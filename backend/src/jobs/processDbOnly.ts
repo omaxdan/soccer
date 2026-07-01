@@ -1131,10 +1131,45 @@ export async function processTeamIntelligencePartial(): Promise<{
       written += chunk.length;
     }
 
+    // Daily history snapshot — same rows just written, reshaped for the
+    // history table. Unblocks Trend charts on Team Detail / League Detail /
+    // Leagues Overview (see backend/docs/SCHEMA_GAP_ANALYSIS.md item #1).
+    // UNIQUE(team_id, snapshot_date) means re-running this multiple times
+    // in the same day upserts rather than creating duplicate history rows.
+    const todaySnapshot = new Date().toISOString().split('T')[0];
+    const historyRows = meaningful.map(r => ({
+      team_id: r.team_id,
+      snapshot_date: todaySnapshot,
+      readiness_score: r.readiness_score,
+      form_index: r.form_index,
+      congestion_score: r.congestion_score,
+      travel_fatigue_score: r.travel_fatigue_score,
+      rest_days_avg: r.rest_days_avg,
+      squad_stability_score: r.squad_stability_score,
+      injury_burden_score: r.injury_burden_score,
+      calculated_at: new Date().toISOString(),
+    }));
+    let historyWritten = 0;
+    for (let i = 0; i < historyRows.length; i += chunkSize) {
+      const chunk = historyRows.slice(i, i + chunkSize);
+      const { error: histErr } = await db
+        .from('team_intelligence_history')
+        .upsert(chunk, { onConflict: 'team_id,snapshot_date' });
+      if (histErr) {
+        // Non-fatal — history is a nice-to-have for trend charts, don't
+        // fail the whole processor if this table doesn't exist yet
+        // (e.g. migration 010 not run) or a transient write error occurs.
+        logger.warn({ error: histErr.message }, 'team_intelligence_history snapshot write failed — trend charts will be missing today\'s point, main team_intelligence data is unaffected');
+        break;
+      }
+      historyWritten += chunk.length;
+    }
+
     logger.info(
       {
         teamsProcessed: teamIds.length,
         rowsWritten: written,
+        historySnapshotWritten: historyWritten,
         withSquadStability: meaningful.filter(r => r.squad_stability_score !== null).length,
       },
       'processTeamIntelligencePartial completed'
@@ -1758,16 +1793,16 @@ export async function processPlayerIntelligence(): Promise<{
     // ── Query 1: Players (injury data only — NO FK join to team_intelligence)
     // players → team_intelligence have no direct FK constraint; Supabase
     // cannot join them. Fetch separately and join in memory instead.
-    const { data: players, error: pErr } = await db
-      .from('players')
-      .select('id, team_id, current_injury, injury_severity_score');
-
-    if (pErr) throw new Error(`players query: ${pErr.message}`);
-    if (!players || players.length === 0) {
+    // Uses fetchAllRows — same 1000-row silent cap bug found and fixed
+    // elsewhere in this file; players has 2,300+ rows.
+    const players = await fetchAllRows(
+      db.from('players').select('id, team_id, current_injury, injury_severity_score')
+    );
+    if (players.length === 0) {
       logger.warn('No players in DB — run sync:squads:v2 first');
       return { playersProcessed: 0, rowsWritten: 0 };
     }
-    logger.debug({ playerCount: players.length }, 'Players fetched');
+    logger.debug({ playerCount: players.length }, 'Players fetched (paginated)');
 
     // ── Query 2: Team congestion scores (keyed by team_id)
     const { data: teamIntels, error: tiErr } = await db
@@ -1810,10 +1845,18 @@ export async function processPlayerIntelligence(): Promise<{
       // load_index: 60% injury fatigue + 40% team schedule congestion
       const load = Math.round(fatigue * 0.6 + teamCongestion * 0.4);
 
+      // readiness_score: inverse of load — a healthy, unfatigued player on
+      // a lightly-congested team schedule reads as high readiness. Same
+      // directional logic as team_intelligence.readiness_score, just at
+      // player granularity. Unblocks the "Key Players" READINESS column
+      // in the Team Detail mockup (see SCHEMA_GAP_ANALYSIS.md item #2).
+      const readiness = Math.max(0, Math.min(100, 100 - Math.min(100, load)));
+
       rows.push({
         player_id:                p.id,
         fatigue_score:            fatigue,
         load_index:               Math.min(100, load),
+        readiness_score:          readiness,
         transfers_last_12_months: transfersLast12,
         // Fields requiring player_match_load — future premium feature
         matches_last_7_days:   null,
