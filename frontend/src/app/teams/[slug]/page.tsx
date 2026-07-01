@@ -105,7 +105,7 @@ export default function TeamPage() {
           </div>
         </div>
         {/* Overall readiness gauge */}
-        <ReadinessGauge score={intel?.readiness_score ?? null} label="READINESS" size="lg" />
+        <ReadinessGauge score={intel?.readiness_score ?? null} label="READINESS" size={120} />
       </div>
 
       {/* ── HERO ROW: 6 Intelligence Gauges ── */}
@@ -299,7 +299,7 @@ export default function TeamPage() {
                   </div>
                 ))}
                 <div style={{ marginTop:8 }}>
-                  <ReadinessGauge score={travel.travel_fatigue_score ? Math.round(travel.travel_fatigue_score) : null} label="TRAVEL FATIGUE" size="md" />
+                  <ReadinessGauge score={travel.travel_fatigue_score ? Math.round(travel.travel_fatigue_score) : null} label="TRAVEL FATIGUE" size={90} />
                 </div>
               </div>
             ) : <div style={{ color:COLORS.dim }}>Run process:travel-load</div>}

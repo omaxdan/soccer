@@ -10,6 +10,8 @@ import {
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
+import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
+import { generateMatchInsight } from '@/lib/insights';
 import FormString from '@/components/FormString';
 import IntelligenceBar from '@/components/IntelligenceBar';
 import SignalChip from '@/components/SignalChip';
@@ -123,6 +125,83 @@ export default function MatchPage() {
     home_squad_stability: homeIntel?.squad_stability_score,
     away_squad_stability: awayIntel?.squad_stability_score,
   }) : [];
+
+  // ── Readiness component breakdown — the 7-component card grid.
+  // Maps directly to what's actually stored per-team in team_intelligence.
+  // Weights match the documented spec (Form 30%, Opponent Strength 20%,
+  // Fixture Congestion 15%, Travel Impact 15%, Home Advantage 10%,
+  // Squad Stability 5%, Motivation 5%).
+  const readinessComponents: ReadinessComponent[] = [
+    {
+      label: 'Form', weight: 30,
+      homeScore: homeIntel?.form_index ?? null, awayScore: awayIntel?.form_index ?? null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+    {
+      label: 'Fixture Congestion', weight: 15,
+      // Inverted display: congestion_score is bad-high, so we show
+      // (100 - score) here so the bar reads "good = long/green" consistently
+      // with every other component in this grid.
+      homeScore: homeIntel?.congestion_score != null ? 100 - homeIntel.congestion_score : null,
+      awayScore: awayIntel?.congestion_score != null ? 100 - awayIntel.congestion_score : null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+    {
+      label: 'Travel Impact', weight: 15,
+      homeScore: homeIntel?.travel_fatigue_score != null ? 100 - homeIntel.travel_fatigue_score : null,
+      awayScore: awayIntel?.travel_fatigue_score != null ? 100 - awayIntel.travel_fatigue_score : null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+    {
+      label: 'Squad Stability', weight: 5,
+      homeScore: homeIntel?.squad_stability_score ?? null, awayScore: awayIntel?.squad_stability_score ?? null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+    {
+      label: 'Injury Burden', weight: 5,
+      // Inverted — lower injury burden is better, shown as "health" here
+      homeScore: homeIntel?.injury_burden_score != null ? 100 - homeIntel.injury_burden_score : null,
+      awayScore: awayIntel?.injury_burden_score != null ? 100 - awayIntel.injury_burden_score : null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+    {
+      label: 'Squad Depth', weight: 5,
+      homeScore: homeIntel?.squad_depth_score ?? null, awayScore: awayIntel?.squad_depth_score ?? null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+    {
+      label: 'Rest Days', weight: 5,
+      // Not a 0-100 score by nature — normalize roughly against a 7-day
+      // healthy-rest baseline so it fits the same bar visualization.
+      homeScore: (intel?.home_rest_days ?? homeIntel?.rest_days_avg) != null
+        ? Math.min(100, Math.round(((intel?.home_rest_days ?? homeIntel?.rest_days_avg) / 7) * 100)) : null,
+      awayScore: (intel?.away_rest_days ?? awayIntel?.rest_days_avg) != null
+        ? Math.min(100, Math.round(((intel?.away_rest_days ?? awayIntel?.rest_days_avg) / 7) * 100)) : null,
+      homeTeam: match.home_team?.short_name ?? 'HOME', awayTeam: match.away_team?.short_name ?? 'AWAY',
+    },
+  ];
+
+  // ── Key Insight — rule-based explanation of the readiness gap, using the
+  // same inputs already computed above. Only generated once both teams have
+  // at least a baseline readiness score.
+  const matchInsight = hasEnoughForSignals ? generateMatchInsight({
+    homeTeam: match.home_team?.name ?? 'Home',
+    awayTeam: match.away_team?.name ?? 'Away',
+    homeReadiness: homeReadinessAny,
+    awayReadiness: awayReadinessAny,
+    readinessGap: intel?.readiness_gap ?? (homeReadinessAny - awayReadinessAny),
+    homeFormIndex: homeIntel?.form_index,
+    awayFormIndex: awayIntel?.form_index,
+    homeRestDays: intel?.home_rest_days ?? homeIntel?.rest_days_avg,
+    awayRestDays: intel?.away_rest_days ?? awayIntel?.rest_days_avg,
+    awayTravelKm: intel?.away_travel_distance_km,
+    homeCongestion: homeIntel?.congestion_score,
+    awayCongestion: awayIntel?.congestion_score,
+    homeInjuryBurden: homeIntel?.injury_burden_score,
+    awayInjuryBurden: awayIntel?.injury_burden_score,
+    homeSquadStability: homeIntel?.squad_stability_score,
+    awaySquadStability: awayIntel?.squad_stability_score,
+  }) : null;
 
   // True when signals were computed without a real match_intelligence row —
   // used to show a precision disclaimer in the Betting Signals tab, since
@@ -313,7 +392,7 @@ export default function MatchPage() {
             {/* Falls back to the team's own current baseline (homeIntel) when
                 match_intelligence hasn't been computed for this specific
                 match yet — see getTeamIntelligence() fetch above. */}
-            <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size="lg" />
+            <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.home_readiness && homeIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
             )}
@@ -363,7 +442,7 @@ export default function MatchPage() {
           {/* Away */}
           <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
             <div style={{ fontSize:20, fontWeight:700, color:COLORS.text }}>{match.away_team?.name}</div>
-            <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size="lg" />
+            <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.away_readiness && awayIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
             )}
@@ -454,6 +533,34 @@ export default function MatchPage() {
       {/* ── OVERVIEW TAB: Two Team Columns ── */}
       {tab === 'Overview' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {/* Key Insight — rule-based explanation, no LLM. See lib/insights.ts */}
+          {matchInsight && (
+            <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue }}>
+                  💡 Key Insight
+                </span>
+              </div>
+              <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.6 }}>{matchInsight.text}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
+                <span style={{ fontSize:10, color:COLORS.dim }}>Confidence</span>
+                <div style={{ flex:1, maxWidth:160, height:5, background:COLORS.border, borderRadius:3, overflow:'hidden' }}>
+                  <div style={{
+                    width:`${matchInsight.confidence}%`, height:'100%', borderRadius:3,
+                    background: `linear-gradient(90deg, ${COLORS.red}, ${COLORS.amber}, ${COLORS.green})`,
+                  }} />
+                </div>
+                <span style={{ fontSize:10, fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>{matchInsight.confidence}%</span>
+              </div>
+            </Card>
+          )}
+
+          {/* Readiness Component Breakdown — 7-component grid matching the
+              documented weighting spec (Form 30%, Congestion 15%, etc.) */}
+          <Card>
+            <ReadinessBreakdown components={readinessComponents} />
+          </Card>
+
           {/* Likely Scoreline — independent Poisson goal model, see
               processScorelinePredictions() in the backend. Estimate only,
               clearly labeled — not a guaranteed outcome. */}
