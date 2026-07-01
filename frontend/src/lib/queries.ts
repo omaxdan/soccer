@@ -560,3 +560,97 @@ export async function searchTournaments(q: string, limit = 10) {
     .limit(limit);
   return (data ?? []).filter((t: any) => isTrackedTournament(t.slug ?? '', t.category ?? ''));
 }
+
+// ─── LEAGUE OVERVIEW ────────────────────────────────────────────────────────
+
+export interface LeagueReadinessRow {
+  tournament: { id: number; name: string; slug: string; category: string | null };
+  teamCount: number;
+  avgReadiness: number | null;
+  avgForm: number | null;
+  avgCongestion: number | null;
+  avgTravel14d: number | null;
+  avgRestDays: number | null;
+  avgActiveComps: number | null;
+}
+
+/**
+ * Aggregates team_intelligence + team_travel_load per tournament, joined
+ * through tournament_standings (the only table linking teams to a specific
+ * tournament + season — team_intelligence itself has no tournament_id).
+ * See backend/docs/SCHEMA_GAP_ANALYSIS.md for why this join path is used.
+ *
+ * Three bulk queries (tournaments, standings, team_intelligence/travel_load)
+ * fetched once and grouped in memory — avoids N+1 queries across up to ~30
+ * tournaments.
+ */
+export async function getLeagueReadinessRankings(): Promise<LeagueReadinessRow[]> {
+  const { data: tournaments } = await supabase
+    .from('tournaments')
+    .select('id, name, slug, category')
+    .in('slug', TRACKED_SLUGS);
+  if (!tournaments || tournaments.length === 0) return [];
+
+  const tournamentIds = tournaments.map((t: any) => t.id);
+
+  // Latest standings row per team per tournament — used purely to get the
+  // team_id -> tournament_id mapping, not the standings data itself.
+  const { data: standings } = await supabase
+    .from('tournament_standings')
+    .select('tournament_id, team_id')
+    .in('tournament_id', tournamentIds);
+
+  const teamIdsByTournament = new Map<number, Set<number>>();
+  for (const s of standings ?? []) {
+    if (!teamIdsByTournament.has(s.tournament_id)) teamIdsByTournament.set(s.tournament_id, new Set());
+    teamIdsByTournament.get(s.tournament_id)!.add(s.team_id);
+  }
+
+  const allTeamIds = [...new Set((standings ?? []).map((s: any) => s.team_id))];
+  if (allTeamIds.length === 0) {
+    return tournaments.map((t: any) => ({
+      tournament: t, teamCount: 0, avgReadiness: null, avgForm: null,
+      avgCongestion: null, avgTravel14d: null, avgRestDays: null, avgActiveComps: null,
+    }));
+  }
+
+  const { data: teamIntel } = await supabase
+    .from('team_intelligence')
+    .select('team_id, readiness_score, form_index, congestion_score, rest_days_avg, active_competitions')
+    .in('team_id', allTeamIds);
+
+  const { data: travelLoad } = await supabase
+    .from('team_travel_load')
+    .select('team_id, km_last_14_days')
+    .in('team_id', allTeamIds)
+    .order('snapshot_date', { ascending: false });
+
+  const intelMap = new Map((teamIntel ?? []).map((t: any) => [t.team_id, t]));
+  const travelMap = new Map<number, number>();
+  for (const t of travelLoad ?? []) {
+    if (!travelMap.has(t.team_id)) travelMap.set(t.team_id, t.km_last_14_days ?? 0);
+  }
+
+  const avg = (nums: (number | null | undefined)[]): number | null => {
+    const valid = nums.filter((n): n is number => n != null);
+    if (valid.length === 0) return null;
+    return Math.round((valid.reduce((s, n) => s + n, 0) / valid.length) * 10) / 10;
+  };
+
+  return tournaments.map((t: any) => {
+    const teamIds = [...(teamIdsByTournament.get(t.id) ?? [])];
+    const intels = teamIds.map(id => intelMap.get(id)).filter(Boolean);
+    const travels = teamIds.map(id => travelMap.get(id));
+
+    return {
+      tournament: t,
+      teamCount: teamIds.length,
+      avgReadiness:   avg(intels.map((i: any) => i.readiness_score)),
+      avgForm:        avg(intels.map((i: any) => i.form_index)),
+      avgCongestion:  avg(intels.map((i: any) => i.congestion_score)),
+      avgTravel14d:   avg(travels),
+      avgRestDays:    avg(intels.map((i: any) => i.rest_days_avg)),
+      avgActiveComps: avg(intels.map((i: any) => i.active_competitions)),
+    };
+  }).sort((a, b) => (b.avgReadiness ?? -1) - (a.avgReadiness ?? -1));
+}
