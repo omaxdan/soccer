@@ -1,0 +1,745 @@
+import 'dotenv/config';
+import { logger } from './utils/logger';
+import { syncTournaments, syncAllSeasons } from './jobs/syncDiscovery';
+import { syncSchedule } from './jobs/syncSchedule';
+import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
+import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad } from './jobs/syncSquadSofaScore';
+import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
+import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
+import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
+import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
+import { syncTransfersForTeams } from './jobs/syncTransfersV2';
+import { syncTeamImages } from './jobs/syncTeamImages';
+import { syncStandings } from './jobs/syncStandings';
+import { TRACKED_LEAGUES, getTrackedLeaguesSummary, TRACKED_LEAGUE_COUNT } from './config/trackedLeagues';
+import { sportsApiClient } from './services/sportsApiClient';
+
+/**
+ * CLI Interface for Manual Job Execution
+ *
+ * Usage:
+ * npx ts-node src/cli.ts <command> [args]
+ *
+ * Commands:
+ * - sync:tournaments              Sync all tournaments
+ * - sync:seasons                  Sync all seasons for all tournaments
+ * - sync:schedule <YYYY-MM-DD>    Sync schedule for specific date
+ * - sync:teams-players            Sync all team rosters
+ * - sync:team-players <teamId>    Sync players for specific team
+ * - process:form:recent           Process form for recent matches
+ * - process:form:backfill         Backfill form history for all matches
+ * - help                          Show this help message
+ */
+
+async function handleCommand(command: string, ...args: string[]) {
+  logger.info({ command, args }, 'Executing CLI command');
+
+  try {
+    switch (command) {
+      case 'sync:tournaments':
+        logger.info('Syncing tournaments...');
+        const toursResult = await syncTournaments();
+        logger.info(toursResult, 'Tournaments sync complete');
+        break;
+
+      case 'sync:seasons':
+        logger.info('Syncing seasons...');
+        const seasonsResult = await syncAllSeasons();
+        logger.info(seasonsResult, 'Seasons sync complete');
+        break;
+
+      case 'sync:schedule':
+        if (!args[0]) {
+          throw new Error('Date required: YYYY-MM-DD format');
+        }
+        logger.info({ date: args[0] }, 'Syncing schedule...');
+        const scheduleResult = await syncSchedule(args[0]);
+        logger.info(scheduleResult, 'Schedule sync complete');
+        break;
+
+      case 'sync:teams-players':
+        logger.info('Syncing all teams and players...');
+        const teamsResult = await syncAllTeamsPlayers();
+        logger.info(teamsResult, 'Teams/players sync complete');
+        break;
+
+      case 'sync:team-players':
+        if (!args[0]) {
+          throw new Error('Team ID required');
+        }
+        const teamId = parseInt(args[0], 10);
+        logger.info({ teamId }, 'Syncing team players...');
+        const teamResult = await syncTeamPlayers(teamId);
+        logger.info(teamResult, 'Team players sync complete');
+        break;
+
+      case 'process:form:recent':
+        logger.info('Processing form for recent matches...');
+        const formRecentResult = await processFormForRecentMatches(24);
+        logger.info(formRecentResult, 'Form processing complete');
+        break;
+
+      case 'process:form:backfill':
+        logger.warn(
+          'Starting form backfill - this may take a long time...'
+        );
+        const formBackfillResult = await processFormBackfill();
+        logger.info(formBackfillResult, 'Form backfill complete');
+        break;
+
+      case 'sync:today': {
+        // Convenience alias — no shell date escaping needed in cPanel cron
+        const today = new Date().toISOString().split('T')[0];
+        const r = await syncDateMasterFeed(today);
+        logger.info(r, 'sync:today complete');
+        break;
+      }
+
+      case 'sync:tomorrow': {
+        const tom = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+        const r = await syncDateMasterFeed(tom);
+        logger.info(r, 'sync:tomorrow complete');
+        break;
+      }
+
+      case 'sync:week': {
+        // Syncs today + next 6 days = 7 API calls
+        // Run weekly to keep fixture calendar fresh
+        const start = new Date().toISOString().split('T')[0];
+        const end   = new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0];
+        const r = await syncDateRange(start, end, 2000);
+        logger.info(r, 'sync:week complete');
+        break;
+      }
+
+      case 'sync:date':
+        if (!args[0]) throw new Error('Date required: YYYY-MM-DD');
+        const dateResult = await syncDateMasterFeed(args[0]);
+        logger.info(dateResult, 'Master feed sync complete');
+        break;
+
+      case 'sync:range':
+        if (!args[0] || !args[1]) throw new Error('Start and end dates required: YYYY-MM-DD YYYY-MM-DD');
+        const rangeResult = await syncDateRange(args[0], args[1]);
+        logger.info(rangeResult, 'Date range sync complete');
+        break;
+
+      case 'sync:squads:v2': {
+        // PRIMARY V2: SofaScore single-call squad intelligence
+        // Populates players, injuries, transfers, squad snapshot,
+        // position depth, transfer intelligence, team intelligence
+        logger.info('SofaScore V2 squad sync — tracked leagues only...');
+        const r = await syncSquadsForTrackedLeagues();
+        logger.info(r, 'V2 squad sync complete');
+        break;
+      }
+
+      case 'sync:squads:countries:v2': {
+        const countriesV2 = args[0]?.split(',').map((c: string) => c.trim()) ?? [];
+        if (countriesV2.length === 0) { logger.error('Usage: sync:squads:countries:v2 "Brazil,Finland"'); break; }
+        logger.info({ countries: countriesV2 }, 'SofaScore V2 squad sync by country...');
+        const r = await syncSquadsByCountries(countriesV2);
+        logger.info(r, 'V2 country squad sync complete');
+        break;
+      }
+
+      case 'sync:team-squad:v2': {
+        const extId = parseInt(args[0] ?? '0');
+        if (!extId) { logger.error('Usage: sync:team-squad:v2 <teamExternalId>'); break; }
+        logger.info({ extId }, 'SofaScore V2 single team squad sync...');
+        const r = await syncSingleTeamSquad(extId);
+        logger.info(r, 'V2 single team squad sync complete');
+        break;
+      }
+
+      case 'sync:squads:tracked': {
+        // Primary command — no args needed, derives team list from matches table
+        logger.info('Syncing squads for tracked leagues only...');
+        const r = await syncSquadsForTrackedLeagues();
+        logger.info(r, 'Tracked league squad sync complete');
+        break;
+      }
+
+      case 'sync:squads:countries':
+        if (!args[0]) throw new Error('At least one country name required (comma-separated, e.g. "Brazil,Finland")');
+        const countryList = args[0].split(',').map((c: string) => c.trim());
+        logger.info({ countries: countryList }, 'Syncing squads by country...');
+        const countrySquadResult = await syncTeamsByCountries(countryList);
+        logger.info(countrySquadResult, 'Country squad sync complete');
+        break;
+
+      case 'sync:squads:all':
+        logger.warn('Syncing ALL 3,756 teams — this takes ~3 hours on first run');
+        const allSquadsResult = await syncAllTeamsPlayers();
+        logger.info(allSquadsResult, 'All squads sync complete');
+        break;
+
+      // ── V3 DATA POINTS — see ROADMAP_V3.md for rate-limit cadence design ──
+
+      case 'sync:player-stats': {
+        // Daily invocation recommended — cooldown + per-run cap (40 teams)
+        // self-throttle, same model as sync:squads:v2. "Every 21 days" as a
+        // single periodic call was an earlier documentation mistake — see
+        // syncSeasonStatistics.ts header for why.
+        // PREREQUISITE: tournaments.external_id must be the correct
+        // uniqueTournament.id (fixed in syncDateMasterFeed.ts + migration 007).
+        // Also requires sync:squads:v2 to have populated players first —
+        // otherwise every fetched row gets filtered out for lack of a
+        // matching internal player_id, wasting the API calls.
+        //
+        // Accepts EITHER a country list ("Brazil,Argentina") OR one or more
+        // space-separated numeric team external_ids ("416 456 567") — same
+        // override pattern as sync:team-squad:v2 <teamExternalId>, for
+        // force-refreshing specific teams without waiting on the cap/cooldown.
+        const playerStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
+        const playerStatsTeamIds = playerStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
+        const playerStatsCountries = !playerStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
+        logger.info({ countries: playerStatsCountries ?? 'n/a', teamIds: playerStatsTeamIds ?? 'n/a' }, 'Syncing player season statistics (rating, minutes, starts)...');
+        const r = await syncPlayerSeasonStatistics(playerStatsCountries, playerStatsTeamIds);
+        logger.info(r, 'Player season statistics sync complete');
+        break;
+      }
+
+      case 'sync:team-stats': {
+        // Daily invocation recommended — cooldown + per-run cap (40 teams)
+        // self-throttle, same model as sync:squads:v2.
+        //
+        // Accepts EITHER a country list ("England,Spain") OR one or more
+        // space-separated numeric team external_ids ("416 456 567") for a
+        // multi-team force-refresh, same as sync:player-stats above.
+        const teamStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
+        const teamStatsTeamIds = teamStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
+        const teamStatsCountries = !teamStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
+        logger.info({ countries: teamStatsCountries ?? 'n/a', teamIds: teamStatsTeamIds ?? 'n/a' }, 'Syncing team season statistics...');
+        const r = await syncTeamSeasonStatistics(teamStatsCountries, teamStatsTeamIds);
+        logger.info(r, 'Team season statistics sync complete');
+        break;
+      }
+
+      case 'sync:transfers': {
+        // NOT a recurring command — run once per region after THAT region's
+        // transfer window closes. See CLI_REFERENCE.md for the cluster schedule.
+        const countriesArg = args[0];
+        const countries = countriesArg ? countriesArg.split(',').map((c: string) => c.trim()) : undefined;
+        logger.info({ countries: countries ?? 'ALL (full backfill only — not for recurring use)' }, 'Syncing transfers...');
+        const r = await syncTransfersForTeams(countries);
+        logger.info(r, 'Transfers sync complete');
+        break;
+      }
+
+      case 'sync:images': {
+        // One-time backfill — re-run manually only if a club rebrands.
+        logger.info('Backfilling team crests to Supabase Storage...');
+        const r = await syncTeamImages();
+        logger.info(r, 'Team image sync complete');
+        break;
+      }
+
+      case 'sync:standings': {
+        // Weekly cadence — per TOURNAMENT not per team (~42 calls total,
+        // not 766). Resolves league_position in team_strength_ratings.
+        logger.info('Syncing tournament standings (~42 calls, one per tracked league)...');
+        const r = await syncStandings();
+        logger.info(r, 'Standings sync complete');
+        break;
+      }
+
+      case 'process:predicted-lineup': {
+        // DB-only, zero API calls — derived "Likely XI" from
+        // player_season_statistics.matches_started + injuries + transfers.
+        logger.info('Computing predicted lineups — DB only...');
+        const r = await processPredictedLineups();
+        logger.info(r, 'Predicted lineups complete');
+        break;
+      }
+
+      case 'process:scorelines': {
+        // DB-only, zero API calls — independent Poisson goal model using
+        // team_form_history.goals_for/against. Upserts directly (not update)
+        // so it works even for matches without a match_intelligence row yet.
+        logger.info('Computing scoreline predictions — DB only, Poisson model...');
+        const r = await processScorelinePredictions();
+        logger.info(r, 'Scoreline predictions complete');
+        break;
+      }
+
+      case 'process:dashboard-summary': {
+        // DB-only — precomputes dashboard aggregates so the frontend never
+        // calculates them at runtime. Run after process:all-db, or
+        // standalone if you just need the top-line stats refreshed quickly.
+        logger.info('Computing dashboard summary — DB only...');
+        const r = await processDashboardSummary();
+        logger.info(r, 'Dashboard summary complete');
+        break;
+      }
+
+      case 'process:fixture-load': {
+        logger.info('Computing fixture load — DB only...');
+        const r = await processTeamFixtureLoad();
+        logger.info(r, 'Fixture load complete');
+        break;
+      }
+
+      case 'process:team-locations': {
+        logger.info('Deriving team locations from venue history — DB only...');
+        const r = await processTeamLocations();
+        logger.info(r, 'Team locations complete');
+        break;
+      }
+
+      case 'process:all-db': {
+        // ── ALL DB-ONLY PROCESSORS — zero API calls ────────────────────────
+        // Strict dependency order. Do NOT reorder.
+        // Safe to run multiple times — all processors are idempotent.
+        // Typical runtime: 30–120s depending on DB size.
+        const t0 = Date.now();
+
+        logger.info('━━━ process:all-db started ━━━ (zero API calls)');
+
+        // ── LAYER 1 ── No prerequisites — raw DB data only ─────────────────
+        logger.info('[L1/3] Form history backfill...');
+        const form    = await processFormBackfill();
+        logger.info({ ...form }, '[L1] ✓ form history');
+
+        logger.info('[L1/3] Fixture load...');
+        const fixture = await processTeamFixtureLoad();
+        logger.info({ ...fixture }, '[L1] ✓ fixture load');
+
+        logger.info('[L1/3] Team locations...');
+        const locs    = await processTeamLocations();
+        logger.info({ ...locs }, '[L1] ✓ team locations');
+
+        // ── LAYER 2 ── Needs team_locations (L1) ───────────────────────────
+        logger.info('[L2/3] Team travel load (needs team_locations)...');
+        const travel    = await processTeamTravelLoad();
+        logger.info({ ...travel }, '[L2] ✓ team travel load');
+
+        logger.info('[L2/3] Match travel intelligence (needs team_locations)...');
+        const matchTravel = await processMatchTravelIntelligence();
+        logger.info({ ...matchTravel }, '[L2] ✓ match travel intelligence');
+
+        logger.info('[L2/3] Team strength ratings (needs form_history + tournament_standings)...');
+        const strength  = await processTeamStrengthRatings();
+        logger.info({ ...strength }, '[L2] ✓ strength ratings');
+
+        logger.info('[L2/3] Team venue performance (needs form_history)...');
+        const venue     = await processTeamVenuePerformance();
+        logger.info({ ...venue }, '[L2] ✓ venue performance');
+
+        // ── LAYER 3 ── Needs L1 + L2 complete ─────────────────────────────
+        logger.info('[L3/3] Team intelligence (needs form + fixture + travel)...');
+        const teamIntel = await processTeamIntelligencePartial();
+        logger.info({ ...teamIntel }, '[L3] ✓ team intelligence');
+
+        logger.info('[L3/3] Player intelligence (needs players + team_intelligence)...');
+        const playerIntel = await processPlayerIntelligence();
+        logger.info({ ...playerIntel }, '[L3] ✓ player intelligence');
+
+        // ── LAYER 4 ── Needs team_intelligence (L3) ────────────────────────
+        logger.info('[L4/3] Match intelligence (needs team_intelligence)...');
+        const matchIntel  = await processMatchIntelligencePartial();
+        logger.info({ ...matchIntel }, '[L4] ✓ match intelligence');
+
+        // ── LAYER 5 ── Needs player_season_statistics (sync:player-stats) ───
+        // Zero-cost — runs even if player-stats hasn't synced yet (just
+        // produces 0 predicted lineups until that data exists).
+        logger.info('[L5/3] Predicted lineups (needs player_season_statistics)...');
+        const predictedLineups = await processPredictedLineups();
+        logger.info({ ...predictedLineups }, '[L5] ✓ predicted lineups');
+
+        // ── LAYER 5.5 ── Needs team_form_history (L1) only — independent
+        // of squad/player data, can run as soon as form history exists.
+        logger.info('[L5.5/3] Scoreline predictions (Poisson model, needs team_form_history)...');
+        const scorelines = await processScorelinePredictions();
+        logger.info({ ...scorelines }, '[L5.5] ✓ scoreline predictions');
+
+        // ── LAYER 6 ── Needs everything above — dashboard aggregate stats ───
+        logger.info('[L6/3] Dashboard summary (needs all prior layers)...');
+        const dashboardSummary = await processDashboardSummary();
+        logger.info({ ...dashboardSummary }, '[L6] ✓ dashboard summary');
+
+        const elapsed = Math.round((Date.now() - t0) / 1000);
+        logger.info({
+          durationSeconds: elapsed,
+          form, fixture, locs, travel, matchTravel,
+          strength, venue, teamIntel, playerIntel, matchIntel, predictedLineups, scorelines, dashboardSummary,
+        }, '━━━ process:all-db complete in ' + elapsed + 's ━━━');
+        break;
+      }
+
+      // ── DATE-SCOPED process:all-db VARIANTS ──────────────────────────────
+      // Same full pipeline as process:all-db but L4 (match-intelligence) and
+      // L2 match-travel are date-scoped — only reprocesses the relevant
+      // subset of matches. L1-L3 and L5-L6 always run in full since they're
+      // team-level aggregations with no meaningful date dimension.
+      // Strategy: resolve date opts once, pass to both date-aware processors.
+      case 'process:all-db:today':
+      case 'process:all-db:tomorrow':
+      case 'process:all-db:yesterday':
+      case 'process:all-db:date':
+      case 'process:all-db:range':
+      case 'process:all-db:catchup': {
+        const t0 = Date.now();
+
+        // ── Resolve date opts from command variant ────────────────────────
+        let dbDateOpts: { dateFilter?: string; dateFrom?: string; dateTo?: string } = {};
+        let modeLabel = '';
+
+        if (command === 'process:all-db:today') {
+          dbDateOpts = { dateFilter: 'today' };
+          modeLabel  = 'TODAY';
+        } else if (command === 'process:all-db:tomorrow') {
+          dbDateOpts = { dateFilter: 'tomorrow' };
+          modeLabel  = 'TOMORROW';
+        } else if (command === 'process:all-db:yesterday') {
+          const yest = new Date();
+          yest.setUTCDate(yest.getUTCDate() - 1);
+          dbDateOpts = { dateFilter: yest.toISOString().split('T')[0] };
+          modeLabel  = `YESTERDAY (${dbDateOpts.dateFilter})`;
+        } else if (command === 'process:all-db:date') {
+          const d = args[0];
+          if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+            logger.error('Usage: process:all-db:date YYYY-MM-DD');
+            break;
+          }
+          dbDateOpts = { dateFilter: d };
+          modeLabel  = d;
+        } else if (command === 'process:all-db:range') {
+          const from = args[0]; const to = args[1];
+          if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+            logger.error('Usage: process:all-db:range YYYY-MM-DD [YYYY-MM-DD]');
+            break;
+          }
+          if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+            logger.error('End date must be YYYY-MM-DD if provided');
+            break;
+          }
+          dbDateOpts = { dateFrom: from, dateTo: to };
+          modeLabel  = `${from} → ${to ?? 'today'}`;
+        } else if (command === 'process:all-db:catchup') {
+          const daysBack = args[0] && /^\d+$/.test(args[0]) ? Number(args[0]) : 3;
+          const fromDate = new Date();
+          fromDate.setUTCDate(fromDate.getUTCDate() - daysBack);
+          dbDateOpts = { dateFrom: fromDate.toISOString().split('T')[0] };
+          modeLabel  = `last ${daysBack} days (from ${dbDateOpts.dateFrom})`;
+        }
+
+        logger.info({ scope: modeLabel }, `━━━ process:all-db:* started (scope: ${modeLabel}) ━━━`);
+
+        // ── L1-L3: always full — team-level aggregations ─────────────────
+        logger.info('[L1] Form history...');
+        const form       = await processFormBackfill();
+        logger.info('[L1] Fixture load...');
+        const fixture    = await processTeamFixtureLoad();
+        logger.info('[L1] Team locations...');
+        const locs       = await processTeamLocations();
+        logger.info('[L2] Team travel load...');
+        const travel     = await processTeamTravelLoad();
+        logger.info(`[L2] Match travel intelligence (scope: ${modeLabel})...`);
+        const matchTravel = await processMatchTravelIntelligence(dbDateOpts);
+        logger.info('[L2] Strength ratings...');
+        const strength   = await processTeamStrengthRatings();
+        logger.info('[L2] Venue performance...');
+        const venue      = await processTeamVenuePerformance();
+        logger.info('[L3] Team intelligence...');
+        const teamIntel  = await processTeamIntelligencePartial();
+        logger.info('[L3] Player intelligence...');
+        const playerIntel = await processPlayerIntelligence();
+
+        // ── L4: date-scoped — only the relevant match subset ─────────────
+        logger.info(`[L4] Match intelligence (scope: ${modeLabel})...`);
+        const matchIntel = await processMatchIntelligencePartial(dbDateOpts);
+        logger.info({ ...matchIntel }, '[L4] ✓ match intelligence');
+
+        // ── L5-L6: always full ────────────────────────────────────────────
+        logger.info('[L5] Predicted lineups...');
+        const predictedLineups = await processPredictedLineups();
+        logger.info('[L5.5] Scoreline predictions...');
+        const scorelines = await processScorelinePredictions();
+        logger.info('[L6] Dashboard summary...');
+        const dashboardSummary = await processDashboardSummary();
+
+        const elapsed = Math.round((Date.now() - t0) / 1000);
+        logger.info({
+          durationSeconds: elapsed, scope: modeLabel,
+          form, fixture, locs, travel, matchTravel,
+          strength, venue, teamIntel, playerIntel, matchIntel,
+          predictedLineups, scorelines, dashboardSummary,
+        }, `━━━ process:all-db:* complete in ${elapsed}s (scope: ${modeLabel}) ━━━`);
+        break;
+      }
+
+      case 'process:travel-load': {
+        logger.info('Computing team travel load — DB only...');
+        const r = await processTeamTravelLoad();
+        logger.info(r, 'Travel load complete');
+        break;
+      }
+
+      case 'process:match-travel': {
+        logger.info('Computing match travel intelligence — DB only...');
+        const r = await processMatchTravelIntelligence();
+        logger.info(r, 'Match travel intelligence complete');
+        break;
+      }
+
+      case 'process:team-intelligence': {
+        logger.info('Computing partial team intelligence (form + congestion + travel) — DB only...');
+        const r = await processTeamIntelligencePartial();
+        logger.info(r, 'Team intelligence (partial) complete');
+        break;
+      }
+
+      case 'process:match-intelligence': {
+        logger.info('Computing match intelligence (all matches) — DB only...');
+        const r = await processMatchIntelligencePartial();
+        logger.info(r, 'Match intelligence complete');
+        break;
+      }
+
+      case 'process:match-intelligence:today': {
+        // Targeted — only today's matches (UTC). Fast, cheap, safe to run
+        // after sync:today/sync:tomorrow without reprocessing all 480+ matches.
+        logger.info('Computing match intelligence for TODAY — DB only...');
+        const r = await processMatchIntelligencePartial({ dateFilter: 'today' });
+        logger.info(r, 'Match intelligence (today) complete');
+        break;
+      }
+
+      case 'process:match-intelligence:tomorrow': {
+        logger.info('Computing match intelligence for TOMORROW — DB only...');
+        const r = await processMatchIntelligencePartial({ dateFilter: 'tomorrow' });
+        logger.info(r, 'Match intelligence (tomorrow) complete');
+        break;
+      }
+
+      case 'process:match-intelligence:date': {
+        // Single date: npx ts-node src/cli.ts process:match-intelligence:date 2026-07-04
+        const dateArg = args[0];
+        if (!dateArg || !/^\d{4}-\d{2}-\d{2}$/.test(dateArg)) {
+          logger.error('Usage: process:match-intelligence:date YYYY-MM-DD');
+          break;
+        }
+        logger.info({ date: dateArg }, 'Computing match intelligence for specific date — DB only...');
+        const r = await processMatchIntelligencePartial({ dateFilter: dateArg });
+        logger.info(r, 'Match intelligence (date) complete');
+        break;
+      }
+
+      case 'process:match-intelligence:yesterday': {
+        // Convenience alias — catches yesterday without needing to type the date
+        const yest = new Date();
+        yest.setUTCDate(yest.getUTCDate() - 1);
+        const yesterdayStr = yest.toISOString().split('T')[0];
+        logger.info({ date: yesterdayStr }, 'Computing match intelligence for yesterday — DB only...');
+        const r = await processMatchIntelligencePartial({ dateFilter: yesterdayStr });
+        logger.info(r, 'Match intelligence (yesterday) complete');
+        break;
+      }
+
+      case 'process:match-intelligence:range': {
+        // Date range: npx ts-node src/cli.ts process:match-intelligence:range 2026-06-29 2026-07-01
+        // End date is optional — defaults to today if omitted.
+        // Designed for catch-up on local machines without crons where
+        // one or more days were missed.
+        const fromArg = args[0];
+        const toArg   = args[1]; // optional
+        if (!fromArg || !/^\d{4}-\d{2}-\d{2}$/.test(fromArg)) {
+          logger.error('Usage: process:match-intelligence:range YYYY-MM-DD [YYYY-MM-DD]');
+          break;
+        }
+        if (toArg && !/^\d{4}-\d{2}-\d{2}$/.test(toArg)) {
+          logger.error('End date must be YYYY-MM-DD if provided');
+          break;
+        }
+        const today = new Date().toISOString().split('T')[0];
+        logger.info({ from: fromArg, to: toArg ?? today }, 'Computing match intelligence for date range — DB only...');
+        const r = await processMatchIntelligencePartial({ dateFrom: fromArg, dateTo: toArg });
+        logger.info(r, 'Match intelligence (range) complete');
+        break;
+      }
+
+      case 'process:match-intelligence:catchup': {
+        // Auto catch-up: npx ts-node src/cli.ts process:match-intelligence:catchup [days]
+        // Defaults to last 3 days if no argument given — covers a typical
+        // weekend or short break on a local machine without crons.
+        // npx ts-node src/cli.ts process:match-intelligence:catchup 7  ← last 7 days
+        const daysBack = args[0] && /^\d+$/.test(args[0]) ? Number(args[0]) : 3;
+        const fromDate = new Date();
+        fromDate.setUTCDate(fromDate.getUTCDate() - daysBack);
+        const fromStr = fromDate.toISOString().split('T')[0];
+        const today   = new Date().toISOString().split('T')[0];
+        logger.info({ daysBack, from: fromStr, to: today }, `Catch-up: computing match intelligence for last ${daysBack} days — DB only...`);
+        const r = await processMatchIntelligencePartial({ dateFrom: fromStr, dateTo: today });
+        logger.info(r, 'Match intelligence (catch-up) complete');
+        break;
+      }
+
+      case 'process:match-intelligence:ids': {
+        // Specific matches: npx ts-node src/cli.ts process:match-intelligence:ids 712 713 714
+        const matchIds = args.filter((a: string) => /^\d+$/.test(a)).map((a: string) => Number(a));
+        if (matchIds.length === 0) {
+          logger.error('Usage: process:match-intelligence:ids <id1> <id2> ...');
+          break;
+        }
+        logger.info({ matchIds }, 'Computing match intelligence for specific matches — DB only...');
+        const r = await processMatchIntelligencePartial({ matchIds });
+        logger.info(r, 'Match intelligence (specific IDs) complete');
+        break;
+      }
+
+      case 'process:player-intelligence': {
+        logger.info('Computing player intelligence (fatigue, load, transfers) — DB only...');
+        const r = await processPlayerIntelligence();
+        logger.info(r, 'Player intelligence complete');
+        break;
+      }
+
+      case 'process:strength-ratings': {
+        logger.info('Computing team strength ratings — DB only...');
+        const r = await processTeamStrengthRatings();
+        logger.info(r, 'Strength ratings complete');
+        break;
+      }
+
+      case 'process:venue-performance': {
+        logger.info('Computing team venue performance (home/away splits) — DB only...');
+        const r = await processTeamVenuePerformance();
+        logger.info(r, 'Venue performance complete');
+        break;
+      }
+
+      case 'sync:leagues': {
+        // Diagnostic: show what leagues are configured and what's in DB
+        const summary = getTrackedLeaguesSummary();
+        console.log('\n=== NinetyData Tracked Leagues ===');
+        console.log(`Total: ${TRACKED_LEAGUE_COUNT} leagues\n`);
+        Object.entries(summary).forEach(([region, count]) => {
+          console.log(`  ${region}: ${count} leagues`);
+        });
+        console.log('\nAll tracked leagues:');
+        TRACKED_LEAGUES.forEach(l => {
+          console.log(`  [${l.band}] ${l.name} (${l.country || 'multi'}) — match: "${l.apiNameMatch}"`);
+        });
+        console.log('');
+        break;
+      }
+
+      case 'help':
+      case '--help':
+      case '-h':
+        showHelp();
+        break;
+
+      default:
+        throw new Error(`Unknown command: ${command}`);
+    }
+
+    logger.info({ command }, 'Command executed successfully');
+
+    // Surface per-key API call usage for this run — helps confirm dual-key
+    // rotation is working and gives visibility into daily quota consumption.
+    // In-memory only (resets each process run), not a historical record.
+    const callCounts = sportsApiClient.getCallCounts();
+    const totalCalls = Object.values(callCounts).reduce((a, b) => a + b, 0);
+    if (totalCalls > 0) {
+      logger.info({ callCounts, totalCalls }, 'API calls used this run');
+    }
+
+    process.exit(0);
+  } catch (error: any) {
+    logger.error(
+      { command, error: error.message },
+      'Command execution failed'
+    );
+    console.error(`\nError: ${error.message}\n`);
+    process.exit(1);
+  }
+}
+
+function showHelp() {
+  console.log(`
+RIP Phase 1 - CLI Utility
+
+Usage: npx ts-node src/cli.ts <command> [args]
+
+Commands:
+
+  Diagnostics:
+    sync:leagues                    Show all 41 tracked leagues and their config
+
+  Master Feed (1 API call per date → 8 tables):
+    sync:today                      ⭐ Sync today's fixtures (use in daily cron)
+    sync:tomorrow                   ⭐ Sync tomorrow's fixtures (use in daily cron)
+    sync:week                       Sync next 7 days — 7 API calls (use in weekly cron)
+    sync:date <YYYY-MM-DD>          Sync a specific date
+    sync:range <start> <end>        Sync a date range
+
+  Squad Sync (smart cooldown — skips teams synced within 7 days):
+    sync:squads:tracked             ⭐ PRIMARY: sync only teams in your 42 tracked leagues
+                                    Derives team list from matches table — no country arg needed
+    sync:squads:countries <list>    Sync by country, still filtered to tracked leagues only
+                                    e.g. "Brazil,Finland" — runs Brazil Série A/B only, not all
+    sync:team-players <teamId>      Force sync one specific team (ignores cooldown)
+    sync:squads:all                 Sync ALL teams (~3hrs — use overnight only)
+
+  Legacy Discovery (optional - schedule feed makes these redundant):
+    sync:tournaments                Sync tournaments (now built into sync:date)
+    sync:seasons                    Sync seasons (now built into sync:date)
+    sync:schedule <date>            Legacy schedule sync (use sync:date instead)
+
+  Processing (DB-only, zero API calls):
+    process:all-db                  ⭐ Run ALL DB processors in one command
+    process:form:recent             Precompute form for last 24hrs of matches
+    process:form:backfill           Backfill form history for ALL finished matches
+    process:fixture-load            Compute fixture congestion for all teams
+    process:team-locations          Derive team home locations from venue history
+    process:travel-load              Compute km traveled + travel fatigue per team
+    process:match-travel             Compute per-match travel burden for both teams
+    process:team-intelligence        Partial team_intelligence (form+congestion+travel)
+    process:match-intelligence       Partial match_intelligence (rest+congestion+travel)
+    process:player-intelligence      Player fatigue/load from injury + transfer data (no match-load)
+    process:strength-ratings         Team strength (PPG, win%, market value) from form history
+    process:venue-performance        Home/away performance splits from match results
+
+  Squad Sync V2 — SofaScore (1 call populates 7 tables, throttled 1 req/2s):
+    sync:squads:v2                   ⭐ PRIMARY V2: tracked leagues, all squad intelligence
+    sync:squads:countries:v2 <list>  V2 by country e.g. "Brazil,Finland"
+    sync:team-squad:v2 <id>          V2 force sync single team
+
+  Utility:
+    help, -h, --help                Show this message
+
+Examples:
+
+  # Sync today (populates 8 tables from 1 API call)
+  npx ts-node src/cli.ts sync:date 2026-06-28
+
+  # Backfill a week
+  npx ts-node src/cli.ts sync:range 2026-06-01 2026-06-07
+
+  # Sync squad for a specific team
+  npx ts-node src/cli.ts sync:team-players 39
+
+  # Backfill all form history
+  npx ts-node src/cli.ts process:form:backfill
+
+Note:
+  - All commands are idempotent (safe to run multiple times)
+  - sync:date is the primary command - use it for all regular syncing
+  - Squad sync uses 7-day cooldown to minimise API calls
+  - Logs in logs/ directory, set NODE_ENV=production for JSON logs
+`);
+}
+
+// Parse CLI arguments and execute
+const args = process.argv.slice(2);
+const command = args[0];
+const commandArgs = args.slice(1);
+
+if (!command) {
+  showHelp();
+  process.exit(0);
+}
+
+handleCommand(command, ...commandArgs);
