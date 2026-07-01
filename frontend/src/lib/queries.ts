@@ -654,3 +654,125 @@ export async function getLeagueReadinessRankings(): Promise<LeagueReadinessRow[]
     };
   }).sort((a, b) => (b.avgReadiness ?? -1) - (a.avgReadiness ?? -1));
 }
+
+// ─── LEAGUE DETAIL ──────────────────────────────────────────────────────────
+
+export interface LeagueDetailTeamRow {
+  id: number; name: string; short_name: string | null; slug: string | null; country: string | null;
+  readiness_score: number | null; form_index: number | null; congestion_score: number | null;
+  rest_days_avg: number | null; travel_fatigue_score: number | null;
+}
+
+export interface LeagueDetailData {
+  tournament: { id: number; name: string; slug: string; category: string | null } | null;
+  teams: LeagueDetailTeamRow[];
+  seasonStats: {
+    avgGoalsPerMatch: number | null;
+    avgCleanSheetsPerMatch: number | null;
+    avgRedCardsPerMatch: number | null;
+    homeWinPct: number | null;
+    awayWinPct: number | null;
+  };
+  fixtureCongestion: { team_id: number; name: string; matches_next_14_days: number | null }[];
+}
+
+/**
+ * Full League Detail page data — teams joined via tournament_standings
+ * (the accurate join path, not matches.competition text matching which
+ * the previous version of this page used).
+ */
+export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetailData> {
+  const { data: tournament } = await supabase
+    .from('tournaments')
+    .select('id, name, slug, category')
+    .eq('id', tournamentId)
+    .maybeSingle();
+
+  const { data: standings } = await supabase
+    .from('tournament_standings')
+    .select('team_id, season_external_id')
+    .eq('tournament_id', tournamentId);
+
+  const teamIds = [...new Set((standings ?? []).map((s: any) => s.team_id))];
+  if (teamIds.length === 0) {
+    return { tournament, teams: [], seasonStats: { avgGoalsPerMatch: null, avgCleanSheetsPerMatch: null, avgRedCardsPerMatch: null, homeWinPct: null, awayWinPct: null }, fixtureCongestion: [] };
+  }
+
+  const { data: teamsData } = await supabase
+    .from('teams')
+    .select('id, name, short_name, slug, country')
+    .in('id', teamIds);
+
+  const { data: intel } = await supabase
+    .from('team_intelligence')
+    .select('team_id, readiness_score, form_index, congestion_score, rest_days_avg, travel_fatigue_score')
+    .in('team_id', teamIds);
+
+  const intelMap = new Map<number, any>((intel ?? []).map((i: any) => [i.team_id, i]));
+
+  const teams: LeagueDetailTeamRow[] = (teamsData ?? []).map((t: any) => {
+    const i = intelMap.get(t.id);
+    return {
+      ...t,
+      readiness_score: i?.readiness_score ?? null,
+      form_index: i?.form_index ?? null,
+      congestion_score: i?.congestion_score ?? null,
+      rest_days_avg: i?.rest_days_avg ?? null,
+      travel_fatigue_score: i?.travel_fatigue_score ?? null,
+    };
+  }).sort((a, b) => (b.readiness_score ?? -1) - (a.readiness_score ?? -1));
+
+  // Season stats — aggregate team_season_statistics for teams in this league
+  const { data: seasonStatsRows } = await supabase
+    .from('team_season_statistics')
+    .select('team_id, matches, goals_scored, goals_conceded, clean_sheets, red_cards')
+    .in('team_id', teamIds);
+
+  const avg = (nums: (number | null | undefined)[]): number | null => {
+    const valid = nums.filter((n): n is number => n != null);
+    if (valid.length === 0) return null;
+    return Math.round((valid.reduce((s, n) => s + n, 0) / valid.length) * 100) / 100;
+  };
+
+  const rows = seasonStatsRows ?? [];
+  const totalMatches = rows.reduce((s: number, r: any) => s + (r.matches ?? 0), 0);
+  const totalGoals = rows.reduce((s: number, r: any) => s + (r.goals_scored ?? 0), 0);
+  const totalCleanSheets = rows.reduce((s: number, r: any) => s + (r.clean_sheets ?? 0), 0);
+  const totalRedCards = rows.reduce((s: number, r: any) => s + (r.red_cards ?? 0), 0);
+
+  const seasonStats = {
+    avgGoalsPerMatch: totalMatches > 0 ? Math.round((totalGoals / totalMatches) * 100) / 100 : null,
+    avgCleanSheetsPerMatch: totalMatches > 0 ? Math.round((totalCleanSheets / totalMatches) * 100) / 100 : null,
+    avgRedCardsPerMatch: totalMatches > 0 ? Math.round((totalRedCards / totalMatches) * 100) / 100 : null,
+    // Home/away win % needs team_venue_performance, not team_season_statistics
+    homeWinPct: null as number | null,
+    awayWinPct: null as number | null,
+  };
+
+  const { data: venuePerf } = await supabase
+    .from('team_venue_performance')
+    .select('team_id, home_win_pct, away_win_pct')
+    .in('team_id', teamIds);
+  seasonStats.homeWinPct = avg((venuePerf ?? []).map((v: any) => v.home_win_pct));
+  seasonStats.awayWinPct = avg((venuePerf ?? []).map((v: any) => v.away_win_pct));
+
+  // Fixture congestion — next 14 days per team, for the "Upcoming Fixture
+  // Congestion" panel, top 5 busiest
+  const { data: fixtureLoad } = await supabase
+    .from('team_fixture_load')
+    .select('team_id, matches_next_14_days')
+    .in('team_id', teamIds)
+    .order('snapshot_date', { ascending: false });
+
+  const fixtureLoadMap = new Map<number, number>();
+  for (const f of fixtureLoad ?? []) {
+    if (!fixtureLoadMap.has(f.team_id)) fixtureLoadMap.set(f.team_id, f.matches_next_14_days ?? 0);
+  }
+  const teamNameMap = new Map(teams.map(t => [t.id, t.name]));
+  const fixtureCongestion = [...fixtureLoadMap.entries()]
+    .map(([team_id, matches_next_14_days]) => ({ team_id, name: teamNameMap.get(team_id) ?? 'Unknown', matches_next_14_days }))
+    .sort((a, b) => (b.matches_next_14_days ?? 0) - (a.matches_next_14_days ?? 0))
+    .slice(0, 5);
+
+  return { tournament, teams, seasonStats, fixtureCongestion };
+}
