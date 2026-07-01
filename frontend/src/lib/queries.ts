@@ -425,6 +425,97 @@ export async function getTeamUpcomingMatches(teamId: number, days = 14) {
   return data ?? [];
 }
 
+/**
+ * Daily readiness/form/congestion history for the Trend chart on Team
+ * Detail. Reads team_intelligence_history (migration 010). Will return
+ * few or zero points until the daily process job has run multiple times
+ * — see backend/docs/SCHEMA_GAP_ANALYSIS.md.
+ */
+export async function getTeamIntelligenceTrend(teamId: number, days = 14) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  const { data, error } = await supabase
+    .from('team_intelligence_history')
+    .select('snapshot_date, readiness_score, form_index, congestion_score')
+    .eq('team_id', teamId)
+    .gte('snapshot_date', since)
+    .order('snapshot_date', { ascending: true });
+  // Table may not exist yet if migration 010 hasn't been run — fail soft,
+  // the page shows an honest "not enough history yet" message either way.
+  if (error) return [];
+  return data ?? [];
+}
+
+/**
+ * Key Players table — top players by readiness_score (migration 010
+ * column). Falls back gracefully: players without a computed readiness
+ * score (squad not synced, or processor hasn't run) are simply excluded
+ * rather than shown with a fake value.
+ */
+export async function getTeamKeyPlayers(teamId: number, limit = 5) {
+  const { data: players } = await supabase
+    .from('players')
+    .select('id, name, short_name, position, primary_position, date_of_birth, nationality_code, jersey_number')
+    .eq('team_id', teamId);
+  if (!players || players.length === 0) return [];
+
+  const playerIds = players.map((p: any) => p.id);
+  const { data: intel } = await supabase
+    .from('player_intelligence')
+    .select('player_id, readiness_score')
+    .in('player_id', playerIds)
+    .not('readiness_score', 'is', null);
+
+  const intelMap = new Map<number, number>((intel ?? []).map((i: any) => [i.player_id, i.readiness_score]));
+
+  const ageFromDob = (dob: string | null) => {
+    if (!dob) return null;
+    const diff = Date.now() - new Date(dob).getTime();
+    return Math.floor(diff / (365.25 * 86400000));
+  };
+
+  return players
+    .filter((p: any) => intelMap.has(p.id))
+    .map((p: any) => ({
+      ...p,
+      age: ageFromDob(p.date_of_birth),
+      readiness_score: intelMap.get(p.id),
+    }))
+    .sort((a: any, b: any) => (b.readiness_score ?? 0) - (a.readiness_score ?? 0))
+    .slice(0, limit);
+}
+
+/** Squad composition by position group (GK/DEF/MID/FWD) for the donut chart. */
+export async function getTeamPositionBreakdown(teamId: number) {
+  const { data } = await supabase
+    .from('team_position_depth')
+    .select('position_code, player_count')
+    .eq('team_id', teamId);
+  return data ?? [];
+}
+
+/**
+ * Next scheduled match with readiness gap — for the "Next Match" card.
+ * Reuses match_intelligence when computed, falls back to team baseline
+ * readiness on both sides same as everywhere else in this codebase.
+ */
+export async function getTeamNextMatch(teamId: number) {
+  const now = new Date().toISOString();
+  const { data } = await supabase
+    .from('matches')
+    .select(`id, date, competition, status,
+      home_team_id, away_team_id,
+      home_team:teams!home_team_id(id, name, short_name, slug),
+      away_team:teams!away_team_id(id, name, short_name, slug),
+      match_intelligence(home_readiness, away_readiness, readiness_gap)`)
+    .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
+    .eq('status', 'scheduled')
+    .gte('date', now)
+    .order('date', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
 // ─── LEAGUE PAGE ──────────────────────────────────────────────────────────────
 
 export async function getTrackedTournaments() {
