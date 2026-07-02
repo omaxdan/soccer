@@ -1,32 +1,60 @@
 /**
- * STANDINGS SYNC — per-TOURNAMENT, not per-team. Confirmed real structure.
+ * STANDINGS SYNC — per-TOURNAMENT, not per-team.
  *
  * Source: GET /tournament/{tournamentId}/season/{seasonId}/standings
  *         (also /standings/home and /standings/away — not synced by default,
  *          see cadence note below)
  *
- * CONFIRMED via live testing: response shape is a FLAT array directly under
- * `standings` — NOT the nested {standings:[{rows:[...]}]} shape an earlier
- * sample response suggested. Field names also differ from that earlier
- * sample: `played`/`won`/`drawn`/`lost`/`goalsFor`/`goalsAgainst` (not
- * matches/wins/draws/losses/scoresFor/scoresAgainst), and `teamId` is a
- * direct field (not nested under `team.id`). SportsAPI Pro evidently
- * normalizes this endpoint's response differently than other endpoints —
- * confirmed against live data, not assumed from documentation.
+ * CONFIRMED SHAPE — flat array, via 5 real captured samples spanning 5
+ * different countries/tiers (Egypt/band A, China/band B, South Korea/
+ * band C, Lithuania/Discovery, Argentina/Mandated — see
+ * backend/docs/api-samples/standings/*.json):
  *
- * MULTI-GROUP / CONFERENCE STANDINGS (e.g. MLS Eastern/Western): NOT YET
- * CONFIRMED against real data. Worth noting: the flat-array shape above
- * was confirmed correct for SINGLE-group leagues specifically — the
- * nested {standings:[{rows:[...]}]} shape mentioned above as "an earlier
- * sample suggested" may well have been a genuine sample for a DIFFERENT
- * (multi-group) tournament, not simply wrong documentation. That earlier
- * guess wasn't necessarily incorrect in general — it may just not have
- * matched the specific single-group tournament that was live-tested at
- * the time. This is exactly the kind of ambiguity logApiSample() (see
- * below) resolves empirically instead of by further guessing — once a
- * real multi-group response has been captured to
- * backend/docs/api-samples/standings/, the shape-detection logic further
- * down in this file can be tightened to the confirmed exact field names.
+ *   response.standings = [{ position, teamId, teamName, played, won,
+ *                            drawn, lost, goalsFor, goalsAgainst, points }]
+ *
+ * This matches what the ORIGINAL pre-session code already correctly
+ * expected — no fix was actually needed for this shape.
+ *
+ * CORRECTION — a prior version of this file mistakenly treated a
+ * different-looking sample (nested team.id, a rows[] wrapper, matches/
+ * wins/draws/losses/scoresFor/scoresAgainst field names, and a
+ * `promotion` field) as an alternate shape THIS endpoint could return.
+ * It wasn't. That sample was from SofaScore — a completely different
+ * provider this file has never called (this file only ever calls
+ * sportsApiClient, i.e. SportsAPI Pro). The two were never two shapes of
+ * the same data; they were two unrelated providers. The grouped-shape
+ * parsing and promotion capture built on that mistaken premise have been
+ * removed. If a genuine SofaScore standings integration is ever wanted
+ * (e.g. specifically to get promotion/relegation zone context, which
+ * SportsAPI Pro's standings response does not carry at all), it would
+ * need its own separate sync path calling that provider directly — not
+ * bolted onto this file.
+ *
+ * MOTIVATION-CONTEXT ALTERNATIVE, not yet built: rather than relying on
+ * a `promotion` label SportsAPI Pro doesn't provide, a real motivation
+ * signal is derivable purely from what's already synced — points gap to
+ * the position boundaries that matter (e.g. within N points of the top-3/
+ * automatic-promotion cutoff, or within N points of the bottom-3/
+ * relegation cutoff), computed against each tournament's own full table.
+ * This needs its own formula design (what counts as "close," does it
+ * vary by league size) and is flagged as a follow-up requiring sign-off,
+ * same discipline as the team_strength_ratings formula change earlier
+ * this project — not built here without that discussion first.
+ *
+ * Grouped-shape detection (looksGrouped below) is kept ONLY as a thin,
+ * genuinely-unconfirmed defensive fallback — for a true multi-group/
+ * conference league (e.g. MLS Eastern/Western) that SportsAPI Pro itself
+ * might return differently. None of the 5 samples captured so far are
+ * multi-group leagues, so this remains unconfirmed either way; kept
+ * because it costs nothing to leave in, not because there's current
+ * evidence for it.
+ *
+ * Lesson from this whole detour: a captured sample is only useful
+ * evidence for what it actually came from. The api-samples logger (see
+ * logApiSample below) exists to catch shape drift and per-tournament
+ * variance empirically — but a sample still needs to be correctly
+ * attributed to the right source before conclusions get drawn from it.
  *
  * This is the cheapest data point in the entire platform: one call per
  * tracked tournament returns the FULL league table for every team in it.
@@ -138,43 +166,51 @@ export async function syncStandings(): Promise<{
       // pattern applied here. Zero extra API calls, soft-fails silently.
       await logApiSample('standings', ctx.band, response);
 
-      // ── MULTI-GROUP / CONFERENCE HANDLING ─────────────────────────────
-      // Some leagues (e.g. MLS Eastern/Western Conference) split standings
-      // into multiple groups within a single response. The confirmed
-      // single-group shape is a flat array: response.standings = [{
-      // position, teamId, teamName, played, won, ... }]. For multi-group
-      // leagues, SportsAPI Pro's exact shape is NOT YET CONFIRMED against
-      // real data — this handles the two most common patterns real sports
-      // APIs use for this, detected at runtime rather than assumed:
+      // ── SHAPE DETECTION ──────────────────────────────────────────────
+      // CONFIRMED FLAT via 5 real captured samples spanning 5 different
+      // countries/tiers (Egypt/A, China/B, South Korea/C, Lithuania/
+      // Discovery, Argentina/Mandated) — response.standings is a flat
+      // array directly: [{ position, teamId, teamName, played, won,
+      // drawn, lost, goalsFor, goalsAgainst, points }]. This matches
+      // what the ORIGINAL pre-session code already correctly expected.
       //
-      //   Shape A: still flat, but each row carries a group identifier
-      //            field (e.g. row.group / row.groupName / row.tableName)
-      //   Shape B: top-level array of GROUP objects, each with its own
-      //            nested rows array (e.g. group.rows / group.standings /
-      //            group.table), rather than team rows directly
+      // CORRECTION TO EARLIER SESSION WORK: a "grouped" shape with
+      // nested team.id, rows[], and a promotion field was earlier
+      // mistaken for this same endpoint's alternate response format.
+      // It was actually from SofaScore — a DIFFERENT provider this file
+      // has never called (this file only ever calls sportsApiClient).
+      // The two were never two shapes of the same data; they were two
+      // different providers entirely. That grouped-shape handling and
+      // the promotion capture built on top of it have been removed —
+      // see git history if a genuine SofaScore standings integration is
+      // ever wanted later (would need its own separate sync path, since
+      // this file doesn't call that provider at all).
       //
-      // Once a real multi-group response has been captured via
-      // logApiSample above (check backend/docs/api-samples/standings/),
-      // this detection can be tightened to the exact confirmed shape.
-      // Until then: this tries both interpretations rather than guessing
-      // one and silently breaking on the other.
+      // Grouped-shape detection kept below ONLY as a thin defensive
+      // fallback for a genuinely different, still-unconfirmed case — a
+      // true multi-group/conference league (e.g. MLS Eastern/Western)
+      // returned by SportsAPI Pro itself. None of the 5 tracked-band
+      // representatives sampled so far are multi-group leagues, so this
+      // remains unconfirmed either way; kept because it costs nothing
+      // and protects against a real future case, not because there's
+      // current evidence for it.
       const topLevel = response?.standings ?? [];
       let standingsRows: { row: any; groupLabel: string }[] = [];
 
-      if (topLevel.length > 0 && topLevel[0]?.teamId != null) {
-        // Shape A (or plain single-group) — flat team rows. Look for an
-        // optional per-row group field; default to 'total' when absent
-        // (this is the confirmed single-group case, e.g. Premier League).
+      const looksFlat = topLevel.length > 0 && topLevel[0]?.teamId != null;
+      const looksGrouped = topLevel.length > 0 && Array.isArray(topLevel[0]?.rows);
+
+      if (looksFlat) {
+        // Confirmed shape — see above.
         standingsRows = topLevel.map((r: any) => ({
           row: r,
           groupLabel: (r.group ?? r.groupName ?? r.tableName ?? 'total').toString().toLowerCase().replace(/\s+/g, '_'),
         }));
-      } else if (topLevel.length > 0) {
-        // Shape B — array of group wrapper objects. Try common nested-
-        // array field names and common group-name field names.
+      } else if (looksGrouped) {
+        // Unconfirmed defensive fallback — see comment block above.
         for (const group of topLevel) {
           const nestedRows = group.rows ?? group.standings ?? group.table ?? group.teams ?? [];
-          const groupLabel = (group.name ?? group.groupName ?? group.description ?? group.tableName ?? 'total')
+          const groupLabel = (group.type ?? group.name ?? group.groupName ?? group.description ?? group.tableName ?? 'total')
             .toString().toLowerCase().replace(/\s+/g, '_');
           if (!Array.isArray(nestedRows) || nestedRows.length === 0) continue;
           for (const r of nestedRows) {
@@ -184,7 +220,7 @@ export async function syncStandings(): Promise<{
         if (standingsRows.length === 0) {
           logger.warn(
             { tournamentId: ctx.tournamentId, topLevelSample: JSON.stringify(topLevel[0]).slice(0, 300) },
-            'Standings response looked like grouped shape B but no recognized nested-rows field was found — see backend/docs/api-samples/standings/ for the captured sample to identify the real field names'
+            'Standings response looked like grouped shape but rows array was empty — see backend/docs/api-samples/standings/ for the captured sample'
           );
         }
       }
@@ -203,8 +239,12 @@ export async function syncStandings(): Promise<{
         continue;
       }
 
-      // Resolve internal team IDs from the direct teamId field
-      const teamExtIds = standingsRows.map(({ row }) => row.teamId).filter(Boolean);
+      // Resolve internal team IDs. CONFIRMED via 5 real samples spanning
+      // 5 countries: team ID is a direct flat field (row.teamId), not
+      // nested. Fallback to row.team.id kept for the unconfirmed grouped
+      // case above — costs nothing.
+      const extractTeamId = (r: any): number | null => r.teamId ?? r.team?.id ?? null;
+      const teamExtIds = standingsRows.map(({ row }) => extractTeamId(row)).filter((id): id is number => id != null);
       const { data: dbTeams } = await db
         .from('teams')
         .select('id, external_id')
@@ -213,25 +253,31 @@ export async function syncStandings(): Promise<{
         (dbTeams ?? []).map((t: any) => [t.external_id, t.id])
       );
 
-      // Map API fields to DB columns (note the API field names: played, won, drawn, lost, goalsFor, goalsAgainst)
-      // standings_type now carries the real group label (e.g. 'eastern_conference')
-      // instead of a hardcoded 'total' for every row — see multi-group
-      // handling above. Single-group leagues still get 'total' exactly as
-      // before, unaffected by this change.
+      // Map API fields to DB columns. CONFIRMED via 5 real samples
+      // spanning Egypt/China/South Korea/Lithuania/Argentina: played/won/
+      // drawn/lost/goalsFor/goalsAgainst — matching what the ORIGINAL
+      // pre-session code already correctly expected. An earlier session
+      // mistakenly treated a SofaScore sample (matches/wins/draws/losses/
+      // scoresFor/scoresAgainst, plus a promotion field) as an alternate
+      // shape of THIS SAME endpoint — it wasn't; that was a different
+      // provider this file has never called. That capture logic has been
+      // removed. See top-of-file docstring for the full correction.
+      // SofaScore-style names kept as a harmless fallback only, in case
+      // the genuinely-unconfirmed grouped case above ever fires.
       const dbRows = standingsRows
-        .filter(({ row }) => teamIdMap.has(row.teamId))
+        .filter(({ row }) => teamIdMap.has(extractTeamId(row) ?? -1))
         .map(({ row: r, groupLabel }) => ({
           tournament_id: ctx.tournamentId,
-          team_id: teamIdMap.get(r.teamId),
+          team_id: teamIdMap.get(extractTeamId(r)!),
           season_external_id: ctx.seasonExternalId,
           standings_type: groupLabel,
           position: r.position ?? null,
-          matches: r.played ?? null,          // API field is "played", DB column is "matches"
-          wins: r.won ?? null,
-          draws: r.drawn ?? null,
-          losses: r.lost ?? null,
-          scores_for: r.goalsFor ?? null,
-          scores_against: r.goalsAgainst ?? null,
+          matches: r.played ?? r.matches ?? null,
+          wins: r.won ?? r.wins ?? null,
+          draws: r.drawn ?? r.draws ?? null,
+          losses: r.lost ?? r.losses ?? null,
+          scores_for: r.goalsFor ?? r.scoresFor ?? null,
+          scores_against: r.goalsAgainst ?? r.scoresAgainst ?? null,
           points: r.points ?? null,
           calculated_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
