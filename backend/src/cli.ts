@@ -9,6 +9,7 @@ import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, pr
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
+import { syncSampleBands } from './jobs/sampleBands';
 import { syncTransfersForTeams } from './jobs/syncTransfersV2';
 import { syncTeamImages } from './jobs/syncTeamImages';
 import { syncStandings } from './jobs/syncStandings';
@@ -257,6 +258,25 @@ async function handleCommand(command: string, ...args: string[]) {
         // sync:team-stats, sync:squads:v2) to recapture.
         const r = clearApiSamples();
         logger.info(r, `Cleared ${r.deleted} API sample file(s) — run your normal syncs to recapture fresh ones`);
+        break;
+      }
+
+      case 'sample:bands': {
+        // Auto-resolves ONE representative team per tier band (A/B/C/
+        // Mandated/Discovery — whatever bands exist in TRACKED_LEAGUES,
+        // not hardcoded) and runs standings + player-stats + team-stats
+        // against exactly those teams in one command — bypassing the
+        // normal cooldown/cap via the existing multi-team override.
+        // Removes the manual "look up a team ID per band, then run
+        // sync:team-stats with all three IDs" step.
+        //
+        // Does NOT include squad sync — that endpoint's sample grouping
+        // is by team country, not tier band, so a band-based team picker
+        // doesn't map onto it. Run sync:squads:v2 separately for a squad
+        // sample.
+        logger.info('Auto-resolving one team per tier band and syncing standings + player-stats + team-stats...');
+        const r = await syncSampleBands();
+        logger.info(r, `sample:bands complete — ${r.bandsResolved}/${r.bandsAttempted} bands resolved`);
         break;
       }
 
