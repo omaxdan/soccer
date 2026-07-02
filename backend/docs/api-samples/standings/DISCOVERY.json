@@ -1,0 +1,135 @@
+{
+  "success": true,
+  "tournamentId": "198",
+  "seasonId": "90029",
+  "totalTeams": 10,
+  "standings": [
+    {
+      "position": 1,
+      "teamId": 5343,
+      "teamName": "FK Sūduva Marijampolė",
+      "played": 20,
+      "won": 9,
+      "drawn": 8,
+      "lost": 3,
+      "goalsFor": 29,
+      "goalsAgainst": 16,
+      "points": 35
+    },
+    {
+      "position": 2,
+      "teamId": 168446,
+      "teamName": "Džiugas Telšiai",
+      "played": 20,
+      "won": 10,
+      "drawn": 5,
+      "lost": 5,
+      "goalsFor": 31,
+      "goalsAgainst": 22,
+      "points": 35
+    },
+    {
+      "position": 3,
+      "teamId": 411452,
+      "teamName": "FK Transinvest",
+      "played": 19,
+      "won": 10,
+      "drawn": 4,
+      "lost": 5,
+      "goalsFor": 35,
+      "goalsAgainst": 22,
+      "points": 34
+    },
+    {
+      "position": 4,
+      "teamId": 80741,
+      "teamName": "FK Kauno Žalgiris",
+      "played": 19,
+      "won": 9,
+      "drawn": 6,
+      "lost": 4,
+      "goalsFor": 37,
+      "goalsAgainst": 16,
+      "points": 33
+    },
+    {
+      "position": 5,
+      "teamId": 35388,
+      "teamName": "FK Banga Gargždai",
+      "played": 20,
+      "won": 9,
+      "drawn": 6,
+      "lost": 5,
+      "goalsFor": 28,
+      "goalsAgainst": 13,
+      "points": 33
+    },
+    {
+      "position": 6,
+      "teamId": 5345,
+      "teamName": "FK Žalgiris",
+      "played": 20,
+      "won": 8,
+      "drawn": 5,
+      "lost": 7,
+      "goalsFor": 27,
+      "goalsAgainst": 23,
+      "points": 29
+    },
+    {
+      "position": 7,
+      "teamId": 192763,
+      "teamName": "FK Panevėžys",
+      "played": 19,
+      "won": 6,
+      "drawn": 3,
+      "lost": 10,
+      "goalsFor": 19,
+      "goalsAgainst": 34,
+      "points": 21
+    },
+    {
+      "position": 8,
+      "teamId": 171484,
+      "teamName": "FC Hegelmann",
+      "played": 19,
+      "won": 3,
+      "drawn": 10,
+      "lost": 6,
+      "goalsFor": 19,
+      "goalsAgainst": 28,
+      "points": 19
+    },
+    {
+      "position": 9,
+      "teamId": 312564,
+      "teamName": "Šiauliai FA",
+      "played": 20,
+      "won": 3,
+      "drawn": 8,
+      "lost": 9,
+      "goalsFor": 21,
+      "goalsAgainst": 35,
+      "points": 17
+    },
+    {
+      "position": 10,
+      "teamId": 310557,
+      "teamName": "FK Riteriai",
+      "played": 16,
+      "won": 0,
+      "drawn": 3,
+      "lost": 13,
+      "goalsFor": 5,
+      "goalsAgainst": 42,
+      "points": 3
+    }
+  ],
+  "source": "live",
+  "timezone": {
+    "name": "Europe/Zurich",
+    "utcOffset": "+02:00",
+    "source": "auto",
+    "country": "CH"
+  }
+}

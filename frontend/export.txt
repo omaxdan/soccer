@@ -1,0 +1,21 @@
+id: 10 | external_id: 649 | name: Chinese Super League | slug: cfa-super-league | country_id: 8 | category: China | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 7 | external_id: 703 | name: Primera Nacional | slug: primera-nacional | country_id: 6 | category: Argentina | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 170 | external_id: 410 | name: K League 1 | slug: k-league-1 | country_id: 21 | category: South Korea | created_at: 2026-07-01T02:25:54.815887+00:00 | logo_storage_path: null
+id: 14 | external_id: 54 | name: LaLiga 2 | slug: laliga-2 | country_id: 11 | category: Spain | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 29 | external_id: 777 | name: K League 2 | slug: k-league-2 | country_id: 21 | category: South Korea | created_at: 2026-06-30T09:47:47.291114+00:00 | logo_storage_path: null
+id: 3 | external_id: 20 | name: Eliteserien | slug: eliteserien | country_id: 2 | category: Norway | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 4 | external_id: 40 | name: Allsvenskan | slug: allsvenskan | country_id: 3 | category: Sweden | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 2 | external_id: 198 | name: TOPLYGA | slug: a-lyga | country_id: 1 | category: Lithuania | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 8 | external_id: 196 | name: J1 League | slug: j1-league | country_id: 7 | category: Japan | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 16 | external_id: 240 | name: LigaPro Serie A | slug: ligapro-serie-a | country_id: 12 | category: Ecuador | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 6 | external_id: 390 | name: Brasileirão Série B | slug: brasileirao-serie-b | country_id: 5 | category: Brazil | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 190 | external_id: 808 | name: Egyptian Premier League | slug: premier-league | country_id: 166 | category: Egypt | created_at: 2026-07-01T11:44:29.047805+00:00 | logo_storage_path: null
+id: 195 | external_id: 53 | name: Serie B | slug: serie-b | country_id: 171 | category: Italy | created_at: 2026-07-01T11:44:29.047805+00:00 | logo_storage_path: null
+id: 196 | external_id: 34 | name: Ligue 1 | slug: ligue-1 | country_id: 172 | category: France | created_at: 2026-07-01T11:44:29.047805+00:00 | logo_storage_path: null
+id: 9 | external_id: 402 | name: J2 League | slug: j2-league | country_id: 7 | category: Japan | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 5 | external_id: 278 | name: Liga AUF Uruguaya | slug: primera-division | country_id: 4 | category: Uruguay | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 37 | external_id: 11539 | name: Primera A, Apertura | slug: primera-a-apertura | country_id: 29 | category: Colombia | created_at: 2026-06-30T09:48:14.418585+00:00 | logo_storage_path: null
+id: 83 | external_id: 192 | name:  Premier Division | slug: premier-division | country_id: 73 | category: Ireland | created_at: 2026-06-30T09:49:58.309161+00:00 | logo_storage_path: null
+id: 13 | external_id: 358 | name: South African Premier Division | slug: premiership | country_id: 10 | category: South Africa | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 17 | external_id: 325 | name: Brasileirão Betano | slug: brasileirao-serie-a | country_id: 5 | category: Brazil | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
+id: 11 | external_id: 41 | name: Veikkausliiga | slug: veikkausliiga | country_id: 9 | category: Finland | created_at: 2026-06-30T09:47:38.967969+00:00 | logo_storage_path: null
