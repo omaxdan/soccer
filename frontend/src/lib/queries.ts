@@ -964,3 +964,82 @@ export async function getTeamIntelligenceList(limit = 100): Promise<TeamIntelRow
     };
   });
 }
+
+// ─── TEAM COMPARISON EXTRAS (Image 3) ──────────────────────────────────────
+
+export interface TeamComparisonExtras {
+  seasonStats: Record<number, any | null>;
+  formPills: Record<number, ('W' | 'D' | 'L')[]>;
+  ppg10: Record<number, number | null>;
+  trend: Record<number, { date: string; readiness: number | null }[]>;
+  upcoming: Record<number, any[]>;
+  headToHead: { date: string; home_team_id: number; away_team_id: number; home_score: number | null; away_score: number | null }[];
+}
+
+/**
+ * Bulk-fetches everything the Team Comparison page needs for two teams at
+ * once, keyed by team_id so the page can look up either side. Two known
+ * gaps deliberately NOT included here (see backend/docs/ recommendation):
+ * shots/shots-on-target/dribbles-completed have zero source anywhere in
+ * the schema or sync job, despite being present in the raw SofaScore
+ * payload — rather than fake these, they're simply not part of the
+ * comparison table. xG is approximated by summing player-level
+ * expected_goals (the only xG source that exists); xGA has no source at
+ * all (would need shot-location/defensive event data) and is also omitted.
+ */
+export async function getTeamComparisonExtras(teamAId: number, teamBId: number): Promise<TeamComparisonExtras> {
+  const ids = [teamAId, teamBId];
+
+  const [statsRes, formRes, xgRes, historyRes, h2hHomeRes, h2hAwayRes] = await Promise.all([
+    supabase.from('team_season_statistics').select('*').in('team_id', ids),
+    supabase.from('team_form_history').select('team_id, result, points, match_date').in('team_id', ids).order('match_date', { ascending: false }),
+    supabase.from('player_season_statistics').select('team_id, expected_goals').in('team_id', ids),
+    supabase.from('team_intelligence_history').select('team_id, snapshot_date, readiness_score').in('team_id', ids).order('snapshot_date', { ascending: true }),
+    supabase.from('matches').select('id, date, home_team_id, away_team_id, match_results(home_score, away_score)').eq('home_team_id', teamAId).eq('away_team_id', teamBId).order('date', { ascending: false }).limit(5),
+    supabase.from('matches').select('id, date, home_team_id, away_team_id, match_results(home_score, away_score)').eq('home_team_id', teamBId).eq('away_team_id', teamAId).order('date', { ascending: false }).limit(5),
+  ]);
+
+  const seasonStats: Record<number, any | null> = {};
+  for (const id of ids) seasonStats[id] = (statsRes.data ?? []).find((s: any) => s.team_id === id) ?? null;
+
+  // Team-level xG approximation — sum of all players' season expected_goals.
+  const xgByTeam = new Map<number, number>();
+  for (const p of xgRes.data ?? []) {
+    if (p.expected_goals == null) continue;
+    xgByTeam.set(p.team_id, (xgByTeam.get(p.team_id) ?? 0) + p.expected_goals);
+  }
+  for (const id of ids) {
+    if (seasonStats[id]) seasonStats[id].approx_xg_total = xgByTeam.get(id) ?? null;
+  }
+
+  const formPills: Record<number, ('W' | 'D' | 'L')[]> = {};
+  const ppg10: Record<number, number | null> = {};
+  for (const id of ids) {
+    const rows = (formRes.data ?? []).filter((f: any) => f.team_id === id).slice(0, 10);
+    formPills[id] = rows.filter((r: any) => r.result === 'W' || r.result === 'D' || r.result === 'L').map((r: any) => r.result).reverse();
+    ppg10[id] = rows.length > 0 ? Math.round((rows.reduce((s: number, r: any) => s + (r.points ?? 0), 0) / rows.length) * 100) / 100 : null;
+  }
+
+  const trend: Record<number, { date: string; readiness: number | null }[]> = {};
+  for (const id of ids) {
+    trend[id] = (historyRes.data ?? [])
+      .filter((h: any) => h.team_id === id)
+      .map((h: any) => ({ date: h.snapshot_date, readiness: h.readiness_score }));
+  }
+
+  const upcoming: Record<number, any[]> = {};
+  for (const id of ids) {
+    upcoming[id] = await getTeamUpcomingMatches(id, 21).catch(() => []);
+  }
+
+  const headToHead = [...(h2hHomeRes.data ?? []), ...(h2hAwayRes.data ?? [])]
+    .map((m: any) => ({
+      date: m.date, home_team_id: m.home_team_id, away_team_id: m.away_team_id,
+      home_score: m.match_results?.[0]?.home_score ?? null,
+      away_score: m.match_results?.[0]?.away_score ?? null,
+    }))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5);
+
+  return { seasonStats, formPills, ppg10, trend, upcoming, headToHead };
+}

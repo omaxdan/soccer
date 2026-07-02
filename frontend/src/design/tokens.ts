@@ -14,6 +14,11 @@ export const COLORS = {
 
   // Text
   text:    '#f0f0ff',
+  text2:   '#c8c8e0', // insight/body copy — softer than `text` (headlines),
+                       // brighter than `muted` (labels). Was referenced
+                       // across 4 pages this session before being defined —
+                       // adding it here fixes all of them at once rather
+                       // than patching each usage individually.
   muted:   '#8888aa',
   dim:     '#555570',
 
