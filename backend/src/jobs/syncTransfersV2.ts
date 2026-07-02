@@ -31,6 +31,7 @@
 import { sportsApiClient } from '../services/sportsApiClient';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
+import { logApiSample } from '../utils/apiSamples';
 
 const THROTTLE_MS = 2000;
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
@@ -68,6 +69,15 @@ export async function syncTransfersForTeams(countries?: string[]): Promise<{
   for (const team of teams) {
     try {
       const response = await sportsApiClient.get<any>(`/teams/${team.external_id}/transfers`);
+
+      // Full reference sample, zero extra API calls. Grouped by
+      // team.country, same reasoning as squad sync — this loop runs
+      // per-team without resolving which tracked tournament/tier band a
+      // team belongs to, so country is what's cheaply available here.
+      // See apiSamples.ts docstring for the full band-vs-country
+      // grouping reasoning.
+      await logApiSample('transfers', team.country, response);
+
       const allEntries: RawTransferEntry[] = [
         ...(response?.transfersIn ?? []),
         ...(response?.transfersOut ?? []),

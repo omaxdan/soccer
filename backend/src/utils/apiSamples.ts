@@ -13,10 +13,10 @@ import { logger } from './logger';
  *     Discovery from TRACKED_LEAGUES, resolved via getBandBySlug()) — the
  *     question these endpoints need answered is "does response richness
  *     differ by competition tier".
- *   - squad: team COUNTRY — this sync runs per-team without otherwise
- *     resolving which tracked tournament/tier a team belongs to, so
- *     country is what's cheaply available without extra plumbing. Still
- *     a real, useful signal, just a different question answered.
+ *   - squad, transfers: team COUNTRY — both syncs run per-team without
+ *     otherwise resolving which tracked tournament/tier a team belongs
+ *     to, so country is what's cheaply available without extra plumbing.
+ *     Still a real, useful signal, just a different question answered.
  *
  * IMPORTANT: for the standings/stats endpoints, this must be the TIER BAND
  * from TRACKED_LEAGUES, NOT tournaments.category from the DB — that DB
@@ -48,6 +48,7 @@ import { logger } from './logger';
  * Usage (inside any sync job, right after receiving `response`):
  *   await logApiSample('standings', getBandBySlug(tournament.slug), response);
  *   await logApiSample('squad', team.country, rawResponse);
+ *   await logApiSample('transfers', team.country, response);
  */
 const SAMPLES_DIR = path.join(__dirname, '..', '..', 'docs', 'api-samples');
 

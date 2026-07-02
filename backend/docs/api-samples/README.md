@@ -22,6 +22,10 @@ squad/
   BRAZIL.json, ENGLAND.json, ...  — grouped by COUNTRY, not tier band
                                      (see apiSamples.ts docstring for why
                                      this endpoint groups differently)
+transfers/
+  BRAZIL.json, ENGLAND.json, ...  — same country grouping as squad, same
+                                     reasoning (per-team sync, no tier
+                                     context resolved in that loop)
 ```
 
 **This directory starts empty.** Files appear automatically the first
@@ -56,7 +60,13 @@ npx ts-node src/cli.ts sync:standings
 npx ts-node src/cli.ts sync:player-stats
 npx ts-node src/cli.ts sync:team-stats
 npx ts-node src/cli.ts sync:squads:v2
+npx ts-node src/cli.ts sync:transfers "England,Spain,Germany,Italy,France"
 ```
+
+Note: `sync:transfers` is NOT a recurring/cron command — it's run once per
+region after that region's transfer window closes. See CLI_REFERENCE.md
+for the cluster schedule. A sample will only appear here once it's been
+run at least once for a given country.
 
 Samples are captured **once** per (endpoint, group) and never
 auto-overwritten — this keeps the directory to one clean reference file
