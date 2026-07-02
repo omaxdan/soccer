@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   getTeamIntelligence, getTeamFormHistory, getTeamFixtureLoad, getTeamTravelLoad,
   getTeamSquadSnapshot, getTeamUpcomingMatches, getTeamIntelligenceTrend,
-  getTeamKeyPlayers, getTeamPositionBreakdown, getTeamNextMatch,
+  getTeamKeyPlayers, getTeamPositionDepth, getTeamNextMatch,
 } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
 import { COLORS, scoreColor } from '@/design/tokens';
@@ -83,7 +83,7 @@ export default function TeamPage() {
           getTeamUpcomingMatches(teamId, 14).catch(() => []),
           getTeamIntelligenceTrend(teamId, 14).catch(() => []),
           getTeamKeyPlayers(teamId, 5).catch(() => []),
-          getTeamPositionBreakdown(teamId).catch(() => []),
+          getTeamPositionDepth(teamId).catch(() => []),
           getTeamNextMatch(teamId).catch(() => null),
         ]);
         setData({ intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch });

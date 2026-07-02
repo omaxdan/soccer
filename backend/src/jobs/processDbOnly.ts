@@ -2099,20 +2099,20 @@ export async function processPlayerIntelligence(): Promise<{
  * two players both around 8-10 starts each get lower confidence (genuine
  * rotation, less predictable).
  */
-// ─── PREDICTED LINEUPS (FIXED) ──────────────────────────────────────────────
+// ─── PREDICTED LINEUPS ───────────────────────────────────────────────────────
 
 /**
  * Computes predicted starting XI for upcoming matches — entirely DB-only,
  * zero API calls.
  *
- * FIXED VERSION includes:
- * 1. Uses matches_started + appearances + minutes_played for ranking
- * 2. Includes injury data from player_injuries table (not just current_injury boolean)
- * 3. Includes recent form (avg rating from season stats)
- * 4. Better confidence calculation with multiple factors
- * 5. Respects formation (1 GK, 4 DEF, 4 MID, 2 FWD)
- * 6. Excludes injured and transferred players
- * 7. Upserts with proper conflict handling
+ * Ranking signals, in priority order: matches_started, appearances,
+ * average rating (total_rating/count_rating), minutes_played. Excludes
+ * players who are currently injured (current_injury flag, or an active
+ * row in player_injuries with status 'out'/'doubtful' or an expected
+ * return date), and players who've transferred to a different team since
+ * their season-stats snapshot. Respects a fixed 1-4-4-2 formation.
+ * Upserts (onConflict: match_id,player_id) after clearing any stale
+ * lineup rows for the matches being processed.
  */
 export async function processPredictedLineups(): Promise<{
   matchesProcessed: number;
@@ -2146,7 +2146,7 @@ export async function processPredictedLineups(): Promise<{
     // Uses fetchAllRows because player_season_statistics has 10,000+ rows
     const seasonStats = await fetchAllRows(
       db.from('player_season_statistics')
-        .select('player_id, team_id, matches_started, appearances, minutes_played, total_rating, count_rating, goals, assists')
+        .select('player_id, team_id, season_external_id, matches_started, appearances, minutes_played, total_rating, count_rating, goals, assists')
         .in('team_id', teamIds)
     );
 
@@ -2155,31 +2155,38 @@ export async function processPredictedLineups(): Promise<{
       return { matchesProcessed: 0, playersWritten: 0 };
     }
 
-    // Build player stats map
+    // Build player stats map — one row per player, MOST RECENT SEASON ONLY.
+    //
+    // player_season_statistics upserts on (player_id, season_external_id) —
+    // see syncSeasonStatistics.ts — meaning a player genuinely accumulates
+    // a SEPARATE row per season as this platform covers more seasons over
+    // time (not just one row that gets overwritten). An earlier version of
+    // this function summed matches_started/minutes_played/etc. across
+    // EVERY row returned per player with no season filter at all, which
+    // would silently mix current-season form with stale prior-season
+    // numbers once historical seasons started accumulating — inflating
+    // matches_started and diluting avg_rating for anyone with more than
+    // one season on record. Fixed to keep only the row with the highest
+    // season_external_id per player, matching the "higher external_id =
+    // more recent season" convention already used elsewhere in this
+    // codebase (see resolveTeamSeasonContext in syncSeasonStatistics.ts).
     const statsMap = new Map<number, any>();
     for (const stat of seasonStats) {
-      // If multiple rows per player (different seasons/competitions), aggregate
       const existing = statsMap.get(stat.player_id);
-      if (existing) {
-        existing.matches_started += stat.matches_started || 0;
-        existing.appearances += stat.appearances || 0;
-        existing.minutes_played += stat.minutes_played || 0;
-        existing.total_rating += stat.total_rating || 0;
-        existing.count_rating += stat.count_rating || 0;
-        existing.goals += stat.goals || 0;
-        existing.assists += stat.assists || 0;
-      } else {
-        statsMap.set(stat.player_id, {
-          team_id: stat.team_id,
-          matches_started: stat.matches_started || 0,
-          appearances: stat.appearances || 0,
-          minutes_played: stat.minutes_played || 0,
-          total_rating: stat.total_rating || 0,
-          count_rating: stat.count_rating || 0,
-          goals: stat.goals || 0,
-          assists: stat.assists || 0,
-        });
+      if (existing && existing.season_external_id >= (stat.season_external_id ?? 0)) {
+        continue; // existing row is from an equal-or-more-recent season — keep it
       }
+      statsMap.set(stat.player_id, {
+        team_id: stat.team_id,
+        season_external_id: stat.season_external_id ?? 0,
+        matches_started: stat.matches_started || 0,
+        appearances: stat.appearances || 0,
+        minutes_played: stat.minutes_played || 0,
+        total_rating: stat.total_rating || 0,
+        count_rating: stat.count_rating || 0,
+        goals: stat.goals || 0,
+        assists: stat.assists || 0,
+      });
     }
 
     // ── 3. Get players with position and injury status ────────────────────

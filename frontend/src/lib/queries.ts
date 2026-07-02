@@ -191,14 +191,6 @@ export async function getTrackedTeamIds(): Promise<number[]> {
 // ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
 // Uses column names (e.g. !home_team_id) not FK constraint names.
 // Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
-
-// ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
-// Uses column names (e.g. !home_team_id) not FK constraint names.
-// Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
-
-// ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
-// Uses column names (e.g. !home_team_id) not FK constraint names.
-// Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
 const MATCH_SELECT = `
   id, date, competition, season, status,
   home_team_id, away_team_id,
@@ -354,14 +346,16 @@ export async function getMatchById(id: number): Promise<any> {
     .select(MATCH_SELECT)
     .eq('id', id)
     .single();
-  
-  if (error) return null;
-  return data;
+
+  // PGRST116 = "no rows found" from .single() — a genuine, expected
+  // "match not found" case. Any OTHER error (network failure, RLS
+  // denial, malformed query) should throw and stay visible rather than
+  // silently rendering as the same "not found" state — same pattern
+  // used by getTeamIntelligence() elsewhere in this file.
+  if (error && error.code !== 'PGRST116') throw error;
+  return data ?? null;
 }
 
-// src/lib/queries.ts
-
-// ─── Define the interface at the top of the file ──────────────────────────
 export interface MatchWithLineups {
   id: number;
   date: string;
@@ -381,7 +375,6 @@ export interface MatchWithLineups {
   away_lineup: any[];
 }
 
-// ─── Then use it in the function ──────────────────────────────────────────
 export async function getMatchWithLineups(id: number): Promise<MatchWithLineups | null> {
   // Get match
   const { data: match, error } = await supabase
@@ -431,13 +424,6 @@ export async function getMatchWithLineups(id: number): Promise<MatchWithLineups 
   
   result.away_lineup = (result.match_predicted_lineups || [])
     .filter((l: any) => l.team_id === result.away_team_id);
-
-  console.log('📋 Match with lineups:', {
-    id: result.id,
-    totalLineups: result.match_predicted_lineups.length,
-    home: result.home_lineup.length,
-    away: result.away_lineup.length,
-  });
 
   return result;
 }
@@ -546,9 +532,6 @@ export async function getTeamIntelligenceTrend(teamId: number, days = 14) {
  * score (squad not synced, or processor hasn't run) are simply excluded
  * rather than shown with a fake value.
  */
-// src/lib/queries.ts
-// src/lib/queries.ts
-
 export async function getTeamKeyPlayers(teamId: number, limit = 5) {
   // ── Get players ──────────────────────────────────────────────────────────
   const { data: players } = await supabase
@@ -685,16 +668,14 @@ export async function getTeamKeyPlayers(teamId: number, limit = 5) {
 }
 
 /** Squad composition by position group (GK/DEF/MID/FWD) for the donut chart. */
-export async function getTeamPositionBreakdown(teamId: number) {
-  const { data } = await supabase
-    .from('team_position_depth')
-    .select('position_code, player_count')
-    .eq('team_id', teamId);
-  return data ?? [];
-}
-
-// src/lib/queries.ts
-
+// Position depth per team — used by both Team Detail and Match pages.
+// Selects the fuller column set (available_count, injured_count,
+// total_market_value) even though Team Detail currently only reads
+// position_code/player_count — was previously two near-identical
+// functions (getTeamPositionBreakdown + getTeamPositionDepth) querying
+// the same table with slightly different column sets; consolidated into
+// this one, since the extra columns cost nothing to select and having a
+// single canonical query is easier to maintain than two.
 export async function getTeamPositionDepth(teamId: number) {
   const { data, error } = await supabase
     .from('team_position_depth')
