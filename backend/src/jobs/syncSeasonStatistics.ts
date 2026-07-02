@@ -242,26 +242,146 @@ export async function syncPlayerSeasonStatistics(countries?: string[], teamExter
 
       const rows = list
         .filter((e: any) => playerIdMap.has(e.player?.id))
-        .map((e: any) => ({
-          player_id:          playerIdMap.get(e.player.id),
-          team_id:             team.id,
-          season_external_id:  ctx.seasonExternalId,
-          rating:               e.statistics?.rating ?? null,
-          total_rating:         e.statistics?.totalRating ?? null,
-          count_rating:         e.statistics?.countRating ?? null,
-          appearances:          e.statistics?.appearances ?? null,
-          matches_started:      e.statistics?.matchesStarted ?? null,
-          minutes_played:       e.statistics?.minutesPlayed ?? null,
-          goals:                e.statistics?.goals ?? null,
-          assists:              e.statistics?.assists ?? null,
-          expected_goals:       e.statistics?.expectedGoals ?? null,
-          expected_assists:     e.statistics?.expectedAssists ?? null,
-          yellow_cards:         e.statistics?.yellowCards ?? null,
-          red_cards:            e.statistics?.redCards ?? null,
-          played_enough:        e.playedEnough ?? false,
-          calculated_at:        new Date().toISOString(),
-          updated_at:           new Date().toISOString(),
-        }));
+        .map((e: any) => {
+          const s = e.statistics ?? {};
+          return {
+            player_id:          playerIdMap.get(e.player.id),
+            team_id:             team.id,
+            season_external_id:  ctx.seasonExternalId,
+            rating:               s.rating ?? null,
+            total_rating:         s.totalRating ?? null,
+            count_rating:         s.countRating ?? null,
+            appearances:          s.appearances ?? null,
+            matches_started:      s.matchesStarted ?? null,
+            minutes_played:       s.minutesPlayed ?? null,
+            goals:                s.goals ?? null,
+            assists:              s.assists ?? null,
+            expected_goals:       s.expectedGoals ?? null,
+            expected_assists:     s.expectedAssists ?? null,
+            yellow_cards:         s.yellowCards ?? null,
+            red_cards:            s.redCards ?? null,
+            played_enough:        e.playedEnough ?? false,
+
+            // ── Passing — migration 011 ──────────────────────────────────
+            accurate_passes:                  s.accuratePasses ?? null,
+            inaccurate_passes:                s.inaccuratePasses ?? null,
+            total_passes:                     s.totalPasses ?? null,
+            accurate_passes_pct:              s.accuratePassesPercentage ?? null,
+            accurate_own_half_passes:         s.accurateOwnHalfPasses ?? null,
+            accurate_opposition_half_passes:  s.accurateOppositionHalfPasses ?? null,
+            accurate_final_third_passes:      s.accurateFinalThirdPasses ?? null,
+            key_passes:                       s.keyPasses ?? null,
+            accurate_long_balls:              s.accurateLongBalls ?? null,
+            accurate_long_balls_pct:          s.accurateLongBallsPercentage ?? null,
+            total_long_balls:                 s.totalLongBalls ?? null,
+            accurate_chipped_passes:          s.accurateChippedPasses ?? null,
+            total_chipped_passes:             s.totalChippedPasses ?? null,
+            accurate_crosses:                 s.accurateCrosses ?? null,
+            accurate_crosses_pct:             s.accurateCrossesPercentage ?? null,
+            total_cross:                      s.totalCross ?? null,
+            pass_to_assist:                   s.passToAssist ?? null,
+            total_attempt_assist:             s.totalAttemptAssist ?? null,
+            total_own_half_passes:            s.totalOwnHalfPasses ?? null,
+            total_opposition_half_passes:     s.totalOppositionHalfPasses ?? null,
+
+            // ── Attacking / Shooting ──────────────────────────────────────
+            total_shots:               s.totalShots ?? null,
+            shots_on_target:           s.shotsOnTarget ?? null,
+            shots_off_target:          s.shotsOffTarget ?? null,
+            shots_from_inside_box:     s.shotsFromInsideTheBox ?? null,
+            shots_from_outside_box:    s.shotsFromOutsideTheBox ?? null,
+            goals_from_inside_box:     s.goalsFromInsideTheBox ?? null,
+            goals_from_outside_box:    s.goalsFromOutsideTheBox ?? null,
+            headed_goals:              s.headedGoals ?? null,
+            left_foot_goals:           s.leftFootGoals ?? null,
+            right_foot_goals:          s.rightFootGoals ?? null,
+            goal_conversion_pct:       s.goalConversionPercentage ?? null,
+            big_chances_created:       s.bigChancesCreated ?? null,
+            big_chances_missed:        s.bigChancesMissed ?? null,
+            hit_woodwork:              s.hitWoodwork ?? null,
+            shot_from_set_piece:       s.shotFromSetPiece ?? null,
+            free_kick_goal:            s.freeKickGoal ?? null,
+
+            // ── Dribbling / Ball carrying ─────────────────────────────────
+            successful_dribbles:      s.successfulDribbles ?? null,
+            successful_dribbles_pct:  s.successfulDribblesPercentage ?? null,
+            total_contest:            s.totalContest ?? null,
+            dispossessed:             s.dispossessed ?? null,
+            possession_lost:          s.possessionLost ?? null,
+            possession_won_att_third: s.possessionWonAttThird ?? null,
+            touches:                  s.touches ?? null,
+            dribbled_past:            s.dribbledPast ?? null,
+            was_fouled:               s.wasFouled ?? null,
+            fouls:                    s.fouls ?? null,
+            offsides:                 s.offsides ?? null,
+
+            // ── Defensive actions ─────────────────────────────────────────
+            tackles:              s.tackles ?? null,
+            tackles_won:          s.tacklesWon ?? null,
+            tackles_won_pct:      s.tacklesWonPercentage ?? null,
+            interceptions:        s.interceptions ?? null,
+            clearances:           s.clearances ?? null,
+            blocked_shots:        s.blockedShots ?? null,
+            ball_recovery:        s.ballRecovery ?? null,
+            outfielder_blocks:    s.outfielderBlocks ?? null,
+            error_lead_to_goal:   s.errorLeadToGoal ?? null,
+            error_lead_to_shot:   s.errorLeadToShot ?? null,
+
+            // ── Duels ──────────────────────────────────────────────────────
+            ground_duels_won:      s.groundDuelsWon ?? null,
+            ground_duels_won_pct:  s.groundDuelsWonPercentage ?? null,
+            aerial_duels_won:      s.aerialDuelsWon ?? null,
+            aerial_duels_won_pct:  s.aerialDuelsWonPercentage ?? null,
+            aerial_lost:           s.aerialLost ?? null,
+            total_duels_won:       s.totalDuelsWon ?? null,
+            total_duels_won_pct:   s.totalDuelsWonPercentage ?? null,
+            duel_lost:             s.duelLost ?? null,
+
+            // ── Penalties & set pieces ────────────────────────────────────
+            penalties_taken:          s.penaltiesTaken ?? null,
+            penalty_goals:            s.penaltyGoals ?? null,
+            penalty_won:              s.penaltyWon ?? null,
+            penalty_conceded:         s.penaltyConceded ?? null,
+            penalty_conversion_pct:   s.penaltyConversion ?? null,
+            attempt_penalty_miss:     s.attemptPenaltyMiss ?? null,
+            attempt_penalty_post:     s.attemptPenaltyPost ?? null,
+            attempt_penalty_target:   s.attemptPenaltyTarget ?? null,
+            set_piece_conversion_pct: s.setPieceConversion ?? null,
+
+            // ── Discipline / misc ─────────────────────────────────────────
+            direct_red_cards:   s.directRedCards ?? null,
+            yellow_red_cards:   s.yellowRedCards ?? null,
+            own_goals:          s.ownGoals ?? null,
+            totw_appearances:   s.totwAppearances ?? null,
+
+            // ── Goalkeeper-specific ───────────────────────────────────────
+            saves:                       s.saves ?? null,
+            saves_caught:                s.savesCaught ?? null,
+            saves_parried:               s.savesParried ?? null,
+            penalty_faced:               s.penaltyFaced ?? null,
+            penalty_save:                s.penaltySave ?? null,
+            saved_shots_inside_box:      s.savedShotsFromInsideTheBox ?? null,
+            saved_shots_outside_box:     s.savedShotsFromOutsideTheBox ?? null,
+            goals_conceded:              s.goalsConceded ?? null,
+            goals_conceded_inside_box:   s.goalsConcededInsideTheBox ?? null,
+            goals_conceded_outside_box:  s.goalsConcededOutsideTheBox ?? null,
+            clean_sheet:                 s.cleanSheet ?? null,
+            punches:                     s.punches ?? null,
+            runs_out:                    s.runsOut ?? null,
+            successful_runs_out:         s.successfulRunsOut ?? null,
+            high_claims:                 s.highClaims ?? null,
+            crosses_not_claimed:         s.crossesNotClaimed ?? null,
+            goal_kicks:                  s.goalKicks ?? null,
+
+            // ── Physical / tracking — may be sparse, see migration 011 ────
+            kilometers_covered:  s.kilometersCovered ?? null,
+            number_of_sprints:   s.numberOfSprints ?? null,
+            top_speed:           s.topSpeed ?? null,
+
+            calculated_at:        new Date().toISOString(),
+            updated_at:           new Date().toISOString(),
+          };
+        });
 
       if (rows.length > 0) {
         const { error } = await db
