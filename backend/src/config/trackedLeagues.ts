@@ -286,6 +286,20 @@ export function isTrackedBySlug(slug: string, category?: string): boolean {
   });
 }
 
+/**
+ * Resolves the real tier band (A/B/C/Mandated/Discovery) for a tracked
+ * league by slug. IMPORTANT: this is NOT the same as tournaments.category
+ * in the DB, which stores COUNTRY (e.g. 'Brazil', 'England'), not tier.
+ * The band classification only ever lived here in this static config —
+ * confirmed by reading the actual TrackedLeague interface and every entry
+ * in TRACKED_LEAGUES below, not assumed. Used by logApiSample() so API
+ * reference samples are organized by real tier, not by country.
+ */
+export function getBandBySlug(slug: string): string | null {
+  const sLower = slug.toLowerCase();
+  return TRACKED_LEAGUES.find(l => l.slug.toLowerCase() === sLower)?.band ?? null;
+}
+
 export function getTrackedLeaguesSummary(): Record<string, number> {
   return TRACKED_LEAGUES.reduce((acc, l) => {
     acc[l.region] = (acc[l.region] || 0) + 1;

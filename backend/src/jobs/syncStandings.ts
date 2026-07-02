@@ -14,6 +14,20 @@
  * normalizes this endpoint's response differently than other endpoints —
  * confirmed against live data, not assumed from documentation.
  *
+ * MULTI-GROUP / CONFERENCE STANDINGS (e.g. MLS Eastern/Western): NOT YET
+ * CONFIRMED against real data. Worth noting: the flat-array shape above
+ * was confirmed correct for SINGLE-group leagues specifically — the
+ * nested {standings:[{rows:[...]}]} shape mentioned above as "an earlier
+ * sample suggested" may well have been a genuine sample for a DIFFERENT
+ * (multi-group) tournament, not simply wrong documentation. That earlier
+ * guess wasn't necessarily incorrect in general — it may just not have
+ * matched the specific single-group tournament that was live-tested at
+ * the time. This is exactly the kind of ambiguity logApiSample() (see
+ * below) resolves empirically instead of by further guessing — once a
+ * real multi-group response has been captured to
+ * backend/docs/api-samples/standings/, the shape-detection logic further
+ * down in this file can be tightened to the confirmed exact field names.
+ *
  * This is the cheapest data point in the entire platform: one call per
  * tracked tournament returns the FULL league table for every team in it.
  * 42 tracked tournaments = 42 calls for complete league-position coverage,
@@ -36,6 +50,8 @@
 import { sportsApiClient } from '../services/sportsApiClient';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
+import { logApiSample } from '../utils/apiSamples';
+import { getBandBySlug } from '../config/trackedLeagues';
 
 const THROTTLE_MS = 2000;
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
@@ -46,16 +62,17 @@ async function getTournamentSeasons(): Promise<
     tournamentId: number;
     tournamentExternalId: number;
     seasonExternalId: number;
+    band: string | null;
   }>
 > {
   const result = new Map<
     number,
-    { tournamentId: number; tournamentExternalId: number; seasonExternalId: number }
+    { tournamentId: number; tournamentExternalId: number; seasonExternalId: number; band: string | null }
   >();
 
   const { data: tournaments } = await db
     .from('tournaments')
-    .select('id, external_id, name');
+    .select('id, external_id, name, slug');
   if (!tournaments) return result;
 
   const { data: seasons } = await db
@@ -77,6 +94,11 @@ async function getTournamentSeasons(): Promise<
       tournamentId: t.id,
       tournamentExternalId: t.external_id,
       seasonExternalId,
+      // NOTE: tier band (A/B/C/Mandated/Discovery) resolved via slug from
+      // the static TRACKED_LEAGUES config — NOT from tournaments.category
+      // in the DB, which stores country, not tier. See getBandBySlug()
+      // docstring in config/trackedLeagues.ts for why these are different.
+      band: getBandBySlug(t.slug ?? ''),
     });
   }
 
@@ -111,8 +133,61 @@ export async function syncStandings(): Promise<{
         `/tournament/${ctx.tournamentExternalId}/season/${ctx.seasonExternalId}/standings`
       );
 
-      // The API returns the standings as a flat array: [{ position, teamId, teamName, played, won, ... }]
-      const standingsRows = response?.standings ?? [];
+      // Capture one reference sample per tournament tier band — see
+      // backend/docs/PLAYER_STATS_EXPANSION.md sibling doc for the same
+      // pattern applied here. Zero extra API calls, soft-fails silently.
+      await logApiSample('standings', ctx.band, response);
+
+      // ── MULTI-GROUP / CONFERENCE HANDLING ─────────────────────────────
+      // Some leagues (e.g. MLS Eastern/Western Conference) split standings
+      // into multiple groups within a single response. The confirmed
+      // single-group shape is a flat array: response.standings = [{
+      // position, teamId, teamName, played, won, ... }]. For multi-group
+      // leagues, SportsAPI Pro's exact shape is NOT YET CONFIRMED against
+      // real data — this handles the two most common patterns real sports
+      // APIs use for this, detected at runtime rather than assumed:
+      //
+      //   Shape A: still flat, but each row carries a group identifier
+      //            field (e.g. row.group / row.groupName / row.tableName)
+      //   Shape B: top-level array of GROUP objects, each with its own
+      //            nested rows array (e.g. group.rows / group.standings /
+      //            group.table), rather than team rows directly
+      //
+      // Once a real multi-group response has been captured via
+      // logApiSample above (check backend/docs/api-samples/standings/),
+      // this detection can be tightened to the exact confirmed shape.
+      // Until then: this tries both interpretations rather than guessing
+      // one and silently breaking on the other.
+      const topLevel = response?.standings ?? [];
+      let standingsRows: { row: any; groupLabel: string }[] = [];
+
+      if (topLevel.length > 0 && topLevel[0]?.teamId != null) {
+        // Shape A (or plain single-group) — flat team rows. Look for an
+        // optional per-row group field; default to 'total' when absent
+        // (this is the confirmed single-group case, e.g. Premier League).
+        standingsRows = topLevel.map((r: any) => ({
+          row: r,
+          groupLabel: (r.group ?? r.groupName ?? r.tableName ?? 'total').toString().toLowerCase().replace(/\s+/g, '_'),
+        }));
+      } else if (topLevel.length > 0) {
+        // Shape B — array of group wrapper objects. Try common nested-
+        // array field names and common group-name field names.
+        for (const group of topLevel) {
+          const nestedRows = group.rows ?? group.standings ?? group.table ?? group.teams ?? [];
+          const groupLabel = (group.name ?? group.groupName ?? group.description ?? group.tableName ?? 'total')
+            .toString().toLowerCase().replace(/\s+/g, '_');
+          if (!Array.isArray(nestedRows) || nestedRows.length === 0) continue;
+          for (const r of nestedRows) {
+            standingsRows.push({ row: r, groupLabel });
+          }
+        }
+        if (standingsRows.length === 0) {
+          logger.warn(
+            { tournamentId: ctx.tournamentId, topLevelSample: JSON.stringify(topLevel[0]).slice(0, 300) },
+            'Standings response looked like grouped shape B but no recognized nested-rows field was found — see backend/docs/api-samples/standings/ for the captured sample to identify the real field names'
+          );
+        }
+      }
 
       if (standingsRows.length === 0) {
         skipped++;
@@ -129,7 +204,7 @@ export async function syncStandings(): Promise<{
       }
 
       // Resolve internal team IDs from the direct teamId field
-      const teamExtIds = standingsRows.map((r: any) => r.teamId).filter(Boolean);
+      const teamExtIds = standingsRows.map(({ row }) => row.teamId).filter(Boolean);
       const { data: dbTeams } = await db
         .from('teams')
         .select('id, external_id')
@@ -139,13 +214,17 @@ export async function syncStandings(): Promise<{
       );
 
       // Map API fields to DB columns (note the API field names: played, won, drawn, lost, goalsFor, goalsAgainst)
+      // standings_type now carries the real group label (e.g. 'eastern_conference')
+      // instead of a hardcoded 'total' for every row — see multi-group
+      // handling above. Single-group leagues still get 'total' exactly as
+      // before, unaffected by this change.
       const dbRows = standingsRows
-        .filter((r: any) => teamIdMap.has(r.teamId))
-        .map((r: any) => ({
+        .filter(({ row }) => teamIdMap.has(row.teamId))
+        .map(({ row: r, groupLabel }) => ({
           tournament_id: ctx.tournamentId,
           team_id: teamIdMap.get(r.teamId),
           season_external_id: ctx.seasonExternalId,
-          standings_type: 'total',
+          standings_type: groupLabel,
           position: r.position ?? null,
           matches: r.played ?? null,          // API field is "played", DB column is "matches"
           wins: r.won ?? null,

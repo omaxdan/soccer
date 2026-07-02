@@ -20,6 +20,7 @@ import { sportsApiClient }  from '../services/sportsApiClient';
 import { getTrackedLeagueSlugs } from '../config/trackedLeagues';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
+import { logApiSample } from '../utils/apiSamples';
 import { playerInjuriesRepository }            from '../repositories/PlayerInjuriesRepository';
 import { teamPositionDepthRepository }         from '../repositories/TeamPositionDepthRepository';
 import { teamTransferIntelligenceRepository }  from '../repositories/IntelligenceRepositories';
@@ -325,6 +326,16 @@ async function syncOneTeamSquad(
     logger.warn({ teamExternalId }, 'No players returned');
     return { synced: false, skipped: true };
   }
+
+  // Full reference sample, zero extra API calls. NOTE: grouped by
+  // team.country here, NOT tier band (A/B/C) — this function runs per-team
+  // and doesn't otherwise resolve which tracked tournament/tier a team
+  // belongs to, so forcing a true band lookup would mean an extra DB call
+  // per team for a diagnostic feature. Country is what's already available
+  // for free at this point. It's a real, useful signal (does a Brazilian
+  // team's squad payload differ from an English one) even if it doesn't
+  // answer the exact tier-band question the standings/stats samples do.
+  await logApiSample('squad', team.country, rawResponse);
 
   logger.debug({ teamId: team.id, playerCount: rawPlayers.length, sample: JSON.stringify(rawPlayers[0]).slice(0, 300) }, 'Squad response sample');
 

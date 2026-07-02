@@ -1649,10 +1649,44 @@ export async function processTeamStrengthRatings(): Promise<{
     // Position needs normalizing against league SIZE — 3rd in a 28-team
     // league is a very different signal than 3rd in a 12-team league, so we
     // group by tournament_id to know each team's league size for scaling.
-    const { data: standingsRows } = await db
+    //
+    // NOTE: no longer filters .eq('standings_type', 'total') — that would
+    // silently exclude every team in a true multi-group/conference league
+    // (e.g. MLS Eastern/Western) once syncStandings.ts starts writing real
+    // group labels instead of a hardcoded 'total' for every row (see that
+    // file's multi-group handling). Prefer 'total' when present (covers
+    // 100% of today's single-group leagues, zero behavior change there);
+    // otherwise take whatever group row exists rather than silently
+    // dropping the team's position entirely.
+    //
+    // KNOWN REMAINING LIMITATION, not fixed here: leagueSizeByTournament
+    // below computes size as the max position seen for a tournament,
+    // across ALL groups combined. For a genuine multi-group league where
+    // each conference has its own independent 1..N ranking, this mixes
+    // two separate rank spaces together — a team ranked 3rd in the
+    // Western conference isn't equivalent to 3rd in the Eastern
+    // conference, but this logic currently treats them as comparable.
+    // Fixing this properly needs the real standings_type values a live
+    // multi-group response would provide (see backend/docs/api-samples/
+    // standings/ once populated) — flagging honestly rather than guessing
+    // at a normalization scheme without that data in hand.
+    const { data: standingsRowsRaw } = await db
       .from('tournament_standings')
-      .select('team_id, tournament_id, position')
-      .eq('standings_type', 'total');
+      .select('team_id, tournament_id, position, standings_type');
+
+    const standingsRows: any[] = [];
+    const seenTeams = new Set<number>();
+    // Prefer 'total' rows first, then fill in any remaining teams from
+    // whatever other standings_type rows they have.
+    for (const s of (standingsRowsRaw ?? []).filter((r: any) => r.standings_type === 'total')) {
+      standingsRows.push(s);
+      seenTeams.add(s.team_id);
+    }
+    for (const s of standingsRowsRaw ?? []) {
+      if (seenTeams.has(s.team_id)) continue;
+      standingsRows.push(s);
+      seenTeams.add(s.team_id);
+    }
 
     const positionMap = new Map<number, number>();
     const leagueSizeByTournament = new Map<number, number>();

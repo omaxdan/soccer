@@ -8,6 +8,7 @@ import { processFormForRecentMatches, processFormBackfill } from './jobs/process
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
+import { clearApiSamples } from './utils/apiSamples';
 import { syncTransfersForTeams } from './jobs/syncTransfersV2';
 import { syncTeamImages } from './jobs/syncTeamImages';
 import { syncStandings } from './jobs/syncStandings';
@@ -241,6 +242,21 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Syncing tournament standings (~42 calls, one per tracked league)...');
         const r = await syncStandings();
         logger.info(r, 'Standings sync complete');
+        break;
+      }
+
+      case 'refresh:api-samples': {
+        // Clears captured API reference samples (backend/docs/api-samples/)
+        // so the next normal sync cycle recaptures fresh ones. Deliberate
+        // action, not automatic — see backend/src/utils/apiSamples.ts for
+        // why samples aren't overwritten on every call by default (keeps
+        // git diffs on these files meaningful when they DO change, rather
+        // than churning on every sync run).
+        // Zero API calls itself — just deletes local files. Run this, then
+        // run your normal sync commands (sync:standings, sync:player-stats,
+        // sync:team-stats, sync:squads:v2) to recapture.
+        const r = clearApiSamples();
+        logger.info(r, `Cleared ${r.deleted} API sample file(s) — run your normal syncs to recapture fresh ones`);
         break;
       }
 

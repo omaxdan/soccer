@@ -47,9 +47,10 @@
  */
 
 import { sportsApiClient } from '../services/sportsApiClient';
-import { getTrackedLeagueSlugs } from '../config/trackedLeagues';
+import { getTrackedLeagueSlugs, getBandBySlug } from '../config/trackedLeagues';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
+import { logApiSample } from '../utils/apiSamples';
 
 // Both set to 21 days (adjusted from the original 14d/30d design) to make
 // room for sync:standings in the daily API budget — see CLI_REFERENCE.md
@@ -72,8 +73,8 @@ function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
  * league — by picking the one with the most fixtures, almost always the
  * league campaign that season-stats are meaningful for).
  */
-async function resolveTeamSeasonContext(): Promise<Map<number, { tournamentExternalId: number; seasonExternalId: number }>> {
-  const result = new Map<number, { tournamentExternalId: number; seasonExternalId: number }>();
+async function resolveTeamSeasonContext(): Promise<Map<number, { tournamentExternalId: number; seasonExternalId: number; band: string | null }>> {
+  const result = new Map<number, { tournamentExternalId: number; seasonExternalId: number; band: string | null }>();
 
   // Pull recent matches with resolved tournament + season context
   const ago90 = new Date(Date.now() - 90 * 86400000).toISOString();
@@ -99,9 +100,16 @@ async function resolveTeamSeasonContext(): Promise<Map<number, { tournamentExter
   // Resolve tournament name -> external_id (uniqueTournament.id, per migration 007)
   const { data: tournaments } = await db
     .from('tournaments')
-    .select('external_id, name');
+    .select('external_id, name, slug');
   const tournamentByName = new Map<string, number>(
     (tournaments ?? []).map((t: any) => [t.name, t.external_id])
+  );
+  // NOTE: tier band resolved via slug from the static TRACKED_LEAGUES
+  // config — NOT from tournaments.category in the DB, which stores
+  // country, not tier. See getBandBySlug() docstring for why these
+  // are different fields entirely.
+  const bandByTournamentExtId = new Map<number, string | null>(
+    (tournaments ?? []).map((t: any) => [t.external_id, getBandBySlug(t.slug ?? '')])
   );
 
   // Resolve tournament external_id -> most recent season external_id
@@ -125,7 +133,7 @@ async function resolveTeamSeasonContext(): Promise<Map<number, { tournamentExter
     if (!tournamentExternalId) continue;
     const seasonExternalId = seasonByTournamentExtId.get(tournamentExternalId);
     if (!seasonExternalId) continue;
-    result.set(teamId, { tournamentExternalId, seasonExternalId });
+    result.set(teamId, { tournamentExternalId, seasonExternalId, band: bandByTournamentExtId.get(tournamentExternalId) ?? null });
   }
 
   return result;
@@ -222,6 +230,10 @@ export async function syncPlayerSeasonStatistics(countries?: string[], teamExter
       const response = await sportsApiClient.get<any>(
         `/teams/${team.external_id}/tournament/${ctx.tournamentExternalId}/season/${ctx.seasonExternalId}/player-statistics`
       );
+
+      // Zero extra API calls — captures one reference sample per tournament
+      // category. See backend/src/utils/apiSamples.ts for full reasoning.
+      await logApiSample('player-stats', ctx.band, response);
 
       // SportsAPI Pro wraps some endpoints as { success: true, data: {...} }
       // and others return the payload directly — handle both shapes.
@@ -445,6 +457,8 @@ export async function syncTeamSeasonStatistics(countries?: string[], teamExterna
       const response = await sportsApiClient.get<any>(
         `/teams/${team.external_id}/tournament/${ctx.tournamentExternalId}/season/${ctx.seasonExternalId}/statistics`
       );
+
+      await logApiSample('team-stats', ctx.band, response);
 
       // SportsAPI Pro wraps some endpoints as { success: true, data: {...} }
       // and others return the payload directly — handle both shapes.
