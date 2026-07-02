@@ -40,6 +40,16 @@ export async function syncSampleBands(): Promise<{
 }> {
   logger.info('syncSampleBands started — resolving one representative team per tier band');
 
+  // ── Standings FIRST, then resolve representative teams ──────────────
+  // Confirmed via real run: resolving teams BEFORE syncing standings
+  // caused false "no standings yet" skips for 3 of 5 bands, even though
+  // the SAME run's standings sync (which used to happen after) went on
+  // to write 227 rows across 21 tournaments moments later — those bands
+  // would have resolved fine if the sync had simply run first. Real
+  // ordering bug, not a data problem — fixed by swapping the order.
+  logger.info('Running full standings sync FIRST (so team-picking below has fresh data)...');
+  const standings = await syncStandings();
+
   // One representative league per band, first match in TRACKED_LEAGUES
   // array order. Skips 'Mandated'/'Discovery' duplicates of the same band
   // already seen, same as skipping duplicate A/B/C entries.
@@ -61,7 +71,13 @@ export async function syncSampleBands(): Promise<{
       .limit(1);
     const tournament = tournamentRows?.[0];
     if (!tournament) {
-      logger.warn({ band: rep.band, slug: rep.slug }, 'Band representative tournament not found in DB — has sync:today run for this league?');
+      // Genuinely different problem from "no standings yet" — this means
+      // the tournament itself was never discovered/created in the DB at
+      // all (sync:today or similar hasn't run for it, or there's a slug
+      // mismatch between TRACKED_LEAGUES and what's actually in the
+      // tournaments table). Confirmed real for band B (League One) in
+      // testing — needs checking independently of the ordering fix above.
+      logger.warn({ band: rep.band, slug: rep.slug }, 'Band representative tournament not found in DB at all — check sync:today has run for this league, and that the slug in TRACKED_LEAGUES matches tournaments.slug exactly');
       continue;
     }
 
@@ -72,7 +88,7 @@ export async function syncSampleBands(): Promise<{
       .limit(1);
     const teamId = standingRows?.[0]?.team_id;
     if (!teamId) {
-      logger.warn({ band: rep.band, tournament: tournament.name }, 'No standings synced for this tournament yet — run sync:standings first, skipping this band for now');
+      logger.warn({ band: rep.band, tournament: tournament.name }, 'Still no standings for this tournament even after syncing — check syncStandings errors above for this tournament specifically');
       continue;
     }
 
@@ -93,11 +109,6 @@ export async function syncSampleBands(): Promise<{
   logger.info({ teamsUsed }, `Resolved ${teamsUsed.length}/${representativeLeagues.length} band representatives`);
 
   const teamExternalIds = teamsUsed.map(t => t.teamExternalId);
-
-  // Standings: full run regardless (cheap, ~42 calls, already covers
-  // every band in one normal call — no point scoping this one down).
-  logger.info('Running full standings sync (covers all bands in one pass)...');
-  const standings = await syncStandings();
 
   logger.info({ teamExternalIds }, 'Running player-stats + team-stats against band-representative teams...');
   const playerStats = teamExternalIds.length > 0
