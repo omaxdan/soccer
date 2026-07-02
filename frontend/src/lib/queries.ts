@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-
+import { Match } from '@/types/match';
 // ─── UTC DAY BOUNDARIES ────────────────────────────────────────────────────
 // EXPLICIT UTC, never local timezone. Match dates are stored as timestamptz
 // (UTC). The previous pattern (new Date(); date.setHours(0,0,0,0)) computes
@@ -191,11 +191,19 @@ export async function getTrackedTeamIds(): Promise<number[]> {
 // ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
 // Uses column names (e.g. !home_team_id) not FK constraint names.
 // Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
+
+// ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
+// Uses column names (e.g. !home_team_id) not FK constraint names.
+// Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
+
+// ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
+// Uses column names (e.g. !home_team_id) not FK constraint names.
+// Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
 const MATCH_SELECT = `
   id, date, competition, season, status,
   home_team_id, away_team_id,
-  home_team:teams!home_team_id(id, name, short_name, slug, country),
-  away_team:teams!away_team_id(id, name, short_name, slug, country),
+  home_team:teams!home_team_id(id, name, short_name, slug, country, crest_storage_path),
+  away_team:teams!away_team_id(id, name, short_name, slug, country, crest_storage_path),
   venue:stadiums!venue_id(id, name, city, country, latitude, longitude, capacity, timezone),
   match_results(home_score, away_score, half_time_home_score, half_time_away_score, winner_team_id, status),
   match_intelligence(
@@ -340,11 +348,98 @@ export async function getMatchesForDate(date: string) {
 
 // ─── MATCH INTELLIGENCE PAGE ──────────────────────────────────────────────────
 
-export async function getMatchById(id: number) {
-  const { data, error } = await supabase.from('matches')
-    .select(MATCH_SELECT).eq('id', id).single();
-  if (error) throw error;
+export async function getMatchById(id: number): Promise<any> {
+  const { data, error } = await supabase
+    .from('matches')
+    .select(MATCH_SELECT)
+    .eq('id', id)
+    .single();
+  
+  if (error) return null;
   return data;
+}
+
+// src/lib/queries.ts
+
+// ─── Define the interface at the top of the file ──────────────────────────
+export interface MatchWithLineups {
+  id: number;
+  date: string;
+  competition: string;
+  season: string;
+  status: string;
+  home_team_id: number;
+  away_team_id: number;
+  home_team: any;
+  away_team: any;
+  venue: any;
+  match_results: any[];
+  match_intelligence: any[];
+  match_travel_intelligence: any[];
+  match_predicted_lineups: any[];
+  home_lineup: any[];
+  away_lineup: any[];
+}
+
+// ─── Then use it in the function ──────────────────────────────────────────
+export async function getMatchWithLineups(id: number): Promise<MatchWithLineups | null> {
+  // Get match
+  const { data: match, error } = await supabase
+    .from('matches')
+    .select(MATCH_SELECT)
+    .eq('id', id)
+    .single();
+  
+  if (error || !match) return null;
+
+  // ── Get lineups with position data ──────────────────────────────────────
+  const { data: lineups } = await supabase
+    .from('match_predicted_lineups')
+    .select(`
+      team_id, 
+      player_id, 
+      position_code, 
+      rank_in_position,
+      matches_started, 
+      confidence,
+      calculated_at,
+      players:player_id (
+        id, 
+        name, 
+        position, 
+        position_detailed,
+        primary_position,
+        secondary_position,
+        tertiary_position,
+        jersey_number, 
+        current_injury
+      )
+    `)
+    .eq('match_id', id)
+    .order('rank_in_position', { ascending: true });
+
+  // ── Build the result with all properties ────────────────────────────────
+  const result: MatchWithLineups = {
+    ...match,
+    match_predicted_lineups: lineups || [],
+    home_lineup: [],
+    away_lineup: [],
+  };
+
+  result.home_lineup = (result.match_predicted_lineups || [])
+    .filter((l: any) => l.team_id === result.home_team_id);
+  
+  result.away_lineup = (result.match_predicted_lineups || [])
+    .filter((l: any) => l.team_id === result.away_team_id);
+
+  console.log('📋 Match with lineups:', {
+    id: result.id,
+    totalLineups: result.match_predicted_lineups.length,
+    home: result.home_lineup.length,
+    away: result.away_lineup.length,
+  });
+
+  return result;
 }
 
 export async function getTeamIntelligence(teamId: number) {
@@ -451,21 +546,70 @@ export async function getTeamIntelligenceTrend(teamId: number, days = 14) {
  * score (squad not synced, or processor hasn't run) are simply excluded
  * rather than shown with a fake value.
  */
+// src/lib/queries.ts
+// src/lib/queries.ts
+
 export async function getTeamKeyPlayers(teamId: number, limit = 5) {
+  // ── Get players ──────────────────────────────────────────────────────────
   const { data: players } = await supabase
     .from('players')
-    .select('id, name, short_name, position, primary_position, date_of_birth, nationality_code, jersey_number')
+    .select('id, name, short_name, position, primary_position, date_of_birth, nationality_code, jersey_number, market_value, current_injury, injury_status, injury_reason, injury_return_days')
     .eq('team_id', teamId);
+  
   if (!players || players.length === 0) return [];
 
   const playerIds = players.map((p: any) => p.id);
+
+  // ── Get player intelligence ──────────────────────────────────────────────
   const { data: intel } = await supabase
     .from('player_intelligence')
-    .select('player_id, readiness_score')
-    .in('player_id', playerIds)
-    .not('readiness_score', 'is', null);
+    .select('player_id, readiness_score, fatigue_score, load_index, matches_last_7_days, minutes_last_7_days')
+    .in('player_id', playerIds);
 
-  const intelMap = new Map<number, number>((intel ?? []).map((i: any) => [i.player_id, i.readiness_score]));
+  const intelMap = new Map<number, any>((intel ?? []).map((i: any) => [i.player_id, i]));
+
+  // ── Get season statistics (for avg rating) ──────────────────────────────
+  const { data: stats } = await supabase
+    .from('player_season_statistics')
+    .select('player_id, matches_started, appearances, minutes_played, goals, assists, total_rating, count_rating')
+    .in('player_id', playerIds);
+
+  const statsMap = new Map<number, any>((stats ?? []).map((s: any) => [s.player_id, s]));
+
+  // ── Get active injuries ──────────────────────────────────────────────────
+  const { data: injuries } = await supabase
+    .from('player_injuries')
+    .select('player_id, injury_reason, injury_status, expected_return_days, days_out, injury_severity_score')
+    .in('player_id', playerIds)
+    .eq('active', true);
+
+  const injuryMap = new Map<number, any>((injuries ?? []).map((i: any) => [i.player_id, i]));
+
+  // ── Get predicted lineups confidence for upcoming match ──────────────────
+  // Find the next match for this team
+  const now = new Date().toISOString();
+  const { data: nextMatch } = await supabase
+    .from('matches')
+    .select('id')
+    .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
+    .eq('status', 'scheduled')
+    .gte('date', now)
+    .order('date', { ascending: true })
+    .limit(1)
+    .single();
+
+  let confidenceMap = new Map<number, number>();
+  if (nextMatch) {
+    const { data: lineups } = await supabase
+      .from('match_predicted_lineups')
+      .select('player_id, confidence')
+      .eq('match_id', nextMatch.id)
+      .eq('team_id', teamId);
+    
+    for (const l of lineups || []) {
+      confidenceMap.set(l.player_id, l.confidence);
+    }
+  }
 
   const ageFromDob = (dob: string | null) => {
     if (!dob) return null;
@@ -473,14 +617,70 @@ export async function getTeamKeyPlayers(teamId: number, limit = 5) {
     return Math.floor(diff / (365.25 * 86400000));
   };
 
+  // ── Calculate avg rating from total/count ────────────────────────────────
+  const calculateAvgRating = (stat: any): number | null => {
+    if (!stat) return null;
+    if (stat.count_rating && stat.count_rating > 0 && stat.total_rating) {
+      return Math.round((stat.total_rating / stat.count_rating) * 100) / 100;
+    }
+    return null;
+  };
+
   return players
-    .filter((p: any) => intelMap.has(p.id))
-    .map((p: any) => ({
-      ...p,
-      age: ageFromDob(p.date_of_birth),
-      readiness_score: intelMap.get(p.id),
-    }))
-    .sort((a: any, b: any) => (b.readiness_score ?? 0) - (a.readiness_score ?? 0))
+    .map((p: any) => {
+      const intel = intelMap.get(p.id);
+      const stat = statsMap.get(p.id);
+      const injury = injuryMap.get(p.id);
+      const avgRating = calculateAvgRating(stat);
+      const confidence = confidenceMap.get(p.id) || null;
+
+      return {
+        id: p.id,
+        name: p.name,
+        short_name: p.short_name,
+        position: p.position,
+        primary_position: p.primary_position,
+        age: ageFromDob(p.date_of_birth),
+        jersey_number: p.jersey_number,
+        nationality_code: p.nationality_code,
+        market_value: p.market_value,
+        // ── Intelligence ──────────────────────────────────────────────────
+        readiness_score: intel?.readiness_score || 0,
+        fatigue_score: intel?.fatigue_score || 0,
+        load_index: intel?.load_index || 0,
+        matches_last_7_days: intel?.matches_last_7_days || 0,
+        minutes_last_7_days: intel?.minutes_last_7_days || 0,
+        // ── Season Stats ──────────────────────────────────────────────────
+        matches_started: stat?.matches_started || 0,
+        appearances: stat?.appearances || 0,
+        minutes_played: stat?.minutes_played || 0,
+        goals: stat?.goals || 0,
+        assists: stat?.assists || 0,
+        avg_rating: avgRating, // ← This is the key metric!
+        // ── Confidence (from predicted lineups) ──────────────────────────
+        confidence: confidence, // ← This is the key metric!
+        // ── Injury Status ──────────────────────────────────────────────────
+        current_injury: p.current_injury,
+        injury_status: p.injury_status || injury?.injury_status || null,
+        injury_reason: p.injury_reason || injury?.injury_reason || null,
+        injury_return_days: p.injury_return_days || injury?.expected_return_days || null,
+        injury_severity: injury?.injury_severity_score || null,
+        days_out: injury?.days_out || 0,
+      };
+    })
+    .filter((p: any) => p.readiness_score > 0 || p.avg_rating !== null) // Only show players with data
+    .sort((a: any, b: any) => {
+      // Sort by: 1. Confidence (if available), 2. Avg Rating, 3. Readiness
+      const aConf = a.confidence || 0;
+      const bConf = b.confidence || 0;
+      if (aConf !== bConf) return bConf - aConf;
+      
+      const aRating = a.avg_rating || 0;
+      const bRating = b.avg_rating || 0;
+      if (aRating !== bRating) return bRating - aRating;
+      
+      return (b.readiness_score || 0) - (a.readiness_score || 0);
+    })
     .slice(0, limit);
 }
 
@@ -490,6 +690,18 @@ export async function getTeamPositionBreakdown(teamId: number) {
     .from('team_position_depth')
     .select('position_code, player_count')
     .eq('team_id', teamId);
+  return data ?? [];
+}
+
+// src/lib/queries.ts
+
+export async function getTeamPositionDepth(teamId: number) {
+  const { data, error } = await supabase
+    .from('team_position_depth')
+    .select('position_code, player_count, available_count, injured_count, total_market_value')
+    .eq('team_id', teamId);
+  
+  if (error) return [];
   return data ?? [];
 }
 
@@ -889,7 +1101,7 @@ export interface TeamIntelRow {
  * have a real trend for a while. Same honesty principle as every other
  * page built this session.
  */
-export async function getTeamIntelligenceList(limit = 100): Promise<TeamIntelRow[]> {
+export async function getTeamIntelligenceList(limit = 10000): Promise<TeamIntelRow[]> {
   const teamIds = await getTrackedTeamIds();
 
   const q = supabase.from('team_intelligence')

@@ -34,16 +34,27 @@ async function fetchAllRows<T = any>(
   let all: T[] = [];
   let page = 0;
   let hasMore = true;
+  
   while (hasMore) {
     const from = page * pageSize;
     const to = from + pageSize - 1;
     const { data, error } = await queryBuilder.range(from, to);
+    
     if (error) throw new Error(`Paginated query failed at page ${page}: ${error.message}`);
-    if (!data || data.length === 0) { hasMore = false; break; }
+    if (!data || data.length === 0) { 
+      hasMore = false; 
+      break; 
+    }
+    
     all = all.concat(data);
+    
+    // ✅ Key: Stop when page comes back SHORTER than pageSize
+    // This is the only reliable end-of-data signal
     if (data.length < pageSize) hasMore = false;
+    
     page++;
   }
+  
   return all;
 }
 
@@ -2088,6 +2099,21 @@ export async function processPlayerIntelligence(): Promise<{
  * two players both around 8-10 starts each get lower confidence (genuine
  * rotation, less predictable).
  */
+// ─── PREDICTED LINEUPS (FIXED) ──────────────────────────────────────────────
+
+/**
+ * Computes predicted starting XI for upcoming matches — entirely DB-only,
+ * zero API calls.
+ *
+ * FIXED VERSION includes:
+ * 1. Uses matches_started + appearances + minutes_played for ranking
+ * 2. Includes injury data from player_injuries table (not just current_injury boolean)
+ * 3. Includes recent form (avg rating from season stats)
+ * 4. Better confidence calculation with multiple factors
+ * 5. Respects formation (1 GK, 4 DEF, 4 MID, 2 FWD)
+ * 6. Excludes injured and transferred players
+ * 7. Upserts with proper conflict handling
+ */
 export async function processPredictedLineups(): Promise<{
   matchesProcessed: number;
   playersWritten: number;
@@ -2096,138 +2122,289 @@ export async function processPredictedLineups(): Promise<{
   logger.info('processPredictedLineups started — DB only, zero API calls');
 
   try {
-    // Only upcoming (scheduled) matches within the next 7 days — predicted
-    // lineups for matches far in the future aren't meaningfully more useful
-    // and just cost processing time without value.
+    // ── 1. Get upcoming matches (next 7 days) ────────────────────────────
     const now = new Date().toISOString();
     const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
 
     const { data: matches, error: mErr } = await db
       .from('matches')
-      .select('id, home_team_id, away_team_id')
+      .select('id, home_team_id, away_team_id, date')
       .eq('status', 'scheduled')
       .gte('date', now)
       .lte('date', weekOut);
 
     if (mErr) throw new Error(`matches query: ${mErr.message}`);
     if (!matches || matches.length === 0) {
+      logger.info('No upcoming matches in next 7 days');
       return { matchesProcessed: 0, playersWritten: 0 };
     }
 
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+    logger.info({ matchCount: matches.length, teamCount: teamIds.length }, 'Processing predicted lineups');
 
-    // Season stats — primary ranking signal (matches_started) plus quality
-    // signal (total_rating/count_rating) for tiebreaking and confidence.
-    //
-    // total_rating is NOT the same as rating: rating = total_rating /
-    // count_rating (verified against live SofaScore payload data), and
-    // count_rating tracks TOTAL appearances (starts + sub apps), not just
-    // starts. total_rating therefore compounds quality with reliability —
-    // a player with rating 8.5 from 2 sub cameos and a player with rating
-    // 8.5 from 30 starts look identical on `rating` alone, but their
-    // total_rating (17 vs 255) correctly shows one is a proven starter and
-    // the other is a small-sample outlier. That distinction is exactly
-    // what's needed here: ranking WHO actually starts, not just who has a
-    // good average.
-    const { data: seasonStats } = await db
-      .from('player_season_statistics')
-      .select('player_id, team_id, matches_started, minutes_played, total_rating, count_rating')
-      .in('team_id', teamIds)
-      .order('matches_started', { ascending: false });
+    // ── 2. Get player season statistics (ranking signal) ──────────────────
+    // Uses fetchAllRows because player_season_statistics has 10,000+ rows
+    const seasonStats = await fetchAllRows(
+      db.from('player_season_statistics')
+        .select('player_id, team_id, matches_started, appearances, minutes_played, total_rating, count_rating, goals, assists')
+        .in('team_id', teamIds)
+    );
 
-    // Player position + injury status
-    const { data: players } = await db
-      .from('players')
-      .select('id, team_id, position, current_injury')
-      .in('team_id', teamIds);
-    const playerMap = new Map<number, any>((players ?? []).map((p: any) => [p.id, p]));
+    if (seasonStats.length === 0) {
+      logger.warn('No season statistics found for teams — run sync:player-stats first');
+      return { matchesProcessed: 0, playersWritten: 0 };
+    }
 
-    // Recent transfers OUT — exclude anyone who's left since the stats snapshot
-    const { data: recentTransfers } = await db
-      .from('player_transfers')
-      .select('player_id, to_team_id, transfer_date')
-      .order('transfer_date', { ascending: false });
-    const latestTeamByPlayer = new Map<number, number>();
-    for (const t of recentTransfers ?? []) {
-      if (!latestTeamByPlayer.has(t.player_id) && t.to_team_id) {
-        latestTeamByPlayer.set(t.player_id, t.to_team_id);
+    // Build player stats map
+    const statsMap = new Map<number, any>();
+    for (const stat of seasonStats) {
+      // If multiple rows per player (different seasons/competitions), aggregate
+      const existing = statsMap.get(stat.player_id);
+      if (existing) {
+        existing.matches_started += stat.matches_started || 0;
+        existing.appearances += stat.appearances || 0;
+        existing.minutes_played += stat.minutes_played || 0;
+        existing.total_rating += stat.total_rating || 0;
+        existing.count_rating += stat.count_rating || 0;
+        existing.goals += stat.goals || 0;
+        existing.assists += stat.assists || 0;
+      } else {
+        statsMap.set(stat.player_id, {
+          team_id: stat.team_id,
+          matches_started: stat.matches_started || 0,
+          appearances: stat.appearances || 0,
+          minutes_played: stat.minutes_played || 0,
+          total_rating: stat.total_rating || 0,
+          count_rating: stat.count_rating || 0,
+          goals: stat.goals || 0,
+          assists: stat.assists || 0,
+        });
       }
     }
 
-    // Build per-team ranked rosters by position
+    // ── 3. Get players with position and injury status ────────────────────
+    const players = await fetchAllRows(
+      db.from('players')
+        .select('id, team_id, position, current_injury, injury_status, injury_reason, injury_return_days')
+        .in('team_id', teamIds)
+    );
+
+    const playerMap = new Map<number, any>();
+    for (const p of players) {
+      playerMap.set(p.id, p);
+    }
+
+    // ── 4. Get active injuries from player_injuries table ──────────────────
+    // This gives us more detailed injury info than the current_injury boolean
+    const { data: injuries, error: injErr } = await db
+      .from('player_injuries')
+      .select('player_id, injury_reason, injury_status, expected_return_days, days_out, injury_severity_score')
+      .eq('active', true)
+      .in('player_id', [...statsMap.keys()]);
+
+    if (injErr) {
+      logger.warn({ error: injErr.message }, 'Failed to fetch player_injuries — using current_injury only');
+    }
+
+    const injuryMap = new Map<number, any>();
+    for (const inj of injuries || []) {
+      injuryMap.set(inj.player_id, inj);
+    }
+
+    // ── 5. Get recent transfers to exclude players who left ────────────────
+    const yearAgo = new Date();
+    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+
+    const { data: transfers, error: tErr } = await db
+      .from('player_transfers')
+      .select('player_id, to_team_id, from_team_id, transfer_date')
+      .gte('transfer_date', yearAgo.toISOString().split('T')[0])
+      .order('transfer_date', { ascending: false });
+
+    if (tErr) {
+      logger.warn({ error: tErr.message }, 'Failed to fetch transfers — continuing without transfer filter');
+    }
+
+    // Get latest team per player (if they transferred)
+    const latestTeamMap = new Map<number, number>();
+    for (const t of transfers || []) {
+      if (t.to_team_id && !latestTeamMap.has(t.player_id)) {
+        latestTeamMap.set(t.player_id, t.to_team_id);
+      }
+    }
+
+    // ── 6. Build per-team ranked rosters by position ──────────────────────
+    // Formation: 1 GK, 4 DEF, 4 MID, 2 FWD
     const FORMATION: Record<string, number> = { G: 1, D: 4, M: 4, F: 2 };
     const teamRosters = new Map<number, Map<string, any[]>>();
 
-    for (const stat of seasonStats ?? []) {
-      const player = playerMap.get(stat.player_id);
+    for (const [playerId, stats] of statsMap) {
+      const player = playerMap.get(playerId);
       if (!player) continue;
-      if (player.current_injury) continue; // unavailable
-      const currentTeam = latestTeamByPlayer.get(stat.player_id);
-      if (currentTeam && currentTeam !== stat.team_id) continue; // transferred out since
 
-      const pos = player.position ?? 'M'; // default bucket if unknown
-      if (!teamRosters.has(stat.team_id)) teamRosters.set(stat.team_id, new Map());
-      const posMap = teamRosters.get(stat.team_id)!;
+      // ── Check if player is available ──────────────────────────────────
+      // 1. Exclude if current_injury is true
+      if (player.current_injury) continue;
+
+      // 2. Check active injuries table for detailed status
+      const injury = injuryMap.get(playerId);
+      if (injury) {
+        // If injury_status is 'out' or 'doubtful', exclude
+        if (injury.injury_status === 'out' || injury.injury_status === 'doubtful') {
+          continue;
+        }
+        // If expected_return_days > 0 and match is within that window, exclude
+        if (injury.expected_return_days && injury.expected_return_days > 0) {
+          // Could check against match date, but safer to exclude if injured at all
+          continue;
+        }
+      }
+
+      // 3. Check if player transferred out since stats snapshot
+      const latestTeam = latestTeamMap.get(playerId);
+      if (latestTeam && latestTeam !== player.team_id) continue;
+      if (latestTeam && latestTeam !== stats.team_id) continue;
+
+      const pos = player.position || 'M'; // default bucket if unknown
+      if (!teamRosters.has(stats.team_id)) {
+        teamRosters.set(stats.team_id, new Map());
+      }
+      const posMap = teamRosters.get(stats.team_id)!;
       if (!posMap.has(pos)) posMap.set(pos, []);
+
+      // Calculate average rating from total/count
+      let avgRating = 0;
+      if (stats.count_rating > 0 && stats.total_rating > 0) {
+        avgRating = stats.total_rating / stats.count_rating;
+      }
+
       posMap.get(pos)!.push({
-        playerId: stat.player_id,
-        matchesStarted: stat.matches_started ?? 0,
-        minutesPlayed: stat.minutes_played ?? 0,
-        totalRating: stat.total_rating ?? null,
-        countRating: stat.count_rating ?? null,
+        playerId: playerId,
+        teamId: stats.team_id,
+        matchesStarted: stats.matches_started || 0,
+        appearances: stats.appearances || 0,
+        minutesPlayed: stats.minutes_played || 0,
+        avgRating: avgRating,
+        totalRating: stats.total_rating || 0,
+        countRating: stats.count_rating || 0,
+        goals: stats.goals || 0,
+        assists: stats.assists || 0,
+        position: pos,
+        injuryStatus: injury?.injury_status || null,
       });
     }
 
+    // ── 7. Select starting XI for each match ──────────────────────────────
     const rows: any[] = [];
 
-    for (const m of matches) {
-      for (const teamId of [m.home_team_id, m.away_team_id]) {
+    for (const match of matches) {
+      for (const teamId of [match.home_team_id, match.away_team_id]) {
         const posMap = teamRosters.get(teamId);
-        if (!posMap) continue;
+        if (!posMap) {
+          logger.warn({ teamId, matchId: match.id }, 'No players found for team');
+          continue;
+        }
 
         for (const [pos, count] of Object.entries(FORMATION)) {
-          // Primary sort: matches_started (who actually plays). Tiebreaker:
-          // total_rating (who's PROVEN good among equally-used players) —
-          // NOT `rating` alone, since rating from a tiny sample (e.g. 2
-          // sub appearances) is noise. total_rating naturally down-weights
-          // small samples because it's a sum, not an average.
-          const candidates = (posMap.get(pos) ?? []).sort((a, b) => {
-            if (b.matchesStarted !== a.matchesStarted) return b.matchesStarted - a.matchesStarted;
-            return (b.totalRating ?? 0) - (a.totalRating ?? 0);
-          });
+          // ── Rank players by multiple signals ──────────────────────────────
+          // Primary: matches_started (who actually plays)
+          // Secondary: appearances (fitness/reliability)
+          // Tertiary: avg_rating (quality)
+          // Quaternary: minutes_played (endurance/trust)
+          const candidates = (posMap.get(pos) || [])
+            .filter(c => c.matchesStarted > 0 || c.appearances > 0) // Only players who've played
+            .sort((a, b) => {
+              // 1. Matches started (most important)
+              if (b.matchesStarted !== a.matchesStarted) {
+                return b.matchesStarted - a.matchesStarted;
+              }
+              // 2. Appearances (reliability)
+              if (b.appearances !== a.appearances) {
+                return b.appearances - a.appearances;
+              }
+              // 3. Average rating (quality)
+              if (b.avgRating !== a.avgRating) {
+                return b.avgRating - a.avgRating;
+              }
+              // 4. Minutes played (endurance)
+              return b.minutesPlayed - a.minutesPlayed;
+            });
+
           const top = candidates.slice(0, count);
 
-          top.forEach((c, i) => {
-            const next = candidates[i + 1];
-            // Confidence: primarily how much this player's starts separate
-            // them from the next-best option (wide gap = high confidence).
-            // When starts are tied or close, total_rating gap becomes the
-            // deciding factor — a clear quality gap between two equally-
-            // used players is still a real signal, just weighted lower
-            // than a starts gap since starts more directly reflect coach
-            // trust/fitness/tactical fit.
-            const startsGap  = next ? c.matchesStarted - next.matchesStarted : c.matchesStarted;
-            const ratingGap  = next ? (c.totalRating ?? 0) - (next.totalRating ?? 0) : 0;
-            const confidence = Math.min(100, Math.max(0, Math.round(
-              50 + startsGap * 5 + ratingGap * 0.3
-            )));
+          top.forEach((c, index) => {
+            const next = candidates[index + 1];
+
+            // ── Calculate confidence ─────────────────────────────────────────
+            // Factors:
+            // 1. Starts gap vs next player (50% weight)
+            // 2. Rating gap vs next player (20% weight)
+            // 3. Appearance count (20% weight)
+            // 4. Position-specific bonus (10% weight)
+
+            const startsGap = next ? c.matchesStarted - next.matchesStarted : c.matchesStarted || 1;
+            const ratingGap = next ? c.avgRating - next.avgRating : 0;
+            const appearanceFactor = Math.min(1, c.appearances / 20);
+
+            let confidence = 50;
+            confidence += Math.min(40, startsGap * 4); // Starts gap: max +40
+            confidence += Math.min(15, ratingGap * 3); // Rating gap: max +15
+            confidence += appearanceFactor * 15; // Experience: max +15
+            confidence += c.matchesStarted > 10 ? 10 : 0; // Established starter: +10
+
+            // Position-specific adjustments
+            if (pos === 'G' && c.matchesStarted > 5) {
+              confidence += 5; // Keepers more stable
+            } else if (pos === 'F' && index > 0) {
+              confidence -= 5; // 2nd forward less certain
+            }
+
+            confidence = Math.min(100, Math.max(0, Math.round(confidence)));
 
             rows.push({
-              match_id:          m.id,
-              team_id:           teamId,
-              player_id:         c.playerId,
-              position_code:     pos,
-              rank_in_position:  i + 1,
-              matches_started:   c.matchesStarted,
-              confidence,
-              calculated_at:     new Date().toISOString(),
+              match_id: match.id,
+              team_id: teamId,
+              player_id: c.playerId,
+              position_code: pos,
+              rank_in_position: index + 1,
+              matches_started: c.matchesStarted,
+              confidence: confidence / 100, // Store as 0-1 for consistency
+              calculated_at: new Date().toISOString(),
             });
           });
+
+          // ── Log if position has fewer players than needed ──────────────
+          if (top.length < count) {
+            logger.warn({
+              teamId,
+              position: pos,
+              needed: count,
+              available: top.length,
+              matchId: match.id,
+            }, 'Not enough players for position — formation may be incomplete');
+          }
         }
       }
     }
 
-    // Batch upsert
+    // ── 8. Batch upsert ────────────────────────────────────────────────────
+    if (rows.length === 0) {
+      logger.warn('No lineups generated — check player data and injury status');
+      return { matchesProcessed: 0, playersWritten: 0 };
+    }
+
+    // Delete existing lineups for these matches (clean slate)
+    const matchIds = [...new Set(rows.map((r: any) => r.match_id))];
+    const { error: delErr } = await db
+      .from('match_predicted_lineups')
+      .delete()
+      .in('match_id', matchIds);
+
+    if (delErr) {
+      logger.warn({ error: delErr.message }, 'Failed to delete existing lineups — continuing with upsert');
+    }
+
+    // Upsert in chunks
     const chunkSize = 500;
     let written = 0;
     for (let i = 0; i < rows.length; i += chunkSize) {
@@ -2235,15 +2412,29 @@ export async function processPredictedLineups(): Promise<{
       const { error } = await db
         .from('match_predicted_lineups')
         .upsert(chunk, { onConflict: 'match_id,player_id' });
-      if (error) throw new Error(`match_predicted_lineups upsert: ${error.message}`);
+      if (error) {
+        logger.error({ error: error.message, chunk: i }, 'Failed to upsert lineups');
+        throw error;
+      }
       written += chunk.length;
     }
 
-    logger.info({ matchesProcessed: matches.length, playersWritten: written }, 'processPredictedLineups completed');
-    return { matchesProcessed: matches.length, playersWritten: written };
+    // ── 9. Log summary ─────────────────────────────────────────────────────
+    const matchesProcessed = new Set(rows.map((r: any) => r.match_id)).size;
+    const teamsProcessed = new Set(rows.map((r: any) => r.team_id)).size;
+
+    logger.info({
+      matchesProcessed,
+      teamsProcessed,
+      playersWritten: written,
+      totalLineups: rows.length,
+      avgPerMatch: Math.round(rows.length / matchesProcessed),
+    }, 'processPredictedLineups completed');
+
+    return { matchesProcessed, playersWritten: written };
 
   } catch (error: any) {
-    logger.error({ error: error.message }, 'processPredictedLineups failed');
+    logger.error({ error: error.message, stack: error.stack }, 'processPredictedLineups failed');
     return { matchesProcessed: 0, playersWritten: 0, error: error.message };
   }
 }

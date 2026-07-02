@@ -309,29 +309,117 @@ export default function TeamPage() {
       {/* ── ROW 3: Key Players | Recent Form | Travel Analysis ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 14 }}>
         <Card>
-          <SectionTitle>Key Players</SectionTitle>
-          {(keyPlayers ?? []).length > 0 ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                  {['PLAYER', 'POS', 'AGE', 'READINESS'].map(h => (
-                    <th key={h} style={{ padding: '4px 6px', textAlign: h === 'PLAYER' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {keyPlayers.map((p: any) => (
-                  <tr key={p.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                    <td style={{ padding: '6px', color: COLORS.text, fontWeight: 600 }}>{p.short_name ?? p.name}</td>
-                    <td style={{ padding: '6px', textAlign: 'center', color: COLORS.muted }}>{p.primary_position ?? p.position ?? '—'}</td>
-                    <td style={{ padding: '6px', textAlign: 'center', color: COLORS.muted, fontFamily: '"JetBrains Mono",monospace' }}>{p.age ?? '—'}</td>
-                    <td style={{ padding: '6px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(p.readiness_score) }}>{Math.round(p.readiness_score)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <div style={{ fontSize: 11, color: COLORS.dim, padding: '20px 0', textAlign: 'center' }}>Player readiness pending — run process:player-intelligence after squads sync</div>}
-        </Card>
+  <SectionTitle>Key Players</SectionTitle>
+  {(keyPlayers ?? []).length > 0 ? (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+      <thead>
+        <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+          {['PLAYER', 'POS', 'RATING', 'CONFIDENCE', 'STATUS'].map(h => (
+            <th key={h} style={{ 
+              padding: '4px 6px', 
+              textAlign: h === 'PLAYER' ? 'left' : 'center', 
+              fontSize: 9, 
+              color: COLORS.dim, 
+              textTransform: 'uppercase' 
+            }}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {keyPlayers.map((p: any) => {
+          const isInjured = p.current_injury || p.injury_status === 'out';
+          const confidence = p.confidence !== null ? Math.round(p.confidence * 100) : null;
+          
+          return (
+            <tr key={p.id} style={{ 
+              borderBottom: `1px solid ${COLORS.border}`,
+              opacity: isInjured ? 0.6 : 1,
+            }}>
+              <td style={{ padding: '6px', color: COLORS.text, fontWeight: 600 }}>
+                {p.short_name ?? p.name}
+                {p.goals > 0 && (
+                  <span style={{ 
+                    marginLeft: 4, 
+                    fontSize: 9, 
+                    color: COLORS.green,
+                    fontWeight: 700 
+                  }}>
+                    ⚽{p.goals}
+                  </span>
+                )}
+                {p.assists > 0 && (
+                  <span style={{ 
+                    marginLeft: 2, 
+                    fontSize: 9, 
+                    color: COLORS.blue,
+                    fontWeight: 700 
+                  }}>
+                    🅰{p.assists}
+                  </span>
+                )}
+              </td>
+              <td style={{ padding: '6px', textAlign: 'center', color: COLORS.muted }}>
+                {p.primary_position ?? p.position ?? '—'}
+              </td>
+              <td style={{ 
+                padding: '6px', 
+                textAlign: 'center',
+                fontFamily: '"JetBrains Mono",monospace',
+                fontWeight: 700,
+                color: p.avg_rating !== null ? scoreColor((p.avg_rating / 10) * 100) : COLORS.dim,
+              }}>
+                {p.avg_rating !== null ? p.avg_rating.toFixed(2) : '—'}
+              </td>
+              <td style={{ 
+                padding: '6px', 
+                textAlign: 'center',
+                fontFamily: '"JetBrains Mono",monospace',
+                fontWeight: 700,
+                color: confidence !== null ? scoreColor(confidence) : COLORS.dim,
+              }}>
+                {confidence !== null ? `${confidence}%` : '—'}
+              </td>
+              <td style={{ padding: '6px', textAlign: 'center' }}>
+                {isInjured ? (
+                  <span style={{
+                    background: COLORS.red + '20',
+                    color: COLORS.red,
+                    fontSize: 8,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    border: `1px solid ${COLORS.red}40`,
+                  }}>
+                    {p.injury_status?.toUpperCase() || 'OUT'}
+                  </span>
+                ) : (
+                  <span style={{
+                    background: COLORS.green + '20',
+                    color: COLORS.green,
+                    fontSize: 8,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    border: `1px solid ${COLORS.green}40`,
+                  }}>
+                    FIT
+                  </span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  ) : (
+    <div style={{ fontSize: 11, color: COLORS.dim, padding: '20px 0', textAlign: 'center' }}>
+      <div>🔒 Player data pending</div>
+      <div style={{ fontSize: 10, marginTop: 4, color: COLORS.muted }}>
+        Run process:player-intelligence after squads sync
+      </div>
+    </div>
+  )}
+</Card>
 
         <Card>
           <SectionTitle>Recent Form</SectionTitle>

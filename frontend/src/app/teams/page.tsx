@@ -74,7 +74,7 @@ export default function TeamsPage() {
 
   useEffect(() => {
     setWatchlist(loadWatchlist());
-    getTeamIntelligenceList(150).then(setTeams).finally(() => setLoading(false));
+    getTeamIntelligenceList(10000).then(setTeams).finally(() => setLoading(false));
   }, []);
 
   const toggleWatch = (id: number) => {

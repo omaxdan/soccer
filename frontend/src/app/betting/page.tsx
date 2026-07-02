@@ -7,6 +7,7 @@ import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import SignalChip from '@/components/SignalChip';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { matchUrl } from '@/lib/urls';
+import { supabase } from '@/lib/supabase'; // ← ADD THIS IMPORT
 
 const MARKET_TABS = ['1X2','Over/Under','BTTS','Asian Handicap','Clean Sheets','Cards','Specials'];
 const TAB_GROUP: Record<string, string[]> = {
@@ -37,16 +38,28 @@ export default function BettingHub() {
         // Fetch team_intelligence for squad signals (squad_depth_score,
         // injury_burden_score, squad_stability_score)
         const teamIds = (data as any[]).flatMap((m: any) => [m.home_team_id, m.away_team_id]).filter(Boolean);
-        const { data: intelRows } = teamIds.length > 0
-          ? await supabase.from('team_intelligence').select('team_id, squad_depth_score, injury_burden_score, squad_stability_score, form_index, travel_fatigue_score, congestion_score, last_5_points, active_competitions').in('team_id', [...new Set(teamIds)])
-          : { data: [] };
-        const tiMap = new Map((intelRows ?? []).map((r: any) => [r.team_id, r]));
+        
+        // ── FIX: Use supabase with proper error handling ──────────────────
+        let intelRows: any[] = [];
+        if (teamIds.length > 0) {
+          try {
+            const { data: rows } = await supabase
+              .from('team_intelligence')
+              .select('team_id, squad_depth_score, injury_burden_score, squad_stability_score, form_index, travel_fatigue_score, congestion_score, last_5_points, active_competitions')
+              .in('team_id', [...new Set(teamIds)]);
+            intelRows = rows || [];
+          } catch (err) {
+            console.error('Failed to fetch team intelligence:', err);
+          }
+        }
+        
+        const tiMap = new Map<number, any>((intelRows ?? []).map((r: any) => [r.team_id, r]));
 
         const computed = (data as any[]).map((m: any) => {
           const intel = m.match_intelligence?.[0];
           if (!intel) return null;
-          const hti = tiMap.get(m.home_team_id);
-          const ati = tiMap.get(m.away_team_id);
+          const hti = tiMap.get(m.home_team_id) || {}; // ← FIX: Default to empty object
+          const ati = tiMap.get(m.away_team_id) || {}; // ← FIX: Default to empty object
           const sigs = computeMatchSignals({
             home_readiness: intel.home_readiness,
             away_readiness: intel.away_readiness,
@@ -59,20 +72,20 @@ export default function BettingHub() {
             home_active_competitions: intel.home_active_competitions,
             away_active_competitions: intel.away_active_competitions,
             travel_advantage_km: m.match_travel_intelligence?.[0]?.travel_advantage_km,
-            home_form_index:    hti?.form_index,
-            away_form_index:    ati?.form_index,
-            home_travel_fatigue: hti?.travel_fatigue_score,
-            away_travel_fatigue: ati?.travel_fatigue_score,
-            home_congestion:    hti?.congestion_score,
-            away_congestion:    ati?.congestion_score,
-            home_last_5_pts:    hti?.last_5_points,
-            away_last_5_pts:    ati?.last_5_points,
-            home_squad_depth:   hti?.squad_depth_score,
-            away_squad_depth:   ati?.squad_depth_score,
-            home_injury_burden: hti?.injury_burden_score,
-            away_injury_burden: ati?.injury_burden_score,
-            home_squad_stability: hti?.squad_stability_score,
-            away_squad_stability: ati?.squad_stability_score,
+            home_form_index:    hti?.form_index ?? null,
+            away_form_index:    ati?.form_index ?? null,
+            home_travel_fatigue: hti?.travel_fatigue_score ?? null,
+            away_travel_fatigue: ati?.travel_fatigue_score ?? null,
+            home_congestion:    hti?.congestion_score ?? null,
+            away_congestion:    ati?.congestion_score ?? null,
+            home_last_5_pts:    hti?.last_5_points ?? null,
+            away_last_5_pts:    ati?.last_5_points ?? null,
+            home_squad_depth:   hti?.squad_depth_score ?? null,
+            away_squad_depth:   ati?.squad_depth_score ?? null,
+            home_injury_burden: hti?.injury_burden_score ?? null,
+            away_injury_burden: ati?.injury_burden_score ?? null,
+            home_squad_stability: hti?.squad_stability_score ?? null,
+            away_squad_stability: ati?.squad_stability_score ?? null,
           });
           return { match: m, intel, signals: sigs };
         }).filter(Boolean);
