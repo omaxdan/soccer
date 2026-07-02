@@ -29,6 +29,18 @@ export interface TrackedLeague {
   apiNameMatch: string;   // Partial match against tournament.name from schedule API
   slug: string;           // EXACT match against tournaments.slug in DB
   country?: string;       // Category/country for disambiguation
+  dbNames?: string[];     // Exact tournament.name values actually found in the DB —
+                          // handles cases where the API's name and what ends up
+                          // stored differ (e.g. API says "Série A", DB stores
+                          // "Brasileirão Betano" — a sponsor-branded name). OPTIONAL
+                          // and safe to leave empty/undefined: a league whose season
+                          // hasn't started yet has no DB row at all, so there's no
+                          // way to know its dbNames in advance — findTrackedLeagueByDbName()
+                          // below falls back to the same apiNameMatch prefix logic used
+                          // everywhere else when dbNames is empty or doesn't match,
+                          // so newly-starting leagues (England/Spain/Italy pre-season,
+                          // etc.) are correctly tracked from their very first synced
+                          // match without needing this field populated ahead of time.
   tier: number;
   band: 'A' | 'B' | 'C' | 'Mandated' | 'Discovery';
   region: string;
@@ -123,22 +135,22 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
   { name: 'Austrian Bundesliga',    apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            country: 'Austria',      tier: 1, band: 'B',         region: 'Europe' },
 
   // Ireland
-  { name: 'League of Ireland',      apiNameMatch: 'League of Ireland',slug: 'premier-division',      country: 'Ireland',      tier: 1, band: 'Discovery', region: 'Europe' },
+  { name: 'League of Ireland',      apiNameMatch: 'League of Ireland',slug: 'premier-division',      country: 'Ireland',      dbNames: ['Premier Division', ' Premier Division'], tier: 1, band: 'Discovery', region: 'Europe' },
 
   // Finland
   { name: 'Veikkausliiga',          apiNameMatch: 'Veikkausliiga',    slug: 'veikkausliiga',         country: 'Finland',      tier: 1, band: 'Discovery', region: 'Europe' },
 
   // Lithuania
-  { name: 'A Lyga',                 apiNameMatch: 'A Lyga',           slug: 'a-lyga',                country: 'Lithuania',    tier: 1, band: 'Discovery', region: 'Europe' },
+  { name: 'A Lyga',                 apiNameMatch: 'A Lyga',           slug: 'a-lyga',                country: 'Lithuania',    dbNames: ['TOPLYGA', 'A Lyga'], tier: 1, band: 'Discovery', region: 'Europe' },
 
   // ── SOUTH AMERICA ─────────────────────────────────────────────────────────
 
-  { name: 'Brasileirão Série A',    apiNameMatch: 'Série A',          slug: 'brasileirao-serie-a',   country: 'Brazil',       tier: 1, band: 'A',         region: 'South America' },
+  { name: 'Brasileirão Série A',    apiNameMatch: 'Série A',          slug: 'brasileirao-serie-a',   country: 'Brazil',       dbNames: ['Brasileirão Série A', 'Brasileirão Betano'], tier: 1, band: 'A',         region: 'South America' },
   { name: 'Brasileirão Série B',    apiNameMatch: 'Série B',          slug: 'brasileirao-serie-b',   country: 'Brazil',       tier: 2, band: 'Mandated',  region: 'South America' },
   { name: 'Liga Profesional',       apiNameMatch: 'Liga Profesional', slug: 'liga-profesional',      country: 'Argentina',    tier: 1, band: 'B',         region: 'South America' },
   { name: 'Primera Nacional',       apiNameMatch: 'Primera Nacional', slug: 'primera-nacional',      country: 'Argentina',    tier: 2, band: 'Mandated',  region: 'South America' },
-  { name: 'Categoría Primera A',    apiNameMatch: 'Primera A',        slug: 'primera-a-apertura',    country: 'Colombia',     tier: 1, band: 'C',         region: 'South America' },
-  { name: 'Primera División',       apiNameMatch: 'Primera División', slug: 'primera-division',      country: 'Uruguay',      tier: 1, band: 'C',         region: 'South America' },
+  { name: 'Categoría Primera A',    apiNameMatch: 'Primera A',        slug: 'primera-a-apertura',    country: 'Colombia',     dbNames: ['Primera A, Apertura'], tier: 1, band: 'C',         region: 'South America' },
+  { name: 'Primera División',       apiNameMatch: 'Primera División', slug: 'primera-division',      country: 'Uruguay',      dbNames: ['Liga AUF Uruguaya'], tier: 1, band: 'C',         region: 'South America' },
   { name: 'LigaPro',                apiNameMatch: 'LigaPro Serie A',  slug: 'ligapro-serie-a',       country: 'Ecuador',      tier: 1, band: 'B',         region: 'South America' },
 
   // ── NORTH AMERICA ─────────────────────────────────────────────────────────
@@ -261,6 +273,51 @@ export function findTrackedLeague(
 
 export function isTrackedLeague(tournamentName: string, countryName?: string): boolean {
   return findTrackedLeague(tournamentName, countryName) !== null;
+}
+
+/**
+ * Resolves a tournament by its ACTUAL DB tournament.name value (not the
+ * API's schedule-feed name, which can differ — e.g. API says "Série A",
+ * DB stores the sponsor-branded "Brasileirão Betano"). Checks dbNames
+ * first (exact match, case/whitespace-insensitive), then FALLS BACK to
+ * the same apiNameMatch prefix logic findTrackedLeague() uses.
+ *
+ * The fallback is what makes this safe for leagues that haven't started
+ * their season yet: a league with no matches ever synced has no
+ * tournament.name in the DB at all, so dbNames literally can't be known
+ * in advance for it. Rather than requiring dbNames to be pre-populated
+ * (which would silently break newly-starting leagues — England/Spain/
+ * Italy pre-season, etc. — until someone manually added their exact DB
+ * name after the fact), this falls through to prefix-matching, which
+ * works correctly from the very first synced match with zero
+ * configuration needed ahead of time. dbNames is purely an optimization/
+ * correction for the specific cases where the DB name doesn't share a
+ * prefix with the API name at all (sponsor branding, regional naming
+ * differences) — not a requirement for a league to be trackable.
+ *
+ * Used by the schedule sync when inserting new tournaments — checks
+ * whether a tournament with a given DB name should be inserted/tracked
+ * or skipped as untracked noise.
+ */
+export function findTrackedLeagueByDbName(
+  tournamentName: string,
+  countryName?: string
+): TrackedLeague | null {
+  const nameLower = tournamentName.toLowerCase().trim();
+
+  // Pass 1: exact dbNames match, when populated.
+  for (const league of TRACKED_LEAGUES) {
+    if (!league.dbNames || league.dbNames.length === 0) continue;
+    const matchesDbName = league.dbNames.some(n => n.toLowerCase().trim() === nameLower);
+    if (!matchesDbName) continue;
+    if (league.country && !countriesMatch(countryName, league.country)) continue;
+    return league;
+  }
+
+  // Pass 2: fall back to the standard prefix-anchored apiNameMatch logic —
+  // this is what keeps newly-starting leagues (no dbNames known yet)
+  // working correctly without any manual config step.
+  return findTrackedLeague(tournamentName, countryName);
 }
 
 /**
