@@ -940,6 +940,56 @@ export async function processTeamIntelligencePartial(): Promise<{
       positionDepthMap.get(p.team_id)!.push(p);
     }
 
+    // 7b. Squad Depth QUALITY inputs — position_depth above only measures
+    // headcount availability (available_count / player_count), which treats
+    // 5 average fit defenders as identical to 5 elite fit defenders. This
+    // blends in actual player quality via total_rating/count_rating (see
+    // Fix 1 above for why total_rating over raw rating — same reasoning:
+    // total_rating naturally down-weights tiny-sample outliers since it's
+    // an accumulated sum, not a bare average).
+    //
+    // Players table needed for position mapping (player_season_statistics
+    // has no position column) and current_injury (only counting AVAILABLE
+    // players' quality, matching what available_count already represents).
+    const qualityPlayers = await fetchAllRows(
+      db.from('players').select('id, team_id, position, current_injury')
+    );
+    const qualityStats = await fetchAllRows(
+      db.from('player_season_statistics').select('player_id, total_rating, count_rating')
+    );
+    const statsByPlayerId = new Map<number, { totalRating: number; countRating: number }>();
+    for (const s of qualityStats ?? []) {
+      if (s.total_rating == null || s.count_rating == null || s.count_rating === 0) continue;
+      // A player can have multiple season_external_id rows (different
+      // competitions) — sum across all of them, consistent with
+      // total_rating's own "accumulate across appearances" semantics.
+      const existing = statsByPlayerId.get(s.player_id);
+      if (existing) {
+        existing.totalRating += s.total_rating;
+        existing.countRating += s.count_rating;
+      } else {
+        statsByPlayerId.set(s.player_id, { totalRating: s.total_rating, countRating: s.count_rating });
+      }
+    }
+
+    // team_id -> position_code -> { sumTotalRating, sumCountRating } across
+    // AVAILABLE (non-injured) players only in that position.
+    const qualityByTeamPosition = new Map<string, { sumTotalRating: number; sumCountRating: number }>();
+    for (const p of qualityPlayers ?? []) {
+      if (p.current_injury) continue; // only available players count toward depth quality
+      const stat = statsByPlayerId.get(p.id);
+      if (!stat) continue; // no season stats — likely a lower-coverage league, handled gracefully below
+      const pos = p.position ?? 'M';
+      const key = `${p.team_id}:${pos}`;
+      const existing = qualityByTeamPosition.get(key);
+      if (existing) {
+        existing.sumTotalRating += stat.totalRating;
+        existing.sumCountRating += stat.countRating;
+      } else {
+        qualityByTeamPosition.set(key, { sumTotalRating: stat.totalRating, sumCountRating: stat.countRating });
+      }
+    }
+
     // 8. Injury Burden / Market Value inputs — players carries market_value
     //    and current_injury directly, grouped per team here.
     // Uses fetchAllRows — this table has 2,300+ rows, well past Supabase's
@@ -1039,17 +1089,40 @@ export async function processTeamIntelligencePartial(): Promise<{
         : null;
 
       // ── Squad Depth Score — synthesized from team_position_depth ──────────
-      // For each position bucket, what fraction of the squad in that
-      // position is currently available (not injured)? Average across
-      // positions present. 100 = full depth everywhere, lower = thin spots.
+      // For each position bucket: availability ratio (available/total, as
+      // before) BLENDED with quality (avg rating of available players in
+      // that position, derived from total_rating/count_rating). 60/40 split
+      // — headcount still matters most (you can't field players who don't
+      // exist), quality is a meaningful secondary signal.
+      //
+      // GRACEFUL FALLBACK: if no quality data exists for a position (lower-
+      // coverage league, squad not fully synced, etc.), falls back to 100%
+      // availability-only — exactly the old behavior. A team is never
+      // penalized for missing data; the score just doesn't get the quality
+      // boost/penalty it would with fuller data. This matters directly for
+      // category B/C tournaments that may have sparser stats coverage.
       const posDepth = positionDepthMap.get(teamId) ?? [];
       let squadDepthScore: number | null = null;
       if (posDepth.length > 0) {
-        const ratios = posDepth
+        // Same rating-scale normalization used nowhere else yet — football
+        // match ratings in this dataset realistically span ~5.0 (poor) to
+        // ~8.5 (excellent) as a season average; map that range to 0-100.
+        const normalizeRating = (avgRating: number) =>
+          Math.max(0, Math.min(100, Math.round(((avgRating - 5.0) / 3.5) * 100)));
+
+        const positionScores = posDepth
           .filter(p => (p.player_count ?? 0) > 0)
-          .map(p => ((p.available_count ?? 0) / p.player_count) * 100);
-        if (ratios.length > 0) {
-          squadDepthScore = Math.round(ratios.reduce((s, r) => s + r, 0) / ratios.length);
+          .map(p => {
+            const availabilityRatio = ((p.available_count ?? 0) / p.player_count) * 100;
+            const q = qualityByTeamPosition.get(`${teamId}:${p.position_code}`);
+            if (!q || q.sumCountRating === 0) return availabilityRatio; // fallback — no quality data
+            const avgRating = q.sumTotalRating / q.sumCountRating;
+            const qualityScore = normalizeRating(avgRating);
+            return availabilityRatio * 0.6 + qualityScore * 0.4;
+          });
+
+        if (positionScores.length > 0) {
+          squadDepthScore = Math.round(positionScores.reduce((s, r) => s + r, 0) / positionScores.length);
         }
       }
 
@@ -1522,8 +1595,24 @@ export async function processMatchIntelligencePartial(opts?: {
  *         team_intelligence (available_market_value as proxy for squad quality)
  * Writes: team_strength_ratings
  *
- * league_position: Cannot be derived without standings API — left null.
- * strength_score: 40% PPG + 40% win % + 20% market value (normalized)
+ * league_position: from tournament_standings (sync:standings), normalized
+ * against actual league size since tracked leagues range from 10-team to
+ * 36-team divisions.
+ *
+ * strength_score (UPDATED — see commit history): 35% PPG + 25% Win% +
+ * 25% League Position + 15% Squad Quality.
+ *
+ * Squad Quality is NEW — derived from player_season_statistics.total_rating
+ * (verified: rating = total_rating / count_rating, and count_rating tracks
+ * total appearances not just starts — see backend/docs/ for the full
+ * reasoning). Previously strength_score used ZERO player-quality signal,
+ * relying purely on standings-derived stats (PPG/Win%/Position) plus
+ * market value as informational-only context. That meant strength_score
+ * was noisy early in a season (few matches played) despite player-level
+ * historical quality data often being available and more stable. Falls
+ * back gracefully to the original 3-component formula (weights
+ * renormalized to 100%) for any team with no season-stats coverage yet —
+ * this matters for category B/C leagues that may have sparser API data.
  */
 export async function processTeamStrengthRatings(): Promise<{
   teamsProcessed: number;
@@ -1587,6 +1676,31 @@ export async function processTeamStrengthRatings(): Promise<{
       (tiRows ?? []).map((t: any) => [t.team_id, (t.available_market_value ?? 0) + (t.injured_market_value ?? 0)])
     );
 
+    // ── Squad Quality — NEW component (see docstring above) ────────────────
+    // Whole-squad average rating, derived from total_rating/count_rating
+    // accumulated per player (same "sum across all season_external_id rows"
+    // logic as Fix 2 in processTeamIntelligencePartial — a player with
+    // stats split across multiple competitions gets a genuine season-wide
+    // total, not just whichever row happened to be selected first).
+    const qualityStatsAll = await fetchAllRows(
+      db.from('player_season_statistics').select('player_id, team_id, total_rating, count_rating')
+    );
+    const teamQuality = new Map<number, { sumTotalRating: number; sumCountRating: number }>();
+    for (const s of qualityStatsAll ?? []) {
+      if (s.total_rating == null || s.count_rating == null || s.count_rating === 0) continue;
+      const existing = teamQuality.get(s.team_id);
+      if (existing) {
+        existing.sumTotalRating += s.total_rating;
+        existing.sumCountRating += s.count_rating;
+      } else {
+        teamQuality.set(s.team_id, { sumTotalRating: s.total_rating, sumCountRating: s.count_rating });
+      }
+    }
+    // Same 5.0-8.5 -> 0-100 normalization as Fix 2, kept consistent across
+    // both places this rating data gets used.
+    const normalizeRating = (avgRating: number) =>
+      Math.max(0, Math.min(100, Math.round(((avgRating - 5.0) / 3.5) * 100)));
+
     const rows: any[] = [];
     for (const [teamId, stats] of teamStats) {
       if (stats.matches === 0) continue;
@@ -1605,11 +1719,27 @@ export async function processTeamStrengthRatings(): Promise<{
         ? Math.round(((leagueSize - leaguePosition) / (leagueSize - 1)) * 100)
         : null;
 
-      // ── Strength Score PER SPEC (section 2): 40% PPG + 30% Win% + 30% League Position
+      // Squad Quality score — whole-squad average rating normalized 0-100.
+      // Null (component simply omitted, weights renormalize) when a team
+      // has zero season-stats coverage — no penalty for missing data,
+      // same graceful-fallback principle as positionScore above.
+      const q = teamQuality.get(teamId);
+      const squadQualityScore = (q && q.sumCountRating > 0)
+        ? normalizeRating(q.sumTotalRating / q.sumCountRating)
+        : null;
+
+      // ── Strength Score: 35% PPG + 25% Win% + 25% League Position +
+      // 15% Squad Quality (NEW — see docstring for full reasoning).
+      // Weights renormalize automatically via totalWeight below whenever
+      // a component is unavailable (no standings yet, no stats yet, etc.)
+      // — a team is never penalized for a data gap, it just falls back to
+      // whichever components ARE available, same as the original formula
+      // already did for positionScore.
       const components = [
-        { v: (ppg / 3) * 100, w: 40 },
-        { v: winPct,          w: 30 },
-        positionScore !== null ? { v: positionScore, w: 30 } : null,
+        { v: (ppg / 3) * 100, w: 35 },
+        { v: winPct,          w: 25 },
+        positionScore     !== null ? { v: positionScore,     w: 25 } : null,
+        squadQualityScore !== null ? { v: squadQualityScore, w: 15 } : null,
       ].filter((c): c is { v: number; w: number } => c !== null);
 
       const totalWeight = components.reduce((s, c) => s + c.w, 0);
@@ -1952,10 +2082,22 @@ export async function processPredictedLineups(): Promise<{
 
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
-    // Season stats — primary ranking signal
+    // Season stats — primary ranking signal (matches_started) plus quality
+    // signal (total_rating/count_rating) for tiebreaking and confidence.
+    //
+    // total_rating is NOT the same as rating: rating = total_rating /
+    // count_rating (verified against live SofaScore payload data), and
+    // count_rating tracks TOTAL appearances (starts + sub apps), not just
+    // starts. total_rating therefore compounds quality with reliability —
+    // a player with rating 8.5 from 2 sub cameos and a player with rating
+    // 8.5 from 30 starts look identical on `rating` alone, but their
+    // total_rating (17 vs 255) correctly shows one is a proven starter and
+    // the other is a small-sample outlier. That distinction is exactly
+    // what's needed here: ranking WHO actually starts, not just who has a
+    // good average.
     const { data: seasonStats } = await db
       .from('player_season_statistics')
-      .select('player_id, team_id, matches_started, minutes_played')
+      .select('player_id, team_id, matches_started, minutes_played, total_rating, count_rating')
       .in('team_id', teamIds)
       .order('matches_started', { ascending: false });
 
@@ -1993,7 +2135,13 @@ export async function processPredictedLineups(): Promise<{
       if (!teamRosters.has(stat.team_id)) teamRosters.set(stat.team_id, new Map());
       const posMap = teamRosters.get(stat.team_id)!;
       if (!posMap.has(pos)) posMap.set(pos, []);
-      posMap.get(pos)!.push({ playerId: stat.player_id, matchesStarted: stat.matches_started ?? 0, minutesPlayed: stat.minutes_played ?? 0 });
+      posMap.get(pos)!.push({
+        playerId: stat.player_id,
+        matchesStarted: stat.matches_started ?? 0,
+        minutesPlayed: stat.minutes_played ?? 0,
+        totalRating: stat.total_rating ?? null,
+        countRating: stat.count_rating ?? null,
+      });
     }
 
     const rows: any[] = [];
@@ -2004,15 +2152,31 @@ export async function processPredictedLineups(): Promise<{
         if (!posMap) continue;
 
         for (const [pos, count] of Object.entries(FORMATION)) {
-          const candidates = (posMap.get(pos) ?? []).sort((a, b) => b.matchesStarted - a.matchesStarted);
+          // Primary sort: matches_started (who actually plays). Tiebreaker:
+          // total_rating (who's PROVEN good among equally-used players) —
+          // NOT `rating` alone, since rating from a tiny sample (e.g. 2
+          // sub appearances) is noise. total_rating naturally down-weights
+          // small samples because it's a sum, not an average.
+          const candidates = (posMap.get(pos) ?? []).sort((a, b) => {
+            if (b.matchesStarted !== a.matchesStarted) return b.matchesStarted - a.matchesStarted;
+            return (b.totalRating ?? 0) - (a.totalRating ?? 0);
+          });
           const top = candidates.slice(0, count);
 
           top.forEach((c, i) => {
             const next = candidates[i + 1];
-            // Confidence: how much this player's starts separate them from
-            // the next-best option — wide gap = high confidence, close = low.
-            const gap = next ? c.matchesStarted - next.matchesStarted : c.matchesStarted;
-            const confidence = Math.min(100, Math.round(50 + gap * 5));
+            // Confidence: primarily how much this player's starts separate
+            // them from the next-best option (wide gap = high confidence).
+            // When starts are tied or close, total_rating gap becomes the
+            // deciding factor — a clear quality gap between two equally-
+            // used players is still a real signal, just weighted lower
+            // than a starts gap since starts more directly reflect coach
+            // trust/fitness/tactical fit.
+            const startsGap  = next ? c.matchesStarted - next.matchesStarted : c.matchesStarted;
+            const ratingGap  = next ? (c.totalRating ?? 0) - (next.totalRating ?? 0) : 0;
+            const confidence = Math.min(100, Math.max(0, Math.round(
+              50 + startsGap * 5 + ratingGap * 0.3
+            )));
 
             rows.push({
               match_id:          m.id,
