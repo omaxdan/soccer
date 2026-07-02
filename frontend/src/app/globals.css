@@ -215,11 +215,11 @@ th, td { text-align: left; }
 }
 .data-table td {
   padding: 9px 10px;
-  border-bottom: 1px solid var(--border)50;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   font-size: 13px;
   vertical-align: middle;
 }
-.data-table tr:hover td { background: var(--surface2)60; }
+.data-table tr:hover td { background: color-mix(in srgb, var(--surface2) 60%, transparent); }
 .data-table tr:last-child td { border-bottom: none; }
 
 /* ─── SCORE CHIPS ─────────────────────────────────────────────────────────────── */
@@ -304,9 +304,9 @@ th, td { text-align: left; }
   font-size: 11px;
   font-weight: 700;
 }
-.form-pill-W { background: var(--green)25;  color: var(--green);  border: 1px solid var(--green)40;  }
-.form-pill-D { background: var(--amber)25;  color: var(--amber);  border: 1px solid var(--amber)40;  }
-.form-pill-L { background: var(--red)25;    color: var(--red);    border: 1px solid var(--red)40;    }
+.form-pill-W { background: color-mix(in srgb, var(--green) 25%, transparent);  color: var(--green);  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);  }
+.form-pill-D { background: color-mix(in srgb, var(--amber) 25%, transparent);  color: var(--amber);  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);  }
+.form-pill-L { background: color-mix(in srgb, var(--red) 25%, transparent);    color: var(--red);    border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);    }
 
 /* ─── TIER BADGES ────────────────────────────────────────────────────────────── */
 .tier-badge {
@@ -318,16 +318,16 @@ th, td { text-align: left; }
   font-weight: 800;
   letter-spacing: 0.1em;
 }
-.tier-strong   { color: var(--green);  background: var(--green)20;  border: 1px solid var(--green)40;  }
-.tier-moderate { color: var(--amber);  background: var(--amber)20;  border: 1px solid var(--amber)40;  }
-.tier-high     { color: var(--green);  background: var(--green)20;  border: 1px solid var(--green)40;  }
-.tier-medium   { color: var(--amber);  background: var(--amber)20;  border: 1px solid var(--amber)40;  }
-.tier-low      { color: var(--orange); background: var(--orange)20; border: 1px solid var(--orange)40; }
+.tier-strong   { color: var(--green);  background: color-mix(in srgb, var(--green) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);  }
+.tier-moderate { color: var(--amber);  background: color-mix(in srgb, var(--amber) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);  }
+.tier-high     { color: var(--green);  background: color-mix(in srgb, var(--green) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);  }
+.tier-medium   { color: var(--amber);  background: color-mix(in srgb, var(--amber) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);  }
+.tier-low      { color: var(--orange); background: color-mix(in srgb, var(--orange) 20%, transparent); border: 1px solid color-mix(in srgb, var(--orange) 40%, transparent); }
 
 /* ─── INTELLIGENCE PANEL (Key Insight box) ───────────────────────────────────── */
 .insight-box {
-  background: var(--blue)12;
-  border: 1px solid var(--blue)30;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   border-radius: 8px;
   padding: 12px 16px;
 }
@@ -371,9 +371,113 @@ th, td { text-align: left; }
   cursor: pointer;
 }
 .nav-item:hover { background: var(--surface2); color: var(--text); }
-.nav-item.active { background: var(--blue)18; color: var(--blue2); font-weight: 600; border-left: 2px solid var(--blue2); border-radius: 0 6px 6px 0; margin-left: 6px; }
+.nav-item.active { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue2); font-weight: 600; border-left: 2px solid var(--blue2); border-radius: 0 6px 6px 0; margin-left: 6px; }
 .nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
 .nav-section { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); padding: 12px 22px 4px; }
+
+/* ─── SIDEBAR (actual classes used by components/Sidebar.tsx) ────────────────
+   Previously entirely missing — Sidebar.tsx used .sidebar-*/.data-status-*
+   class names that never existed here (the stylesheet only had the
+   equivalent .nav-item/.nav-section rules above, under different names),
+   so the sidebar rendered as an unstyled <aside> with plain links — no
+   width, no background, no active-state highlight, no spacing. This
+   block gives every class Sidebar.tsx actually references real rules,
+   matching the same visual language as .nav-item/.nav-section above. */
+
+.sidebar-logo {
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.sidebar-logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-logo-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blue) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
+  color: var(--blue2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.sidebar-logo-text {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.sidebar-logo-sub {
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.4;
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sidebar-section { margin-bottom: 4px; }
+.sidebar-section-last { margin-bottom: 4px; }
+
+.sidebar-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--dim);
+  padding: 12px 22px 4px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  margin: 1px 8px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.sidebar-item:hover { background: var(--surface2); color: var(--text); }
+.sidebar-item.active {
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
+  color: var(--blue2);
+  font-weight: 600;
+  border-left: 2px solid var(--blue2);
+  border-radius: 0 6px 6px 0;
+  margin-left: 6px;
+}
+
+.sidebar-data-status {
+  margin-top: auto;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.data-status-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.data-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
 
 /* ─── TOP NAVBAR ─────────────────────────────────────────────────────────────── */
 .topbar-breadcrumb {

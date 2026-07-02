@@ -16,7 +16,7 @@ export default function MobileNav() {
 
   return (
     <nav style={{
-      display: 'none',  // shown via @media in globals.css
+      display: 'none',  // shown via the @media block in this component's own <style> tag below
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 300,
       background: COLORS.surface,
       borderTop: `1px solid ${COLORS.border}`,
@@ -27,7 +27,7 @@ export default function MobileNav() {
       <style>{`
         @media (max-width: 768px) {
           .mobile-nav { display: flex !important; }
-          .desktop-sidebar { display: none !important; }
+          .app-sidebar { display: none !important; }
         }
       `}</style>
       {TABS.map(tab => {
