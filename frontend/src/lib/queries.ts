@@ -867,3 +867,100 @@ export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetai
 
   return { tournament, teams, seasonStats, fixtureCongestion };
 }
+
+// ─── TEAM INTELLIGENCE LIST (Image 1) ──────────────────────────────────────
+
+export interface TeamIntelRow {
+  id: number; name: string; short_name: string | null; slug: string | null; country: string | null;
+  league: string | null; position: number | null;
+  readiness_score: number | null; form_index: number | null;
+  congestion_score: number | null; rest_days_avg: number | null; active_competitions: number | null;
+  travel_14d: number | null;
+  form_pills: ('W' | 'D' | 'L')[];
+  trend_7d: number | null; // readiness delta vs 7 days ago — null if insufficient history
+}
+
+/**
+ * Full Team Intelligence list — readiness-ranked with league, form pills,
+ * rest days, travel load, congestion, and a 7-day trend arrow. Trend uses
+ * team_intelligence_history (migration 010); returns null (rendered as
+ * "—", not a fake 0) for any team without a snapshot from ~7 days ago yet
+ * — that table only started accumulating recently, so most teams won't
+ * have a real trend for a while. Same honesty principle as every other
+ * page built this session.
+ */
+export async function getTeamIntelligenceList(limit = 100): Promise<TeamIntelRow[]> {
+  const teamIds = await getTrackedTeamIds();
+
+  const q = supabase.from('team_intelligence')
+    .select(`team_id, readiness_score, form_index, congestion_score, rest_days_avg, active_competitions,
+      team:teams!team_id(id, name, short_name, slug, country)`)
+    .not('readiness_score', 'is', null)
+    .order('readiness_score', { ascending: false })
+    .limit(limit);
+  if (teamIds.length > 0) q.in('team_id', teamIds);
+  const { data: intelRows } = await q;
+  if (!intelRows || intelRows.length === 0) return [];
+
+  const ids = intelRows.map((r: any) => r.team_id);
+
+  const [travelRes, standingsRes, formRes, historyRes] = await Promise.all([
+    supabase.from('team_travel_load').select('team_id, km_last_14_days').in('team_id', ids).order('snapshot_date', { ascending: false }),
+    supabase.from('tournament_standings').select('team_id, position, tournament:tournaments(name)').in('team_id', ids),
+    supabase.from('team_form_history').select('team_id, result, match_date').in('team_id', ids).order('match_date', { ascending: false }),
+    supabase.from('team_intelligence_history').select('team_id, readiness_score, snapshot_date').in('team_id', ids).order('snapshot_date', { ascending: true }),
+  ]);
+
+  const travelMap = new Map<number, number>();
+  for (const t of travelRes.data ?? []) {
+    if (!travelMap.has(t.team_id)) travelMap.set(t.team_id, t.km_last_14_days ?? 0);
+  }
+
+  const standingsMap = new Map<number, { position: number | null; league: string | null }>();
+  for (const s of standingsRes.data ?? []) {
+    if (!standingsMap.has(s.team_id)) {
+      standingsMap.set(s.team_id, { position: s.position ?? null, league: (s.tournament as any)?.name ?? null });
+    }
+  }
+
+  const formMap = new Map<number, ('W' | 'D' | 'L')[]>();
+  for (const f of formRes.data ?? []) {
+    if (!formMap.has(f.team_id)) formMap.set(f.team_id, []);
+    const arr = formMap.get(f.team_id)!;
+    if (arr.length < 5 && (f.result === 'W' || f.result === 'D' || f.result === 'L')) arr.push(f.result);
+  }
+
+  // Trend: earliest snapshot ~7+ days old vs current readiness. If the
+  // earliest available snapshot is LESS than 5 days old, there's not
+  // enough history yet for a meaningful weekly trend — return null rather
+  // than comparing today against itself or a 1-day-old point.
+  const historyByTeam = new Map<number, { readiness_score: number; snapshot_date: string }[]>();
+  for (const h of historyRes.data ?? []) {
+    if (!historyByTeam.has(h.team_id)) historyByTeam.set(h.team_id, []);
+    historyByTeam.get(h.team_id)!.push(h);
+  }
+  const trendMap = new Map<number, number | null>();
+  const now = Date.now();
+  for (const [teamId, points] of historyByTeam) {
+    const earliest = points[0];
+    if (!earliest) { trendMap.set(teamId, null); continue; }
+    const daysAgo = (now - new Date(earliest.snapshot_date).getTime()) / 86400000;
+    if (daysAgo < 5) { trendMap.set(teamId, null); continue; }
+    const current = intelRows.find((r: any) => r.team_id === teamId)?.readiness_score;
+    if (current == null || earliest.readiness_score == null) { trendMap.set(teamId, null); continue; }
+    trendMap.set(teamId, Math.round((current - earliest.readiness_score) * 10) / 10);
+  }
+
+  return intelRows.map((r: any) => {
+    const standing = standingsMap.get(r.team_id);
+    return {
+      id: r.team.id, name: r.team.name, short_name: r.team.short_name, slug: r.team.slug, country: r.team.country,
+      league: standing?.league ?? null, position: standing?.position ?? null,
+      readiness_score: r.readiness_score, form_index: r.form_index,
+      congestion_score: r.congestion_score, rest_days_avg: r.rest_days_avg, active_competitions: r.active_competitions,
+      travel_14d: travelMap.get(r.team_id) ?? null,
+      form_pills: formMap.get(r.team_id) ?? [],
+      trend_7d: trendMap.get(r.team_id) ?? null,
+    };
+  });
+}
