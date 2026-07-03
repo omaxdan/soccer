@@ -697,6 +697,74 @@ export interface WatchlistTeamRow {
   position: number | null;
 }
 
+export interface WatchlistMatchRow {
+  id: number;
+  date: string;
+  competition: string;
+  status: string;
+  home_team: { name: string; short_name: string | null; slug: string | null } | null;
+  away_team: { name: string; short_name: string | null; slug: string | null } | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeReadiness: number | null;
+  awayReadiness: number | null;
+}
+
+/** Lean, targeted fetch for the /watchlist page's matches section — same
+ *  "just enough to render a glance list with a link to the full detail
+ *  page" scope as getWatchlistTeams below, not the full MATCH_SELECT
+ *  richness the match detail page needs. home_team/away_team are shaped
+ *  as objects (not flat strings) specifically so matchUrl() can build a
+ *  correct link straight off this row — matches have no slug column of
+ *  their own, matchUrl() derives the URL from each team's slug/name. */
+export async function getWatchlistMatches(matchIds: number[]): Promise<WatchlistMatchRow[]> {
+  if (matchIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('matches')
+    .select(`
+      id, date, competition, status,
+      home_team:teams!home_team_id(name, short_name, slug),
+      away_team:teams!away_team_id(name, short_name, slug),
+      match_results(home_score, away_score),
+      match_intelligence(home_readiness, away_readiness)
+    `)
+    .in('id', matchIds)
+    .order('date', { ascending: false });
+
+  if (error || !data) return [];
+
+  return data.map((m: any) => {
+    const result = toOne(m.match_results);
+    const intel = toOne(m.match_intelligence);
+    return {
+      id: m.id,
+      date: m.date,
+      competition: m.competition,
+      status: m.status,
+      home_team: m.home_team ?? null,
+      away_team: m.away_team ?? null,
+      homeScore: result?.home_score ?? null,
+      awayScore: result?.away_score ?? null,
+      homeReadiness: intel?.home_readiness ?? null,
+      awayReadiness: intel?.away_readiness ?? null,
+    };
+  });
+}
+
+export interface WatchlistTeamRow {
+  id: number;
+  name: string;
+  short_name: string | null;
+  slug: string | null;
+  country: string | null;
+  readiness_score: number | null;
+  form_index: number | null;
+  congestion_score: number | null;
+  league: string | null;
+  position: number | null;
+}
+
 /** Lean, targeted fetch for the /watchlist page — just enough to render a
  *  glance list with links to each team's full detail page, not the full
  *  richness getTeamIntelligenceList() builds for the main Team Intelligence

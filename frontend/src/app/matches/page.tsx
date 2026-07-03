@@ -5,6 +5,7 @@ import { generateMatchInsight } from '@/lib/insights';
 import { computeMatchSignals } from '@/lib/signals';
 import { matchUrl } from '@/lib/urls';
 import { COLORS, scoreColor } from '@/design/tokens';
+import MatchWatchlistStar from '@/components/MatchWatchlistStar';
 import Link from 'next/link';
 
 export const metadata = { title: 'Match Center | NinetyData RIP' };
@@ -232,8 +233,8 @@ export default async function MatchCenter({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: COLORS.surface2 }}>
-                {['TIME', 'MATCH', 'HOME', 'AWAY', 'GAP', 'STR (H/A)', 'VENUE (H/A)', 'XG (H/A)', 'VERS (H/A)', 'PICK', 'CONF %'].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', textAlign: h === 'MATCH' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                {['★', 'TIME', 'MATCH', 'HOME', 'AWAY', 'GAP', 'STR (H/A)', 'VENUE (H/A)', 'XG (H/A)', 'VERS (H/A)', 'PICK', 'CONF %'].map(h => (
+                  <th key={h} style={{ padding: h === '★' ? '8px 4px' : '8px 10px', textAlign: h === 'MATCH' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -244,7 +245,7 @@ export default async function MatchCenter({
                 return (
                   <React.Fragment key={`country-${country}`}>
                     <tr>
-                      <td colSpan={11} style={{ padding: '10px 10px 4px', fontSize: 12, fontWeight: 800, color: COLORS.text, background: COLORS.bg }}>
+                      <td colSpan={12} style={{ padding: '10px 10px 4px', fontSize: 12, fontWeight: 800, color: COLORS.text, background: COLORS.bg }}>
                         {country}
                       </td>
                     </tr>
@@ -253,7 +254,7 @@ export default async function MatchCenter({
                       return (
                         <React.Fragment key={`comp-${country}-${competition}`}>
                           <tr>
-                            <td colSpan={11} style={{ padding: '6px 10px 6px 22px', fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: `1px solid ${COLORS.border}` }}>
+                            <td colSpan={12} style={{ padding: '6px 10px 6px 22px', fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: `1px solid ${COLORS.border}` }}>
                               {competition}
                             </td>
                           </tr>
@@ -262,6 +263,9 @@ export default async function MatchCenter({
                             const intel = toOne(m.match_intelligence);
                             return (
                               <tr key={m.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
+                                <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                                  <MatchWatchlistStar matchId={m.id} />
+                                </td>
                                 <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
                                 <td style={{ padding: '8px 10px' }}>
                                   <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600 }}>
@@ -329,7 +333,7 @@ export default async function MatchCenter({
                 );
               })}
               {enriched.length === 0 && (
-                <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: loadError ? COLORS.red : COLORS.dim }}>
+                <tr><td colSpan={12} style={{ padding: 32, textAlign: 'center', color: loadError ? COLORS.red : COLORS.dim }}>
                   {loadError
                     ? `Match data failed to load (${loadError}) — check migrations/RLS, this is a data error, not an empty day`
                     : `No fixtures found for ${displayDate}`}
