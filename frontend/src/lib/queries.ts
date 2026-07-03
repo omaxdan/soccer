@@ -203,7 +203,8 @@ const MATCH_SELECT = `
     home_rest_days, away_rest_days,
     home_travel_distance_km, away_travel_distance_km, travel_advantage_score,
     home_active_competitions, away_active_competitions,
-    predicted_home_goals, predicted_away_goals, predicted_scorelines
+    predicted_home_goals, predicted_away_goals, predicted_scorelines,
+    confidence_score, confidence_band
   ),
   match_travel_intelligence(
     home_team_distance_km, away_team_distance_km,

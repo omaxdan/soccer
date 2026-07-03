@@ -90,7 +90,8 @@ export default async function MatchCenter({
     const homeR = intel?.home_readiness ?? homeIntel?.readiness_score;
     const awayR = intel?.away_readiness ?? awayIntel?.readiness_score;
     const gap = homeR != null && awayR != null ? homeR - awayR : null;
-    return { match: m, intel, homeIntel, awayIntel, signals, topSignal, homeR, awayR, gap };
+    return { match: m, intel, homeIntel, awayIntel, signals, topSignal, homeR, awayR, gap,
+             confidence: intel?.confidence_score ?? null, confidenceBand: intel?.confidence_band ?? null };
   }).filter(e => e.match.status !== 'finished');
 
   // Sort by absolute gap, largest first — matches the "highest signal" ordering the mockup implies
@@ -164,13 +165,13 @@ export default async function MatchCenter({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: COLORS.surface2 }}>
-                {['TIME', 'MATCH', 'COMP', 'HOME', 'AWAY', 'GAP', 'REST(H/A)', 'TRAVEL(A)', 'SIGNALS', 'PICK'].map(h => (
+                {['TIME', 'MATCH', 'COMP', 'HOME', 'AWAY', 'GAP', 'REST(H/A)', 'TRAVEL(A)', 'SIGNALS', 'PICK', 'CONF %'].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: h === 'MATCH' || h === 'COMP' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {enriched.map(({ match: m, homeR, awayR, gap, signals, topSignal }) => {
+              {enriched.map(({ match: m, homeR, awayR, gap, signals, topSignal, confidence, confidenceBand }) => {
                 const time = new Date(m.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
                 const intel = m.match_intelligence?.[0];
                 return (
@@ -203,11 +204,21 @@ export default async function MatchCenter({
                         </span>
                       ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
                     </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center' }} title={confidenceBand ?? 'Not enough corroborating data yet — run process:all-db after migration 016'}>
+                      {confidence != null ? (
+                        <span style={{
+                          fontFamily: '"JetBrains Mono",monospace', fontSize: 11, fontWeight: 700,
+                          color: confidence >= 85 ? COLORS.green : confidence >= 70 ? COLORS.greenDim : confidence >= 55 ? COLORS.amber : COLORS.red,
+                        }}>
+                          {Math.round(confidence)}
+                        </span>
+                      ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
+                    </td>
                   </tr>
                 );
               })}
               {enriched.length === 0 && (
-                <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: COLORS.dim }}>No pre-match fixtures for {displayDate}</td></tr>
+                <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: COLORS.dim }}>No pre-match fixtures for {displayDate}</td></tr>
               )}
             </tbody>
           </table>

@@ -1390,7 +1390,7 @@ export async function processMatchIntelligencePartial(opts?: {
     // ── Load team_intelligence: form, congestion, travel, stability, comps ──
     const { data: teamIntel, error: tiErr } = await db
       .from('team_intelligence')
-      .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions');
+      .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score');
     if (tiErr) throw new Error(`team_intelligence query: ${tiErr.message}`);
 
     const intelMap = new Map<number, any>(
@@ -1561,6 +1561,89 @@ export async function processMatchIntelligencePartial(opts?: {
         homeAdvantage: awayVenueAdv, stability: awayStability, motivation: awayMotivation,
       });
 
+      // ── CONFIDENCE SCORE — evidence agreement on the pick side ──────────
+      // The Pick is whichever side the readiness gap favors. Confidence
+      // measures how strongly the OTHER independent evidence streams agree
+      // with that side. Each edge is signed toward the pick (+1 = fully
+      // supports, -1 = fully contradicts), normalized by a saturation
+      // constant (the gap size at which that signal counts as "maximal"),
+      // then weight-blended. Missing components renormalize rather than
+      // dragging the score down — same discipline as computeReadiness and
+      // the team-strength formula (missing data must never masquerade as
+      // negative evidence).
+      //
+      // Uses ONLY fields verified as actually computed (audit 2026-07-03):
+      // readiness_gap, own-team strength (note: homeOppStrength = AWAY
+      // team's strength, so home's own strength is awayOppStrength),
+      // injury_burden_score, congestion_score (post-polarity-fix: higher =
+      // more congested), travel distance, squad stability, venue advantage,
+      // and the motivation proxy (deliberately lowest weight — it's a
+      // shallow active-competitions modifier, not the points-gap-to-boundary
+      // formula still flagged as a follow-up).
+      //
+      // Bands per spec: >=95 Elite | 85-94 Strong | 70-84 Moderate |
+      // 55-69 Risky | <55 Avoid.
+      let confidenceScore: number | null = null;
+      let confidenceBand: string | null = null;
+      {
+        const rGap = (homeReadiness !== null && awayReadiness !== null)
+          ? homeReadiness - awayReadiness : null;
+
+        if (rGap !== null) {
+          const pickSign = rGap >= 0 ? 1 : -1; // +1 = home pick, -1 = away pick
+
+          // Each entry: [signed-toward-home raw gap | null, saturation, weight]
+          const homeOwnStrength = awayOppStrength; // what away faces = home's own
+          const awayOwnStrength = homeOppStrength;
+          const homeInjury = homeIntel?.injury_burden_score ?? null;
+          const awayInjury = awayIntel?.injury_burden_score ?? null;
+          const homeCongRaw = homeIntel?.congestion_score ?? null;
+          const awayCongRaw = awayIntel?.congestion_score ?? null;
+          const homeKm = travel?.home_team_distance_km ?? null;
+          const awayKm = travel?.away_team_distance_km ?? null;
+
+          const components: Array<[number | null, number, number]> = [
+            [rGap, 30, 30],                                                                          // readiness gap
+            [(homeOwnStrength !== null && awayOwnStrength !== null) ? homeOwnStrength - awayOwnStrength : null, 30, 20], // strength gap
+            [(homeInjury !== null && awayInjury !== null) ? awayInjury - homeInjury : null, 40, 15], // injury gap (opponent's burden helps)
+            [(homeCongRaw !== null && awayCongRaw !== null) ? awayCongRaw - homeCongRaw : null, 50, 10], // congestion gap
+            [(homeKm !== null && awayKm !== null) ? awayKm - homeKm : null, 1500, 10],               // travel gap (km)
+            [(homeStability !== null && awayStability !== null) ? homeStability - awayStability : null, 40, 5], // stability gap
+            [(homeVenueAdv !== null && awayVenueAdv !== null) ? homeVenueAdv - awayVenueAdv : null, 40, 7],     // venue gap
+            [homeMotivation - awayMotivation, 20, 3],                                                // motivation proxy
+          ];
+
+          let weightedSum = 0;
+          let weightUsed = 0;
+          let componentsWithData = 0;
+          for (const [gapTowardHome, saturation, weight] of components) {
+            if (gapTowardHome === null) continue;
+            // Sign toward the PICK side, clamp to [-1, 1] at saturation.
+            const edge = Math.max(-1, Math.min(1, (gapTowardHome * pickSign) / saturation));
+            weightedSum += edge * weight;
+            weightUsed += weight;
+            componentsWithData++;
+          }
+
+          // Gate: readiness gap + motivation are ALWAYS present (motivation
+          // is a computed proxy, never null), so >= 4 means at least TWO
+          // genuinely independent corroborating streams beyond those —
+          // a "confidence" built from the gap alone would just restate it
+          // with false precision.
+          if (componentsWithData >= 4 && weightUsed > 0) {
+            confidenceScore = Math.round(
+              Math.max(0, Math.min(100, 50 + 50 * (weightedSum / weightUsed))) * 10
+            ) / 10;
+            confidenceBand =
+              confidenceScore >= 95 ? 'Elite'
+              : confidenceScore >= 85 ? 'Strong'
+              : confidenceScore >= 70 ? 'Moderate'
+              : confidenceScore >= 55 ? 'Risky'
+              : 'Avoid';
+          }
+        }
+      }
+
       rows.push({
         match_id:                 m.id,
         match_date:               m.date,  // denormalized — see migration 007
@@ -1584,6 +1667,8 @@ export async function processMatchIntelligencePartial(opts?: {
         home_squad_stability:      homeStability,
         away_squad_stability:      awayStability,
         motivation_gap:            Math.round((homeMotivation - awayMotivation) * 100) / 100,
+        confidence_score:          confidenceScore,
+        confidence_band:           confidenceBand,
         home_active_competitions:  homeActiveComps,
         away_active_competitions:  awayActiveComps,
         calculated_at:             new Date().toISOString(),
