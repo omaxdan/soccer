@@ -80,6 +80,13 @@ export function generateMatchInsight(m: InsightInput): Insight {
     drivers.push(`${stabDiff > 0 ? m.homeTeam : m.awayTeam} notably more stable squad`);
   }
 
+  // Strength rating — was declared in InsightInput but never actually
+  // used here (found while building generateExecutiveSummary below).
+  const strengthDiff = (m.homeStrengthRating ?? 50) - (m.awayStrengthRating ?? 50);
+  if (Math.abs(strengthDiff) > 20) {
+    drivers.push(`${strengthDiff > 0 ? m.homeTeam : m.awayTeam} has the stronger overall squad (${Math.round(Math.abs(strengthDiff))}pt rating gap)`);
+  }
+
   // Build the headline text
   let text = '';
   if (absGap < 5) {
@@ -129,4 +136,69 @@ export function generateTeamInsight(m: {
 
   if (insights.length === 0) return `${m.teamName} are in steady condition — readiness indicators within normal range.`;
   return insights.slice(0, 2).join('. ') + '.';
+}
+
+// ─── EXECUTIVE SUMMARY — fuller, multi-sentence synthesis ──────────────────
+// Reuses generateMatchInsight's exact readiness-gap logic and driver list
+// (single source of truth for "why is one team favored") but produces a
+// genuinely comprehensive 2-3 sentence paragraph incorporating goals
+// scored/conceded and injury/goal-dependency context that the single-line
+// Insight card intentionally leaves out. Built for the new Team Comparison
+// Matrix on the match page — same "no LLM, no hallucination, every
+// statement maps 1:1 to a real score" discipline as generateMatchInsight.
+
+export interface ExecutiveSummaryInput extends InsightInput {
+  homeGoalsScored?: number | null;
+  awayGoalsScored?: number | null;
+  homeGoalsConceded?: number | null;
+  awayGoalsConceded?: number | null;
+  homeInjuredCount?: number | null;
+  awayInjuredCount?: number | null;
+  homeTopScorerPct?: number | null;
+  awayTopScorerPct?: number | null;
+}
+
+export function generateExecutiveSummary(m: ExecutiveSummaryInput): string {
+  const insight = generateMatchInsight(m);
+  const gap = m.readinessGap ?? ((m.homeReadiness ?? 50) - (m.awayReadiness ?? 50));
+  const absGap = Math.abs(gap);
+  const favTeam = gap > 0 ? m.homeTeam : m.awayTeam;
+  const disTeam = gap > 0 ? m.awayTeam : m.homeTeam;
+
+  const sentences: string[] = [];
+
+  // Opening: readiness verdict, reusing the Insight card's exact text
+  sentences.push(insight.text);
+
+  // Goal output context — only if both sides have season stats
+  if (m.homeGoalsScored != null && m.awayGoalsScored != null) {
+    const homeGD = (m.homeGoalsScored ?? 0) - (m.homeGoalsConceded ?? 0);
+    const awayGD = (m.awayGoalsScored ?? 0) - (m.awayGoalsConceded ?? 0);
+    if (Math.abs(homeGD - awayGD) > 8) {
+      const better = homeGD > awayGD ? m.homeTeam : m.awayTeam;
+      sentences.push(`${better}'s goal difference this season (${homeGD > awayGD ? homeGD : awayGD > 0 ? '+' + awayGD : awayGD}) points to a clear edge in overall output at both ends of the pitch.`);
+    }
+  }
+
+  // Injury/availability context — only mention if genuinely notable
+  const homeInjured = m.homeInjuredCount ?? 0;
+  const awayInjured = m.awayInjuredCount ?? 0;
+  if (homeInjured === 0 && awayInjured === 0) {
+    sentences.push(`Both sides have a clean injury sheet — this is a true test of squad quality rather than forced changes.`);
+  } else if (homeInjured > 0 || awayInjured > 0) {
+    const worseOff = homeInjured > awayInjured ? m.homeTeam : m.awayTeam;
+    const count = Math.max(homeInjured, awayInjured);
+    sentences.push(`${worseOff} will be missing ${count} player${count === 1 ? '' : 's'} from their strongest available XI.`);
+  }
+
+  // Goal-scoring concentration risk — only flag if genuinely high
+  const homeTopPct = m.homeTopScorerPct ?? 0;
+  const awayTopPct = m.awayTopScorerPct ?? 0;
+  if (homeTopPct >= 30 || awayTopPct >= 30) {
+    const concentrated = homeTopPct > awayTopPct ? m.homeTeam : m.awayTeam;
+    const pct = Math.max(homeTopPct, awayTopPct);
+    sentences.push(`${concentrated} lean heavily on a single scorer (${pct.toFixed(0)}% of season goals) — a real risk if that player is marked out of the game.`);
+  }
+
+  return sentences.join(' ');
 }

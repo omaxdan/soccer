@@ -256,7 +256,10 @@ export default async function MatchCenter({
                     <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                       {topSignal ? (
                         <span style={{ fontSize: 10, fontWeight: 700, color: DIR_COLOR[topSignal.direction as keyof typeof DIR_COLOR] }}>
-                          {topSignal.direction === 'home' ? '1' : topSignal.direction === 'away' ? '2' : topSignal.direction === 'avoid' ? '⚠' : '—'}
+                          {topSignal.direction === 'home' ? (m.home_team?.short_name ?? 'HOME')
+                            : topSignal.direction === 'away' ? (m.away_team?.short_name ?? 'AWAY')
+                            : topSignal.direction === 'avoid' ? '⚠ Avoid'
+                            : 'Even'}
                         </span>
                       ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
                     </td>

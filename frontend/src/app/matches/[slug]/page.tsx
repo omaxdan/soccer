@@ -7,13 +7,14 @@ import Link from 'next/link';
 import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
-  getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact,
+  getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras,
 } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary } from '@/lib/insights';
+import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
 import IntelligenceBar from '@/components/IntelligenceBar';
 import SignalChip from '@/components/SignalChip';
@@ -92,7 +93,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals, hGoalDep, aGoalDep, hInjury, aInjury] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -112,6 +113,7 @@ export default function MatchPage() {
           getTeamGoalDependency(awayId).catch(() => null),
           getTeamInjuryImpact(homeId).catch(() => null),
           getTeamInjuryImpact(awayId).catch(() => null),
+          getMatchComparisonExtras([homeId, awayId]).catch(() => new Map()),
         ]);
         
         setData({ 
@@ -137,6 +139,7 @@ export default function MatchPage() {
           awayGoalDep: aGoalDep,
           homeInjury: hInjury,
           awayInjury: aInjury,
+          matchExtras,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
@@ -171,6 +174,7 @@ export default function MatchPage() {
     awayGoalDep,
     homeInjury,
     awayInjury,
+    matchExtras,
   } = data;
   
   const intel   = toOne(match.match_intelligence);
@@ -290,6 +294,62 @@ export default function MatchPage() {
     awayInjuryBurden: awayIntel?.injury_burden_score,
     homeSquadStability: homeIntel?.squad_stability_score,
     awaySquadStability: awayIntel?.squad_stability_score,
+  }) : null;
+
+  // ─── Team Comparison Matrix data — consolidates data already fetched/
+  // computed above (team_intelligence, team_goal_dependency,
+  // team_injury_impact) plus the new lean getMatchComparisonExtras fetch
+  // (strength rating, venue advantage, season goals) into one scannable
+  // table, replacing several previously-scattered separate cards. ───────
+  const homeExtras = matchExtras?.get(match.home_team_id);
+  const awayExtras = matchExtras?.get(match.away_team_id);
+
+  // Form strings — oldest-to-newest, same convention as getTeamComparisonExtras's
+  // formPills builder elsewhere in this codebase (fetched newest-first, reversed).
+  const homeFormString = (homeForm ?? []).slice(0, 5).map((f: any) => f.result).reverse().join('');
+  const awayFormString = (awayForm ?? []).slice(0, 5).map((f: any) => f.result).reverse().join('');
+
+  const comparisonRows: ComparisonRow[] = [
+    { label: 'Readiness', homeValue: homeReadinessAny, awayValue: awayReadinessAny, higherIsBetter: true },
+    { label: 'Form Index', homeValue: homeIntel?.form_index ?? null, awayValue: awayIntel?.form_index ?? null, higherIsBetter: true },
+    { label: 'Congestion', homeValue: homeIntel?.congestion_score ?? null, awayValue: awayIntel?.congestion_score ?? null, higherIsBetter: false },
+    { label: 'Strength Rating', homeValue: homeExtras?.strength_score ?? null, awayValue: awayExtras?.strength_score ?? null, higherIsBetter: true },
+    { label: 'Venue Advantage', homeValue: homeExtras?.venue_advantage_score ?? null, awayValue: awayExtras?.venue_advantage_score ?? null, higherIsBetter: true },
+    { label: 'Goals Scored', homeValue: homeExtras?.goals_scored ?? null, awayValue: awayExtras?.goals_scored ?? null, higherIsBetter: true },
+    { label: 'Goals Conceded', homeValue: homeExtras?.goals_conceded ?? null, awayValue: awayExtras?.goals_conceded ?? null, higherIsBetter: false },
+    { label: 'Squad Stability', homeValue: homeIntel?.squad_stability_score ?? null, awayValue: awayIntel?.squad_stability_score ?? null, higherIsBetter: true },
+    { label: 'Squad Depth', homeValue: homeIntel?.squad_depth_score ?? null, awayValue: awayIntel?.squad_depth_score ?? null, higherIsBetter: true },
+    { label: 'Injury Impact', homeValue: homeInjury?.total_importance_lost ?? 0, awayValue: awayInjury?.total_importance_lost ?? 0, higherIsBetter: false },
+    { label: 'Predicted Goals', homeValue: intel?.predicted_home_goals ?? null, awayValue: intel?.predicted_away_goals ?? null, higherIsBetter: true, decimals: 2 },
+  ];
+
+  const executiveSummary = hasEnoughForSignals ? generateExecutiveSummary({
+    homeTeam: match.home_team?.name ?? 'Home',
+    awayTeam: match.away_team?.name ?? 'Away',
+    homeReadiness: homeReadinessAny,
+    awayReadiness: awayReadinessAny,
+    readinessGap: intel?.readiness_gap ?? (homeReadinessAny - awayReadinessAny),
+    homeFormIndex: homeIntel?.form_index,
+    awayFormIndex: awayIntel?.form_index,
+    homeRestDays: intel?.home_rest_days ?? homeIntel?.rest_days_avg,
+    awayRestDays: intel?.away_rest_days ?? awayIntel?.rest_days_avg,
+    awayTravelKm: intel?.away_travel_distance_km,
+    homeCongestion: homeIntel?.congestion_score,
+    awayCongestion: awayIntel?.congestion_score,
+    homeInjuryBurden: homeIntel?.injury_burden_score,
+    awayInjuryBurden: awayIntel?.injury_burden_score,
+    homeSquadStability: homeIntel?.squad_stability_score,
+    awaySquadStability: awayIntel?.squad_stability_score,
+    homeStrengthRating: homeExtras?.strength_score,
+    awayStrengthRating: awayExtras?.strength_score,
+    homeGoalsScored: homeExtras?.goals_scored,
+    awayGoalsScored: awayExtras?.goals_scored,
+    homeGoalsConceded: homeExtras?.goals_conceded,
+    awayGoalsConceded: awayExtras?.goals_conceded,
+    homeInjuredCount: homeInjury?.injured_count ?? 0,
+    awayInjuredCount: awayInjury?.injured_count ?? 0,
+    homeTopScorerPct: homeGoalDep?.top_scorer_pct,
+    awayTopScorerPct: awayGoalDep?.top_scorer_pct,
   }) : null;
 
   const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
@@ -680,29 +740,54 @@ export default function MatchPage() {
       {/* ── OVERVIEW TAB ── */}
       {tab === 'Overview' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {matchInsight && (
+          {/* ── EXECUTIVE SUMMARY + TEAM COMPARISON MATRIX ──────────────────
+              Replaces the old single-line "Key Insight" card + full 7-
+              component Readiness Breakdown as the FIRST thing shown —
+              consolidates the same underlying data (team_intelligence,
+              team_strength_ratings, team_venue_performance,
+              team_goal_dependency, team_injury_impact) into one scannable
+              table instead of scattered cards, per the "page makes a lot
+              of noise, if someone isn't good at reading they'll miss a
+              lot" feedback this was built from. The detailed 7-component
+              breakdown is still available below for anyone who wants the
+              weighted contribution numbers, just no longer the first
+              thing on the page. */}
+          {executiveSummary && (
             <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
                 <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue }}>
-                  💡 Key Insight
+                  💡 Executive Summary
                 </span>
               </div>
-              <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.6 }}>{matchInsight.text}</div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
-                <span style={{ fontSize:10, color:COLORS.dim }}>Confidence</span>
-                <div style={{ flex:1, maxWidth:160, height:5, background:COLORS.border, borderRadius:3, overflow:'hidden' }}>
-                  <div style={{
-                    width:`${matchInsight.confidence}%`, height:'100%', borderRadius:3,
-                    background: `linear-gradient(90deg, ${COLORS.red}, ${COLORS.amber}, ${COLORS.green})`,
-                  }} />
+              <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.6 }}>{executiveSummary}</div>
+              {matchInsight && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
+                  <span style={{ fontSize:10, color:COLORS.dim }}>Confidence</span>
+                  <div style={{ flex:1, maxWidth:160, height:5, background:COLORS.border, borderRadius:3, overflow:'hidden' }}>
+                    <div style={{
+                      width:`${matchInsight.confidence}%`, height:'100%', borderRadius:3,
+                      background: `linear-gradient(90deg, ${COLORS.red}, ${COLORS.amber}, ${COLORS.green})`,
+                    }} />
+                  </div>
+                  <span style={{ fontSize:10, fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>{matchInsight.confidence}%</span>
                 </div>
-                <span style={{ fontSize:10, fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>{matchInsight.confidence}%</span>
-              </div>
+              )}
             </Card>
           )}
 
           <Card>
-            <ReadinessBreakdown components={readinessComponents} />
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Team Comparison
+              </div>
+            </div>
+            <TeamComparisonMatrix
+              homeTeam={match.home_team?.short_name ?? match.home_team?.name ?? 'Home'}
+              awayTeam={match.away_team?.short_name ?? match.away_team?.name ?? 'Away'}
+              rows={comparisonRows}
+              homeFormString={homeFormString}
+              awayFormString={awayFormString}
+            />
           </Card>
 
           {/* ── PREDICTED LINEUPS ── */}
@@ -723,6 +808,20 @@ export default function MatchPage() {
               />
             </Card>
           )}
+
+          {/* ── DETAILED READINESS BREAKDOWN — was the first thing on the
+              page before this redesign; now supplementary detail for
+              anyone who wants the weighted 7-component contribution
+              numbers behind the Readiness row in the Comparison Matrix
+              above, rather than competing with it for attention. */}
+          <details>
+            <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
+              Detailed Readiness Breakdown
+            </summary>
+            <Card style={{ marginTop: 10 }}>
+              <ReadinessBreakdown components={readinessComponents} />
+            </Card>
+          </details>
 
           {/* ── SQUAD RISK — "how much does each side rely on one player,
               and who's missing" — the two questions the pre-match source

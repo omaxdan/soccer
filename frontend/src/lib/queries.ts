@@ -904,6 +904,49 @@ export async function getTeamFixtureDifficulty(teamId: number) {
 /** Reads team_momentum — written by processTeamMomentum() (backend).
  *  Same "new metric, no live fallback needed" reasoning as
  *  getTeamFixtureDifficulty above. */
+/** Lean bulk fetch of strength_score + venue_advantage_score + season
+ *  goals for/against for 2+ teams — the pieces of an at-a-glance match
+ *  comparison that weren't fetched anywhere on the match page before
+ *  (team_strength_ratings and team_venue_performance were only ever read
+ *  on the Team Detail page). Deliberately NOT reusing the heavier
+ *  getTeamComparisonExtras() below — that also fetches 21-day upcoming
+ *  fixtures, 5-match head-to-head, and full readiness trend history, none
+ *  of which a match-page comparison table needs; pulling it wholesale
+ *  here would add fetches, not reduce them, which was the whole point of
+ *  this consolidation. team_season_statistics coverage is thin platform-
+ *  wide (~55 rows as of the last audit) — goals_scored/goals_conceded
+ *  come back null for most teams right now, handled gracefully by the
+ *  comparison matrix component (renders "—", not a fake zero). */
+export async function getMatchComparisonExtras(teamIds: number[]): Promise<Map<number, {
+  strength_score: number | null;
+  venue_advantage_score: number | null;
+  goals_scored: number | null;
+  goals_conceded: number | null;
+}>> {
+  const result = new Map<number, { strength_score: number | null; venue_advantage_score: number | null; goals_scored: number | null; goals_conceded: number | null }>();
+  if (teamIds.length === 0) return result;
+  const [strengthRes, venueRes, statsRes] = await Promise.all([
+    supabase.from('team_strength_ratings').select('team_id, strength_score').in('team_id', teamIds),
+    supabase.from('team_venue_performance').select('team_id, venue_advantage_score').in('team_id', teamIds),
+    supabase.from('team_season_statistics').select('team_id, goals_scored, goals_conceded').in('team_id', teamIds),
+  ]);
+  const venueMap = new Map<number, number | null>((venueRes.data ?? []).map((r: any) => [r.team_id, r.venue_advantage_score]));
+  const statsMap = new Map<number, { goals_scored: number | null; goals_conceded: number | null }>(
+    (statsRes.data ?? []).map((r: any) => [r.team_id, { goals_scored: r.goals_scored, goals_conceded: r.goals_conceded }])
+  );
+  for (const id of teamIds) {
+    const strength = (strengthRes.data ?? []).find((r: any) => r.team_id === id);
+    const stats = statsMap.get(id);
+    result.set(id, {
+      strength_score: strength?.strength_score ?? null,
+      venue_advantage_score: venueMap.get(id) ?? null,
+      goals_scored: stats?.goals_scored ?? null,
+      goals_conceded: stats?.goals_conceded ?? null,
+    });
+  }
+  return result;
+}
+
 export async function getTeamMomentum(teamId: number) {
   const { data, error } = await supabase
     .from('team_momentum')
