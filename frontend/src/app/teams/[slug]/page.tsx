@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { toOne } from '@/lib/relations';
 import { useParams } from 'next/navigation';
 import { parseIdFromSlug, matchUrl } from '@/lib/urls';
 import Link from 'next/link';
@@ -128,7 +129,7 @@ export default function TeamPage() {
     form: t.form_index,
   }));
 
-  const nextMatchIntel = nextMatch?.match_intelligence?.[0];
+  const nextMatchIntel = toOne(nextMatch?.match_intelligence);
   const isHome = nextMatch?.home_team_id === parseInt(id);
   const opponent = isHome ? nextMatch?.away_team : nextMatch?.home_team;
   const ownReadiness = isHome ? nextMatchIntel?.home_readiness : nextMatchIntel?.away_readiness;

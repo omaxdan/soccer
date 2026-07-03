@@ -1,4 +1,5 @@
 import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap } from '@/lib/queries';
+import { toOne } from '@/lib/relations';
 import { computeMatchSignals } from '@/lib/signals';
 import { matchUrl, teamUrl } from '@/lib/urls';
 import { COLORS, scoreColor } from '@/design/tokens';
@@ -51,8 +52,8 @@ function formatDisplayDate(dateStr: string, todayStr: string): string {
 }
 
 function scoreMatch(m: any, homeIntel: any, awayIntel: any): ScoredMatch['scores'] {
-  const intel  = m.match_intelligence?.[0];
-  const travel = m.match_travel_intelligence?.[0];
+  const intel  = toOne(m.match_intelligence);
+  const travel = toOne(m.match_travel_intelligence);
 
   // Readiness gap — most important signal (0–40 pts)
   const gap = Math.abs(
@@ -133,8 +134,8 @@ export default async function MatchPicksPage({
   const scored: ScoredMatch[] = (rawMatches as any[])
     .filter((m: any) => m.status !== 'finished') // picks are pre-match only
     .map((m: any) => {
-      const intel     = m.match_intelligence?.[0];
-      const travel    = m.match_travel_intelligence?.[0];
+      const intel     = toOne(m.match_intelligence);
+      const travel    = toOne(m.match_travel_intelligence);
       const homeIntel = tiMap.get(m.home_team_id);
       const awayIntel = tiMap.get(m.away_team_id);
       const scores    = scoreMatch(m, homeIntel, awayIntel);

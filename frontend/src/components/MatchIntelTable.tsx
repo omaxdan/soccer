@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { toOne } from '@/lib/relations';
 import { COLORS, scoreColor } from '@/design/tokens';
 import { matchUrl } from '@/lib/urls';
 
@@ -70,8 +71,8 @@ export default function MatchIntelTable({ matches, teamIntelMap }: MatchIntelTab
         </thead>
         <tbody>
           {matches.map((m: any) => {
-            const intel = m.match_intelligence?.[0];
-            const result = m.match_results?.[0];
+            const intel = toOne(m.match_intelligence);
+            const result = toOne(m.match_results);
             const homeIntel = teamIntelMap.get(m.home_team_id);
             const awayIntel = teamIntelMap.get(m.away_team_id);
             const isLive = m.status === 'live';

@@ -1,4 +1,5 @@
 import { matchUrl } from '@/lib/urls';
+import { toOne } from '@/lib/relations';
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -41,9 +42,9 @@ function ScoreChip({ score }: { score: number | null }) {
 
 export default function MatchRow({ match, homeIntel, awayIntel, homeForm = [], awayForm = [] }: MatchRowProps) {
   const [expanded, setExpanded] = useState(false);
-  const intel  = match.match_intelligence?.[0];
-  const travel = match.match_travel_intelligence?.[0];
-  const result = match.match_results?.[0];
+  const intel  = toOne(match.match_intelligence);
+  const travel = toOne(match.match_travel_intelligence);
+  const result = toOne(match.match_results);
   const isLive = match.status === 'live';
   const isDone = match.status === 'finished';
 

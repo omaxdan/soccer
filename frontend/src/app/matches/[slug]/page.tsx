@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { toOne } from '@/lib/relations';
 import { useParams } from 'next/navigation';
 import { parseIdFromSlug, teamUrl } from '@/lib/urls';
 import Link from 'next/link';
@@ -160,9 +161,9 @@ export default function MatchPage() {
     storedSignals,
   } = data;
   
-  const intel   = (match.match_intelligence as any[])?.[0];
+  const intel   = toOne(match.match_intelligence);
   const travel  = (match.match_travel_intelligence as any[])?.[0];
-  const result  = (match.match_results as any[])?.[0];
+  const result  = toOne(match.match_results);
   const venue   = match.venue as any;
   const isLive  = match.status === 'live';
   const isDone  = match.status === 'finished';

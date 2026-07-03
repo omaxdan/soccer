@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { toOne } from '@/lib/relations';
 import Link from 'next/link';
 import {
   getTodaysMatches, getReadinessRankings, getMostCongestedTeams,
@@ -141,11 +142,11 @@ export default async function Dashboard() {
   // Top match for hero — this is SELECTION (which already-fetched match to
   // feature), not a calculation that fabricates new data, so it stays here.
   const heroMatch = M.sort((a: any, b: any) =>
-    Math.abs(b.match_intelligence?.[0]?.readiness_gap ?? 0) - Math.abs(a.match_intelligence?.[0]?.readiness_gap ?? 0)
+    Math.abs(toOne(b.match_intelligence)?.readiness_gap ?? 0) - Math.abs(toOne(a.match_intelligence)?.readiness_gap ?? 0)
   )[0] as any | undefined;
-  const heroIntel = heroMatch?.match_intelligence?.[0];
-  const heroTravel = heroMatch?.match_travel_intelligence?.[0];
-  const heroResult = heroMatch?.match_results?.[0];
+  const heroIntel = toOne(heroMatch?.match_intelligence);
+  const heroTravel = toOne(heroMatch?.match_travel_intelligence);
+  const heroResult = toOne(heroMatch?.match_results);
 
   // Fallback when match_intelligence hasn't been computed for the hero
   // match yet (e.g. synced after the last process:all-db run) — same
@@ -174,7 +175,7 @@ export default async function Dashboard() {
   // removed in favor of the real backend-computed score.
   const travelData = T.slice(0, 8).map((m: any) => ({
     team: (m.away_team as any)?.name ?? '—',
-    km: m.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0,
+    km: toOne(m.match_travel_intelligence)?.away_team_distance_km ?? 0,
     score: m.away_team_travel_fatigue_score ?? null, // joined in getTodayTravelAlerts
   }));
 
@@ -184,7 +185,7 @@ export default async function Dashboard() {
   const watchlist = M
     .filter((m: any) => m.status !== 'finished')
     .map((m: any) => {
-      const intel = m.match_intelligence?.[0];
+      const intel = toOne(m.match_intelligence);
       const gap   = Math.abs(intel?.readiness_gap ?? 0);
       return { ...m, _gap: gap };
     })
@@ -553,8 +554,8 @@ export default async function Dashboard() {
         </div>
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
           {watchlist.map((m: any) => {
-            const intel  = m.match_intelligence?.[0];
-            const result = m.match_results?.[0];
+            const intel  = toOne(m.match_intelligence);
+            const result = toOne(m.match_results);
             const isDone = m.status === 'finished';
             return (
               <Link key={m.id} href={matchUrl(m)} style={{

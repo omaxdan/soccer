@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { toOne } from '@/lib/relations';
 import { Match } from '@/types/match';
 // ─── UTC DAY BOUNDARIES ────────────────────────────────────────────────────
 // EXPLICIT UTC, never local timezone. Match dates are stored as timestamptz
@@ -287,10 +288,10 @@ export async function getTodayTravelAlerts() {
   if (!data) return [];
 
   const filtered = data
-    .filter((m: any) => (m.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0) > 500)
+    .filter((m: any) => (toOne(m.match_travel_intelligence)?.away_team_distance_km ?? 0) > 500)
     .sort((a: any, b: any) =>
-      (b.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0) -
-      (a.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0))
+      (toOne(b.match_travel_intelligence)?.away_team_distance_km ?? 0) -
+      (toOne(a.match_travel_intelligence)?.away_team_distance_km ?? 0))
     .slice(0, 5);
 
   // team_intelligence has no direct FK path from matches for PostgREST to
@@ -972,7 +973,7 @@ export async function getTodayTravelMatches() {
   if (names.length > 0) q.in('competition', names);
 
   const { data } = await q;
-  return (data ?? []).filter((m: any) => m.match_travel_intelligence?.[0]);
+  return (data ?? []).filter((m: any) => toOne(m.match_travel_intelligence));
 }
 
 // ─── CONGESTION HUB ───────────────────────────────────────────────────────────
@@ -1461,8 +1462,8 @@ export async function getTeamComparisonExtras(teamAId: number, teamBId: number):
   const headToHead = [...(h2hHomeRes.data ?? []), ...(h2hAwayRes.data ?? [])]
     .map((m: any) => ({
       date: m.date, home_team_id: m.home_team_id, away_team_id: m.away_team_id,
-      home_score: m.match_results?.[0]?.home_score ?? null,
-      away_score: m.match_results?.[0]?.away_score ?? null,
+      home_score: toOne(m.match_results)?.home_score ?? null,
+      away_score: toOne(m.match_results)?.away_score ?? null,
     }))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);

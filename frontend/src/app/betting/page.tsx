@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { toOne } from '@/lib/relations';
 import Link from 'next/link';
 import { getTodaysMatches, getMatchSignalsForMatches } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
@@ -67,12 +68,12 @@ export default function BettingHub() {
         const computed = matchList.map((m: any) => {
           const stored = storedMap.get(m.id);
           if (stored && stored.length > 0) {
-            return { match: m, intel: m.match_intelligence?.[0], signals: stored };
+            return { match: m, intel: toOne(m.match_intelligence), signals: stored };
           }
 
           // Fall back to live computation — same as before this change,
           // for any match process:match-signals hasn't reached yet.
-          const intel = m.match_intelligence?.[0];
+          const intel = toOne(m.match_intelligence);
           if (!intel) return null;
           const hti = tiMap.get(m.home_team_id) || {};
           const ati = tiMap.get(m.away_team_id) || {};
@@ -87,7 +88,7 @@ export default function BettingHub() {
             away_travel_distance_km: intel.away_travel_distance_km,
             home_active_competitions: intel.home_active_competitions,
             away_active_competitions: intel.away_active_competitions,
-            travel_advantage_km: m.match_travel_intelligence?.[0]?.travel_advantage_km,
+            travel_advantage_km: toOne(m.match_travel_intelligence)?.travel_advantage_km,
             home_form_index:    hti?.form_index ?? null,
             away_form_index:    ati?.form_index ?? null,
             home_travel_fatigue: hti?.travel_fatigue_score ?? null,

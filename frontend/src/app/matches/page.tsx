@@ -1,4 +1,6 @@
 import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap, getMatchConfidenceMap } from '@/lib/queries';
+import { toOne } from '@/lib/relations';
+import { generateMatchInsight } from '@/lib/insights';
 import { computeMatchSignals } from '@/lib/signals';
 import { matchUrl } from '@/lib/urls';
 import { COLORS, scoreColor } from '@/design/tokens';
@@ -68,7 +70,7 @@ export default async function MatchCenter({
 
   // Compute signals per match — same pattern as /matches/picks
   const enriched = (matches as any[]).map((m: any) => {
-    const intel = m.match_intelligence?.[0];
+    const intel = toOne(m.match_intelligence);
     const homeIntel = teamIntelMap.get(m.home_team_id);
     const awayIntel = teamIntelMap.get(m.away_team_id);
     const signals = computeMatchSignals({
@@ -96,15 +98,38 @@ export default async function MatchCenter({
       away_injury_burden: awayIntel?.injury_burden_score,
       home_squad_stability: homeIntel?.squad_stability_score,
       away_squad_stability: awayIntel?.squad_stability_score,
-      travel_advantage_km: m.match_travel_intelligence?.[0]?.travel_advantage_km,
+      travel_advantage_km: toOne(m.match_travel_intelligence)?.travel_advantage_km,
     });
     const topSignal = [...signals].filter(s => s.direction !== 'neutral').sort((a, b) => b.strength - a.strength)[0];
     const homeR = intel?.home_readiness ?? homeIntel?.readiness_score;
     const awayR = intel?.away_readiness ?? awayIntel?.readiness_score;
     const gap = homeR != null && awayR != null ? homeR - awayR : null;
     const conf = confMap.get(m.id);
+    // Precomputed confidence (evidence-agreement engine, migration 016)
+    // first; fall back to the SAME insight-confidence heuristic the match
+    // detail page's "Key Insight" card shows (gap-sized base + 5 per
+    // corroborating driver, capped 95) so the CONF column is never blank
+    // when the detail page is already showing a confidence for the same
+    // match. Both are backend-data-driven; the precomputed one simply
+    // weighs more evidence streams, so it wins when present.
+    let fallbackConf: number | null = null;
+    if (conf == null && homeR != null && awayR != null) {
+      fallbackConf = generateMatchInsight({
+        homeTeam: m.home_team?.short_name ?? m.home_team?.name ?? 'Home',
+        awayTeam: m.away_team?.short_name ?? m.away_team?.name ?? 'Away',
+        homeReadiness: homeR, awayReadiness: awayR,
+        readinessGap: gap,
+        homeFormIndex: homeIntel?.form_index, awayFormIndex: awayIntel?.form_index,
+        homeRestDays: intel?.home_rest_days ?? homeIntel?.rest_days_avg,
+        awayRestDays: intel?.away_rest_days ?? awayIntel?.rest_days_avg,
+        awayTravelKm: intel?.away_travel_distance_km,
+        homeCongestion: homeIntel?.congestion_score, awayCongestion: awayIntel?.congestion_score,
+        homeInjuryBurden: homeIntel?.injury_burden_score, awayInjuryBurden: awayIntel?.injury_burden_score,
+        homeSquadStability: homeIntel?.squad_stability_score, awaySquadStability: awayIntel?.squad_stability_score,
+      }).confidence;
+    }
     return { match: m, intel, homeIntel, awayIntel, signals, topSignal, homeR, awayR, gap,
-             confidence: conf?.score ?? null, confidenceBand: conf?.band ?? null };
+             confidence: conf?.score ?? fallbackConf, confidenceBand: conf?.band ?? null };
   });
   // NOTE: deliberately NOT filtering out finished matches — past dates are
   // entirely finished matches, and filtering them produced a permanently
@@ -189,7 +214,7 @@ export default async function MatchCenter({
             <tbody>
               {enriched.map(({ match: m, homeR, awayR, gap, signals, topSignal, confidence, confidenceBand }) => {
                 const time = new Date(m.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-                const intel = m.match_intelligence?.[0];
+                const intel = toOne(m.match_intelligence);
                 return (
                   <tr key={m.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
@@ -199,7 +224,7 @@ export default async function MatchCenter({
                           // match_results has always been fetched by MATCH_SELECT —
                           // it was just never rendered here, so finished matches
                           // stayed at "team v team" with no score forever.
-                          const r = m.match_results?.[0];
+                          const r = toOne(m.match_results);
                           const hasScore = r != null && r.home_score != null && r.away_score != null;
                           return (
                             <>

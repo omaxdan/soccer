@@ -1,4 +1,5 @@
 import { getTravelBurdenRankings, getTodayTravelMatches } from '@/lib/queries';
+import { toOne } from '@/lib/relations';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 
 export const metadata = { title: 'Travel Intelligence Hub' };
@@ -15,8 +16,8 @@ export default async function TravelHub() {
   ]);
 
   // Stats
-  const totalKm = (todayMatches as any[]).reduce((s: number, m: any) => s + (m.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0), 0);
-  const maxTravel = (todayMatches as any[]).sort((a: any, b: any) => (b.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0) - (a.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0))[0];
+  const totalKm = (todayMatches as any[]).reduce((s: number, m: any) => s + (toOne(m.match_travel_intelligence)?.away_team_distance_km ?? 0), 0);
+  const maxTravel = (todayMatches as any[]).sort((a: any, b: any) => (toOne(b.match_travel_intelligence)?.away_team_distance_km ?? 0) - (toOne(a.match_travel_intelligence)?.away_team_distance_km ?? 0))[0];
   const avgTravel = (todayMatches as any[]).length ? Math.round(totalKm / (todayMatches as any[]).length) : 0;
 
   return (
@@ -31,7 +32,7 @@ export default async function TravelHub() {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
         {[
           { label:'Total km Today', val:Math.round(totalKm).toLocaleString()+'km', color:COLORS.blue },
-          { label:'Longest Trip Today', val:maxTravel ? `${Math.round(maxTravel.match_travel_intelligence?.[0]?.away_team_distance_km ?? 0).toLocaleString()}km` : '—', sub:(maxTravel?.away_team as any)?.name, color:COLORS.amber },
+          { label:'Longest Trip Today', val:maxTravel ? `${Math.round(toOne(maxTravel.match_travel_intelligence)?.away_team_distance_km ?? 0).toLocaleString()}km` : '—', sub:(maxTravel?.away_team as any)?.name, color:COLORS.amber },
           { label:'Avg Away Travel', val:avgTravel ? avgTravel.toLocaleString()+'km' : '—', color:COLORS.green },
         ].map(c => (
           <Card key={c.label}>
@@ -58,8 +59,8 @@ export default async function TravelHub() {
               {(todayMatches as any[]).length === 0 && (
                 <tr><td colSpan={5} style={{ padding:30, textAlign:'center', color:COLORS.dim, fontSize:12 }}>No travel data for today — run process:match-travel</td></tr>
               )}
-              {(todayMatches as any[]).sort((a: any, b: any) => (b.match_travel_intelligence?.[0]?.away_team_distance_km??0)-(a.match_travel_intelligence?.[0]?.away_team_distance_km??0)).map((m: any, i: number) => {
-                const t = m.match_travel_intelligence?.[0];
+              {(todayMatches as any[]).sort((a: any, b: any) => (toOne(b.match_travel_intelligence)?.away_team_distance_km??0)-(toOne(a.match_travel_intelligence)?.away_team_distance_km??0)).map((m: any, i: number) => {
+                const t = toOne(m.match_travel_intelligence);
                 const awayKm = Math.round(t?.away_team_distance_km ?? 0);
                 const homeKm = Math.round(t?.home_team_distance_km ?? 0);
                 const advKm  = Math.round(t?.travel_advantage_km ?? 0);
