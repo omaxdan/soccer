@@ -697,7 +697,12 @@ async function handleCommand(command: string, ...args: string[]) {
       }
 
       case 'process:player-intelligence': {
-        logger.info('Computing player intelligence (fatigue, load, transfers) — DB only...');
+        // Also now computes and writes: player_intelligence.importance_score
+        // (+ goal/assist/minutes share), team_goal_dependency (top-scorer
+        // concentration risk), team_injury_impact (SUM of importance lost to
+        // active injuries) — all from the same season-scoped player-stats
+        // pass, no extra API calls, no extra sync needed.
+        logger.info('Computing player intelligence (fatigue, load, importance) + goal dependency + injury impact — DB only...');
         const r = await processPlayerIntelligence();
         logger.info(r, 'Player intelligence complete');
         break;
@@ -806,7 +811,7 @@ Commands:
     process:match-travel             Compute per-match travel burden for both teams
     process:team-intelligence        Partial team_intelligence (form+congestion+travel)
     process:match-intelligence       Partial match_intelligence (rest+congestion+travel)
-    process:player-intelligence      Player fatigue/load from injury + transfer data (no match-load)
+    process:player-intelligence      Player fatigue/load/importance + goal dependency + injury impact
     process:strength-ratings         Team strength (PPG, win%, market value) from form history
     process:venue-performance        Home/away performance splits from match results
 

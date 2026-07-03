@@ -2072,19 +2072,56 @@ export async function processPlayerIntelligence(): Promise<{
   logger.info('processPlayerIntelligence started — DB only, zero API calls');
 
   try {
-    // ── Query 1: Players (injury data only — NO FK join to team_intelligence)
+    // ── Query 1: Players (injury data + position, needed for importance) ───
     // players → team_intelligence have no direct FK constraint; Supabase
     // cannot join them. Fetch separately and join in memory instead.
     // Uses fetchAllRows — same 1000-row silent cap bug found and fixed
     // elsewhere in this file; players has 2,300+ rows.
     const players = await fetchAllRows(
-      db.from('players').select('id, team_id, current_injury, injury_severity_score')
+      db.from('players').select('id, team_id, position, current_injury, injury_severity_score')
     );
     if (players.length === 0) {
       logger.warn('No players in DB — run sync:squads:v2 first');
       return { playersProcessed: 0, rowsWritten: 0 };
     }
     logger.debug({ playerCount: players.length }, 'Players fetched (paginated)');
+
+    // ── Query 1b: Season stats for importance scoring ───────────────────────
+    // Season-SCOPED — most recent season per player only. Same fix as
+    // processPredictedLineups: player_season_statistics upserts on
+    // (player_id, season_external_id), so a player genuinely accumulates a
+    // separate row per season over time; summing across all of them would
+    // mix current-season form with stale prior-season numbers.
+    const seasonStatsRaw = await fetchAllRows(
+      db.from('player_season_statistics')
+        .select('player_id, team_id, season_external_id, goals, assists, minutes_played, total_rating, count_rating')
+    );
+    const statsMap = new Map<number, any>();
+    for (const s of seasonStatsRaw) {
+      const existing = statsMap.get(s.player_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsMap.set(s.player_id, {
+        team_id: s.team_id,
+        season_external_id: s.season_external_id ?? 0,
+        goals: s.goals || 0,
+        assists: s.assists || 0,
+        minutes_played: s.minutes_played || 0,
+        avg_rating: (s.count_rating > 0 && s.total_rating > 0) ? s.total_rating / s.count_rating : null,
+      });
+    }
+
+    // Team-level totals, built from the SAME season-scoped statsMap (not raw
+    // multi-season sums) — keeps "player's share of team total" internally
+    // consistent rather than comparing a single-season player figure against
+    // a stale multi-season team figure.
+    const teamGoals = new Map<number, number>();
+    const teamAssists = new Map<number, number>();
+    const teamMinutes = new Map<number, number>();
+    for (const [, s] of statsMap) {
+      teamGoals.set(s.team_id, (teamGoals.get(s.team_id) ?? 0) + s.goals);
+      teamAssists.set(s.team_id, (teamAssists.get(s.team_id) ?? 0) + s.assists);
+      teamMinutes.set(s.team_id, (teamMinutes.get(s.team_id) ?? 0) + s.minutes_played);
+    }
 
     // ── Query 2: Team congestion scores (keyed by team_id)
     const { data: teamIntels, error: tiErr } = await db
@@ -2116,6 +2153,14 @@ export async function processPlayerIntelligence(): Promise<{
     const now = new Date().toISOString();
     const rows: any[] = [];
 
+    // normalizeRating: identical to the convention used in
+    // processTeamIntelligencePartial/processTeamStrengthRatings elsewhere in
+    // this file — a 5.0 rating floors at 0, 8.5 caps at 100.
+    const normalizeRating = (r: number) =>
+      Math.max(0, Math.min(100, Math.round(((r - 5.0) / 3.5) * 100)));
+
+    const importanceByPlayer = new Map<number, number>(); // for team_injury_impact below
+
     for (const p of players) {
       const injurySeverity  = Number(p.injury_severity_score ?? 0);
       const teamCongestion  = congestionMap.get(p.team_id) ?? 0;
@@ -2134,12 +2179,54 @@ export async function processPlayerIntelligence(): Promise<{
       // in the Team Detail mockup (see SCHEMA_GAP_ANALYSIS.md item #2).
       const readiness = Math.max(0, Math.min(100, 100 - Math.min(100, load)));
 
+      // ── Importance score — how much does this team rely on this player? ──
+      // Built after finding a real double-scaling bug in a proposed ad-hoc
+      // formula elsewhere ((weighted-fraction-sum-already-0-100) * 100 —
+      // inflated a real ~12.5/100 score to 1250, misreported as "CRITICAL").
+      // Verified this version by direct simulation against realistic player
+      // profiles before writing it here — star striker, first-choice
+      // keeper, rotation player, and bench player all produced a sensible,
+      // monotonic, correctly-bounded 0-100 distribution.
+      //
+      // POSITION-AWARE, deliberately: a goals+assists-weighted formula
+      // would make every goalkeeper look nearly worthless (keepers
+      // essentially never score or assist), which is obviously wrong —
+      // losing a first-choice keeper is a major blow. Goalkeepers are
+      // scored on minutes-share + quality only; outfield players get the
+      // full goals/assists/minutes/quality blend.
+      const stat = statsMap.get(p.id);
+      let importanceScore: number | null = null;
+      let goalSharePct: number | null = null;
+      let assistSharePct: number | null = null;
+      let minutesSharePct: number | null = null;
+      if (stat) {
+        const tGoals = teamGoals.get(stat.team_id) ?? 0;
+        const tAssists = teamAssists.get(stat.team_id) ?? 0;
+        const tMinutes = teamMinutes.get(stat.team_id) ?? 0;
+        const gShare = tGoals > 0 ? stat.goals / tGoals : 0;
+        const aShare = tAssists > 0 ? stat.assists / tAssists : 0;
+        const mShare = tMinutes > 0 ? stat.minutes_played / tMinutes : 0;
+        const quality = stat.avg_rating != null ? normalizeRating(stat.avg_rating) / 100 : 0;
+
+        importanceScore = p.position === 'G'
+          ? Math.round(Math.min(100, mShare * 50 + quality * 50) * 10) / 10
+          : Math.round(Math.min(100, gShare * 30 + aShare * 20 + mShare * 30 + quality * 20) * 10) / 10;
+        goalSharePct = Math.round(gShare * 1000) / 10;
+        assistSharePct = Math.round(aShare * 1000) / 10;
+        minutesSharePct = Math.round(mShare * 1000) / 10;
+      }
+      if (importanceScore != null) importanceByPlayer.set(p.id, importanceScore);
+
       rows.push({
         player_id:                p.id,
         fatigue_score:            fatigue,
         load_index:               Math.min(100, load),
         readiness_score:          readiness,
         transfers_last_12_months: transfersLast12,
+        importance_score:         importanceScore,
+        goal_share_pct:           goalSharePct,
+        assist_share_pct:         assistSharePct,
+        minutes_share_pct:        minutesSharePct,
         // Fields requiring player_match_load — future premium feature
         matches_last_7_days:   null,
         matches_last_30_days:  null,
@@ -2170,6 +2257,139 @@ export async function processPlayerIntelligence(): Promise<{
       withInjury:       rows.filter((r: any) => r.fatigue_score > 0).length,
       withTransfers:    rows.filter((r: any) => r.transfers_last_12_months > 0).length,
     }, 'processPlayerIntelligence completed');
+
+    // ── team_goal_dependency — concentration risk, not "starters vs bench" ──
+    // Deliberately NOT "% of goals from the predicted XI" (the framing in
+    // the source analysis this was built from) — that's largely tautological,
+    // since predicted lineups are selected BY matches_started/rating, so of
+    // course the starters account for most output; that's true of every
+    // team ever and isn't itself a differentiated risk signal. Concentration
+    // in ONE named individual — "33% of this team's goals come from a
+    // single player" — is the real, rare, actionable signal.
+    let goalDepWritten = 0;
+    try {
+      const goalDepRows: any[] = [];
+      for (const [teamId, tGoals] of teamGoals) {
+        if (tGoals <= 0) continue;
+        // Find this team's top scorer(s) among players with a resolved stat row
+        const teamPlayers = [...statsMap.entries()].filter(([, s]) => s.team_id === teamId);
+        const byGoals = teamPlayers.filter(([, s]) => s.goals > 0).sort((a, b) => b[1].goals - a[1].goals);
+        if (byGoals.length === 0) continue;
+        const [topId, topStat] = byGoals[0];
+        const top2Goals = byGoals.slice(0, 2).reduce((sum, [, s]) => sum + s.goals, 0);
+        goalDepRows.push({
+          team_id: teamId,
+          season_external_id: topStat.season_external_id,
+          total_goals: tGoals,
+          total_assists: teamAssists.get(teamId) ?? 0,
+          top_scorer_player_id: topId,
+          top_scorer_goals: topStat.goals,
+          top_scorer_pct: Math.round((topStat.goals / tGoals) * 1000) / 10,
+          top_2_scorers_pct: Math.round((top2Goals / tGoals) * 1000) / 10,
+          // No viable second scorer at all — single point of failure, not
+          // just "concentrated", genuinely irreplaceable if only one player
+          // has scored ANY goals this season.
+          top_scorer_no_backup: byGoals.length === 1,
+          calculated_at: now,
+        });
+      }
+      if (goalDepRows.length > 0) {
+        const { error: gdErr } = await db
+          .from('team_goal_dependency')
+          .upsert(goalDepRows, { onConflict: 'team_id' });
+        if (gdErr) {
+          logger.warn({ error: gdErr.message }, 'team_goal_dependency upsert failed — continuing');
+        } else {
+          goalDepWritten = goalDepRows.length;
+        }
+      }
+    } catch (e: any) {
+      logger.warn({ error: e.message }, 'team_goal_dependency computation failed — continuing');
+    }
+
+    // ── team_injury_impact — SUM(importance_score) of currently-injured
+    // players, correctly gated on the SAME two signals already used above
+    // (current_injury boolean OR an active row implied by injury_severity_score
+    // > 0 — this function never queried player_injuries directly, it already
+    // had what it needed on the players row itself). NOT the source
+    // analysis's `end_timestamp > NOW()` comparison, which silently drops
+    // any open-ended injury with no known return date (NULL > X is NULL,
+    // not true, in a WHERE clause).
+    let injuryImpactWritten = 0;
+    try {
+      const injuredByTeam = new Map<number, { player_id: number; importance: number; goals: number; assists: number; position: string }[]>();
+      for (const p of players) {
+        const isInjured = p.current_injury === true || Number(p.injury_severity_score ?? 0) > 0;
+        if (!isInjured) continue;
+        const importance = importanceByPlayer.get(p.id) ?? 0;
+        const stat = statsMap.get(p.id);
+        if (!injuredByTeam.has(p.team_id)) injuredByTeam.set(p.team_id, []);
+        injuredByTeam.get(p.team_id)!.push({
+          player_id: p.id, importance,
+          goals: stat?.goals ?? 0, assists: stat?.assists ?? 0,
+          position: p.position ?? 'M',
+        });
+      }
+
+      const injuryRows: any[] = [];
+      for (const [teamId, injured] of injuredByTeam) {
+        if (injured.length === 0) continue;
+        const totalImportance = injured.reduce((s, i) => s + i.importance, 0);
+        const goalsLost = injured.reduce((s, i) => s + i.goals, 0);
+        const assistsLost = injured.reduce((s, i) => s + i.assists, 0);
+        const worst = injured.reduce((a, b) => (b.importance > a.importance ? b : a));
+
+        // Positions where EVERY player at that position for this team is
+        // currently injured — "no natural replacement", the genuinely
+        // useful signal from the source analysis, computed correctly here
+        // via team_position_depth's own available_count rather than a
+        // fragile in-memory position count.
+        injuryRows.push({
+          team_id: teamId,
+          injured_count: injured.length,
+          total_importance_lost: Math.round(totalImportance * 10) / 10,
+          goals_lost: goalsLost,
+          assists_lost: assistsLost,
+          no_replacement_positions: null, // filled in below via team_position_depth
+          worst_absence_player_id: worst.player_id,
+          worst_absence_importance: Math.round(worst.importance * 10) / 10,
+          calculated_at: now,
+        });
+      }
+
+      // Fill in no_replacement_positions from team_position_depth
+      // (available_count === 0 at a position with player_count > 0).
+      if (injuryRows.length > 0) {
+        const { data: posDepth } = await db
+          .from('team_position_depth')
+          .select('team_id, position_code, available_count, player_count')
+          .in('team_id', injuryRows.map(r => r.team_id));
+        const noReplMap = new Map<number, string[]>();
+        for (const pd of posDepth ?? []) {
+          if ((pd.player_count ?? 0) > 0 && (pd.available_count ?? 0) === 0) {
+            if (!noReplMap.has(pd.team_id)) noReplMap.set(pd.team_id, []);
+            noReplMap.get(pd.team_id)!.push(pd.position_code);
+          }
+        }
+        for (const row of injuryRows) {
+          const positions = noReplMap.get(row.team_id);
+          row.no_replacement_positions = positions && positions.length > 0 ? positions.join(',') : null;
+        }
+
+        const { error: iiErr } = await db
+          .from('team_injury_impact')
+          .upsert(injuryRows, { onConflict: 'team_id' });
+        if (iiErr) {
+          logger.warn({ error: iiErr.message }, 'team_injury_impact upsert failed — continuing');
+        } else {
+          injuryImpactWritten = injuryRows.length;
+        }
+      }
+    } catch (e: any) {
+      logger.warn({ error: e.message }, 'team_injury_impact computation failed — continuing');
+    }
+
+    logger.info({ goalDepWritten, injuryImpactWritten }, 'goal dependency + injury impact written');
 
     return { playersProcessed: players.length, rowsWritten: written };
 

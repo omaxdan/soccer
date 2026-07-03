@@ -8,7 +8,7 @@ import {
   getTeamIntelligence, getTeamFormHistory, getTeamFixtureLoad, getTeamTravelLoad,
   getTeamSquadSnapshot, getTeamUpcomingMatches, getTeamIntelligenceTrend,
   getTeamKeyPlayers, getTeamPositionDepth, getTeamNextMatch,
-  getTeamFixtureDifficulty, getTeamMomentum,
+  getTeamFixtureDifficulty, getTeamMomentum, getTeamGoalDependency, getTeamInjuryImpact,
 } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
 import { COLORS, scoreColor } from '@/design/tokens';
@@ -76,7 +76,7 @@ export default function TeamPage() {
       try {
         const { data: td } = await supabase.from('teams').select('id,name,short_name,country,slug').eq('id', teamId).single();
         setTeam(td);
-        const [intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum] = await Promise.all([
+        const [intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum, goalDependency, injuryImpact] = await Promise.all([
           getTeamIntelligence(teamId).catch(() => null),
           getTeamFormHistory(teamId, 10).catch(() => []),
           getTeamFixtureLoad(teamId).catch(() => null),
@@ -89,8 +89,10 @@ export default function TeamPage() {
           getTeamNextMatch(teamId).catch(() => null),
           getTeamFixtureDifficulty(teamId).catch(() => null),
           getTeamMomentum(teamId).catch(() => null),
+          getTeamGoalDependency(teamId).catch(() => null),
+          getTeamInjuryImpact(teamId).catch(() => null),
         ]);
-        setData({ intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum });
+        setData({ intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum, goalDependency, injuryImpact });
       } finally { setLoading(false); }
     }
     load();
@@ -99,7 +101,7 @@ export default function TeamPage() {
   if (loading) return <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}><SkeletonCard height={80} /><SkeletonCard height={140} /><SkeletonCard height={240} /></div>;
   if (!team) return <div style={{ padding: 40, textAlign: 'center', color: COLORS.muted }}>Team not found</div>;
 
-  const { intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum } = data ?? {};
+  const { intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum, goalDependency, injuryImpact } = data ?? {};
   const formResults = (form ?? []).map((f: any) => f.result).reverse();
 
   const cleanSheets10 = (form ?? []).slice(0, 10).filter((f: any) => f.goals_against === 0).length;
@@ -367,6 +369,79 @@ export default function TeamPage() {
         </Card>
       </div>
 
+      {/* ── ROW 2.6: Goal Dependency | Injury Impact — "how much does this
+          team rely on one player" from two angles. Deliberately NOT
+          "starters vs bench" (see processPlayerIntelligence comments for
+          why that framing is largely tautological) — concentration in ONE
+          named individual is the real, differentiated risk signal. Both
+          reuse a real fixed bug: the source analysis this was built from
+          had a formula that inflated a real ~12.5/100 score to 1250.4,
+          misreported as "5650.9 CRITICAL" for a real player — verified via
+          simulation this version stays correctly bounded 0-100. ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <Card>
+          <SectionTitle>Goal Dependency <span style={{ color: COLORS.dim, fontWeight: 400, textTransform: 'none' }}>(concentration risk)</span></SectionTitle>
+          {goalDependency ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: COLORS.muted, fontSize: 12 }}>
+                  {toOne(goalDependency.players)?.short_name ?? toOne(goalDependency.players)?.name ?? 'Top scorer'}
+                </span>
+                <span style={{
+                  fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, fontSize: 16,
+                  color: goalDependency.top_scorer_pct >= 35 ? COLORS.red : goalDependency.top_scorer_pct >= 20 ? COLORS.amber : COLORS.green,
+                }}>
+                  {goalDependency.top_scorer_pct}%
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: COLORS.dim }}>
+                {goalDependency.top_scorer_goals} of {goalDependency.total_goals} team goals this season
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span style={{ color: COLORS.muted }}>Top 2 scorers combined</span>
+                <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.text }}>{goalDependency.top_2_scorers_pct}%</span>
+              </div>
+              {goalDependency.top_scorer_no_backup && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.red, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  ⚠ No other player has scored — single point of failure
+                </div>
+              )}
+            </div>
+          ) : <div style={{ fontSize: 11, color: COLORS.dim }}>Run process:player-intelligence</div>}
+        </Card>
+
+        <Card>
+          <SectionTitle>Injury Impact <span style={{ color: COLORS.dim, fontWeight: 400, textTransform: 'none' }}>(importance lost)</span></SectionTitle>
+          {injuryImpact ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: COLORS.muted, fontSize: 12 }}>{injuryImpact.injured_count} player{injuryImpact.injured_count === 1 ? '' : 's'} out</span>
+                <span style={{
+                  fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, fontSize: 16,
+                  color: injuryImpact.total_importance_lost >= 40 ? COLORS.red : injuryImpact.total_importance_lost >= 20 ? COLORS.amber : COLORS.green,
+                }}>
+                  {injuryImpact.total_importance_lost}
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: COLORS.dim }}>
+                Worst absence: {toOne(injuryImpact.players)?.short_name ?? toOne(injuryImpact.players)?.name ?? '—'} ({injuryImpact.worst_absence_importance})
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span style={{ color: COLORS.muted }}>Goals / assists lost</span>
+                <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.text }}>{injuryImpact.goals_lost}g / {injuryImpact.assists_lost}a</span>
+              </div>
+              {injuryImpact.no_replacement_positions && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.red, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  ⚠ No available cover: {injuryImpact.no_replacement_positions}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: COLORS.green, fontWeight: 600 }}>✓ Healthy squad — no active injuries</div>
+          )}
+        </Card>
+      </div>
+
       {/* ── ROW 3: Key Players | Recent Form | Travel Analysis ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 14 }}>
         <Card>
@@ -375,7 +450,7 @@ export default function TeamPage() {
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
       <thead>
         <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-          {['PLAYER', 'POS', 'RATING', 'CONFIDENCE', 'STATUS'].map(h => (
+          {['PLAYER', 'POS', 'RATING', 'CONFIDENCE', 'IMPORTANCE', 'STATUS'].map(h => (
             <th key={h} style={{ 
               padding: '4px 6px', 
               textAlign: h === 'PLAYER' ? 'left' : 'center', 
@@ -439,6 +514,17 @@ export default function TeamPage() {
                 color: confidence !== null ? scoreColor(confidence) : COLORS.dim,
               }}>
                 {confidence !== null ? `${confidence}%` : '—'}
+              </td>
+              <td style={{
+                padding: '6px',
+                textAlign: 'center',
+                fontFamily: '"JetBrains Mono",monospace',
+                fontWeight: 700,
+                color: p.importance_score != null ? scoreColor(p.importance_score) : COLORS.dim,
+              }}
+              title={p.importance_score != null ? "Share of team goals/assists/minutes + quality — how much this team relies on this player" : undefined}
+              >
+                {p.importance_score != null ? p.importance_score.toFixed(1) : '—'}
               </td>
               <td style={{ padding: '6px', textAlign: 'center' }}>
                 {isInjured ? (

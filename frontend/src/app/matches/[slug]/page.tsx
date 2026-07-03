@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
-  getMatchWithLineups, getTeamPositionDepth, getMatchSignals,
+  getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact,
 } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
@@ -92,7 +92,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals, hGoalDep, aGoalDep, hInjury, aInjury] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -108,6 +108,10 @@ export default function MatchPage() {
           getTeamPositionDepth(homeId).catch(() => []),
           getTeamPositionDepth(awayId).catch(() => []),
           getMatchSignals(parseInt(id)).catch(() => []),
+          getTeamGoalDependency(homeId).catch(() => null),
+          getTeamGoalDependency(awayId).catch(() => null),
+          getTeamInjuryImpact(homeId).catch(() => null),
+          getTeamInjuryImpact(awayId).catch(() => null),
         ]);
         
         setData({ 
@@ -129,6 +133,10 @@ export default function MatchPage() {
           homeDepth: hDepth,
           awayDepth: aDepth,
           storedSignals,
+          homeGoalDep: hGoalDep,
+          awayGoalDep: aGoalDep,
+          homeInjury,
+          awayInjury,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
@@ -159,10 +167,14 @@ export default function MatchPage() {
     homeDepth,
     awayDepth,
     storedSignals,
+    homeGoalDep,
+    awayGoalDep,
+    homeInjury,
+    awayInjury,
   } = data;
   
   const intel   = toOne(match.match_intelligence);
-  const travel  = (match.match_travel_intelligence as any[])?.[0];
+  const travel  = toOne(match.match_travel_intelligence);
   const result  = toOne(match.match_results);
   const venue   = match.venue as any;
   const isLive  = match.status === 'live';
@@ -709,6 +721,74 @@ export default function MatchPage() {
                 awayTeam={match.away_team}
                 lineups={{ home: homeLineup, away: awayLineup }}
               />
+            </Card>
+          )}
+
+          {/* ── SQUAD RISK — "how much does each side rely on one player,
+              and who's missing" — the two questions the pre-match source
+              analysis this was built from was really trying to answer,
+              done correctly this time (see processPlayerIntelligence
+              comments for the double-scaling bug this replaces). Only
+              renders once at least one side has data — avoids an empty
+              card for matches where neither team has been processed yet. */}
+          {(homeGoalDep || awayGoalDep || homeInjury || awayInjury) && (
+            <Card>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Squad Risk
+                </div>
+                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
+                  Goal-scoring concentration and injury impact for each side
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {[
+                  { team: match.home_team, goalDep: homeGoalDep, injury: homeInjury },
+                  { team: match.away_team, goalDep: awayGoalDep, injury: awayInjury },
+                ].map(({ team, goalDep, injury }, i) => (
+                  <div key={i}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
+                      {team?.short_name ?? team?.name}
+                    </div>
+                    {goalDep ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
+                        <span style={{ color: COLORS.muted }}>
+                          Top scorer{' '}
+                          <span style={{ color: COLORS.dim }}>
+                            ({toOne(goalDep.players)?.short_name ?? toOne(goalDep.players)?.name ?? '—'})
+                          </span>
+                        </span>
+                        <span style={{
+                          fontFamily: '"JetBrains Mono",monospace', fontWeight: 700,
+                          color: goalDep.top_scorer_pct >= 35 ? COLORS.red : goalDep.top_scorer_pct >= 20 ? COLORS.amber : COLORS.green,
+                        }}>
+                          {goalDep.top_scorer_pct}%
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 10, color: COLORS.dim, marginBottom: 6 }}>Not yet computed</div>
+                    )}
+                    {injury ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                        <span style={{ color: COLORS.muted }}>
+                          {injury.injured_count} out
+                          {injury.no_replacement_positions && (
+                            <span style={{ color: COLORS.red, fontWeight: 700 }}> · no cover: {injury.no_replacement_positions}</span>
+                          )}
+                        </span>
+                        <span style={{
+                          fontFamily: '"JetBrains Mono",monospace', fontWeight: 700,
+                          color: injury.total_importance_lost >= 40 ? COLORS.red : injury.total_importance_lost >= 20 ? COLORS.amber : COLORS.green,
+                        }}>
+                          −{injury.total_importance_lost}
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 11, color: COLORS.green, fontWeight: 600 }}>✓ Healthy squad</div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </Card>
           )}
 

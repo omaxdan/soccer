@@ -720,7 +720,7 @@ export async function getTeamKeyPlayers(teamId: number, limit = 5) {
   // ── Get player intelligence ──────────────────────────────────────────────
   const { data: intel } = await supabase
     .from('player_intelligence')
-    .select('player_id, readiness_score, fatigue_score, load_index, matches_last_7_days, minutes_last_7_days')
+    .select('player_id, readiness_score, fatigue_score, load_index, matches_last_7_days, minutes_last_7_days, importance_score, goal_share_pct, assist_share_pct')
     .in('player_id', playerIds);
 
   const intelMap = new Map<number, any>((intel ?? []).map((i: any) => [i.player_id, i]));
@@ -807,6 +807,9 @@ export async function getTeamKeyPlayers(teamId: number, limit = 5) {
         load_index: intel?.load_index || 0,
         matches_last_7_days: intel?.matches_last_7_days || 0,
         minutes_last_7_days: intel?.minutes_last_7_days || 0,
+        importance_score: intel?.importance_score ?? null,
+        goal_share_pct: intel?.goal_share_pct ?? null,
+        assist_share_pct: intel?.assist_share_pct ?? null,
         // ── Season Stats ──────────────────────────────────────────────────
         matches_started: stat?.matches_started || 0,
         appearances: stat?.appearances || 0,
@@ -905,6 +908,37 @@ export async function getTeamMomentum(teamId: number) {
   const { data, error } = await supabase
     .from('team_momentum')
     .select('momentum_score, last_5_points, prior_5_points, trend')
+    .eq('team_id', teamId)
+    .maybeSingle();
+  if (error) return null;
+  return data ?? null;
+}
+
+/** Reads team_goal_dependency — written by processPlayerIntelligence()
+ *  (backend), same season-scoped pass as player importance. Concentration
+ *  risk, not "starters vs bench" — see that function's comments for why
+ *  the starters-vs-bench framing was deliberately avoided (largely
+ *  tautological, since predicted lineups are selected BY season form). */
+export async function getTeamGoalDependency(teamId: number) {
+  const { data, error } = await supabase
+    .from('team_goal_dependency')
+    .select('total_goals, total_assists, top_scorer_player_id, top_scorer_goals, top_scorer_pct, top_2_scorers_pct, top_scorer_no_backup, players:top_scorer_player_id(name, short_name)')
+    .eq('team_id', teamId)
+    .maybeSingle();
+  if (error) return null;
+  return data ?? null;
+}
+
+/** Reads team_injury_impact — SUM(importance_score) of currently-active
+ *  injuries, correctly gated (see processPlayerIntelligence for why the
+ *  source analysis this was built from had a real end_timestamp NULL bug
+ *  that silently dropped open-ended injuries). Returns null (not zeros)
+ *  when the team has no injured players, so the frontend can distinguish
+ *  "genuinely healthy squad" from "not yet computed". */
+export async function getTeamInjuryImpact(teamId: number) {
+  const { data, error } = await supabase
+    .from('team_injury_impact')
+    .select('injured_count, total_importance_lost, goals_lost, assists_lost, no_replacement_positions, worst_absence_player_id, worst_absence_importance, players:worst_absence_player_id(name, short_name)')
     .eq('team_id', teamId)
     .maybeSingle();
   if (error) return null;
