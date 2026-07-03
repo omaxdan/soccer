@@ -5,17 +5,7 @@ import { getTeamIntelligenceList, TeamIntelRow } from '@/lib/queries';
 import { COLORS, scoreColor } from '@/design/tokens';
 import { teamUrl } from '@/lib/urls';
 
-const WATCHLIST_KEY = 'rip_team_watchlist';
-
-function loadWatchlist(): Set<number> {
-  try {
-    const raw = localStorage.getItem(WATCHLIST_KEY);
-    return raw ? new Set<number>(JSON.parse(raw)) : new Set<number>();
-  } catch { return new Set<number>(); }
-}
-function saveWatchlist(ids: Set<number>) {
-  try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...ids])); } catch {}
-}
+import { loadWatchlist, saveWatchlist } from '@/lib/watchlist';
 
 function Donut({ segments, centerValue, centerLabel }: {
   segments: { label: string; count: number; color: string }[];

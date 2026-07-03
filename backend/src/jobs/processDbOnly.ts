@@ -1,6 +1,7 @@
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { isTrackedBySlug, isTrackedLeague } from '../config/trackedLeagues';
+import { computeMatchSignals, MatchSignalInput } from '../lib/signalLogic';
 
 /**
  * Fetches ALL rows from a Supabase query, paginating past the server's
@@ -2446,6 +2447,267 @@ export async function processPredictedLineups(): Promise<{
   }
 }
 
+// ─── LEAGUE INTELLIGENCE — precomputed per-tournament aggregates ────────────
+
+/**
+ * PRECOMPUTES per-tournament averages (readiness, form, congestion, travel,
+ * rest days, active competitions) — previously computed live in the
+ * browser on every Leagues Overview page load (getLeagueReadinessRankings()
+ * in frontend/src/lib/queries.ts: three bulk queries + in-memory grouping/
+ * averaging, recomputed fresh every time). Same architecture fix as
+ * processMatchSignals() above — zero runtime calculations, frontend reads
+ * only.
+ *
+ * Exact same join path as the original frontend logic: tournament_standings
+ * is the only table linking teams to a specific tournament (team_intelligence
+ * itself has no tournament_id) — see backend/docs/SCHEMA_GAP_ANALYSIS.md.
+ *
+ * Queries ALL tournaments in the DB rather than re-filtering by tracked
+ * slug — the tournaments table itself is already curated to just the
+ * tracked set (see migration 006_cleanup_untracked_data.sql), so an
+ * additional slug filter here would be redundant with what the DB already
+ * guarantees, unlike the frontend's belt-and-suspenders TRACKED_SLUGS
+ * filter which existed partly to guard against un-migrated/stale data.
+ */
+export async function processLeagueIntelligence(): Promise<{
+  tournamentsProcessed: number;
+  error?: string;
+}> {
+  logger.info('processLeagueIntelligence started — DB only, zero API calls');
+
+  try {
+    const tournaments = await fetchAllRows(db.from('tournaments').select('id'));
+    if (tournaments.length === 0) {
+      logger.info('No tournaments found');
+      return { tournamentsProcessed: 0 };
+    }
+    const tournamentIds = tournaments.map((t: any) => t.id);
+
+    // Latest standings row per team per tournament — used purely for the
+    // team_id -> tournament_id mapping, not the standings data itself.
+    const standings = await fetchAllRows(
+      db.from('tournament_standings').select('tournament_id, team_id').in('tournament_id', tournamentIds)
+    );
+
+    const teamIdsByTournament = new Map<number, Set<number>>();
+    for (const s of standings) {
+      if (!teamIdsByTournament.has(s.tournament_id)) teamIdsByTournament.set(s.tournament_id, new Set());
+      teamIdsByTournament.get(s.tournament_id)!.add(s.team_id);
+    }
+
+    const allTeamIds = [...new Set(standings.map((s: any) => s.team_id))];
+
+    const [teamIntel, travelLoad] = allTeamIds.length > 0
+      ? await Promise.all([
+          fetchAllRows(
+            db.from('team_intelligence')
+              .select('team_id, readiness_score, form_index, congestion_score, rest_days_avg, active_competitions')
+              .in('team_id', allTeamIds)
+          ),
+          fetchAllRows(
+            db.from('team_travel_load')
+              .select('team_id, km_last_14_days, snapshot_date')
+              .in('team_id', allTeamIds)
+              .order('snapshot_date', { ascending: false })
+          ),
+        ])
+      : [[], []];
+
+    const intelMap = new Map<number, any>(teamIntel.map((t: any) => [t.team_id, t]));
+    const travelMap = new Map<number, number>();
+    for (const t of travelLoad) {
+      if (!travelMap.has(t.team_id)) travelMap.set(t.team_id, t.km_last_14_days ?? 0);
+    }
+
+    const avg = (nums: (number | null | undefined)[]): number | null => {
+      const valid = nums.filter((n): n is number => n != null);
+      if (valid.length === 0) return null;
+      return Math.round((valid.reduce((s, n) => s + n, 0) / valid.length) * 10) / 10;
+    };
+
+    const rows = tournaments.map((t: any) => {
+      const teamIds = [...(teamIdsByTournament.get(t.id) ?? [])];
+      const intels = teamIds.map(id => intelMap.get(id)).filter(Boolean);
+      const travels = teamIds.map(id => travelMap.get(id));
+
+      return {
+        tournament_id: t.id,
+        team_count: teamIds.length,
+        avg_readiness: avg(intels.map((i: any) => i.readiness_score)),
+        avg_form: avg(intels.map((i: any) => i.form_index)),
+        avg_congestion: avg(intels.map((i: any) => i.congestion_score)),
+        avg_travel_14d: avg(travels),
+        avg_rest_days: avg(intels.map((i: any) => i.rest_days_avg)),
+        avg_active_competitions: avg(intels.map((i: any) => i.active_competitions)),
+        calculated_at: new Date().toISOString(),
+      };
+    });
+
+    const { error } = await db.from('league_intelligence').upsert(rows, { onConflict: 'tournament_id' });
+    if (error) throw new Error(`league_intelligence upsert: ${error.message}`);
+
+    logger.info({ tournamentsProcessed: rows.length }, 'processLeagueIntelligence completed');
+    return { tournamentsProcessed: rows.length };
+
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processLeagueIntelligence failed');
+    return { tournamentsProcessed: 0, error: error.message };
+  }
+}
+
+// ─── FIXTURE DIFFICULTY ──────────────────────────────────────────────────────
+
+/**
+ * Average opponent strength across each team's next 5/10 scheduled
+ * matches — fully derivable from data already synced (team_strength_ratings
+ * + matches), no new API calls. Higher score = harder run of fixtures.
+ * Confirmed nothing computed this before.
+ */
+export async function processFixtureDifficulty(): Promise<{
+  teamsProcessed: number;
+  error?: string;
+}> {
+  logger.info('processFixtureDifficulty started — DB only, zero API calls');
+
+  try {
+    const now = new Date().toISOString();
+
+    const upcomingMatches = await fetchAllRows(
+      db.from('matches')
+        .select('home_team_id, away_team_id, date')
+        .eq('status', 'scheduled')
+        .gte('date', now)
+        .order('date', { ascending: true })
+    );
+
+    if (upcomingMatches.length === 0) {
+      logger.info('No upcoming matches found');
+      return { teamsProcessed: 0 };
+    }
+
+    const strengthRows = await fetchAllRows(
+      db.from('team_strength_ratings').select('team_id, strength_score')
+    );
+    const strengthMap = new Map<number, number>(
+      strengthRows.filter((r: any) => r.strength_score != null).map((r: any) => [r.team_id, r.strength_score])
+    );
+
+    // Build each team's ordered list of upcoming opponents.
+    const opponentsByTeam = new Map<number, number[]>();
+    for (const m of upcomingMatches) {
+      if (m.home_team_id && m.away_team_id) {
+        if (!opponentsByTeam.has(m.home_team_id)) opponentsByTeam.set(m.home_team_id, []);
+        opponentsByTeam.get(m.home_team_id)!.push(m.away_team_id);
+        if (!opponentsByTeam.has(m.away_team_id)) opponentsByTeam.set(m.away_team_id, []);
+        opponentsByTeam.get(m.away_team_id)!.push(m.home_team_id);
+      }
+    }
+
+    const avg = (nums: number[]): number | null =>
+      nums.length > 0 ? Math.round((nums.reduce((s, n) => s + n, 0) / nums.length) * 10) / 10 : null;
+
+    const rows: any[] = [];
+    for (const [teamId, opponents] of opponentsByTeam) {
+      const next5 = opponents.slice(0, 5).map(id => strengthMap.get(id)).filter((s): s is number => s != null);
+      const next10 = opponents.slice(0, 10).map(id => strengthMap.get(id)).filter((s): s is number => s != null);
+
+      rows.push({
+        team_id: teamId,
+        next_5_difficulty: avg(next5),
+        next_10_difficulty: avg(next10),
+        next_5_matches: Math.min(5, opponents.length),
+        next_10_matches: Math.min(10, opponents.length),
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const { error } = await db.from('team_fixture_difficulty').upsert(rows, { onConflict: 'team_id' });
+    if (error) throw new Error(`team_fixture_difficulty upsert: ${error.message}`);
+
+    logger.info({ teamsProcessed: rows.length }, 'processFixtureDifficulty completed');
+    return { teamsProcessed: rows.length };
+
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processFixtureDifficulty failed');
+    return { teamsProcessed: 0, error: error.message };
+  }
+}
+
+// ─── TEAM MOMENTUM ───────────────────────────────────────────────────────────
+
+/**
+ * Recent-vs-prior form trend — fully derivable from team_form_history
+ * (already has per-match points + date), no new data needed. Positive
+ * momentum_score = rising, negative = declining. Confirmed nothing
+ * computed this before.
+ */
+export async function processTeamMomentum(): Promise<{
+  teamsProcessed: number;
+  error?: string;
+}> {
+  logger.info('processTeamMomentum started — DB only, zero API calls');
+
+  try {
+    const formRows = await fetchAllRows(
+      db.from('team_form_history')
+        .select('team_id, points, match_date')
+        .order('match_date', { ascending: false })
+    );
+
+    if (formRows.length === 0) {
+      logger.info('No form history found');
+      return { teamsProcessed: 0 };
+    }
+
+    const byTeam = new Map<number, any[]>();
+    for (const r of formRows) {
+      if (!byTeam.has(r.team_id)) byTeam.set(r.team_id, []);
+      byTeam.get(r.team_id)!.push(r);
+    }
+
+    const rows: any[] = [];
+    for (const [teamId, matches] of byTeam) {
+      // Already ordered most-recent-first from the query above.
+      const last5 = matches.slice(0, 5);
+      const prior5 = matches.slice(5, 10);
+
+      if (last5.length === 0) continue;
+
+      const last5Points = last5.reduce((s, m) => s + (m.points ?? 0), 0);
+      const prior5Points = prior5.reduce((s, m) => s + (m.points ?? 0), 0);
+
+      // Only meaningful once there's a full prior window to compare
+      // against — with fewer than 5 prior matches, momentum is null
+      // rather than a misleadingly confident number computed from a
+      // partial (or empty) comparison window.
+      const momentumScore = prior5.length === 5 ? last5Points - prior5Points : null;
+      const trend = momentumScore == null ? null
+        : momentumScore > 2 ? 'rising'
+        : momentumScore < -2 ? 'declining'
+        : 'stable';
+
+      rows.push({
+        team_id: teamId,
+        momentum_score: momentumScore,
+        last_5_points: last5Points,
+        prior_5_points: prior5.length === 5 ? prior5Points : null,
+        trend,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const { error } = await db.from('team_momentum').upsert(rows, { onConflict: 'team_id' });
+    if (error) throw new Error(`team_momentum upsert: ${error.message}`);
+
+    logger.info({ teamsProcessed: rows.length }, 'processTeamMomentum completed');
+    return { teamsProcessed: rows.length };
+
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamMomentum failed');
+    return { teamsProcessed: 0, error: error.message };
+  }
+}
+
 // ─── PLATFORM DAILY SUMMARY — precomputed dashboard aggregates ─────────────
 
 /**
@@ -2572,6 +2834,184 @@ export async function processDashboardSummary(): Promise<{
   } catch (error: any) {
     logger.error({ error: error.message }, 'processDashboardSummary failed');
     return { written: false, error: error.message };
+  }
+}
+
+// ─── MATCH SIGNALS — precomputed betting signals ─────────────────────────────
+
+/**
+ * PRECOMPUTES betting signals — previously computeMatchSignals() (see
+ * lib/signalLogic.ts, an exact port of the old frontend-only
+ * lib/signals.ts) ran fresh in the browser on every match/betting page
+ * load, with no backend job and nothing persisted. That violated this
+ * project's own core principle (zero runtime calculations, frontend
+ * reads only), and meant there was no way to ever check whether a
+ * signal was "right" after the fact — a live-computed, thrown-away-on-
+ * every-load signal has nothing to check accuracy against later.
+ *
+ * Mirrors the exact input-building logic the frontend match page used —
+ * match_intelligence (per-match, spec-authoritative) as primary source,
+ * falling back to team_intelligence (team baseline) for any field
+ * match_intelligence hasn't computed yet for this specific match. Same
+ * "match_intelligence lags behind matches.id" pattern used elsewhere in
+ * this codebase.
+ *
+ * The frontend's lib/signals.ts (computeMatchSignals + its own input-
+ * building code) is UNCHANGED and still exists — it now serves as a
+ * live-compute fallback for any match that doesn't have a precomputed
+ * row yet, so nothing regresses for freshly-synced matches waiting on
+ * their first process:match-signals run.
+ */
+export async function processMatchSignals(): Promise<{
+  matchesProcessed: number;
+  signalsWritten: number;
+  error?: string;
+}> {
+  logger.info('processMatchSignals started — DB only, zero API calls');
+
+  try {
+    const now = new Date().toISOString();
+    const twoWeeksOut = new Date(Date.now() + 14 * 86400000).toISOString();
+
+    const matches = await fetchAllRows(
+      db.from('matches')
+        .select('id, home_team_id, away_team_id')
+        .eq('status', 'scheduled')
+        .gte('date', now)
+        .lte('date', twoWeeksOut)
+    );
+
+    if (matches.length === 0) {
+      logger.info('No upcoming matches in next 14 days');
+      return { matchesProcessed: 0, signalsWritten: 0 };
+    }
+
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const [matchIntelRows, teamIntelRows, travelRows] = await Promise.all([
+      fetchAllRows(
+        db.from('match_intelligence')
+          .select('match_id, home_readiness, away_readiness, readiness_gap, congestion_factor, home_rest_days, away_rest_days, home_travel_distance_km, away_travel_distance_km, home_active_competitions, away_active_competitions')
+          .in('match_id', matchIds)
+      ),
+      fetchAllRows(
+        db.from('team_intelligence')
+          .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, last_5_points, active_competitions, rest_days_avg, squad_depth_score, injury_burden_score, squad_stability_score')
+          .in('team_id', teamIds)
+      ),
+      fetchAllRows(
+        db.from('match_travel_intelligence')
+          .select('match_id, travel_advantage_km')
+          .in('match_id', matchIds)
+      ),
+    ]);
+
+    const matchIntelMap = new Map<number, any>(matchIntelRows.map((r: any) => [r.match_id, r]));
+    const teamIntelMap = new Map<number, any>(teamIntelRows.map((r: any) => [r.team_id, r]));
+    const travelMap = new Map<number, any>(travelRows.map((r: any) => [r.match_id, r]));
+
+    const allRows: any[] = [];
+
+    for (const match of matches) {
+      const intel = matchIntelMap.get(match.id);
+      const homeIntel = teamIntelMap.get(match.home_team_id);
+      const awayIntel = teamIntelMap.get(match.away_team_id);
+      const travel = travelMap.get(match.id);
+
+      const homeReadinessAny = intel?.home_readiness ?? homeIntel?.readiness_score ?? null;
+      const awayReadinessAny = intel?.away_readiness ?? awayIntel?.readiness_score ?? null;
+
+      // Same gate the frontend used — need at least a baseline readiness
+      // on both sides before signals are meaningful at all.
+      if (homeReadinessAny == null || awayReadinessAny == null) continue;
+
+      const input: MatchSignalInput = {
+        home_readiness: homeReadinessAny,
+        away_readiness: awayReadinessAny,
+        readiness_gap: intel?.readiness_gap ?? (homeReadinessAny - awayReadinessAny),
+        congestion_factor: intel?.congestion_factor ??
+          ((homeIntel?.congestion_score != null && awayIntel?.congestion_score != null)
+            ? (homeIntel.congestion_score + awayIntel.congestion_score) / 2
+            : null),
+        home_rest_days: intel?.home_rest_days ?? homeIntel?.rest_days_avg,
+        away_rest_days: intel?.away_rest_days ?? awayIntel?.rest_days_avg,
+        home_travel_distance_km: intel?.home_travel_distance_km,
+        away_travel_distance_km: intel?.away_travel_distance_km,
+        home_active_competitions: intel?.home_active_competitions ?? homeIntel?.active_competitions,
+        away_active_competitions: intel?.away_active_competitions ?? awayIntel?.active_competitions,
+        home_form_index: homeIntel?.form_index,
+        away_form_index: awayIntel?.form_index,
+        home_travel_fatigue: homeIntel?.travel_fatigue_score,
+        away_travel_fatigue: awayIntel?.travel_fatigue_score,
+        home_congestion: homeIntel?.congestion_score,
+        away_congestion: awayIntel?.congestion_score,
+        home_last_5_pts: homeIntel?.last_5_points,
+        away_last_5_pts: awayIntel?.last_5_points,
+        travel_advantage_km: travel?.travel_advantage_km,
+        home_squad_depth: homeIntel?.squad_depth_score,
+        away_squad_depth: awayIntel?.squad_depth_score,
+        home_injury_burden: homeIntel?.injury_burden_score,
+        away_injury_burden: awayIntel?.injury_burden_score,
+        home_squad_stability: homeIntel?.squad_stability_score,
+        away_squad_stability: awayIntel?.squad_stability_score,
+      };
+
+      const signals = computeMatchSignals(input);
+      for (const s of signals) {
+        allRows.push({
+          match_id: match.id,
+          market: s.market,
+          signal_group: s.group,
+          signal_text: s.signal,
+          direction: s.direction,
+          strength: s.strength,
+          drivers: s.drivers,
+          data_source: s.dataSource ?? null,
+          locked: s.locked ?? false,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    if (allRows.length === 0) {
+      logger.info('No matches had enough data for signals yet');
+      return { matchesProcessed: 0, signalsWritten: 0 };
+    }
+
+    // Delete-then-upsert, same pattern as processPredictedLineups — clears
+    // stale signals for these matches before writing the fresh set, so a
+    // market that no longer fires (e.g. a signal that used to show but
+    // conditions changed) doesn't linger.
+    const processedMatchIds = [...new Set(allRows.map((r: any) => r.match_id))];
+    const { error: delErr } = await db
+      .from('match_signals')
+      .delete()
+      .in('match_id', processedMatchIds);
+    if (delErr) {
+      logger.warn({ error: delErr.message }, 'Failed to delete stale match_signals — continuing with upsert');
+    }
+
+    const chunkSize = 500;
+    let written = 0;
+    for (let i = 0; i < allRows.length; i += chunkSize) {
+      const chunk = allRows.slice(i, i + chunkSize);
+      const { error } = await db
+        .from('match_signals')
+        .upsert(chunk, { onConflict: 'match_id,market' });
+      if (error) throw new Error(`match_signals upsert: ${error.message}`);
+      written += chunk.length;
+    }
+
+    logger.info(
+      { matchesProcessed: processedMatchIds.length, signalsWritten: written },
+      'processMatchSignals completed'
+    );
+    return { matchesProcessed: processedMatchIds.length, signalsWritten: written };
+
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchSignals failed');
+    return { matchesProcessed: 0, signalsWritten: 0, error: error.message };
   }
 }
 

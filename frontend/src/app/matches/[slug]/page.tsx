@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
-  getMatchWithLineups, getTeamPositionDepth,
+  getMatchWithLineups, getTeamPositionDepth, getMatchSignals,
 } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
@@ -91,7 +91,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -106,6 +106,7 @@ export default function MatchPage() {
           getTeamUpcomingMatches(awayId).catch(() => []),
           getTeamPositionDepth(homeId).catch(() => []),
           getTeamPositionDepth(awayId).catch(() => []),
+          getMatchSignals(parseInt(id)).catch(() => []),
         ]);
         
         setData({ 
@@ -126,6 +127,7 @@ export default function MatchPage() {
           awayLineup,
           homeDepth: hDepth,
           awayDepth: aDepth,
+          storedSignals,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
@@ -155,6 +157,7 @@ export default function MatchPage() {
     awayLineup,
     homeDepth,
     awayDepth,
+    storedSignals,
   } = data;
   
   const intel   = (match.match_intelligence as any[])?.[0];
@@ -167,12 +170,19 @@ export default function MatchPage() {
   const homeResults = (homeForm as any[]).map((f: any) => f.result).reverse();
   const awayResults = (awayForm as any[]).map((f: any) => f.result).reverse();
 
-  // Compute signals
+  // Signals — PRECOMPUTED FIRST (process:match-signals, see backend
+  // processDbOnly.ts), falling back to live computeMatchSignals() only
+  // when this match hasn't been through that job yet (e.g. freshly
+  // synced, or the daily cycle hasn't reached it). This is the same
+  // "match_intelligence lags behind matches.id, fall back to baseline"
+  // pattern already used elsewhere on this page — nothing regresses for
+  // matches without a precomputed row, they just compute live exactly as
+  // before until the next process:match-signals run catches up.
   const homeReadinessAny = intel?.home_readiness ?? homeIntel?.readiness_score ?? null;
   const awayReadinessAny = intel?.away_readiness ?? awayIntel?.readiness_score ?? null;
   const hasEnoughForSignals = homeReadinessAny != null && awayReadinessAny != null;
 
-  const signals = hasEnoughForSignals ? computeMatchSignals({
+  const liveSignals = hasEnoughForSignals ? computeMatchSignals({
     home_readiness: homeReadinessAny,
     away_readiness: awayReadinessAny,
     readiness_gap: intel?.readiness_gap ?? (homeReadinessAny - awayReadinessAny),
@@ -202,6 +212,8 @@ export default function MatchPage() {
     home_squad_stability: homeIntel?.squad_stability_score,
     away_squad_stability: awayIntel?.squad_stability_score,
   }) : [];
+
+  const signals = (storedSignals && storedSignals.length > 0) ? storedSignals : liveSignals;
 
   // Readiness components
   const readinessComponents: ReadinessComponent[] = [

@@ -5,7 +5,7 @@ import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
-import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
+import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
@@ -289,6 +289,52 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
       }
 
+      case 'process:match-signals': {
+        // DB-only, zero API calls — precomputes betting signals (see
+        // lib/signalLogic.ts) into match_signals, replacing what used to
+        // be computed fresh in the browser on every page load. See that
+        // job's docstring for the full architecture reasoning. Run this
+        // after process:team-intelligence / process:all-db so
+        // team_intelligence/match_intelligence are current first.
+        logger.info('Precomputing betting signals — DB only...');
+        const r = await processMatchSignals();
+        logger.info(r, 'Match signals complete');
+        break;
+      }
+
+      case 'process:league-intelligence': {
+        // DB-only, zero API calls — precomputes per-tournament averages
+        // (readiness, form, congestion, travel, rest days), replacing what
+        // used to be computed fresh in the browser on every Leagues
+        // Overview page load. Run after process:team-intelligence so
+        // team_intelligence is current first.
+        logger.info('Precomputing league intelligence — DB only...');
+        const r = await processLeagueIntelligence();
+        logger.info(r, 'League intelligence complete');
+        break;
+      }
+
+      case 'process:fixture-difficulty': {
+        // DB-only, zero API calls — average opponent strength across each
+        // team's next 5/10 scheduled matches. Needs team_strength_ratings
+        // (sync:standings + process:all-db) to be populated first, or every
+        // team's difficulty comes back null.
+        logger.info('Precomputing fixture difficulty — DB only...');
+        const r = await processFixtureDifficulty();
+        logger.info(r, 'Fixture difficulty complete');
+        break;
+      }
+
+      case 'process:momentum': {
+        // DB-only, zero API calls — recent-vs-prior form trend from
+        // team_form_history. Needs at least 10 matches of form history per
+        // team for a meaningful (non-null) momentum_score.
+        logger.info('Precomputing team momentum — DB only...');
+        const r = await processTeamMomentum();
+        logger.info(r, 'Team momentum complete');
+        break;
+      }
+
       case 'process:scorelines': {
         // DB-only, zero API calls — independent Poisson goal model using
         // team_form_history.goals_for/against. Upserts directly (not update)
@@ -337,6 +383,12 @@ async function handleCommand(command: string, ...args: string[]) {
         const form    = await processFormBackfill();
         logger.info({ ...form }, '[L1] ✓ form history');
 
+        // Needs only team_form_history (L1, just above) — recent-vs-prior
+        // form trend, independent of everything else.
+        logger.info('[L1/3] Team momentum (needs form_history)...');
+        const momentum = await processTeamMomentum();
+        logger.info({ ...momentum }, '[L1] ✓ team momentum');
+
         logger.info('[L1/3] Fixture load...');
         const fixture = await processTeamFixtureLoad();
         logger.info({ ...fixture }, '[L1] ✓ fixture load');
@@ -358,6 +410,12 @@ async function handleCommand(command: string, ...args: string[]) {
         const strength  = await processTeamStrengthRatings();
         logger.info({ ...strength }, '[L2] ✓ strength ratings');
 
+        // Needs team_strength_ratings (just above) — average opponent
+        // strength across each team's next 5/10 fixtures.
+        logger.info('[L2/3] Fixture difficulty (needs strength ratings)...');
+        const fixtureDiff = await processFixtureDifficulty();
+        logger.info({ ...fixtureDiff }, '[L2] ✓ fixture difficulty');
+
         logger.info('[L2/3] Team venue performance (needs form_history)...');
         const venue     = await processTeamVenuePerformance();
         logger.info({ ...venue }, '[L2] ✓ venue performance');
@@ -371,10 +429,24 @@ async function handleCommand(command: string, ...args: string[]) {
         const playerIntel = await processPlayerIntelligence();
         logger.info({ ...playerIntel }, '[L3] ✓ player intelligence');
 
+        // ── LAYER 3.5 ── Needs team_intelligence (L3) + team_travel_load
+        // (L1) — per-tournament averages, independent of match-level data.
+        logger.info('[L3.5/3] League intelligence (needs team_intelligence)...');
+        const leagueIntel = await processLeagueIntelligence();
+        logger.info({ ...leagueIntel }, '[L3.5] ✓ league intelligence');
+
         // ── LAYER 4 ── Needs team_intelligence (L3) ────────────────────────
         logger.info('[L4/3] Match intelligence (needs team_intelligence)...');
         const matchIntel  = await processMatchIntelligencePartial();
         logger.info({ ...matchIntel }, '[L4] ✓ match intelligence');
+
+        // ── LAYER 4.5 ── Needs match_intelligence (L4) + team_intelligence
+        // (L3) — precomputes betting signals, replacing what used to be
+        // computed fresh in the browser on every page load. See
+        // processMatchSignals()'s docstring for the full reasoning.
+        logger.info('[L4.5/3] Match signals (needs match_intelligence + team_intelligence)...');
+        const matchSignals = await processMatchSignals();
+        logger.info({ ...matchSignals }, '[L4.5] ✓ match signals');
 
         // ── LAYER 5 ── Needs player_season_statistics (sync:player-stats) ───
         // Zero-cost — runs even if player-stats hasn't synced yet (just
@@ -397,8 +469,8 @@ async function handleCommand(command: string, ...args: string[]) {
         const elapsed = Math.round((Date.now() - t0) / 1000);
         logger.info({
           durationSeconds: elapsed,
-          form, fixture, locs, travel, matchTravel,
-          strength, venue, teamIntel, playerIntel, matchIntel, predictedLineups, scorelines, dashboardSummary,
+          form, fixture, locs, travel, matchTravel, momentum, fixtureDiff,
+          strength, venue, teamIntel, playerIntel, leagueIntel, matchIntel, matchSignals, predictedLineups, scorelines, dashboardSummary,
         }, '━━━ process:all-db complete in ' + elapsed + 's ━━━');
         break;
       }

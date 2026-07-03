@@ -7,6 +7,7 @@ import {
   getTeamIntelligence, getTeamFormHistory, getTeamFixtureLoad, getTeamTravelLoad,
   getTeamSquadSnapshot, getTeamUpcomingMatches, getTeamIntelligenceTrend,
   getTeamKeyPlayers, getTeamPositionDepth, getTeamNextMatch,
+  getTeamFixtureDifficulty, getTeamMomentum,
 } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
 import { COLORS, scoreColor } from '@/design/tokens';
@@ -74,7 +75,7 @@ export default function TeamPage() {
       try {
         const { data: td } = await supabase.from('teams').select('id,name,short_name,country,slug').eq('id', teamId).single();
         setTeam(td);
-        const [intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch] = await Promise.all([
+        const [intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum] = await Promise.all([
           getTeamIntelligence(teamId).catch(() => null),
           getTeamFormHistory(teamId, 10).catch(() => []),
           getTeamFixtureLoad(teamId).catch(() => null),
@@ -85,8 +86,10 @@ export default function TeamPage() {
           getTeamKeyPlayers(teamId, 5).catch(() => []),
           getTeamPositionDepth(teamId).catch(() => []),
           getTeamNextMatch(teamId).catch(() => null),
+          getTeamFixtureDifficulty(teamId).catch(() => null),
+          getTeamMomentum(teamId).catch(() => null),
         ]);
-        setData({ intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch });
+        setData({ intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum });
       } finally { setLoading(false); }
     }
     load();
@@ -95,7 +98,7 @@ export default function TeamPage() {
   if (loading) return <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}><SkeletonCard height={80} /><SkeletonCard height={140} /><SkeletonCard height={240} /></div>;
   if (!team) return <div style={{ padding: 40, textAlign: 'center', color: COLORS.muted }}>Team not found</div>;
 
-  const { intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch } = data ?? {};
+  const { intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum } = data ?? {};
   const formResults = (form ?? []).map((f: any) => f.result).reverse();
 
   const cleanSheets10 = (form ?? []).slice(0, 10).filter((f: any) => f.goals_against === 0).length;
@@ -303,6 +306,63 @@ export default function TeamPage() {
               ))}
             </div>
           ) : <div style={{ fontSize: 11, color: COLORS.dim }}>Run process:fixture-load</div>}
+        </Card>
+      </div>
+
+      {/* ── ROW 2.5: Fixture Difficulty | Momentum — both fully derivable
+          from data already synced (team_strength_ratings, team_form_history),
+          nothing computed either before processFixtureDifficulty/
+          processTeamMomentum were added ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <Card>
+          <SectionTitle>Fixture Difficulty <span style={{ color: COLORS.dim, fontWeight: 400, textTransform: 'none' }}>(opponent strength)</span></SectionTitle>
+          {fixtureDifficulty ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                ['Next 5 Matches', fixtureDifficulty.next_5_difficulty != null ? Math.round(fixtureDifficulty.next_5_difficulty) : null, fixtureDifficulty.next_5_matches],
+                ['Next 10 Matches', fixtureDifficulty.next_10_difficulty != null ? Math.round(fixtureDifficulty.next_10_difficulty) : null, fixtureDifficulty.next_10_matches],
+              ].map(([label, value, count]) => (
+                <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: COLORS.muted }}>{label} {count != null && count !== undefined ? `(${count} scheduled)` : ''}</span>
+                  <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: value != null ? scoreColor(100 - (value as number)) : COLORS.dim }}>
+                    {value ?? '—'}
+                  </span>
+                </div>
+              ))}
+              <div style={{ fontSize: 9, color: COLORS.dim, marginTop: 2 }}>Higher = tougher run of fixtures (avg opponent strength_score)</div>
+            </div>
+          ) : <div style={{ fontSize: 11, color: COLORS.dim }}>Run process:fixture-difficulty</div>}
+        </Card>
+
+        <Card>
+          <SectionTitle>Momentum <span style={{ color: COLORS.dim, fontWeight: 400, textTransform: 'none' }}>(recent vs prior form)</span></SectionTitle>
+          {momentum ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: COLORS.muted, fontSize: 12 }}>Momentum Score</span>
+                <span style={{
+                  fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, fontSize: 16,
+                  color: (momentum.momentum_score ?? 0) > 0 ? COLORS.green : (momentum.momentum_score ?? 0) < 0 ? COLORS.red : COLORS.dim,
+                }}>
+                  {momentum.momentum_score != null ? (momentum.momentum_score > 0 ? '+' : '') + Math.round(momentum.momentum_score) : '—'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: COLORS.muted }}>Last 5 vs Prior 5</span>
+                <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.text }}>
+                  {momentum.last_5_points ?? '—'}pts vs {momentum.prior_5_points ?? '—'}pts
+                </span>
+              </div>
+              {momentum.trend && (
+                <div style={{
+                  fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+                  color: momentum.trend === 'rising' ? COLORS.green : momentum.trend === 'declining' ? COLORS.red : COLORS.muted,
+                }}>
+                  {momentum.trend === 'rising' ? '↗ Rising' : momentum.trend === 'declining' ? '↘ Declining' : '→ Stable'}
+                </div>
+              )}
+            </div>
+          ) : <div style={{ fontSize: 11, color: COLORS.dim }}>Run process:momentum</div>}
         </Card>
       </div>
 

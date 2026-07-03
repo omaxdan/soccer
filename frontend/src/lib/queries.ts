@@ -428,6 +428,77 @@ export async function getMatchWithLineups(id: number): Promise<MatchWithLineups 
   return result;
 }
 
+// ─── PRECOMPUTED MATCH SIGNALS ──────────────────────────────────────────────
+// Reads from match_signals — written by processMatchSignals() (backend),
+// which ports the exact same logic that used to run live in the browser
+// (see lib/signals.ts's computeMatchSignals — that function and its own
+// input-building code are UNCHANGED and still used as a fallback below for
+// any match that doesn't have a precomputed row yet).
+
+export interface StoredSignal {
+  market: string;
+  group: string;
+  signal: string;
+  direction: string;
+  strength: number;
+  drivers: string | null;
+  dataSource: string | null;
+  locked: boolean;
+}
+
+/** Precomputed signals for one match. Empty array if none computed yet
+ *  (e.g. match hasn't been through process:match-signals) — caller should
+ *  fall back to the live computeMatchSignals() in that case. */
+export async function getMatchSignals(matchId: number): Promise<StoredSignal[]> {
+  const { data, error } = await supabase
+    .from('match_signals')
+    .select('market, signal_group, signal_text, direction, strength, drivers, data_source, locked')
+    .eq('match_id', matchId);
+
+  if (error || !data) return [];
+  return data.map((r: any) => ({
+    market: r.market,
+    group: r.signal_group,
+    signal: r.signal_text,
+    direction: r.direction,
+    strength: r.strength,
+    drivers: r.drivers,
+    dataSource: r.data_source,
+    locked: r.locked,
+  }));
+}
+
+/** Bulk variant for pages showing signals across many matches at once
+ *  (e.g. the Betting Hub). Returns a Map keyed by match_id, each value the
+ *  same shape getMatchSignals() returns for a single match. */
+export async function getMatchSignalsForMatches(matchIds: number[]): Promise<Map<number, StoredSignal[]>> {
+  const result = new Map<number, StoredSignal[]>();
+  if (matchIds.length === 0) return result;
+
+  const { data, error } = await supabase
+    .from('match_signals')
+    .select('match_id, market, signal_group, signal_text, direction, strength, drivers, data_source, locked')
+    .in('match_id', matchIds);
+
+  if (error || !data) return result;
+
+  for (const r of data) {
+    const entry: StoredSignal = {
+      market: r.market,
+      group: r.signal_group,
+      signal: r.signal_text,
+      direction: r.direction,
+      strength: r.strength,
+      drivers: r.drivers,
+      dataSource: r.data_source,
+      locked: r.locked,
+    };
+    if (!result.has(r.match_id)) result.set(r.match_id, []);
+    result.get(r.match_id)!.push(entry);
+  }
+  return result;
+}
+
 export async function getTeamIntelligence(teamId: number) {
   const { data, error } = await supabase
     .from('team_intelligence').select('*').eq('team_id', teamId).single();
@@ -441,6 +512,71 @@ export async function getTeamIntelligence(teamId: number) {
 // though team_intelligence (each team's own baseline) is current. matches
 // has no direct FK to team_intelligence for PostgREST to embed (two hops:
 // matches -> teams -> team_intelligence), so this is a separate query +
+export interface WatchlistTeamRow {
+  id: number;
+  name: string;
+  short_name: string | null;
+  slug: string | null;
+  country: string | null;
+  readiness_score: number | null;
+  form_index: number | null;
+  congestion_score: number | null;
+  league: string | null;
+  position: number | null;
+}
+
+/** Lean, targeted fetch for the /watchlist page — just enough to render a
+ *  glance list with links to each team's full detail page, not the full
+ *  richness getTeamIntelligenceList() builds for the main Team Intelligence
+ *  table (travel, form pills, trend). Returns [] for an empty/missing ID
+ *  list rather than erroring. */
+export async function getWatchlistTeams(teamIds: number[]): Promise<WatchlistTeamRow[]> {
+  if (teamIds.length === 0) return [];
+
+  const [intelRes, standingsRes] = await Promise.all([
+    supabase.from('team_intelligence')
+      .select('team_id, readiness_score, form_index, congestion_score, team:teams!team_id(id, name, short_name, slug, country)')
+      .in('team_id', teamIds),
+    supabase.from('tournament_standings')
+      .select('team_id, position, tournament:tournaments(name)')
+      .in('team_id', teamIds),
+  ]);
+
+  const standingsMap = new Map<number, { position: number | null; league: string | null }>();
+  for (const s of standingsRes.data ?? []) {
+    if (!standingsMap.has(s.team_id)) {
+      standingsMap.set(s.team_id, { position: s.position ?? null, league: (s.tournament as any)?.name ?? null });
+    }
+  }
+
+  const intelByTeam = new Map<number, any>((intelRes.data ?? []).map((r: any) => [r.team_id, r]));
+
+  // Preserve the order teamIds was given in (whatever order the caller's
+  // Set iterated) rather than whatever order Supabase happens to return —
+  // keeps the rendered list stable across reloads instead of jumping
+  // around each time.
+  return teamIds
+    .map((id) => {
+      const intel = intelByTeam.get(id);
+      const team = intel?.team;
+      if (!team) return null;
+      const standing = standingsMap.get(id);
+      return {
+        id: team.id,
+        name: team.name,
+        short_name: team.short_name,
+        slug: team.slug,
+        country: team.country,
+        readiness_score: intel?.readiness_score ?? null,
+        form_index: intel?.form_index ?? null,
+        congestion_score: intel?.congestion_score ?? null,
+        league: standing?.league ?? null,
+        position: standing?.position ?? null,
+      };
+    })
+    .filter((r): r is WatchlistTeamRow => r != null);
+}
+
 // in-memory join, same pattern as getTodayTravelAlerts() uses already.
 // Returns a Map keyed by team_id so callers can look up home/away directly.
 export async function getTeamIntelligenceMap(teamIds: number[]): Promise<Map<number, any>> {
@@ -709,6 +845,34 @@ export async function getTeamNextMatch(teamId: number) {
   return data ?? null;
 }
 
+/** Reads team_fixture_difficulty — written by processFixtureDifficulty()
+ *  (backend). Purely a read, no live-compute fallback needed here since
+ *  this is a genuinely new metric (nothing computed this live before),
+ *  unlike match_signals/league_intelligence which replaced an existing
+ *  live computation. Returns null if not yet computed for this team. */
+export async function getTeamFixtureDifficulty(teamId: number) {
+  const { data, error } = await supabase
+    .from('team_fixture_difficulty')
+    .select('next_5_difficulty, next_10_difficulty, next_5_matches, next_10_matches')
+    .eq('team_id', teamId)
+    .maybeSingle();
+  if (error) return null;
+  return data ?? null;
+}
+
+/** Reads team_momentum — written by processTeamMomentum() (backend).
+ *  Same "new metric, no live fallback needed" reasoning as
+ *  getTeamFixtureDifficulty above. */
+export async function getTeamMomentum(teamId: number) {
+  const { data, error } = await supabase
+    .from('team_momentum')
+    .select('momentum_score, last_5_points, prior_5_points, trend')
+    .eq('team_id', teamId)
+    .maybeSingle();
+  if (error) return null;
+  return data ?? null;
+}
+
 // ─── LEAGUE PAGE ──────────────────────────────────────────────────────────────
 
 export async function getTrackedTournaments() {
@@ -859,14 +1023,13 @@ export interface LeagueReadinessRow {
 }
 
 /**
- * Aggregates team_intelligence + team_travel_load per tournament, joined
- * through tournament_standings (the only table linking teams to a specific
- * tournament + season — team_intelligence itself has no tournament_id).
- * See backend/docs/SCHEMA_GAP_ANALYSIS.md for why this join path is used.
- *
- * Three bulk queries (tournaments, standings, team_intelligence/travel_load)
- * fetched once and grouped in memory — avoids N+1 queries across up to ~30
- * tournaments.
+ * PRECOMPUTED FIRST — reads league_intelligence, written by
+ * processLeagueIntelligence() (backend, see processDbOnly.ts). Falls back
+ * to the live in-memory aggregation (renamed below to
+ * computeLeagueReadinessRankingsLive) only if that table is empty — e.g.
+ * process:league-intelligence hasn't run yet. This mirrors the same
+ * "precomputed first, live fallback" pattern used for match signals (see
+ * getMatchSignals / getMatchSignalsForMatches above).
  */
 export async function getLeagueReadinessRankings(): Promise<LeagueReadinessRow[]> {
   const { data: tournaments } = await supabase
@@ -877,6 +1040,39 @@ export async function getLeagueReadinessRankings(): Promise<LeagueReadinessRow[]
 
   const tournamentIds = tournaments.map((t: any) => t.id);
 
+  const { data: precomputed } = await supabase
+    .from('league_intelligence')
+    .select('tournament_id, team_count, avg_readiness, avg_form, avg_congestion, avg_travel_14d, avg_rest_days, avg_active_competitions')
+    .in('tournament_id', tournamentIds);
+
+  if (precomputed && precomputed.length > 0) {
+    const precomputedMap = new Map<number, any>(precomputed.map((r: any) => [r.tournament_id, r]));
+    return tournaments
+      .map((t: any) => {
+        const r = precomputedMap.get(t.id);
+        return {
+          tournament: t,
+          teamCount: r?.team_count ?? 0,
+          avgReadiness: r?.avg_readiness ?? null,
+          avgForm: r?.avg_form ?? null,
+          avgCongestion: r?.avg_congestion ?? null,
+          avgTravel14d: r?.avg_travel_14d ?? null,
+          avgRestDays: r?.avg_rest_days ?? null,
+          avgActiveComps: r?.avg_active_competitions ?? null,
+        };
+      })
+      .sort((a, b) => (b.avgReadiness ?? -1) - (a.avgReadiness ?? -1));
+  }
+
+  // Fallback — precomputed table empty (process:league-intelligence hasn't
+  // run yet). Same live logic as before this change, unchanged.
+  return computeLeagueReadinessRankingsLive(tournaments, tournamentIds);
+}
+
+async function computeLeagueReadinessRankingsLive(
+  tournaments: any[],
+  tournamentIds: number[]
+): Promise<LeagueReadinessRow[]> {
   // Latest standings row per team per tournament — used purely to get the
   // team_id -> tournament_id mapping, not the standings data itself.
   const { data: standings } = await supabase

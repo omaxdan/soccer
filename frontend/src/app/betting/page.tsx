@@ -1,13 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getTodaysMatches } from '@/lib/queries';
+import { getTodaysMatches, getMatchSignalsForMatches } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import SignalChip from '@/components/SignalChip';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { matchUrl } from '@/lib/urls';
-import { supabase } from '@/lib/supabase'; // ← ADD THIS IMPORT
+import { supabase } from '@/lib/supabase';
 
 const MARKET_TABS = ['1X2','Over/Under','BTTS','Asian Handicap','Clean Sheets','Cards','Specials'];
 const TAB_GROUP: Record<string, string[]> = {
@@ -35,11 +35,20 @@ export default function BettingHub() {
     getTodaysMatches()
       .then(async data => {
         setMatches(data as any[]);
+        const matchList = data as any[];
+        const matchIds = matchList.map((m: any) => m.id).filter(Boolean);
+
+        // Precomputed signals first — see processMatchSignals() in the
+        // backend (match_signals table). Bulk-fetched for all of today's
+        // matches in one query rather than one live computation per match.
+        const storedMap = await getMatchSignalsForMatches(matchIds).catch(() => new Map());
+
         // Fetch team_intelligence for squad signals (squad_depth_score,
-        // injury_burden_score, squad_stability_score)
-        const teamIds = (data as any[]).flatMap((m: any) => [m.home_team_id, m.away_team_id]).filter(Boolean);
-        
-        // ── FIX: Use supabase with proper error handling ──────────────────
+        // injury_burden_score, squad_stability_score) — still needed for
+        // the LIVE fallback path below, for any match that doesn't have a
+        // precomputed row yet.
+        const teamIds = matchList.flatMap((m: any) => [m.home_team_id, m.away_team_id]).filter(Boolean);
+
         let intelRows: any[] = [];
         if (teamIds.length > 0) {
           try {
@@ -52,14 +61,21 @@ export default function BettingHub() {
             console.error('Failed to fetch team intelligence:', err);
           }
         }
-        
+
         const tiMap = new Map<number, any>((intelRows ?? []).map((r: any) => [r.team_id, r]));
 
-        const computed = (data as any[]).map((m: any) => {
+        const computed = matchList.map((m: any) => {
+          const stored = storedMap.get(m.id);
+          if (stored && stored.length > 0) {
+            return { match: m, intel: m.match_intelligence?.[0], signals: stored };
+          }
+
+          // Fall back to live computation — same as before this change,
+          // for any match process:match-signals hasn't reached yet.
           const intel = m.match_intelligence?.[0];
           if (!intel) return null;
-          const hti = tiMap.get(m.home_team_id) || {}; // ← FIX: Default to empty object
-          const ati = tiMap.get(m.away_team_id) || {}; // ← FIX: Default to empty object
+          const hti = tiMap.get(m.home_team_id) || {};
+          const ati = tiMap.get(m.away_team_id) || {};
           const sigs = computeMatchSignals({
             home_readiness: intel.home_readiness,
             away_readiness: intel.away_readiness,
