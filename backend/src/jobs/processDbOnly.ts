@@ -171,25 +171,43 @@ export async function processTeamFixtureLoad(): Promise<{
         : null;
       const minRest = restGaps.length ? Math.round(Math.min(...restGaps)) : null;
 
-      // ── Congestion score per spec formula (NOT a custom weighted blend) ──
-      // Spec: match count in 14-day window → fixed lookup table, then
-      // subtract a competition-load penalty based on active_competitions.
+      // ── Congestion score — POLARITY: higher = MORE congested ────────────
+      // Spec: match count in 14-day window → fixed lookup table, plus a
+      // competition-load penalty based on active_competitions.
       // We use matches_next_14_days as the window — this is the
       // forward-looking fixture load that actually predicts fatigue going
       // into a team's NEXT match, which is what congestion is meant to warn about.
+      //
+      // POLARITY FIX (was inverted at this source): the original lookup
+      // gave ≤1 match → 100, i.e. higher = FEWER matches = LESS congested.
+      // But every single consumer already treats high-as-congested:
+      //   - readiness formula: `100 - congestionScore` ("low congestion = good")
+      //   - match_intelligence: congestionGood = 100 - raw
+      //   - player_intelligence: load = fatigue*0.6 + teamCongestion*0.4
+      //   - signal logic: congestion > 65 → "Under goals" / awayCong > 70
+      //   - frontend labels: "High (71-100)", "MOST CONGESTED" = highest score
+      // Under the old polarity, sparse forward-fixture data (most teams have
+      // ≤1 scheduled match synced) meant nearly every team scored 100 →
+      // readiness contribution 100-100=0 at 15% weight → the platform-wide
+      // near-zero readiness clustering observed in the live UI. Flipping
+      // the source makes all consumers correct simultaneously, and sparse
+      // data now errs OPTIMISTIC (score 0 → "not congested") instead of
+      // silently crushing readiness.
       const matchCountForCongestion = nextMatches14;
 
       let baseCongestionScore: number;
-      if      (matchCountForCongestion <= 1) baseCongestionScore = 100;
-      else if (matchCountForCongestion === 2) baseCongestionScore = 90;
-      else if (matchCountForCongestion === 3) baseCongestionScore = 75;
-      else if (matchCountForCongestion === 4) baseCongestionScore = 60;
-      else if (matchCountForCongestion === 5) baseCongestionScore = 40;
-      else                                     baseCongestionScore = 20; // 6+
+      if      (matchCountForCongestion <= 1) baseCongestionScore = 0;
+      else if (matchCountForCongestion === 2) baseCongestionScore = 10;
+      else if (matchCountForCongestion === 3) baseCongestionScore = 25;
+      else if (matchCountForCongestion === 4) baseCongestionScore = 40;
+      else if (matchCountForCongestion === 5) baseCongestionScore = 60;
+      else                                     baseCongestionScore = 80; // 6+
 
       // Competition penalty — filled in by caller using teamCompetitionCounts
       // (passed in via closure below); placeholder here, real value applied
-      // after the competitions map is built (see post-loop pass).
+      // after the competitions map is built (see post-loop pass). Under the
+      // corrected polarity the penalty now ADDS congestion (more active
+      // competitions = busier schedule), rather than subtracting.
       const congestionScore = baseCongestionScore; // competition penalty applied below
 
       rows.push({
@@ -239,7 +257,10 @@ export async function processTeamFixtureLoad(): Promise<{
     for (const row of rows) {
       const compCount = teamCompCount.get(row.team_id)?.size ?? 1;
       const penalty   = competitionPenalty(compCount);
-      row.congestion_score = Math.max(0, Math.min(100, row.congestion_score - penalty));
+      // ADDS congestion under the corrected polarity (higher = more
+      // congested): more active competitions = busier schedule. Was
+      // `- penalty` under the old inverted scale.
+      row.congestion_score = Math.max(0, Math.min(100, row.congestion_score + penalty));
     }
 
 
