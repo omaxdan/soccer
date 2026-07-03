@@ -135,8 +135,8 @@ export default function MatchPage() {
           storedSignals,
           homeGoalDep: hGoalDep,
           awayGoalDep: aGoalDep,
-          homeInjury,
-          awayInjury,
+          homeInjury: hInjury,
+          awayInjury: aInjury,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
