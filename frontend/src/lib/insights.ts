@@ -202,3 +202,120 @@ export function generateExecutiveSummary(m: ExecutiveSummaryInput): string {
 
   return sentences.join(' ');
 }
+
+// ─── NARRATIVE THREADS — numbered story points ─────────────────────────────
+// The "Key Narrative Threads" block from the source match-preview
+// documents this whole feature was built from — explicit ask to include
+// this more faithfully rather than only the condensed executive summary.
+// Each thread only fires when its underlying gap is genuinely notable
+// (same discipline as generateExecutiveSummary's concentration-risk
+// sentence) — six weak threads are noise, not insight; this is meant to
+// surface only the storylines that actually matter for THIS match.
+
+export interface NarrativeThreadsInput extends ExecutiveSummaryInput {
+  homeLast5Points?: number | null;
+  awayLast5Points?: number | null;
+  homeVenueAdvantage?: number | null;
+  awayVenueAdvantage?: number | null; // the AWAY side's OWN away-form venue score, not the inverse of home's
+  homeTopScorerName?: string | null;
+  awayTopScorerName?: string | null;
+  homeTopScorerGoals?: number | null;
+  awayTopScorerGoals?: number | null;
+}
+
+export interface NarrativeThread {
+  title: string;
+  emoji: string;
+  text: string;
+  impact: string;
+}
+
+export function generateNarrativeThreads(m: NarrativeThreadsInput): NarrativeThread[] {
+  const threads: NarrativeThread[] = [];
+
+  // 1. The Form Divide — only when the points gap over the last 5 is real
+  const homePts = m.homeLast5Points ?? null;
+  const awayPts = m.awayLast5Points ?? null;
+  if (homePts != null && awayPts != null && Math.abs(homePts - awayPts) >= 6) {
+    const better = homePts > awayPts ? m.homeTeam : m.awayTeam;
+    const worse = homePts > awayPts ? m.awayTeam : m.homeTeam;
+    const betterPts = Math.max(homePts, awayPts);
+    const worsePts = Math.min(homePts, awayPts);
+    threads.push({
+      title: 'The Form Divide', emoji: '📉📈',
+      text: `${worse} have collected just ${worsePts} point${worsePts === 1 ? '' : 's'} from their last 5 matches, while ${better} have taken ${betterPts} from the same 15 available. A ${betterPts - worsePts}-point swing over 5 games is a significant gap in current form.`,
+      impact: `A team building momentum visiting one that isn't — the psychological edge favors ${better}.`,
+    });
+  }
+
+  // 2. The Injury Factor — always worth stating either way (clean sheet is
+  // itself informative), but the FRAMING differs based on severity
+  const homeInj = m.homeInjuredCount ?? 0;
+  const awayInj = m.awayInjuredCount ?? 0;
+  if (homeInj === 0 && awayInj === 0) {
+    threads.push({
+      title: 'The Injury Factor', emoji: '💊',
+      text: `Both teams arrive with a clean injury sheet — no players missing for either side.`,
+      impact: `This is a true test of squad quality versus squad quality, not a match decided by forced absences.`,
+    });
+  } else if (homeInj > 0 || awayInj > 0) {
+    const worseOff = homeInj > awayInj ? m.homeTeam : m.awayTeam;
+    const count = Math.max(homeInj, awayInj);
+    threads.push({
+      title: 'The Injury Factor', emoji: '💊',
+      text: `${worseOff} will be without ${count} player${count === 1 ? '' : 's'} from their strongest available XI.`,
+      impact: `A genuine squad-depth test for ${worseOff}, not just a form contest.`,
+    });
+  }
+
+  // 3. The Home Advantage Myth — only worth a thread when the away side's
+  // venue comparator meaningfully exceeds the home side's (not just any
+  // crossover — structural-inverse comparators cross 50 constantly, so a
+  // real threshold matters here to keep this selective, not trivial)
+  if (m.homeVenueAdvantage != null && m.awayVenueAdvantage != null && (m.awayVenueAdvantage - m.homeVenueAdvantage) >= 8) {
+    threads.push({
+      title: 'The Home Advantage Myth', emoji: '🏠',
+      text: `${m.homeTeam}'s home venue score (${m.homeVenueAdvantage.toFixed(0)}) is actually lower than ${m.awayTeam}'s away venue score (${m.awayVenueAdvantage.toFixed(0)}) — the visitors perform better on the road than the hosts do at home.`,
+      impact: `Home advantage may not be the equalizer ${m.homeTeam} need it to be.`,
+    });
+  }
+
+  // 4. The Goal Difference Story — only when the swing is large
+  if (m.homeGoalsScored != null && m.awayGoalsScored != null && m.homeGoalsConceded != null && m.awayGoalsConceded != null) {
+    const homeGD = m.homeGoalsScored - m.homeGoalsConceded;
+    const awayGD = m.awayGoalsScored - m.awayGoalsConceded;
+    if (Math.abs(homeGD - awayGD) >= 15) {
+      threads.push({
+        title: 'The Goal Difference Story', emoji: '⚽',
+        text: `${m.homeTeam} have a goal difference of ${homeGD >= 0 ? '+' : ''}${homeGD} (${m.homeGoalsScored} scored, ${m.homeGoalsConceded} conceded) compared to ${m.awayTeam}'s ${awayGD >= 0 ? '+' : ''}${awayGD} (${m.awayGoalsScored} scored, ${m.awayGoalsConceded} conceded).`,
+        impact: `Two teams operating at very different levels at both ends of the pitch this season.`,
+      });
+    }
+  }
+
+  // 5. The Squad Quality Gap — strength rating, only when the gap is large
+  if (m.homeStrengthRating != null && m.awayStrengthRating != null) {
+    const sDiff = Math.abs(m.homeStrengthRating - m.awayStrengthRating);
+    if (sDiff >= 30) {
+      const stronger = m.homeStrengthRating > m.awayStrengthRating ? m.homeTeam : m.awayTeam;
+      const weaker = m.homeStrengthRating > m.awayStrengthRating ? m.awayTeam : m.homeTeam;
+      threads.push({
+        title: 'The Squad Quality Gap', emoji: '🏋️',
+        text: `${stronger}'s strength rating outweighs ${weaker}'s by ${sDiff.toFixed(0)} points — a real difference in individual quality across the pitch.`,
+        impact: `Even at full strength, ${weaker} face a genuine talent gap, not just a form dip.`,
+      });
+    }
+  }
+
+  // 6. The Key Player Battle — only when both sides have an identifiable
+  // top scorer with a real share of team goals
+  if (m.homeTopScorerName && m.awayTopScorerName && (m.homeTopScorerPct ?? 0) > 0 && (m.awayTopScorerPct ?? 0) > 0) {
+    threads.push({
+      title: 'The Key Player Battle', emoji: '⚔️',
+      text: `${m.homeTopScorerName} (${m.homeTeam}'s top scorer, ${(m.homeTopScorerPct ?? 0).toFixed(0)}% of team goals) versus ${m.awayTopScorerName} (${m.awayTeam}'s top scorer, ${(m.awayTopScorerPct ?? 0).toFixed(0)}% of team goals) — the individual matchup likely to shape the game.`,
+      impact: `Whichever side neutralizes the opposing scorer gains a real tactical edge.`,
+    });
+  }
+
+  return threads;
+}

@@ -1551,12 +1551,34 @@ export async function processMatchIntelligencePartial(opts?: {
       const awayMotivation = Math.min(100, motivationBase + motivationModifier(awayActiveComps));
 
       const homeReadiness = computeReadiness({
-        form: homeForm, oppStrength: homeOppStrength,
+        // BUG FIX (found from a real reported discrepancy: page showed
+        // Sligo/Shamrock readiness as 52/56, Δ4, while team_intelligence's
+        // baseline — which deliberately excludes opponent strength — showed
+        // 41/74, Δ33; a 58-point strength gap should WIDEN the match-context
+        // gap versus baseline, not compress it to almost nothing).
+        // homeOppStrength/awayOppStrength store the RAW opponent strength
+        // (kept that way deliberately — the confidence-score formula further
+        // below reuses them unaveraged: homeOwnStrength = awayOppStrength).
+        // Every OTHER component in this formula uses "higher input = better
+        // for the team owning this calc" polarity (congestion/travel are
+        // pre-inverted before being passed in here) — opponent strength
+        // was the one component passed RAW, so a team facing a genuinely
+        // strong opponent had that opponent's high strength score added as
+        // a POSITIVE contribution to their OWN readiness. Inverted only at
+        // this call site (100 - raw) so a weak opponent correctly raises
+        // readiness and a strong opponent correctly lowers it, without
+        // touching what homeOppStrength/awayOppStrength themselves store.
+        // Verified by simulation against the real reported numbers before
+        // this fix: buggy formula reproduced 52 almost exactly; corrected
+        // formula lands at 40, right on the team_intelligence baseline of
+        // 41 — exactly the small, sensible adjustment match context should
+        // make, not a near-total wipeout of a real 58-point strength gap.
+        form: homeForm, oppStrength: homeOppStrength !== null ? 100 - homeOppStrength : null,
         congestion: homeCongestionGood, travel: homeTravelGood,
         homeAdvantage: homeVenueAdv, stability: homeStability, motivation: homeMotivation,
       });
       const awayReadiness = computeReadiness({
-        form: awayForm, oppStrength: awayOppStrength,
+        form: awayForm, oppStrength: awayOppStrength !== null ? 100 - awayOppStrength : null,
         congestion: awayCongestionGood, travel: awayTravelGood,
         homeAdvantage: awayVenueAdv, stability: awayStability, motivation: awayMotivation,
       });

@@ -13,7 +13,7 @@ import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads } from '@/lib/insights';
 import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
 import IntelligenceBar from '@/components/IntelligenceBar';
@@ -351,6 +351,35 @@ export default function MatchPage() {
     homeTopScorerPct: homeGoalDep?.top_scorer_pct,
     awayTopScorerPct: awayGoalDep?.top_scorer_pct,
   }) : null;
+
+  // ─── Narrative Threads — the numbered story-point block from the source
+  // documents, built with the same "only fire when genuinely notable"
+  // discipline as the executive summary above. ─────────────────────────
+  const narrativeThreads = hasEnoughForSignals ? generateNarrativeThreads({
+    homeTeam: match.home_team?.name ?? 'Home',
+    awayTeam: match.away_team?.name ?? 'Away',
+    homeReadiness: homeReadinessAny,
+    awayReadiness: awayReadinessAny,
+    readinessGap: intel?.readiness_gap ?? (homeReadinessAny - awayReadinessAny),
+    homeFormIndex: homeIntel?.form_index,
+    awayFormIndex: awayIntel?.form_index,
+    homeStrengthRating: homeExtras?.strength_score,
+    awayStrengthRating: awayExtras?.strength_score,
+    homeGoalsScored: homeExtras?.goals_scored,
+    awayGoalsScored: awayExtras?.goals_scored,
+    homeGoalsConceded: homeExtras?.goals_conceded,
+    awayGoalsConceded: awayExtras?.goals_conceded,
+    homeInjuredCount: homeInjury?.injured_count ?? 0,
+    awayInjuredCount: awayInjury?.injured_count ?? 0,
+    homeTopScorerPct: homeGoalDep?.top_scorer_pct,
+    awayTopScorerPct: awayGoalDep?.top_scorer_pct,
+    homeLast5Points: (homeForm ?? []).slice(0, 5).reduce((s: number, f: any) => s + (f.points ?? 0), 0),
+    awayLast5Points: (awayForm ?? []).slice(0, 5).reduce((s: number, f: any) => s + (f.points ?? 0), 0),
+    homeVenueAdvantage: homeExtras?.venue_advantage_score,
+    awayVenueAdvantage: homeExtras?.venue_advantage_score != null ? 100 - homeExtras.venue_advantage_score : null,
+    homeTopScorerName: toOne(homeGoalDep?.players)?.short_name ?? toOne(homeGoalDep?.players)?.name ?? null,
+    awayTopScorerName: toOne(awayGoalDep?.players)?.short_name ?? toOne(awayGoalDep?.players)?.name ?? null,
+  }) : [];
 
   const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
   const strongHome = signals.filter(s => s.direction === 'home' && s.strength >= 4);
@@ -885,6 +914,31 @@ export default function MatchPage() {
                     ) : (
                       <div style={{ fontSize: 11, color: COLORS.green, fontWeight: 600 }}>✓ Healthy squad</div>
                     )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* ── KEY NARRATIVE THREADS — the numbered story-point block from
+              the source match-preview documents, included as a genuine,
+              visible section (not collapsed) per explicit feedback to use
+              that approach rather than only the condensed summary above. ── */}
+          {narrativeThreads.length > 0 && (
+            <Card>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  🚨 Key Narrative Threads
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {narrativeThreads.map((t, i) => (
+                  <div key={i} style={{ borderLeft: `2px solid ${COLORS.border}`, paddingLeft: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>
+                      {i + 1}. {t.title} {t.emoji}
+                    </div>
+                    <div style={{ fontSize: 12, color: COLORS.text2, lineHeight: 1.6, marginBottom: 6 }}>{t.text}</div>
+                    <div style={{ fontSize: 11, color: COLORS.dim, fontStyle: 'italic' }}>Impact: {t.impact}</div>
                   </div>
                 ))}
               </div>
