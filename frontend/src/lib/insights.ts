@@ -158,6 +158,28 @@ export interface ExecutiveSummaryInput extends InsightInput {
   awayTopScorerPct?: number | null;
 }
 
+// ─── ROLE DERIVATION — rule-based, deterministic ────────────────────────────
+// Classifies a key player's role from real stats (position + goals/assists),
+// matching the source document's "🎯 Playmaker / 🛡️ Defensive Anchor /
+// 🧤 Key Goalkeeper / 🔥 Main Attacker" labels — every label maps 1:1 to a
+// real stat threshold, never inferred/hallucinated.
+
+export function deriveRole(positionCode: string, goals: number, assists: number): { emoji: string; label: string } {
+  if (positionCode === 'GK') return { emoji: '🧤', label: 'Key Goalkeeper' };
+  if (positionCode === 'DEF') {
+    if (goals + assists >= 3) return { emoji: '⚔️', label: 'Attacking Threat' };
+    return { emoji: '🛡️', label: 'Defensive Anchor' };
+  }
+  if (positionCode === 'MID') {
+    if (assists > goals && assists >= 2) return { emoji: '🎯', label: 'Playmaker' };
+    if (goals >= 3) return { emoji: '🏆', label: 'Goal-Scoring Midfielder' };
+    return { emoji: '🏆', label: 'Key Midfielder' };
+  }
+  // FWD
+  if (goals >= 5) return { emoji: '🔥', label: 'Main Attacker' };
+  return { emoji: '⚡', label: 'Forward' };
+}
+
 export function generateExecutiveSummary(m: ExecutiveSummaryInput): string {
   const insight = generateMatchInsight(m);
   const gap = m.readinessGap ?? ((m.homeReadiness ?? 50) - (m.awayReadiness ?? 50));
@@ -212,6 +234,14 @@ export function generateExecutiveSummary(m: ExecutiveSummaryInput): string {
 // sentence) — six weak threads are noise, not insight; this is meant to
 // surface only the storylines that actually matter for THIS match.
 
+export interface NarrativeKeyPlayer {
+  name: string;
+  positionCode: string;
+  importance: number;
+  goals: number;
+  assists: number;
+}
+
 export interface NarrativeThreadsInput extends ExecutiveSummaryInput {
   homeLast5Points?: number | null;
   awayLast5Points?: number | null;
@@ -221,6 +251,12 @@ export interface NarrativeThreadsInput extends ExecutiveSummaryInput {
   awayTopScorerName?: string | null;
   homeTopScorerGoals?: number | null;
   awayTopScorerGoals?: number | null;
+  /** Every predicted-XI player above the narrative's importance threshold
+   *  (16% by default at the call site) — replaces the old single top-
+   *  scorer name/pct pair so the "Key Player Battle" thread can genuinely
+   *  list every player worth naming per side, not just one. */
+  homeKeyPlayers?: NarrativeKeyPlayer[];
+  awayKeyPlayers?: NarrativeKeyPlayer[];
 }
 
 export interface NarrativeThread {
@@ -307,9 +343,31 @@ export function generateNarrativeThreads(m: NarrativeThreadsInput): NarrativeThr
     }
   }
 
-  // 6. The Key Player Battle — only when both sides have an identifiable
-  // top scorer with a real share of team goals
-  if (m.homeTopScorerName && m.awayTopScorerName && (m.homeTopScorerPct ?? 0) > 0 && (m.awayTopScorerPct ?? 0) > 0) {
+  // 6. The Key Player Battle — lists EVERY player above the importance
+  // threshold per side (not just the single top scorer), per explicit
+  // ask that players "at least above 16%" belong in the narrative itself,
+  // not just a separate table. Each player gets a rule-based role from
+  // deriveRole() — no single-name-only version of this thread anymore.
+  const homeKP = m.homeKeyPlayers ?? [];
+  const awayKP = m.awayKeyPlayers ?? [];
+  if (homeKP.length > 0 || awayKP.length > 0) {
+    const describeSide = (team: string, players: NarrativeKeyPlayer[]): string => {
+      if (players.length === 0) return `${team} have no single player standing out above the threshold — a genuinely collective effort.`;
+      const parts = players.map(p => {
+        const role = deriveRole(p.positionCode, p.goals, p.assists);
+        const statLine = p.goals > 0 || p.assists > 0 ? ` (${p.goals}g/${p.assists}a)` : '';
+        return `${p.name} — ${role.emoji} ${role.label}, ${p.importance.toFixed(0)}% importance${statLine}`;
+      });
+      return `${team}'s key contributors: ${parts.join('; ')}.`;
+    };
+    threads.push({
+      title: 'The Key Player Battle', emoji: '⚔️',
+      text: `${describeSide(m.homeTeam, homeKP)} ${describeSide(m.awayTeam, awayKP)}`,
+      impact: `Whichever side loses the most of these individual battles is likely to lose control of the match.`,
+    });
+  } else if (m.homeTopScorerName && m.awayTopScorerName && (m.homeTopScorerPct ?? 0) > 0 && (m.awayTopScorerPct ?? 0) > 0) {
+    // Fallback for callers that haven't wired homeKeyPlayers/awayKeyPlayers
+    // yet — keeps this thread working with just the top-scorer pair.
     threads.push({
       title: 'The Key Player Battle', emoji: '⚔️',
       text: `${m.homeTopScorerName} (${m.homeTeam}'s top scorer, ${(m.homeTopScorerPct ?? 0).toFixed(0)}% of team goals) versus ${m.awayTopScorerName} (${m.awayTeam}'s top scorer, ${(m.awayTopScorerPct ?? 0).toFixed(0)}% of team goals) — the individual matchup likely to shape the game.`,

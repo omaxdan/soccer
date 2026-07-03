@@ -394,6 +394,96 @@ export async function getMatchById(id: number): Promise<any> {
   return data ?? null;
 }
 
+export interface MatchKeyPlayer {
+  playerId: number;
+  name: string;
+  shortName: string | null;
+  positionCode: string;
+  importance: number;
+  goals: number;
+  assists: number;
+  rating: number | null;
+}
+
+/** Every predicted-XI player above an importance threshold, for both
+ *  sides of a match — the data the "Key Player Battle" narrative thread
+ *  was only using a single name from (team_goal_dependency's top scorer
+ *  by GOALS specifically). This pulls from player_intelligence.
+ *  importance_score instead, which already blends goals/assists/minutes/
+ *  quality and is position-aware (a goalkeeper can qualify on minutes+
+ *  quality alone, exactly like the source document's "Key Goalkeeper"
+ *  entries) — so a genuinely important defender or keeper surfaces here
+ *  even with zero goals, not just the top scorer.
+ *  Default threshold matches the specific ask: "at least above 16%". */
+export async function getMatchKeyPlayers(
+  matchId: number,
+  homeTeamId: number,
+  awayTeamId: number,
+  minImportance = 16
+): Promise<{ home: MatchKeyPlayer[]; away: MatchKeyPlayer[] }> {
+  const empty = { home: [], away: [] };
+
+  const { data: lineupRows, error: lineupErr } = await supabase
+    .from('match_predicted_lineups')
+    .select('team_id, player_id, position_code')
+    .eq('match_id', matchId);
+  if (lineupErr || !lineupRows || lineupRows.length === 0) return empty;
+
+  const playerIds = lineupRows.map((r: any) => r.player_id);
+
+  const [playersRes, intelRes, statsRes] = await Promise.all([
+    supabase.from('players').select('id, name, short_name').in('id', playerIds),
+    supabase.from('player_intelligence').select('player_id, importance_score').in('player_id', playerIds),
+    supabase.from('player_season_statistics').select('player_id, team_id, season_external_id, goals, assists, total_rating, count_rating').in('player_id', playerIds),
+  ]);
+
+  const playerMap = new Map<number, any>((playersRes.data ?? []).map((p: any) => [p.id, p]));
+  const intelMap = new Map<number, number>((intelRes.data ?? []).map((r: any) => [r.player_id, r.importance_score]));
+
+  // Same "most recent season only" resolution used throughout this
+  // codebase's backend (player_season_statistics genuinely accumulates
+  // one row per season over time) — keep only the highest
+  // season_external_id per player.
+  const statsMap = new Map<number, any>();
+  for (const s of statsRes.data ?? []) {
+    const existing = statsMap.get(s.player_id);
+    if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+    statsMap.set(s.player_id, s);
+  }
+
+  const home: MatchKeyPlayer[] = [];
+  const away: MatchKeyPlayer[] = [];
+
+  for (const row of lineupRows) {
+    const importance = intelMap.get(row.player_id);
+    if (importance == null || importance < minImportance) continue;
+    const player = playerMap.get(row.player_id);
+    if (!player) continue;
+    const stat = statsMap.get(row.player_id);
+    const rating = stat?.count_rating > 0 && stat?.total_rating > 0
+      ? Math.round((stat.total_rating / stat.count_rating) * 100) / 100
+      : null;
+
+    const entry: MatchKeyPlayer = {
+      playerId: row.player_id,
+      name: player.name,
+      shortName: player.short_name,
+      positionCode: row.position_code,
+      importance,
+      goals: stat?.goals ?? 0,
+      assists: stat?.assists ?? 0,
+      rating,
+    };
+    if (row.team_id === homeTeamId) home.push(entry);
+    else if (row.team_id === awayTeamId) away.push(entry);
+  }
+
+  home.sort((a, b) => b.importance - a.importance);
+  away.sort((a, b) => b.importance - a.importance);
+
+  return { home, away };
+}
+
 export interface MatchWithLineups {
   id: number;
   date: string;

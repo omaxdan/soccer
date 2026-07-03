@@ -7,13 +7,13 @@ import Link from 'next/link';
 import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
-  getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras,
+  getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers,
 } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole } from '@/lib/insights';
 import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
 import SignalChip from '@/components/SignalChip';
@@ -92,7 +92,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -113,6 +113,7 @@ export default function MatchPage() {
           getTeamInjuryImpact(homeId).catch(() => null),
           getTeamInjuryImpact(awayId).catch(() => null),
           getMatchComparisonExtras([homeId, awayId]).catch(() => new Map()),
+          getMatchKeyPlayers(parseInt(id), homeId, awayId).catch(() => ({ home: [], away: [] })),
         ]);
         
         setData({ 
@@ -139,6 +140,7 @@ export default function MatchPage() {
           homeInjury: hInjury,
           awayInjury: aInjury,
           matchExtras,
+          matchKeyPlayers,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
@@ -174,6 +176,7 @@ export default function MatchPage() {
     homeInjury,
     awayInjury,
     matchExtras,
+    matchKeyPlayers,
   } = data;
   
   const intel   = toOne(match.match_intelligence);
@@ -376,6 +379,12 @@ export default function MatchPage() {
     awayVenueAdvantage: homeExtras?.venue_advantage_score != null ? 100 - homeExtras.venue_advantage_score : null,
     homeTopScorerName: toOne(homeGoalDep?.players)?.short_name ?? toOne(homeGoalDep?.players)?.name ?? null,
     awayTopScorerName: toOne(awayGoalDep?.players)?.short_name ?? toOne(awayGoalDep?.players)?.name ?? null,
+    homeKeyPlayers: (matchKeyPlayers?.home ?? []).map((p: any) => ({
+      name: p.shortName ?? p.name, positionCode: p.positionCode, importance: p.importance, goals: p.goals, assists: p.assists,
+    })),
+    awayKeyPlayers: (matchKeyPlayers?.away ?? []).map((p: any) => ({
+      name: p.shortName ?? p.name, positionCode: p.positionCode, importance: p.importance, goals: p.goals, assists: p.assists,
+    })),
   }) : [];
 
   const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
@@ -905,6 +914,55 @@ export default function MatchPage() {
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {/* ── PLAYER IMPORTANCE COMPARISON — structured table version of
+              the same key-players data the narrative thread above now
+              lists in prose. Reuses the SAME matchKeyPlayers fetch, zero
+              extra queries — just a second, more scannable presentation
+              of the same real data for anyone who wants the table view
+              matching the source document's format. ── */}
+          {((matchKeyPlayers?.home?.length ?? 0) > 0 || (matchKeyPlayers?.away?.length ?? 0) > 0) && (
+            <Card>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  📊 Player Importance Comparison
+                </div>
+                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
+                  Predicted-XI players at 16%+ importance — season goals/assists/rating, from real synced data
+                </div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                    {['Player', 'Team', 'Importance', 'Goals', 'Assists', 'Rating', 'Role'].map(h => (
+                      <th key={h} style={{ padding: '6px 8px', textAlign: h === 'Player' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ...(matchKeyPlayers?.home ?? []).map((p: any) => ({ ...p, team: match.home_team?.short_name ?? match.home_team?.name })),
+                    ...(matchKeyPlayers?.away ?? []).map((p: any) => ({ ...p, team: match.away_team?.short_name ?? match.away_team?.name })),
+                  ]
+                    .sort((a, b) => b.importance - a.importance)
+                    .map((p: any) => {
+                      const role = deriveRole(p.positionCode, p.goals, p.assists);
+                      return (
+                        <tr key={p.playerId} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                          <td style={{ padding: '6px 8px', color: COLORS.text, fontWeight: 600 }}>{p.shortName ?? p.name}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', color: COLORS.muted, fontSize: 11 }}>{p.team}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.importance >= 20 ? COLORS.green : COLORS.text2 }}>{p.importance.toFixed(1)}%</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.goals}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.assists}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.rating != null ? p.rating.toFixed(2) : '—'}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: 11, color: COLORS.text2, whiteSpace: 'nowrap' }}>{role.emoji} {role.label}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </Card>
           )}
 
