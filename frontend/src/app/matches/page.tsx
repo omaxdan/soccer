@@ -1,4 +1,4 @@
-import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap } from '@/lib/queries';
+import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap, getMatchConfidenceMap } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
 import { matchUrl } from '@/lib/urls';
 import { COLORS, scoreColor } from '@/design/tokens';
@@ -50,7 +50,19 @@ export default async function MatchCenter({
   }
   const isToday = activeDateStr === todayStr;
 
-  const matches = await (isToday ? getTodaysMatches() : getMatchesForDate(activeDateStr)).catch(() => []);
+  // Query errors must be VISIBLE, not silently rendered as "no matches" —
+  // a schema mismatch (e.g. a pending migration) previously blanked every
+  // match on the platform because this was `.catch(() => [])`. Data errors
+  // and genuinely-empty days are different states and must render differently.
+  let matches: any[] = [];
+  let loadError: string | null = null;
+  try {
+    matches = await (isToday ? getTodaysMatches() : getMatchesForDate(activeDateStr));
+  } catch (e: any) {
+    loadError = e?.message ?? 'Unknown query error';
+    console.error('Matches query failed:', loadError);
+  }
+  const confMap = await getMatchConfidenceMap((matches as any[]).map((m: any) => m.id)).catch(() => new Map());
   const teamIds = (matches as any[]).flatMap((m: any) => [m.home_team_id, m.away_team_id]).filter(Boolean);
   const teamIntelMap = await getTeamIntelligenceMap(teamIds);
 
@@ -90,9 +102,13 @@ export default async function MatchCenter({
     const homeR = intel?.home_readiness ?? homeIntel?.readiness_score;
     const awayR = intel?.away_readiness ?? awayIntel?.readiness_score;
     const gap = homeR != null && awayR != null ? homeR - awayR : null;
+    const conf = confMap.get(m.id);
     return { match: m, intel, homeIntel, awayIntel, signals, topSignal, homeR, awayR, gap,
-             confidence: intel?.confidence_score ?? null, confidenceBand: intel?.confidence_band ?? null };
-  }).filter(e => e.match.status !== 'finished');
+             confidence: conf?.score ?? null, confidenceBand: conf?.band ?? null };
+  });
+  // NOTE: deliberately NOT filtering out finished matches — past dates are
+  // entirely finished matches, and filtering them produced a permanently
+  // empty page for any previous date plus scores that could never display.
 
   // Sort by absolute gap, largest first — matches the "highest signal" ordering the mockup implies
   enriched.sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
@@ -176,10 +192,25 @@ export default async function MatchCenter({
                 const intel = m.match_intelligence?.[0];
                 return (
                   <tr key={m.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{time}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
                     <td style={{ padding: '8px 10px' }}>
                       <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600 }}>
-                        {m.home_team?.short_name ?? m.home_team?.name} <span style={{ color: COLORS.dim, fontWeight: 400 }}>v</span> {m.away_team?.short_name ?? m.away_team?.name}
+                        {(() => {
+                          // match_results has always been fetched by MATCH_SELECT —
+                          // it was just never rendered here, so finished matches
+                          // stayed at "team v team" with no score forever.
+                          const r = m.match_results?.[0];
+                          const hasScore = r != null && r.home_score != null && r.away_score != null;
+                          return (
+                            <>
+                              {m.home_team?.short_name ?? m.home_team?.name}{' '}
+                              {hasScore
+                                ? <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.green, fontWeight: 700 }}>{r.home_score}–{r.away_score}</span>
+                                : <span style={{ color: COLORS.dim, fontWeight: 400 }}>v</span>}
+                              {' '}{m.away_team?.short_name ?? m.away_team?.name}
+                            </>
+                          );
+                        })()}
                       </Link>
                     </td>
                     <td style={{ padding: '8px 10px', color: COLORS.muted, fontSize: 10 }}>{m.competition}</td>
@@ -218,7 +249,11 @@ export default async function MatchCenter({
                 );
               })}
               {enriched.length === 0 && (
-                <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: COLORS.dim }}>No pre-match fixtures for {displayDate}</td></tr>
+                <tr><td colSpan={11} style={{ padding: 32, textAlign: 'center', color: loadError ? COLORS.red : COLORS.dim }}>
+                  {loadError
+                    ? `Match data failed to load (${loadError}) — check migrations/RLS, this is a data error, not an empty day`
+                    : `No fixtures found for ${displayDate}`}
+                </td></tr>
               )}
             </tbody>
           </table>

@@ -191,6 +191,16 @@ export async function getTrackedTeamIds(): Promise<number[]> {
 // ─── FK JOIN SYNTAX ───────────────────────────────────────────────────────────
 // Uses column names (e.g. !home_team_id) not FK constraint names.
 // Both tables must have RLS public read policy — run SUPABASE_RLS_SETUP.sql.
+//
+// SCHEMA-COUPLING RULE (learned the hard way, 2026-07-03): NEVER add a
+// column from a not-yet-applied migration to this shared select. PostgREST
+// rejects the ENTIRE query for one unknown column, every page using
+// MATCH_SELECT throws, and the pages' `.catch(() => [])` silently renders
+// "no matches" platform-wide — which is exactly what happened when
+// confidence_score/confidence_band were added here before migration 016 had
+// been run. New/optional columns get their own small standalone query with
+// a soft-fail (see getMatchConfidenceMap below), so a missing migration can
+// only ever degrade one column, never blank every match page.
 const MATCH_SELECT = `
   id, date, competition, season, status,
   home_team_id, away_team_id,
@@ -203,8 +213,7 @@ const MATCH_SELECT = `
     home_rest_days, away_rest_days,
     home_travel_distance_km, away_travel_distance_km, travel_advantage_score,
     home_active_competitions, away_active_competitions,
-    predicted_home_goals, predicted_away_goals, predicted_scorelines,
-    confidence_score, confidence_band
+    predicted_home_goals, predicted_away_goals, predicted_scorelines
   ),
   match_travel_intelligence(
     home_team_distance_km, away_team_distance_km,
@@ -337,6 +346,33 @@ export async function getMatchesForDate(date: string) {
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
+}
+
+/** Confidence scores for a set of matches — deliberately a SEPARATE query
+ *  from MATCH_SELECT with a soft-fail, so that if migration 016 hasn't been
+ *  applied yet (columns don't exist), only the CONF % column degrades to
+ *  "—" instead of every match query on the platform failing. See the
+ *  schema-coupling rule on MATCH_SELECT above. */
+export async function getMatchConfidenceMap(
+  matchIds: number[]
+): Promise<Map<number, { score: number; band: string | null }>> {
+  const result = new Map<number, { score: number; band: string | null }>();
+  if (matchIds.length === 0) return result;
+  try {
+    const { data, error } = await supabase
+      .from('match_intelligence')
+      .select('match_id, confidence_score, confidence_band')
+      .in('match_id', matchIds)
+      .not('confidence_score', 'is', null);
+    if (error || !data) return result;
+    for (const r of data) {
+      result.set(r.match_id, { score: r.confidence_score, band: r.confidence_band ?? null });
+    }
+  } catch {
+    // Columns missing (migration 016 not applied) or transient failure —
+    // degrade the one column, never the page.
+  }
+  return result;
 }
 
 // ─── MATCH INTELLIGENCE PAGE ──────────────────────────────────────────────────
