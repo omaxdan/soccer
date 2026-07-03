@@ -1,4 +1,5 @@
-import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap, getMatchConfidenceMap } from '@/lib/queries';
+import React from 'react';
+import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap, getMatchConfidenceMap, getMatchComparisonExtras, getMatchLineupVersatility } from '@/lib/queries';
 import { toOne } from '@/lib/relations';
 import { generateMatchInsight } from '@/lib/insights';
 import { computeMatchSignals } from '@/lib/signals';
@@ -23,19 +24,6 @@ function formatDisplayDate(dateStr: string, todayStr: string): string {
 }
 
 const DIR_COLOR = { home: COLORS.green, away: COLORS.blue, neutral: COLORS.dim, avoid: COLORS.red };
-
-function SignalDots({ signals }: { signals: any[] }) {
-  // Up to 3 dots, colored by the top signals' direction, strongest first.
-  const top = [...signals].sort((a, b) => b.strength - a.strength).slice(0, 3);
-  return (
-    <div style={{ display: 'flex', gap: 3 }}>
-      {top.map((s, i) => (
-        <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: s.strength >= 3 ? DIR_COLOR[s.direction as keyof typeof DIR_COLOR] : COLORS.border }} />
-      ))}
-      {top.length === 0 && <span style={{ fontSize: 9, color: COLORS.dim }}>—</span>}
-    </div>
-  );
-}
 
 export default async function MatchCenter({
   searchParams,
@@ -67,6 +55,11 @@ export default async function MatchCenter({
   const confMap = await getMatchConfidenceMap((matches as any[]).map((m: any) => m.id)).catch(() => new Map());
   const teamIds = (matches as any[]).flatMap((m: any) => [m.home_team_id, m.away_team_id]).filter(Boolean);
   const teamIntelMap = await getTeamIntelligenceMap(teamIds);
+  // New: strength rating + venue advantage + predicted goals come from
+  // match_intelligence (already fetched) and a bulk strength/venue fetch —
+  // replacing REST(H/A)/TRAVEL(A)/SIGNALS as the list's at-a-glance columns.
+  const extrasMap = await getMatchComparisonExtras([...new Set(teamIds)]).catch(() => new Map());
+  const versatilityMap = await getMatchLineupVersatility((matches as any[]).map((m: any) => m.id)).catch(() => new Map());
 
   // Compute signals per match — same pattern as /matches/picks
   const enriched = (matches as any[]).map((m: any) => {
@@ -128,17 +121,50 @@ export default async function MatchCenter({
         homeSquadStability: homeIntel?.squad_stability_score, awaySquadStability: awayIntel?.squad_stability_score,
       }).confidence;
     }
+    const versatility = versatilityMap.get(m.id);
     return { match: m, intel, homeIntel, awayIntel, signals, topSignal, homeR, awayR, gap,
-             confidence: conf?.score ?? fallbackConf, confidenceBand: conf?.band ?? null };
+             confidence: conf?.score ?? fallbackConf, confidenceBand: conf?.band ?? null,
+             homeExtras: extrasMap.get(m.home_team_id), awayExtras: extrasMap.get(m.away_team_id),
+             homeVersatility: versatility?.get(m.home_team_id) ?? null,
+             awayVersatility: versatility?.get(m.away_team_id) ?? null };
   });
   // NOTE: deliberately NOT filtering out finished matches — past dates are
   // entirely finished matches, and filtering them produced a permanently
   // empty page for any previous date plus scores that could never display.
 
   // Sort by absolute gap, largest first — matches the "highest signal" ordering the mockup implies
-  enriched.sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
+  // Previously mutated `enriched`'s own order (sorted by gap) since the
+  // flat table used that as its display order too. Now that the table
+  // groups by Country -> Competition, `enriched` needs to stay in its
+  // natural chronological order (from getTodaysMatches/getMatchesForDate,
+  // already date-ascending) for that grouping to make sense — the gap
+  // sort is now only used for the sidebar's "Top Match" widget, via a
+  // separate sorted copy that doesn't touch the main array's order.
+  const byGapDesc = [...enriched].sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
+  const topMatch = byGapDesc[0];
 
-  const topMatch = enriched[0];
+  // ── Group by Country -> Competition, per request ─────────────────────
+  // Country isn't a direct field on matches — using the home team's
+  // country as a reasonable proxy (domestic-league matches, which this
+  // platform mostly tracks, always share a country between both sides;
+  // this only becomes an approximation for genuine cross-border
+  // competitions, which aren't the common case here). Groups preserve
+  // chronological order within each competition (the natural order
+  // matches already come in) rather than the old flat gap-sort, since a
+  // fixtures list grouped by league should read top-to-bottom by kickoff
+  // time within each league, not by signal strength.
+  type Entry = typeof enriched[number];
+  const grouped = new Map<string, Map<string, Entry[]>>();
+  for (const e of enriched) {
+    const country = e.match.home_team?.country ?? 'Other';
+    const competition = e.match.competition ?? 'Unknown';
+    if (!grouped.has(country)) grouped.set(country, new Map());
+    const compMap = grouped.get(country)!;
+    if (!compMap.has(competition)) compMap.set(competition, []);
+    compMap.get(competition)!.push(e);
+  }
+  // Sort countries and competitions alphabetically for a stable, scannable order.
+  const sortedCountries = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
   const displayDate = formatDisplayDate(activeDateStr, todayStr);
 
   // Readiness gap distribution buckets
@@ -206,74 +232,100 @@ export default async function MatchCenter({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: COLORS.surface2 }}>
-                {['TIME', 'MATCH', 'COMP', 'HOME', 'AWAY', 'GAP', 'REST(H/A)', 'TRAVEL(A)', 'SIGNALS', 'PICK', 'CONF %'].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', textAlign: h === 'MATCH' || h === 'COMP' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                {['TIME', 'MATCH', 'HOME', 'AWAY', 'GAP', 'STR (H/A)', 'VENUE (H/A)', 'XG (H/A)', 'VERS (H/A)', 'PICK', 'CONF %'].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: h === 'MATCH' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {enriched.map(({ match: m, homeR, awayR, gap, signals, topSignal, confidence, confidenceBand }) => {
-                const time = new Date(m.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-                const intel = toOne(m.match_intelligence);
+              {sortedCountries.map(country => {
+                const compMap = grouped.get(country)!;
+                const sortedComps = [...compMap.keys()].sort((a, b) => a.localeCompare(b));
                 return (
-                  <tr key={m.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
-                    <td style={{ padding: '8px 10px' }}>
-                      <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600 }}>
-                        {(() => {
-                          // match_results has always been fetched by MATCH_SELECT —
-                          // it was just never rendered here, so finished matches
-                          // stayed at "team v team" with no score forever.
-                          const r = toOne(m.match_results);
-                          const hasScore = r != null && r.home_score != null && r.away_score != null;
-                          return (
-                            <>
-                              {m.home_team?.short_name ?? m.home_team?.name}{' '}
-                              {hasScore
-                                ? <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.green, fontWeight: 700 }}>{r.home_score}–{r.away_score}</span>
-                                : <span style={{ color: COLORS.dim, fontWeight: 400 }}>v</span>}
-                              {' '}{m.away_team?.short_name ?? m.away_team?.name}
-                            </>
-                          );
-                        })()}
-                      </Link>
-                    </td>
-                    <td style={{ padding: '8px 10px', color: COLORS.muted, fontSize: 10 }}>{m.competition}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(homeR) }}>{homeR != null ? Math.round(homeR) : '—'}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(awayR) }}>{awayR != null ? Math.round(awayR) : '—'}</td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                      {gap != null ? (
-                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(Math.min(100, Math.abs(gap) * 2)) }}>{gap >= 0 ? '+' : ''}{Math.round(gap)}</span>
-                      ) : <span style={{ color: COLORS.dim }}>—</span>}
-                    </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
-                      {intel?.home_rest_days != null ? intel.home_rest_days.toFixed(1) : '—'}/{intel?.away_rest_days != null ? intel.away_rest_days.toFixed(1) : '—'}
-                    </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: (intel?.away_travel_distance_km ?? 0) > 500 ? COLORS.red : COLORS.muted }}>
-                      {intel?.away_travel_distance_km != null ? `${Math.round(intel.away_travel_distance_km)}km` : '—'}
-                    </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center' }}><SignalDots signals={signals} /></td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                      {topSignal ? (
-                        <span style={{ fontSize: 10, fontWeight: 700, color: DIR_COLOR[topSignal.direction as keyof typeof DIR_COLOR] }}>
-                          {topSignal.direction === 'home' ? (m.home_team?.short_name ?? 'HOME')
-                            : topSignal.direction === 'away' ? (m.away_team?.short_name ?? 'AWAY')
-                            : topSignal.direction === 'avoid' ? '⚠ Avoid'
-                            : 'Even'}
-                        </span>
-                      ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
-                    </td>
-                    <td style={{ padding: '8px 10px', textAlign: 'center' }} title={confidenceBand ?? 'Not enough corroborating data yet — run process:all-db after migration 016'}>
-                      {confidence != null ? (
-                        <span style={{
-                          fontFamily: '"JetBrains Mono",monospace', fontSize: 11, fontWeight: 700,
-                          color: confidence >= 85 ? COLORS.green : confidence >= 70 ? COLORS.greenDim : confidence >= 55 ? COLORS.amber : COLORS.red,
-                        }}>
-                          {Math.round(confidence)}
-                        </span>
-                      ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
-                    </td>
-                  </tr>
+                  <React.Fragment key={`country-${country}`}>
+                    <tr>
+                      <td colSpan={11} style={{ padding: '10px 10px 4px', fontSize: 12, fontWeight: 800, color: COLORS.text, background: COLORS.bg }}>
+                        {country}
+                      </td>
+                    </tr>
+                    {sortedComps.map(competition => {
+                      const rows = compMap.get(competition)!;
+                      return (
+                        <React.Fragment key={`comp-${country}-${competition}`}>
+                          <tr>
+                            <td colSpan={11} style={{ padding: '6px 10px 6px 22px', fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: `1px solid ${COLORS.border}` }}>
+                              {competition}
+                            </td>
+                          </tr>
+                          {rows.map(({ match: m, homeR, awayR, gap, topSignal, confidence, confidenceBand, homeExtras, awayExtras, homeVersatility, awayVersatility }) => {
+                            const time = new Date(m.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+                            const intel = toOne(m.match_intelligence);
+                            return (
+                              <tr key={m.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600 }}>
+                                    {(() => {
+                                      const r = toOne(m.match_results);
+                                      const hasScore = r != null && r.home_score != null && r.away_score != null;
+                                      return (
+                                        <>
+                                          {m.home_team?.short_name ?? m.home_team?.name}{' '}
+                                          {hasScore
+                                            ? <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.green, fontWeight: 700 }}>{r.home_score}–{r.away_score}</span>
+                                            : <span style={{ color: COLORS.dim, fontWeight: 400 }}>v</span>}
+                                          {' '}{m.away_team?.short_name ?? m.away_team?.name}
+                                        </>
+                                      );
+                                    })()}
+                                  </Link>
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(homeR) }}>{homeR != null ? Math.round(homeR) : '—'}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(awayR) }}>{awayR != null ? Math.round(awayR) : '—'}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  {gap != null ? (
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(Math.min(100, Math.abs(gap) * 2)) }}>{gap >= 0 ? '+' : ''}{Math.round(gap)}</span>
+                                  ) : <span style={{ color: COLORS.dim }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                  {homeExtras?.strength_score != null ? Math.round(homeExtras.strength_score) : '—'}/{awayExtras?.strength_score != null ? Math.round(awayExtras.strength_score) : '—'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                  {homeExtras?.venue_advantage_score != null ? Math.round(homeExtras.venue_advantage_score) : '—'}/{awayExtras?.venue_advantage_score != null ? Math.round(awayExtras.venue_advantage_score) : '—'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                  {intel?.predicted_home_goals != null ? intel.predicted_home_goals.toFixed(1) : '—'}/{intel?.predicted_away_goals != null ? intel.predicted_away_goals.toFixed(1) : '—'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                  {homeVersatility != null ? `${homeVersatility}%` : '—'}/{awayVersatility != null ? `${awayVersatility}%` : '—'}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                  {topSignal ? (
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: DIR_COLOR[topSignal.direction as keyof typeof DIR_COLOR] }}>
+                                      {topSignal.direction === 'home' ? (m.home_team?.short_name ?? 'HOME')
+                                        : topSignal.direction === 'away' ? (m.away_team?.short_name ?? 'AWAY')
+                                        : topSignal.direction === 'avoid' ? '⚠ Avoid'
+                                        : 'Even'}
+                                    </span>
+                                  ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center' }} title={confidenceBand ?? 'Not enough corroborating data yet — run process:all-db after migration 016'}>
+                                  {confidence != null ? (
+                                    <span style={{
+                                      fontFamily: '"JetBrains Mono",monospace', fontSize: 11, fontWeight: 700,
+                                      color: confidence >= 85 ? COLORS.green : confidence >= 70 ? COLORS.greenDim : confidence >= 55 ? COLORS.amber : COLORS.red,
+                                    }}>
+                                      {Math.round(confidence)}
+                                    </span>
+                                  ) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
                 );
               })}
               {enriched.length === 0 && (

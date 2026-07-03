@@ -537,6 +537,50 @@ export async function getMatchSignalsForMatches(matchIds: number[]): Promise<Map
   return result;
 }
 
+/** Bulk lineup-versatility fetch for the matches list page — same
+ *  calculation as PredictedLineup.tsx's per-match versatility badge
+ *  (share of predicted-XI players with more than one listed position:
+ *  primary/secondary/tertiary), just computed across every match in a
+ *  day at once instead of one match at a time. Returns a Map keyed by
+ *  match_id, each value a Map keyed by team_id -> versatility percentage
+ *  (0-100), so the caller can look up home/away by their own team_id
+ *  without this function needing to know which side is which. */
+export async function getMatchLineupVersatility(matchIds: number[]): Promise<Map<number, Map<number, number>>> {
+  const result = new Map<number, Map<number, number>>();
+  if (matchIds.length === 0) return result;
+
+  const { data, error } = await supabase
+    .from('match_predicted_lineups')
+    .select('match_id, team_id, players:player_id(primary_position, secondary_position, tertiary_position)')
+    .in('match_id', matchIds);
+
+  if (error || !data) return result;
+
+  // Group raw rows by (match_id, team_id) first, then compute the percentage —
+  // same two-pass shape as PredictedLineup.tsx's own calculation.
+  const grouped = new Map<string, any[]>();
+  for (const r of data) {
+    const key = `${r.match_id}:${r.team_id}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(toOne(r.players));
+  }
+
+  for (const [key, players] of grouped) {
+    const [matchIdStr, teamIdStr] = key.split(':');
+    const matchId = Number(matchIdStr);
+    const teamId = Number(teamIdStr);
+    const versatileCount = players.filter(p => {
+      if (!p) return false;
+      return [p.primary_position, p.secondary_position, p.tertiary_position].filter(Boolean).length > 1;
+    }).length;
+    const pct = players.length > 0 ? Math.round((versatileCount / players.length) * 100) : 0;
+    if (!result.has(matchId)) result.set(matchId, new Map());
+    result.get(matchId)!.set(teamId, pct);
+  }
+
+  return result;
+}
+
 export async function getTeamIntelligence(teamId: number) {
   const { data, error } = await supabase
     .from('team_intelligence').select('*').eq('team_id', teamId).single();

@@ -16,7 +16,6 @@ import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBr
 import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads } from '@/lib/insights';
 import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
-import IntelligenceBar from '@/components/IntelligenceBar';
 import SignalChip from '@/components/SignalChip';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { PredictedLineup } from '@/components/PredictedLineup';
@@ -184,8 +183,6 @@ export default function MatchPage() {
   const isLive  = match.status === 'live';
   const isDone  = match.status === 'finished';
 
-  const homeResults = (homeForm as any[]).map((f: any) => f.result).reverse();
-  const awayResults = (awayForm as any[]).map((f: any) => f.result).reverse();
 
   // Signals — PRECOMPUTED FIRST (process:match-signals, see backend
   // processDbOnly.ts), falling back to live computeMatchSignals() only
@@ -643,7 +640,6 @@ export default function MatchPage() {
             {!intel?.home_readiness && homeIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
             )}
-            <FormString results={homeResults.slice(-5)} showPoints />
           </div>
 
           {/* VS / Score */}
@@ -688,71 +684,38 @@ export default function MatchPage() {
             {!intel?.away_readiness && awayIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
             )}
-            <FormString results={awayResults.slice(-5)} showPoints />
           </div>
         </div>
       </Card>
 
-      {/* ── 6 INTELLIGENCE METRIC CARDS ── */}
-      {intel && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-          <Card style={{ padding:14 }}>
-            <Label>Rest Advantage</Label>
-            <IntelligenceBar homeValue={intel.home_rest_days} awayValue={intel.away_rest_days}
-              homeLabel={match.home_team?.short_name} awayLabel={match.away_team?.short_name} max={10} unit="d" />
-            <div style={{ marginTop:8, fontSize:10, fontWeight:700, color:COLORS.green }}>
-              {intel.home_rest_days > intel.away_rest_days
-                ? `HOME +${Math.abs(intel.home_rest_days - intel.away_rest_days).toFixed(1)} days`
-                : intel.away_rest_days > intel.home_rest_days
-                ? `AWAY +${Math.abs(intel.home_rest_days - intel.away_rest_days).toFixed(1)} days`
-                : 'EQUAL'}
-            </div>
-          </Card>
-          <Card style={{ padding:14 }}>
-            <Label>Travel Burden</Label>
-            <IntelligenceBar homeValue={travel?.home_team_distance_km ? Math.round(travel.home_team_distance_km) : null}
-              awayValue={travel?.away_team_distance_km ? Math.round(travel.away_team_distance_km) : null}
-              homeLabel={match.home_team?.short_name} awayLabel={match.away_team?.short_name} max={2000} inverse unit="km" />
-          </Card>
-          <Card style={{ padding:14 }}>
-            <Label>Fixture Congestion</Label>
-            <IntelligenceBar homeValue={homeIntel?.congestion_score ? Math.round(homeIntel.congestion_score) : null}
-              awayValue={awayIntel?.congestion_score ? Math.round(awayIntel.congestion_score) : null}
-              homeLabel={match.home_team?.short_name} awayLabel={match.away_team?.short_name} max={100} inverse />
-          </Card>
-          <Card style={{ padding:14 }}>
-            <Label>Active Competitions</Label>
-            <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center', marginTop:8 }}>
-              {[{label:match.home_team?.short_name, val:intel.home_active_competitions},{label:match.away_team?.short_name, val:intel.away_active_competitions}].map(t => (
-                <div key={t.label} style={{ textAlign:'center' }}>
-                  <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:26, fontWeight:700, color:(t.val??0)>2?COLORS.amber:COLORS.text }}>{t.val ?? '—'}</div>
-                  <div style={{ fontSize:9, color:COLORS.dim }}>{t.label}</div>
-                  {(t.val??0)>2 && <div style={{ fontSize:9, color:COLORS.amber }}>⚠ High load</div>}
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card style={{ padding:14 }}>
-            <Label>Travel Fatigue</Label>
-            <IntelligenceBar homeValue={homeIntel?.travel_fatigue_score ? Math.round(homeIntel.travel_fatigue_score) : null}
-              awayValue={awayIntel?.travel_fatigue_score ? Math.round(awayIntel.travel_fatigue_score) : null}
-              homeLabel={match.home_team?.short_name} awayLabel={match.away_team?.short_name} max={100} inverse />
-          </Card>
-          <Card style={{ padding:14 }}>
-            <Label>Form Last 5</Label>
-            <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:6 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <span style={{ fontSize:10, color:COLORS.muted }}>{match.home_team?.short_name}</span>
-                <FormString results={homeResults.slice(-5)} size="sm" showPoints />
-              </div>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <span style={{ fontSize:10, color:COLORS.muted }}>{match.away_team?.short_name}</span>
-                <FormString results={awayResults.slice(-5)} size="sm" showPoints />
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
+      {/* ── TEAM FORM/FIXTURE/SQUAD/INTELLIGENCE — moved here right after
+          the hero (was previously at the bottom of the Overview tab) per
+          explicit request. Replaces the old "6 Intelligence Metric Cards"
+          grid (Rest Advantage/Travel Burden/Fixture Congestion/Active
+          Competitions/Travel Fatigue/Form Last 5) entirely — removed per
+          feedback that it was "hard to digest and understand how it
+          works". Form is no longer duplicated in the hero above (removed
+          separately) since this block already shows it in full. ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+        <TeamColumn 
+          team={match.home_team} 
+          intel={homeIntel} 
+          form={homeForm} 
+          fix={homeFix} 
+          squad={homeSquad} 
+          upcoming={homeUp}
+          depth={homeDepth}
+        />
+        <TeamColumn 
+          team={match.away_team} 
+          intel={awayIntel} 
+          form={awayForm} 
+          fix={awayFix} 
+          squad={awaySquad} 
+          upcoming={awayUp}
+          depth={awayDepth}
+        />
+      </div>
 
       {/* ── PAGE TABS ── */}
       <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${COLORS.border}` }}>
@@ -979,26 +942,6 @@ export default function MatchPage() {
             </Card>
           )}
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-            <TeamColumn 
-              team={match.home_team} 
-              intel={homeIntel} 
-              form={homeForm} 
-              fix={homeFix} 
-              squad={homeSquad} 
-              upcoming={homeUp}
-              depth={homeDepth}
-            />
-            <TeamColumn 
-              team={match.away_team} 
-              intel={awayIntel} 
-              form={awayForm} 
-              fix={awayFix} 
-              squad={awaySquad} 
-              upcoming={awayUp}
-              depth={awayDepth}
-            />
-          </div>
         </div>
       )}
 
