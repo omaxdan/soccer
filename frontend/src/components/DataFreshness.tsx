@@ -1,4 +1,4 @@
-import { COLORS, TYPE } from '@/design/tokens';
+import { COLORS, TYPE , withAlpha } from '@/design/tokens';
 import { supabase } from '@/lib/supabase';
 
 async function getLastUpdated(): Promise<string | null> {
@@ -43,10 +43,10 @@ export default async function DataFreshness() {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 5,
-          border: `1px solid ${color}40`,
+          border: `1px solid ${withAlpha(color, '40')}`,
           borderRadius: 20,
           padding: '3px 11px',
-          background: `${color}10`,
+          background: `${withAlpha(color, '10')}`,
           ...TYPE.smallData,
         }}
       >

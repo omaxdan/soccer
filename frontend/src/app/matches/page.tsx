@@ -227,8 +227,11 @@ export default async function MatchCenter({
       <div className="rip-sidebar-layout">
         {/* Main table */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 16px', borderBottom: `1px solid ${COLORS.border}`, fontSize: 11, color: COLORS.dim }}>
-            {displayDate} · {enriched.length} matches
+          <div style={{ padding: '10px 16px', borderBottom: `1px solid ${COLORS.border}`, fontSize: 11, color: COLORS.dim, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{displayDate} · {enriched.length} matches</span>
+            <Link href="/matches/inactive" style={{ color: COLORS.muted, textDecoration: 'none', fontSize: 10 }}>
+              Postponed &amp; cancelled →
+            </Link>
           </div>
           <div className="rip-table-scroll">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

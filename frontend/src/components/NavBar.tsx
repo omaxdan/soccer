@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { COLORS, TYPE } from '@/design/tokens';
+import { COLORS, TYPE , withAlpha } from '@/design/tokens';
 
 const NAV_LINKS = [
   { href: '/matches',          label: 'Matches' },
@@ -48,8 +48,8 @@ export default function NavBar() {
           NINETYDATA
         </span>
         <span style={{
-          background: COLORS.purple + '20', color: COLORS.purple,
-          border: `1px solid ${COLORS.purple}40`,
+          background: withAlpha(COLORS.purple, '20'), color: COLORS.purple,
+          border: `1px solid ${withAlpha(COLORS.purple, '40')}`,
           borderRadius: 4, padding: '1px 6px',
           fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
           textTransform: 'uppercase',
@@ -140,7 +140,7 @@ export default function NavBar() {
         }} title="Alerts">🔔</button>
         <div style={{
           width: 30, height: 30,
-          background: COLORS.blue + '30', border: `1px solid ${COLORS.blue}50`,
+          background: withAlpha(COLORS.blue, '30'), border: `1px solid ${withAlpha(COLORS.blue, '50')}`,
           borderRadius: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 13, color: COLORS.blue, cursor: 'pointer',
         }}>U</div>

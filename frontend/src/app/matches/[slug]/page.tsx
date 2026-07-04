@@ -10,13 +10,13 @@ import {
   getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers,
 } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
 import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveMatchRisk, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
-import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
+import { ComparisonRow } from '@/components/TeamComparisonMatrix';
+import CategorizedComparison from '@/components/CategorizedComparison';
 import FormString from '@/components/FormString';
-import SignalChip from '@/components/SignalChip';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { PredictedLineup } from '@/components/PredictedLineup';
 import Tabs from '@/components/Tabs';
@@ -32,9 +32,10 @@ function Mono({ children, size = 20, color }: { children: React.ReactNode; size?
   return <div style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: size, fontWeight: 700, color: color ?? COLORS.text, lineHeight: 1 }}>{children}</div>;
 }
 
-const PAGE_TABS = ['Overview', 'Intelligence', 'Lineups', 'Insights'];
-const INTELLIGENCE_SUBTABS = ['Summary', 'Squads', 'Tactical', 'Physical', 'Models'];
-const INSIGHTS_SUBTABS = ['Preview', 'Narratives', 'Signals', 'Recommendations'];
+// 6 flat top-level tabs per the redesign spec — NO nested subtabs anywhere.
+// Former subtab content flattened into ordered scrollable sections; Signals
+// and Recommendations promoted from Insights subtabs to their own tabs.
+const PAGE_TABS = ['Overview', 'Lineups', 'Intelligence', 'Insights', 'Signals', 'Recommendations'];
 const TEAM_TABS   = ['Form', 'Fixture Load', 'Squad', 'Intelligence'];
 
 // ─── Helper: Map detailed positions to position groups ──────────────────────
@@ -77,8 +78,6 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab]       = useState('Overview');
   const [teamTab, setTeamTab] = useState('Form');
-  const [intelSubtab, setIntelSubtab] = useState('Summary');
-  const [insightsSubtab, setInsightsSubtab] = useState('Preview');
   const [isPro]             = useState(true);
 
   useEffect(() => {
@@ -444,8 +443,6 @@ export default function MatchPage() {
   const awayAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(awayLineup));
 
   const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
-  const strongHome = signals.filter(s => s.direction === 'home' && s.strength >= 4);
-  const strongAway = signals.filter(s => s.direction === 'away' && s.strength >= 4);
 
   // ─── Team Column Renderer ───────────────────────────────────────────────────
   const TeamColumn = ({ team, intel: ti, form, fix, squad, upcoming, depth }: any) => {
@@ -494,7 +491,7 @@ export default function MatchPage() {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: `1px solid ${COLORS.border}` }}>
                       <div style={{ fontSize: 10, color: COLORS.dim, minWidth: 52 }}>{m?.date ? new Date(m.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) : '—'}</div>
                       <div style={{ fontSize: 11, color: COLORS.muted, flex: 1 }}>{opponent ?? '—'}</div>
-                      <div style={{ background: col+'28', border:`1px solid ${col}60`, borderRadius:3, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:col, fontFamily:'monospace' }}>{f.result}</div>
+                      <div style={{ background: withAlpha(col, '28'), border:`1px solid ${withAlpha(col, '60')}`, borderRadius:3, width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:col, fontFamily:'monospace' }}>{f.result}</div>
                       <div style={{ fontFamily:'monospace', fontSize:11, color:COLORS.muted, minWidth:32, textAlign:'right' }}>{f.goals_for}–{f.goals_against}</div>
                       <div style={{ fontFamily:'monospace', fontSize:11, fontWeight:700, color:col, minWidth:12 }}>{f.points}</div>
                     </div>
@@ -763,7 +760,7 @@ export default function MatchPage() {
 
           {/* ── PREDICTION CARD ── */}
           {favoredSide && (
-            <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
+            <Card style={{ background: withAlpha(COLORS.blue, '0f'), border: `1px solid ${withAlpha(COLORS.blue, '30')}` }}>
               <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue, marginBottom:12 }}>
                 🎯 Prediction
               </div>
@@ -817,47 +814,30 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {/* ── KEY SIGNALS (top 2-3) ── */}
-          {signals.length > 0 && (
-            <Card>
-              <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>
-                Key Signals
-              </div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {strongHome.length > 0 && <SignalChip label={`${strongHome[0].market} — ${strongHome[0].signal}`} strength={strongHome[0].strength} direction="home" />}
-                {strongAway.length > 0 && <SignalChip label={`${strongAway[0].market} — ${strongAway[0].signal}`} strength={strongAway[0].strength} direction="away" />}
-                {strongHome.length === 0 && strongAway.length === 0 && <SignalChip label="No strong signals detected" strength={1} direction="neutral" />}
-              </div>
-            </Card>
-          )}
-
-          {/* ── TEAM COMPARISON MATRIX ── */}
-          <Card>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Team Comparison
-              </div>
-            </div>
-            <TeamComparisonMatrix
-              homeTeam={match.home_team?.short_name ?? match.home_team?.name ?? 'Home'}
-              awayTeam={match.away_team?.short_name ?? match.away_team?.name ?? 'Away'}
-              rows={comparisonRows}
-              homeFormString={homeFormString}
-              awayFormString={awayFormString}
-            />
-          </Card>
+          {/* ── CATEGORIZED TEAM COMPARISON — the Overview landing content per
+              the 6-tab redesign spec: four named category groups, 4-col
+              desktop / stacked mobile, edge pills. Replaces both the flat
+              matrix (same data, categorized presentation) and the old Key
+              Signals card (signals now have their own top-level tab). ── */}
+          <CategorizedComparison
+            homeTeam={match.home_team?.short_name ?? match.home_team?.name ?? 'Home'}
+            awayTeam={match.away_team?.short_name ?? match.away_team?.name ?? 'Away'}
+            rows={comparisonRows}
+            homeFormString={homeFormString}
+            awayFormString={awayFormString}
+          />
         </div>
       )}
 
       {/* ══════════════════════════ INTELLIGENCE ══════════════════════════
           The flagship tab — 5 subtabs going from fast summary to deep
           models, matching the proposed IA. ── */}
-      {tab === 'Intelligence' && (
+      {/* Former Intelligence wrapper — now ungated; inner section guards route
+          each block to its new tab (Squads/Tactical → Lineups, rest → Intelligence) */}
+      {(
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Tabs tabs={INTELLIGENCE_SUBTABS} active={intelSubtab} onChange={setIntelSubtab} />
-
           {/* ── SUMMARY ── */}
-          {intelSubtab === 'Summary' && (
+          {tab === 'Intelligence' && (
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
               <Card>
                 <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12 }}>Readiness Battle</div>
@@ -913,7 +893,7 @@ export default function MatchPage() {
           )}
 
           {/* ── SQUADS — "where your injury query belongs" ── */}
-          {intelSubtab === 'Squads' && (
+          {tab === 'Lineups' && (
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:16 }}>
                 {[
@@ -1073,23 +1053,8 @@ export default function MatchPage() {
           )}
 
           {/* ── TACTICAL ── */}
-          {intelSubtab === 'Tactical' && (
+          {tab === 'Lineups' && (
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              {keyBattles.length > 0 && (
-                <Card>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Key Battles</div>
-                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>Highest-importance player per position group, each side</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    {keyBattles.map((b, i) => (
-                      <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom: i < keyBattles.length-1 ? `1px solid ${COLORS.border}` : 'none' }}>
-                        <div style={{ flex:1, textAlign:'right', fontSize:12, fontWeight:600, color: b.home ? COLORS.text : COLORS.dim }}>{b.home?.shortName ?? b.home?.name ?? '—'}</div>
-                        <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase', padding:'0 12px' }}>{b.group}</div>
-                        <div style={{ flex:1, fontSize:12, fontWeight:600, color: b.away ? COLORS.text : COLORS.dim }}>{b.away?.shortName ?? b.away?.name ?? '—'}</div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
               {(Object.values(homeAreaVersatility).some(v => v != null) || Object.values(awayAreaVersatility).some(v => v != null)) && (
                 <Card>
                   <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Area Versatility</div>
@@ -1119,6 +1084,21 @@ export default function MatchPage() {
                   </div>
                 </Card>
               )}
+              {keyBattles.length > 0 && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Key Battles</div>
+                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>Highest-importance player per position group, each side</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {keyBattles.map((b, i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom: i < keyBattles.length-1 ? `1px solid ${COLORS.border}` : 'none' }}>
+                        <div style={{ flex:1, textAlign:'right', fontSize:12, fontWeight:600, color: b.home ? COLORS.text : COLORS.dim }}>{b.home?.shortName ?? b.home?.name ?? '—'}</div>
+                        <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase', padding:'0 12px' }}>{b.group}</div>
+                        <div style={{ flex:1, fontSize:12, fontWeight:600, color: b.away ? COLORS.text : COLORS.dim }}>{b.away?.shortName ?? b.away?.name ?? '—'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
               <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'10px 16px', fontSize:11, color:COLORS.dim }}>
                 Real ball-control / heat-map area breakdowns would need positional-tracking data this platform doesn't have — Area Versatility above is a genuine, different proxy (squad flexibility), not an estimate of the same thing.
               </div>
@@ -1128,7 +1108,7 @@ export default function MatchPage() {
           {/* ── PHYSICAL — congestion, fatigue, travel, stability, full
               per-team breakdown (TeamColumn) for anyone wanting the deep
               dive. ── */}
-          {intelSubtab === 'Physical' && (
+          {tab === 'Intelligence' && (
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
               <details open>
                 <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
@@ -1146,7 +1126,7 @@ export default function MatchPage() {
           )}
 
           {/* ── MODELS ── */}
-          {intelSubtab === 'Models' && (
+          {tab === 'Intelligence' && (
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
               {hasWinProbs && (
                 <Card>
@@ -1180,7 +1160,7 @@ export default function MatchPage() {
                   </div>
                   <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                     {intel.predicted_scorelines.slice(0, 6).map((s: any, i: number) => (
-                      <div key={i} style={{ background: i === 0 ? COLORS.green+'15' : COLORS.surface2, border: `1px solid ${i === 0 ? COLORS.green+'40' : COLORS.border}`, borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 64 }}>
+                      <div key={i} style={{ background: i === 0 ? withAlpha(COLORS.green, '15') : COLORS.surface2, border: `1px solid ${i === 0 ? withAlpha(COLORS.green, '40') : COLORS.border}`, borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 64 }}>
                         <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color: i === 0 ? COLORS.green : COLORS.text }}>{s.home}–{s.away}</div>
                         <div style={{ fontSize:10, color:COLORS.dim, marginTop:2 }}>{s.probability}%</div>
                       </div>
@@ -1242,12 +1222,12 @@ export default function MatchPage() {
 
       {/* ══════════════════════════ INSIGHTS ══════════════════════════
           The storytelling tab — 4 subtabs. ── */}
-      {tab === 'Insights' && (
+      {/* Former Insights wrapper — now ungated; Preview+Narratives → Insights,
+          Signals and Recommendations → their own top-level tabs */}
+      {(
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Tabs tabs={INSIGHTS_SUBTABS} active={insightsSubtab} onChange={setInsightsSubtab} />
-
-          {insightsSubtab === 'Preview' && executiveSummary && (
-            <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
+          {tab === 'Insights' && executiveSummary && (
+            <Card style={{ background: withAlpha(COLORS.blue, '0f'), border: `1px solid ${withAlpha(COLORS.blue, '30')}` }}>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
                 <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue }}>💡 Executive Summary</span>
               </div>
@@ -1255,7 +1235,7 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {insightsSubtab === 'Narratives' && narrativeThreads.length > 0 && (
+          {tab === 'Insights' && narrativeThreads.length > 0 && (
             <Card>
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>🚨 Key Narrative Threads</div>
@@ -1272,9 +1252,9 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {insightsSubtab === 'Signals' && (
+          {tab === 'Signals' && (
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div style={{ background:COLORS.amber+'15', border:`1px solid ${COLORS.amber}30`, borderRadius:8, padding:'10px 16px', fontSize:12, color:COLORS.amber }}>
+              <div style={{ background:withAlpha(COLORS.amber, '15'), border:`1px solid ${withAlpha(COLORS.amber, '30')}`, borderRadius:8, padding:'10px 16px', fontSize:12, color:COLORS.amber }}>
                 ⚠ Intelligence signals are derived from precomputed data. Not betting advice. Please bet responsibly.
               </div>
               {signalsAreBaselineOnly && (
@@ -1315,7 +1295,7 @@ export default function MatchPage() {
                             const isLocked = s.locked && !isPro;
                             const isBlurred = !isPro && i >= 3;
                             return (
-                              <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background: i%2===0?'transparent':COLORS.surface2+'40', position:'relative' }}>
+                              <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background: i%2===0?'transparent':withAlpha(COLORS.surface2, '40'), position:'relative' }}>
                                 <td style={{ padding:'10px 14px', fontSize:12, fontWeight:600, color:COLORS.text, filter:isBlurred?'blur(4px)':'none' }}>
                                   {s.market}{isLocked && <span style={{ marginLeft:5, fontSize:9, color:COLORS.purple }}>🔒 PRO</span>}
                                 </td>
@@ -1331,8 +1311,8 @@ export default function MatchPage() {
                                 </td>
                                 <td style={{ padding:'10px 14px', fontSize:11, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{s.drivers}</td>
                                 {isBlurred && (
-                                  <td style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:COLORS.surface+'90' }}>
-                                    <div style={{ background:COLORS.purple+'20', border:`1px solid ${COLORS.purple}40`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
+                                  <td style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:withAlpha(COLORS.surface, '90') }}>
+                                    <div style={{ background:withAlpha(COLORS.purple, '20'), border:`1px solid ${withAlpha(COLORS.purple, '40')}`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
                                       🔒 Unlock 47 more signals today →
                                     </div>
                                   </td>
@@ -1349,7 +1329,7 @@ export default function MatchPage() {
             </div>
           )}
 
-          {insightsSubtab === 'Recommendations' && (
+          {tab === 'Recommendations' && (
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
               {signals.filter(s => s.strength >= 3 && s.signal !== 'No Edge' && s.signal !== 'Balanced' && s.signal !== 'Level').length === 0 ? (
                 <div style={{ padding:'24px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { searchTeams, searchTournaments } from '@/lib/queries';
-import { COLORS } from '@/design/tokens';
+import { COLORS , withAlpha } from '@/design/tokens';
 import { teamUrl, leagueUrl } from '@/lib/urls';
 
 export default function SearchPage() {
@@ -50,7 +50,7 @@ export default function SearchPage() {
           <div style={{ padding:'8px 14px', borderBottom:`1px solid ${COLORS.border}`, fontSize:10, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em' }}>Teams</div>
           {teams.map((t: any) => (
             <Link key={t.id} href={teamUrl(t)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${COLORS.border}`, textDecoration:'none' }}>
-              <div style={{ width:28, height:28, background:COLORS.green+'20', borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace', fontSize:10, fontWeight:700, color:COLORS.green }}>{t.short_name?.slice(0,3)}</div>
+              <div style={{ width:28, height:28, background:withAlpha(COLORS.green, '20'), borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace', fontSize:10, fontWeight:700, color:COLORS.green }}>{t.short_name?.slice(0,3)}</div>
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{t.name}</div>
                 <div style={{ fontSize:10, color:COLORS.muted }}>{t.country}</div>

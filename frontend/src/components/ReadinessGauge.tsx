@@ -1,5 +1,5 @@
 'use client';
-import { scoreColor } from '@/design/tokens';
+import { scoreColor , withAlpha } from '@/design/tokens';
 
 interface Props {
   score: number | null;
@@ -51,7 +51,7 @@ export default function ReadinessGauge({
           <path d={arcPath(startAngle, arcSpan)} fill="none" stroke="var(--border)" strokeWidth={strokeWidth} strokeLinecap="round" />
           {score != null && score > 0 && (
             <path d={arcPath(startAngle, filled)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
-              style={{ filter: score >= 85 ? `drop-shadow(0 0 6px ${color}80)` : undefined }} />
+              style={{ filter: score >= 85 ? `drop-shadow(0 0 6px ${withAlpha(color, '80')})` : undefined }} />
           )}
         </svg>
         <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>

@@ -3,7 +3,7 @@ import { toOne } from '@/lib/relations';
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import FormString from './FormString';
 import IntelligenceBar from './IntelligenceBar';
 
@@ -30,7 +30,7 @@ function ScoreChip({ score }: { score: number | null }) {
   const col = scoreColor(score);
   return (
     <div style={{
-      background: col + '18', border: `1px solid ${col}40`,
+      background: withAlpha(col, '18'), border: `1px solid ${withAlpha(col, '40')}`,
       borderRadius: 7, padding: '3px 10px',
       ...TYPE.mono, fontSize: 17, fontWeight: 700, color: col,
       minWidth: 46, textAlign: 'center', flexShrink: 0,
@@ -211,7 +211,7 @@ export default function MatchRow({ match, homeIntel, awayIntel, homeForm = [], a
           {/* Link */}
           <div style={{ gridColumn: '1/-1', textAlign: 'center', paddingTop: 6 }}>
             <Link href={matchUrl(match)} style={{
-              fontSize: 11, color: COLORS.blue, borderBottom: `1px solid ${COLORS.blue}40`,
+              fontSize: 11, color: COLORS.blue, borderBottom: `1px solid ${withAlpha(COLORS.blue, '40')}`,
             }}>
               View Full Match Intelligence →
             </Link>

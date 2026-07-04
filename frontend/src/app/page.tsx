@@ -7,7 +7,7 @@ import {
   getDashboardSummary, getTeamIntelligenceMap,
 } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import { teamUrl, matchUrl } from '@/lib/urls';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -76,7 +76,7 @@ function ReadinessGauge({ score, size = 80, label = 'READINESS', change }: {
             <path d={arc(START, SWEEP)} fill="none" stroke="#2a2a3a" strokeWidth={SW} strokeLinecap="round" />
             {pct > 0 && (
               <path d={arc(START, fillSweep)} fill="none" stroke={col} strokeWidth={SW} strokeLinecap="round"
-                style={{ filter: isElite ? `drop-shadow(0 0 6px ${col}80)` : 'none' }} />
+                style={{ filter: isElite ? `drop-shadow(0 0 6px ${withAlpha(col, '80')})` : 'none' }} />
             )}
           </>
         )}

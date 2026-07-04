@@ -4,7 +4,7 @@ import { toOne } from '@/lib/relations';
 import Link from 'next/link';
 import { getTodaysMatches, getMatchSignalsForMatches } from '@/lib/queries';
 import { computeMatchSignals } from '@/lib/signals';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import SignalChip from '@/components/SignalChip';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { matchUrl } from '@/lib/urls';
@@ -129,7 +129,7 @@ export default function BettingHub() {
     <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
 
       {/* Disclaimer — always visible per spec */}
-      <div style={{ background:COLORS.amber+'15', border:`1px solid ${COLORS.amber}35`, borderRadius:10, padding:'12px 18px', fontSize:12, color:COLORS.amber, display:'flex', gap:10, alignItems:'flex-start' }}>
+      <div style={{ background:withAlpha(COLORS.amber, '15'), border:`1px solid ${withAlpha(COLORS.amber, '35')}`, borderRadius:10, padding:'12px 18px', fontSize:12, color:COLORS.amber, display:'flex', gap:10, alignItems:'flex-start' }}>
         <span style={{ fontSize:16, flexShrink:0 }}>⚠️</span>
         <div>
           <div style={{ fontWeight:700, marginBottom:2 }}>Intelligence signals are derived from precomputed data for informational purposes only.</div>
@@ -155,7 +155,7 @@ export default function BettingHub() {
 
       {/* PRO badge + upgrade hint */}
       {!isPro && (
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:COLORS.purple+'12', border:`1px solid ${COLORS.purple}30`, borderRadius:10, padding:'10px 18px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', background:withAlpha(COLORS.purple, '12'), border:`1px solid ${withAlpha(COLORS.purple, '30')}`, borderRadius:10, padding:'10px 18px' }}>
           <div>
             <div style={{ fontSize:12, color:COLORS.text, fontWeight:700 }}>🔒 PRO — Full signal access</div>
             <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>Full market coverage, all signals, data export, alerts</div>
@@ -172,7 +172,7 @@ export default function BettingHub() {
           <button key={t} onClick={() => setTab(t)} style={{
             padding:'6px 14px', borderRadius:8, fontSize:11, fontWeight:700,
             border:`1px solid ${tab===t?COLORS.green:COLORS.border}`,
-            background:tab===t?COLORS.green+'18':'none',
+            background:tab===t?withAlpha(COLORS.green, '18'):'none',
             color:tab===t?COLORS.green:COLORS.muted, cursor:'pointer',
             textTransform:'uppercase', letterSpacing:'0.06em',
             position:'relative',
@@ -231,7 +231,7 @@ export default function BettingHub() {
                             const hasTravel = (intel?.away_travel_distance_km??0) > 800;
                             const hasForm = intel?.home_readiness > 70;
                             return (
-                              <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':COLORS.surface2+'40', position:'relative' }}>
+                              <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':withAlpha(COLORS.surface2, '40'), position:'relative' }}>
                                 <td style={{ padding:'10px 12px', filter:isBlurred?'blur(4px)':'none' }}>
                                   <Link href={matchUrl(m)} style={{ fontSize:12, fontWeight:700, color:COLORS.text }}>{m.home_team?.short_name} vs {m.away_team?.short_name}</Link>
                                 </td>
@@ -241,9 +241,9 @@ export default function BettingHub() {
                                 <td style={{ padding:'10px 12px', fontFamily:'monospace', fontSize:12, filter:isBlurred?'blur(4px)':'none' }}>{intel?.readiness_gap != null ? Math.abs(intel.readiness_gap) : '—'}</td>
                                 <td style={{ padding:'10px 12px', filter:isBlurred?'blur(4px)':'none' }}>
                                   <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                                    {restDiff>2 && <span style={{ fontSize:9, color:COLORS.green, background:COLORS.green+'15', border:`1px solid ${COLORS.green}30`, borderRadius:3, padding:'1px 5px', fontWeight:700 }}>Rest✓</span>}
-                                    {hasTravel && <span style={{ fontSize:9, color:COLORS.green, background:COLORS.green+'15', border:`1px solid ${COLORS.green}30`, borderRadius:3, padding:'1px 5px', fontWeight:700 }}>Travel✓</span>}
-                                    {hasForm && <span style={{ fontSize:9, color:COLORS.green, background:COLORS.green+'15', border:`1px solid ${COLORS.green}30`, borderRadius:3, padding:'1px 5px', fontWeight:700 }}>Form✓</span>}
+                                    {restDiff>2 && <span style={{ fontSize:9, color:COLORS.green, background:withAlpha(COLORS.green, '15'), border:`1px solid ${withAlpha(COLORS.green, '30')}`, borderRadius:3, padding:'1px 5px', fontWeight:700 }}>Rest✓</span>}
+                                    {hasTravel && <span style={{ fontSize:9, color:COLORS.green, background:withAlpha(COLORS.green, '15'), border:`1px solid ${withAlpha(COLORS.green, '30')}`, borderRadius:3, padding:'1px 5px', fontWeight:700 }}>Travel✓</span>}
+                                    {hasForm && <span style={{ fontSize:9, color:COLORS.green, background:withAlpha(COLORS.green, '15'), border:`1px solid ${withAlpha(COLORS.green, '30')}`, borderRadius:3, padding:'1px 5px', fontWeight:700 }}>Form✓</span>}
                                   </div>
                                 </td>
                                 <td style={{ padding:'10px 12px', filter:isBlurred?'blur(4px)':'none' }}>
@@ -252,8 +252,8 @@ export default function BettingHub() {
                                   </div>
                                 </td>
                                 {isBlurred && (
-                                  <td colSpan={0} style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:COLORS.surface+'90' }}>
-                                    <div style={{ background:COLORS.purple+'20', border:`1px solid ${COLORS.purple}40`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
+                                  <td colSpan={0} style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:withAlpha(COLORS.surface, '90') }}>
+                                    <div style={{ background:withAlpha(COLORS.purple, '20'), border:`1px solid ${withAlpha(COLORS.purple, '40')}`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
                                       🔒 Unlock with PRO →
                                     </div>
                                   </td>
@@ -296,7 +296,7 @@ export default function BettingHub() {
                       const isEdge = !['No Edge','No Flag','Balanced','Level'].includes(sig.signal);
                       const isBlurred = !isPro && (ei*3+si) >= 3;
                       return (
-                        <tr key={`${ei}-${si}`} style={{ borderBottom:`1px solid ${COLORS.border}`, background:(ei*3+si)%2===0?'transparent':COLORS.surface2+'40', position:'relative' }}>
+                        <tr key={`${ei}-${si}`} style={{ borderBottom:`1px solid ${COLORS.border}`, background:(ei*3+si)%2===0?'transparent':withAlpha(COLORS.surface2, '40'), position:'relative' }}>
                           <td style={{ padding:'9px 12px', filter:isBlurred?'blur(4px)':'none' }}>
                             <Link href={matchUrl(m)} style={{ fontSize:11, fontWeight:700, color:COLORS.text }}>{m.home_team?.short_name} vs {m.away_team?.short_name}</Link>
                           </td>
@@ -312,8 +312,8 @@ export default function BettingHub() {
                           </td>
                           <td className="rip-mobile-hide" style={{ padding:'9px 12px', fontSize:10, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{sig.drivers}</td>
                           {isBlurred && (
-                            <td colSpan={0} style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:COLORS.surface+'90' }}>
-                              <div style={{ background:COLORS.purple+'20', border:`1px solid ${COLORS.purple}40`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>🔒 Unlock with PRO →</div>
+                            <td colSpan={0} style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:withAlpha(COLORS.surface, '90') }}>
+                              <div style={{ background:withAlpha(COLORS.purple, '20'), border:`1px solid ${withAlpha(COLORS.purple, '40')}`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>🔒 Unlock with PRO →</div>
                             </td>
                           )}
                         </tr>

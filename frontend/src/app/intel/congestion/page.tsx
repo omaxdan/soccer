@@ -1,5 +1,5 @@
 import { getCongestionRankings, getWeekHeatmap } from '@/lib/queries';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import Link from 'next/link';
 import { teamUrl } from '@/lib/urls';
 
@@ -54,7 +54,7 @@ export default async function CongestionHub() {
       </div>
 
       {/* Top 3 cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
+      <div className="rip-stack-mobile" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
         {[
           { label:'Most Congested', val:top?.congestion_score ? Math.round(top.congestion_score) : '—', unit:'/100', sub:top?.team?.name, color:scoreColor(top?.congestion_score ? 100-top.congestion_score : null) },
           { label:'Most Games (Next 7d)', val:mostGames7?.matches_next_7_days ?? '—', unit:' matches', sub:mostGames7?.team?.name, color:COLORS.orange },
@@ -68,7 +68,7 @@ export default async function CongestionHub() {
         ))}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 380px', gap:20 }}>
+      <div className="rip-stack-mobile" style={{ display:'grid', gridTemplateColumns:'1fr 380px', gap:20 }}>
         {/* Congestion table */}
         <Card style={{ padding:0, overflow:'hidden' }}>
           <div style={{ padding:'12px 16px', borderBottom:`1px solid ${COLORS.border}`, fontSize:12, fontWeight:700, color:COLORS.text }}>Congestion League Table</div>
@@ -86,7 +86,7 @@ export default async function CongestionHub() {
                 const cScore = Math.round(t.congestion_score ?? 0);
                 const cCol = scoreColor(100 - cScore);
                 return (
-                  <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':COLORS.surface2+'40' }}>
+                  <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':withAlpha(COLORS.surface2, '40') }}>
                     <td style={{ padding:'8px 10px' }}>
                       <Link href={teamUrl(t.team)} style={{ fontSize:12, fontWeight:700, color:COLORS.text }}>{t.team?.name}</Link>
                     </td>
@@ -127,7 +127,7 @@ export default async function CongestionHub() {
                 </div>
                 {days.map(d => {
                   const count = dayMap.get(d) ?? 0;
-                  const bg = count === 0 ? COLORS.border : count === 1 ? COLORS.green+'30' : count === 2 ? COLORS.amber+'50' : COLORS.red+'60';
+                  const bg = count === 0 ? COLORS.border : count === 1 ? withAlpha(COLORS.green, '30') : count === 2 ? withAlpha(COLORS.amber, '50') : withAlpha(COLORS.red, '60');
                   const col = count === 0 ? 'transparent' : count === 1 ? COLORS.green : count === 2 ? COLORS.amber : COLORS.red;
                   return (
                     <div key={d} style={{ background:bg, borderRadius:3, height:22, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontFamily:'monospace', color:col, fontWeight:count>0?700:400 }}>

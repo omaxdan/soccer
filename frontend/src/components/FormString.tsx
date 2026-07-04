@@ -1,5 +1,5 @@
 'use client';
-import { COLORS, TYPE } from '@/design/tokens';
+import { COLORS, TYPE , withAlpha } from '@/design/tokens';
 
 interface FormStringProps {
   results: string[];       // W / D / L array
@@ -9,9 +9,9 @@ interface FormStringProps {
 }
 
 const RESULT_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  W: { bg: COLORS.green  + '28', border: COLORS.green  + '70', text: COLORS.green },
-  D: { bg: COLORS.amber  + '28', border: COLORS.amber  + '70', text: COLORS.amber },
-  L: { bg: COLORS.red    + '28', border: COLORS.red    + '70', text: COLORS.red },
+  W: { bg: withAlpha(COLORS.green, '28'), border: withAlpha(COLORS.green, '70'), text: COLORS.green },
+  D: { bg: withAlpha(COLORS.amber, '28'), border: withAlpha(COLORS.amber, '70'), text: COLORS.amber },
+  L: { bg: withAlpha(COLORS.red, '28'), border: withAlpha(COLORS.red, '70'), text: COLORS.red },
 };
 
 const RESULT_PTS: Record<string, number> = { W: 3, D: 1, L: 0 };

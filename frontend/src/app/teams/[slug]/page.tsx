@@ -11,7 +11,7 @@ import {
   getTeamFixtureDifficulty, getTeamMomentum, getTeamGoalDependency, getTeamInjuryImpact,
 } from '@/lib/queries';
 import { supabase } from '@/lib/supabase';
-import { COLORS, scoreColor } from '@/design/tokens';
+import { COLORS, scoreColor , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import FormString from '@/components/FormString';
 import { SkeletonCard } from '@/components/SkeletonCard';
@@ -204,7 +204,7 @@ export default function TeamPage() {
       {/* ── HEADER (compact — name + badge + tags, no longer competing
           with a full metrics wall right below it) ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 48, height: 48, background: COLORS.green + '20', border: `2px solid ${COLORS.green}40`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', color: COLORS.green, flexShrink: 0 }}>
+        <div style={{ width: 48, height: 48, background: withAlpha(COLORS.green, '20'), border: `2px solid ${withAlpha(COLORS.green, '40')}`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', color: COLORS.green, flexShrink: 0 }}>
           {team.short_name?.slice(0, 3) ?? team.name?.slice(0, 3)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -214,7 +214,7 @@ export default function TeamPage() {
               { val: team.country, col: COLORS.blue },
               { val: squad?.players_count ? `${squad.players_count} players` : null, col: COLORS.muted },
             ].filter(t => t.val).map((t, i) => (
-              <span key={i} style={{ background: t.col + '20', color: t.col, border: `1px solid ${t.col}40`, borderRadius: 4, padding: '1px 7px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t.val}</span>
+              <span key={i} style={{ background: withAlpha(t.col, '20'), color: t.col, border: `1px solid ${withAlpha(t.col, '40')}`, borderRadius: 4, padding: '1px 7px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t.val}</span>
             ))}
           </div>
         </div>
@@ -395,25 +395,25 @@ export default function TeamPage() {
                         <td style={{ padding: '6px', textAlign: 'center' }}>
                           {isInjured ? (
                             <span style={{
-                              background: COLORS.red + '20',
+                              background: withAlpha(COLORS.red, '20'),
                               color: COLORS.red,
                               fontSize: 8,
                               fontWeight: 700,
                               padding: '1px 6px',
                               borderRadius: 4,
-                              border: `1px solid ${COLORS.red}40`,
+                              border: `1px solid ${withAlpha(COLORS.red, '40')}`,
                             }}>
                               {p.injury_status?.toUpperCase() || 'OUT'}
                             </span>
                           ) : (
                             <span style={{
-                              background: COLORS.green + '20',
+                              background: withAlpha(COLORS.green, '20'),
                               color: COLORS.green,
                               fontSize: 8,
                               fontWeight: 700,
                               padding: '1px 6px',
                               borderRadius: 4,
-                              border: `1px solid ${COLORS.green}40`,
+                              border: `1px solid ${withAlpha(COLORS.green, '40')}`,
                             }}>
                               FIT
                             </span>

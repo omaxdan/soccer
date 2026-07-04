@@ -2,7 +2,7 @@
 
 'use client';
 
-import { COLORS } from '@/design/tokens';
+import { COLORS , withAlpha } from '@/design/tokens';
 import { deriveFormation } from '@/lib/insights';
 
 // ─── Interface ──────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ function PlayerBadge({ player }: { player: LineupPlayer }) {
       textAlign: 'center',
       padding: '4px 2px',
       borderRadius: 6,
-      background: isInjured ? COLORS.red + '15' : COLORS.surface2,
+      background: isInjured ? withAlpha(COLORS.red, '15') : COLORS.surface2,
       border: isInjured ? `1px solid ${COLORS.red}` : `1px solid ${COLORS.border}`,
       position: 'relative',
     }}>
@@ -266,7 +266,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
             fontSize: 13,
             color: color,
             marginLeft: 3,
-            background: color + '15',
+            background: withAlpha(color, '15'),
             padding: '0 4px',
             borderRadius: 3,
           }}>
@@ -299,7 +299,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
             fontSize: 13,
             color: color,
             marginLeft: 3,
-            background: color + '15',
+            background: withAlpha(color, '15'),
             padding: '0 4px',
             borderRadius: 3,
           }}>
@@ -358,10 +358,10 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
                 fontSize: 8,
                 fontWeight: 700,
                 color: COLORS.green,
-                background: COLORS.green + '15',
+                background: withAlpha(COLORS.green, '15'),
                 padding: '1px 6px',
                 borderRadius: 4,
-                border: `1px solid ${COLORS.green}30`,
+                border: `1px solid ${withAlpha(COLORS.green, '30')}`,
               }}>
                 🔄 {versatilityPct}% Versatile
               </span>
@@ -397,7 +397,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
             gap: 6, 
             padding: '4px 0',
             fontSize: 12,
-            borderBottom: `1px solid ${COLORS.border}40`,
+            borderBottom: `1px solid ${withAlpha(COLORS.border, '40')}`,
           }}>
             <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>GK:</span>
             <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -414,7 +414,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
             gap: 6, 
             padding: '4px 0',
             fontSize: 12,
-            borderBottom: `1px solid ${COLORS.border}40`,
+            borderBottom: `1px solid ${withAlpha(COLORS.border, '40')}`,
           }}>
             <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>DEF:</span>
             <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
@@ -431,7 +431,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
             gap: 6, 
             padding: '4px 0',
             fontSize: 12,
-            borderBottom: `1px solid ${COLORS.border}40`,
+            borderBottom: `1px solid ${withAlpha(COLORS.border, '40')}`,
           }}>
             <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>MID:</span>
             <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>

@@ -1,3 +1,5 @@
+import { withAlpha } from '@/design/tokens';
+
 export const metadata = { title: 'Alerts' };
 
 export default function AlertsPage() {
@@ -23,7 +25,7 @@ export default function AlertsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {alerts.map((a, i) => (
           <div key={i} className="card" style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: a.color + '20', border: `1px solid ${a.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: withAlpha(a.color, '20'), border: `1px solid ${withAlpha(a.color, '40')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
               {a.icon}
             </div>
             <div style={{ flex: 1 }}>

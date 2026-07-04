@@ -1,5 +1,5 @@
 'use client';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 
 interface MetricCardProps {
   value: string | number | null;
@@ -79,7 +79,7 @@ export default function MetricCard({
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0,
         height: 2, borderRadius: '12px 12px 0 0',
-        background: isNull ? COLORS.border : col + '60',
+        background: isNull ? COLORS.border : withAlpha(col, '60'),
       }} />
     </div>
   );

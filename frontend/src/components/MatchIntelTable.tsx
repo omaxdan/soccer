@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { toOne } from '@/lib/relations';
-import { COLORS, scoreColor } from '@/design/tokens';
+import { COLORS, scoreColor , withAlpha } from '@/design/tokens';
 import { matchUrl } from '@/lib/urls';
 
 interface MatchIntelTableProps {
@@ -83,7 +83,7 @@ export default function MatchIntelTable({ matches, teamIntelMap }: MatchIntelTab
             return (
               <tr
                 key={m.id}
-                style={{ height: 40, borderBottom: `1px solid ${COLORS.border}80`, cursor: 'pointer' }}
+                style={{ height: 40, borderBottom: `1px solid ${withAlpha(COLORS.border, '80')}`, cursor: 'pointer' }}
                 className="match-intel-row"
               >
                 <td style={{ padding: '0 8px' }}>
@@ -135,7 +135,7 @@ export default function MatchIntelTable({ matches, teamIntelMap }: MatchIntelTab
         </tbody>
       </table>
       <style>{`
-        .match-intel-row:hover { background: ${COLORS.surface2}60; }
+        .match-intel-row:hover { background: ${withAlpha(COLORS.surface2, '60')}; }
       `}</style>
     </div>
   );

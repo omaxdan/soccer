@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { getTeamIntelligenceList, TeamIntelRow } from '@/lib/queries';
-import { COLORS, scoreColor } from '@/design/tokens';
+import { COLORS, scoreColor , withAlpha } from '@/design/tokens';
 import { teamUrl } from '@/lib/urls';
 
 import { loadWatchlist, saveWatchlist } from '@/lib/watchlist';
@@ -135,7 +135,7 @@ export default function TeamsPage() {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2.6fr 1fr', gap: 14 }}>
+      <div className="rip-sidebar-layout">
         {/* Main table */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -247,7 +247,7 @@ export default function TeamsPage() {
               ].map(f => (
                 <button key={f.key} onClick={() => setQuickFilter(quickFilter === f.key ? null : f.key)} style={{
                   fontSize: 10, padding: '5px 10px', borderRadius: 6,
-                  background: quickFilter === f.key ? COLORS.purple + '30' : COLORS.surface2,
+                  background: quickFilter === f.key ? withAlpha(COLORS.purple, '30') : COLORS.surface2,
                   color: quickFilter === f.key ? COLORS.purple : COLORS.muted,
                   border: `1px solid ${quickFilter === f.key ? COLORS.purple : COLORS.border}`,
                 }}>{f.label}</button>

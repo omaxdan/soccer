@@ -230,6 +230,7 @@ export async function getTodaysMatches() {
 
   const q = supabase.from('matches').select(MATCH_SELECT)
     .gte('date', start.toISOString()).lte('date', end.toISOString())
+    .not('status', 'in', `(${INACTIVE_MATCH_STATUSES.join(',')})`)
     .order('date', { ascending: true });
   if (names.length > 0) q.in('competition', names);
 
@@ -335,13 +336,42 @@ export async function getLastSyncTime(): Promise<string | null> {
 
 // ─── MATCH CENTER ─────────────────────────────────────────────────────────────
 
+/** Match statuses that mean "this will not be played (as scheduled)" —
+ *  excluded from the main match lists to cut noise, surfaced instead on
+ *  their own dedicated page (/matches/inactive). Both 'canceled' and
+ *  'cancelled' spellings included because syncDateMasterFeed passes the
+ *  source API's status string through verbatim with no normalization —
+ *  cheaper to match both here than to risk missing one. */
+export const INACTIVE_MATCH_STATUSES = ['postponed', 'cancelled', 'canceled', 'abandoned'];
+
 export async function getMatchesForDate(date: string) {
   const { start, end } = getUTCDayBounds(new Date(date));
   const names = await getTrackedCompetitionNames();
 
   const q = supabase.from('matches').select(MATCH_SELECT)
     .gte('date', start.toISOString()).lte('date', end.toISOString())
+    .not('status', 'in', `(${INACTIVE_MATCH_STATUSES.join(',')})`)
     .order('date', { ascending: true });
+  if (names.length > 0) q.in('competition', names);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Postponed / cancelled / abandoned matches — the ones excluded from
+ *  every main list. Window: past 14 days to next 30 (a postponed match's
+ *  original date can be in the recent past while still being relevant). */
+export async function getInactiveMatches() {
+  const now = Date.now();
+  const from = new Date(now - 14 * 86400000).toISOString();
+  const to = new Date(now + 30 * 86400000).toISOString();
+  const names = await getTrackedCompetitionNames();
+
+  const q = supabase.from('matches').select(MATCH_SELECT)
+    .gte('date', from).lte('date', to)
+    .in('status', INACTIVE_MATCH_STATUSES)
+    .order('date', { ascending: false });
   if (names.length > 0) q.in('competition', names);
 
   const { data, error } = await q;
@@ -1256,16 +1286,29 @@ export async function getLeagueTeams(tournamentName: string) {
 export async function getTravelBurdenRankings(limit = 10) {
   const teamIds = await getTrackedTeamIds();
 
+  // team_travel_load accumulates SNAPSHOT rows over time (multiple rows
+  // per team, one per processing run) — without deduping, a team with 4
+  // snapshots appears 4 times in the ranking (real observed bug: Yunnan
+  // Yukun rendered 4 identical rows). Fetch newest-first with headroom,
+  // keep only each team's most recent snapshot, then cut to the limit.
   const q = supabase.from('team_travel_load')
-    .select(`team_id, km_last_30_days, travel_fatigue_score,
+    .select(`team_id, snapshot_date, km_last_30_days, travel_fatigue_score,
       away_matches_last_30_days, avg_trip_distance_km,
-      team:teams!team_id(name, slug, country)`)
-    .order('km_last_30_days', { ascending: false })
-    .limit(limit);
+      team:teams!team_id(name, short_name, slug, country)`)
+    .order('snapshot_date', { ascending: false })
+    .limit(limit * 8);
   if (teamIds.length > 0) q.in('team_id', teamIds);
 
   const { data } = await q;
-  return data ?? [];
+  const seen = new Set<number>();
+  const deduped: any[] = [];
+  for (const row of data ?? []) {
+    if (seen.has(row.team_id)) continue;
+    seen.add(row.team_id);
+    deduped.push(row);
+  }
+  deduped.sort((a, b) => (b.km_last_30_days ?? 0) - (a.km_last_30_days ?? 0));
+  return deduped.slice(0, limit);
 }
 
 export async function getTodayTravelMatches() {

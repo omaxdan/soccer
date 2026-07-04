@@ -1,5 +1,5 @@
 import { getFormPowerRankings } from '@/lib/queries';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import Link from 'next/link';
 import { teamUrl } from '@/lib/urls';
 
@@ -47,7 +47,7 @@ export default async function FormHub() {
                 const fi = Math.round(t.form_index ?? 0);
                 const col = scoreColor(fi);
                 return (
-                  <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':COLORS.surface2+'40' }}>
+                  <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':withAlpha(COLORS.surface2, '40') }}>
                     <td style={{ padding:'8px 12px', fontFamily:'monospace', fontSize:11, color:COLORS.dim }}>{i+1}</td>
                     <td style={{ padding:'8px 12px' }}>
                       <Link href={teamUrl(t.team)} style={{ fontSize:12, fontWeight:700, color:COLORS.text }}>{t.team?.name}</Link>

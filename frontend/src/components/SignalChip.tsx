@@ -1,5 +1,5 @@
 'use client';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 
 interface SignalChipProps {
   label: string;
@@ -29,8 +29,8 @@ export default function SignalChip({ label, strength, direction, compact = false
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: compact ? 5 : 7,
-      background: col + '18',
-      border: `1px solid ${col}40`,
+      background: withAlpha(col, '18'),
+      border: `1px solid ${withAlpha(col, '40')}`,
       borderRadius: 8,
       padding: compact ? '3px 8px' : '5px 11px',
     }}>

@@ -1,6 +1,6 @@
 import { getTravelBurdenRankings, getTodayTravelMatches } from '@/lib/queries';
 import { toOne } from '@/lib/relations';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 
 export const metadata = { title: 'Travel Intelligence Hub' };
 export const revalidate = 1800;
@@ -23,13 +23,13 @@ export default async function TravelHub() {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
       {/* Hero banner — exact spec */}
-      <div style={{ background:`linear-gradient(135deg, ${COLORS.blue}20, ${COLORS.purple}10)`, border:`1px solid ${COLORS.blue}30`, borderRadius:14, padding:'20px 28px' }}>
+      <div style={{ background:`linear-gradient(135deg, ${withAlpha(COLORS.blue, '20')}, ${withAlpha(COLORS.purple, '10')})`, border:`1px solid ${withAlpha(COLORS.blue, '30')}`, borderRadius:14, padding:'20px 28px' }}>
         <div style={{ fontSize:20, fontWeight:700, color:COLORS.text, marginBottom:4 }}>✈ Travel Intelligence</div>
         <div style={{ fontSize:13, color:COLORS.muted }}>The factor most betting sites ignore. Precomputed from real match venue coordinates.</div>
       </div>
 
       {/* 3 stat cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
+      <div className="rip-stack-mobile" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14 }}>
         {[
           { label:'Total km Today', val:Math.round(totalKm).toLocaleString()+'km', color:COLORS.blue },
           { label:'Longest Trip Today', val:maxTravel ? `${Math.round(toOne(maxTravel.match_travel_intelligence)?.away_team_distance_km ?? 0).toLocaleString()}km` : '—', sub:(maxTravel?.away_team as any)?.name, color:COLORS.amber },
@@ -43,7 +43,7 @@ export default async function TravelHub() {
         ))}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20 }}>
+      <div className="rip-stack-mobile" style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20 }}>
         {/* Main table */}
         <Card style={{ padding:0, overflow:'hidden' }}>
           <div style={{ padding:'12px 16px', borderBottom:`1px solid ${COLORS.border}`, fontSize:12, fontWeight:700, color:COLORS.text }}>Today&apos;s Travel-Affected Matches</div>
@@ -67,7 +67,7 @@ export default async function TravelHub() {
                 const signal = awayKm > 1500 ? '🔴 Very Strong disadvantage' : awayKm > 800 ? '🟡 Moderate disadvantage' : '⚪ Minor';
                 const col    = awayKm > 1500 ? COLORS.red : awayKm > 800 ? COLORS.amber : COLORS.dim;
                 return (
-                  <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':COLORS.surface2+'40' }}>
+                  <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background:i%2===0?'transparent':withAlpha(COLORS.surface2, '40') }}>
                     <td style={{ padding:'10px 14px', fontSize:12, fontWeight:600, color:COLORS.text }}>{m.home_team?.name} vs {m.away_team?.name}</td>
                     <td style={{ padding:'10px 14px', fontFamily:'monospace', fontSize:13, fontWeight:700, color:col }}>{awayKm.toLocaleString()}km</td>
                     <td style={{ padding:'10px 14px', fontFamily:'monospace', fontSize:13, color:COLORS.muted }}>{homeKm.toLocaleString()}km</td>
@@ -87,7 +87,7 @@ export default async function TravelHub() {
             <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${COLORS.border}` }}>
               <div style={{ fontFamily:'monospace', fontSize:10, color:COLORS.dim, width:16 }}>{i+1}</div>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:COLORS.text }}>{t.team?.name}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:COLORS.text }}>{t.team?.short_name ?? t.team?.name}</div>
                 <div style={{ fontSize:9, color:COLORS.dim }}>Fatigue: {t.travel_fatigue_score ? Math.round(t.travel_fatigue_score) : '—'}/100</div>
               </div>
               <div style={{ fontFamily:'monospace', fontSize:13, fontWeight:700, color:(t.km_last_30_days??0)>3000?COLORS.red:(t.km_last_30_days??0)>1500?COLORS.amber:COLORS.text }}>
