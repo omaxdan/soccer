@@ -791,6 +791,52 @@ export async function syncSquadsByCountries(
   return { synced, skipped, failed, teams: teams.length };
 }
 
+/** Resolves a set of match external IDs (matches.external_match_id — the
+ *  source API's id, not this DB's internal auto-increment id) to the
+ *  external_id of every team playing in those matches, deduplicated.
+ *  Extracted out of syncSquadsForMatches() below so the SAME resolution
+ *  logic can be reused by other match-targeted sync commands (e.g.
+ *  player-stats-by-matches in cli.ts) without duplicating the match ->
+ *  team -> external_id lookup a second time. */
+export async function resolveTeamsFromMatches(matchExternalIds: number[]): Promise<{
+  teams: { id: number; external_id: number; name: string }[];
+  matchesResolved: number;
+  matchesNotFound: number[];
+}> {
+  const { data: matches, error: matchErr } = await db
+    .from('matches')
+    .select('external_match_id, home_team_id, away_team_id')
+    .in('external_match_id', matchExternalIds);
+
+  if (matchErr) {
+    logger.error({ error: matchErr.message }, 'Failed to look up matches by external_match_id');
+    return { teams: [], matchesResolved: 0, matchesNotFound: matchExternalIds };
+  }
+
+  const foundIds = new Set((matches ?? []).map((m: any) => m.external_match_id));
+  const matchesNotFound = matchExternalIds.filter(id => !foundIds.has(id));
+  if (matchesNotFound.length > 0) {
+    logger.warn({ matchesNotFound }, 'Some match external IDs were not found in this DB — ensure sync:today/sync:schedule has run for them');
+  }
+  if (!matches || matches.length === 0) {
+    return { teams: [], matchesResolved: 0, matchesNotFound };
+  }
+
+  const internalTeamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+  const { data: teams, error: teamErr } = await db
+    .from('teams')
+    .select('id, external_id, name')
+    .in('id', internalTeamIds);
+
+  if (teamErr || !teams) {
+    logger.error({ error: teamErr?.message }, 'Failed to resolve teams for the matched fixtures');
+    return { teams: [], matchesResolved: matches.length, matchesNotFound };
+  }
+
+  return { teams, matchesResolved: matches.length, matchesNotFound };
+}
+
 /** Sync squads for the teams playing in specific matches, identified by
  *  each match's EXTERNAL id (matches.external_match_id — the source
  *  API's ID, not this DB's internal auto-increment id). Built for the
@@ -805,8 +851,7 @@ export async function syncSquadsByCountries(
  *  Resolves match -> home_team_id/away_team_id (internal DB ids) ->
  *  teams.external_id (the id syncOneTeamSquad actually needs — a
  *  different id space from either the match's or the team's internal
- *  DB id), deduplicates teams appearing across multiple matches (e.g.
- *  two matches on the list from the same team), then calls the SAME
+ *  DB id) via resolveTeamsFromMatches() above, then calls the SAME
  *  syncOneTeamSquad() unit every other squad-sync path already uses —
  *  no new sync logic, just a new, more targeted way to select which
  *  teams get synced. Passes priority=true unconditionally (same as
@@ -828,41 +873,16 @@ export async function syncSquadsForMatches(
   logger.info({ matchExternalIds }, 'Resolving teams for the given match external IDs...');
   logger.info('Initializing Supabase client...');
 
-  const { data: matches, error: matchErr } = await db
-    .from('matches')
-    .select('external_match_id, home_team_id, away_team_id')
-    .in('external_match_id', matchExternalIds);
+  const { teams, matchesResolved, matchesNotFound } = await resolveTeamsFromMatches(matchExternalIds);
 
-  if (matchErr) {
-    logger.error({ error: matchErr.message }, 'Failed to look up matches by external_match_id');
-    return { synced: 0, skipped: 0, failed: 0, teams: 0, matchesResolved: 0, matchesNotFound: matchExternalIds };
-  }
-
-  const foundIds = new Set((matches ?? []).map((m: any) => m.external_match_id));
-  const matchesNotFound = matchExternalIds.filter(id => !foundIds.has(id));
-  if (matchesNotFound.length > 0) {
-    logger.warn({ matchesNotFound }, 'Some match external IDs were not found in this DB — ensure sync:today/sync:schedule has run for them');
-  }
-  if (!matches || matches.length === 0) {
-    logger.error('None of the given match external IDs resolved to a match — nothing to sync');
-    return { synced: 0, skipped: 0, failed: 0, teams: 0, matchesResolved: 0, matchesNotFound };
-  }
-
-  const internalTeamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
-
-  const { data: teams, error: teamErr } = await db
-    .from('teams')
-    .select('id, external_id, name')
-    .in('id', internalTeamIds);
-
-  if (teamErr || !teams || teams.length === 0) {
-    logger.error({ error: teamErr?.message }, 'Failed to resolve teams for the matched fixtures');
-    return { synced: 0, skipped: 0, failed: 0, teams: 0, matchesResolved: matches.length, matchesNotFound };
+  if (teams.length === 0) {
+    logger.error('None of the given match external IDs resolved to any team — nothing to sync');
+    return { synced: 0, skipped: 0, failed: 0, teams: 0, matchesResolved, matchesNotFound };
   }
 
   logger.info({
     matchesRequested: matchExternalIds.length,
-    matchesResolved: matches.length,
+    matchesResolved,
     teamsToSync: teams.length,
     teamNames: teams.map((t: any) => t.name),
   }, 'Teams resolved from match external IDs — starting squad sync');
@@ -875,8 +895,8 @@ export async function syncSquadsForMatches(
     else if (result.synced) { synced++; await delay(delayMs); }
   }
 
-  logger.info({ synced, skipped, failed, teams: teams.length, matchesResolved: matches.length, matchesNotFound }, 'Match-targeted squad sync completed');
-  return { synced, skipped, failed, teams: teams.length, matchesResolved: matches.length, matchesNotFound };
+  logger.info({ synced, skipped, failed, teams: teams.length, matchesResolved, matchesNotFound }, 'Match-targeted squad sync completed');
+  return { synced, skipped, failed, teams: teams.length, matchesResolved, matchesNotFound };
 }
 
 /** Force sync a single team — bypasses cooldown */

@@ -3,7 +3,7 @@ import { logger } from './utils/logger';
 import { syncTournaments, syncAllSeasons } from './jobs/syncDiscovery';
 import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
-import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches } from './jobs/syncSquadSofaScore';
+import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
@@ -222,6 +222,40 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info({ countries: playerStatsCountries ?? 'n/a', teamIds: playerStatsTeamIds ?? 'n/a' }, 'Syncing player season statistics (rating, minutes, starts)...');
         const r = await syncPlayerSeasonStatistics(playerStatsCountries, playerStatsTeamIds);
         logger.info(r, 'Player season statistics sync complete');
+        break;
+      }
+
+      case 'sync:player-stats:matches:v2': {
+        // Same match-targeted pattern as sync:squads:matches:v2 - given
+        // 2+ match external IDs (matches.external_match_id), resolves
+        // the teams playing in those specific fixtures and syncs player
+        // season statistics for just those teams. Reuses
+        // resolveTeamsFromMatches() (the same match->team resolution
+        // already built for the squads version, extracted out so this
+        // command doesn't duplicate that lookup) and the EXISTING
+        // syncPlayerSeasonStatistics(countries?, teamExternalIds?) —
+        // that function already accepted an explicit team-external-id
+        // override, so no new sync logic was needed here at all, just
+        // a new way to arrive at the team id list.
+        const playerStatsMatchIds = args
+          .flatMap((a: string) => a.split(','))
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+          .map((s: string) => Number(s))
+          .filter((n: number) => !Number.isNaN(n));
+        if (playerStatsMatchIds.length < 2) {
+          logger.error({ received: args }, 'Usage: sync:player-stats:matches:v2 <externalMatchId1> <externalMatchId2> [...] — needs at least 2 match external IDs (matches.external_match_id). Also accepts one comma-separated arg.');
+          break;
+        }
+        logger.info({ matchIds: playerStatsMatchIds }, 'Resolving teams for player-stats sync...');
+        const { teams: statsTeams, matchesResolved, matchesNotFound } = await resolveTeamsFromMatches(playerStatsMatchIds);
+        if (statsTeams.length === 0) {
+          logger.error({ matchesNotFound }, 'None of the given match external IDs resolved to any team — nothing to sync');
+          break;
+        }
+        logger.info({ matchesResolved, matchesNotFound, teamNames: statsTeams.map(t => t.name) }, 'Teams resolved — syncing player season statistics...');
+        const matchStatsResult = await syncPlayerSeasonStatistics(undefined, statsTeams.map(t => t.external_id));
+        logger.info({ ...matchStatsResult, matchesResolved, matchesNotFound }, 'Match-targeted player stats sync complete');
         break;
       }
 
@@ -842,6 +876,7 @@ Commands:
     sync:squads:v2                   ⭐ PRIMARY V2: tracked leagues, all squad intelligence
     sync:squads:countries:v2 <list>  V2 by country e.g. "Brazil,Finland"
     sync:squads:matches:v2 <ids>     V2 for teams in specific matches, by match external_match_id (needs 2+; space or comma separated)
+    sync:player-stats:matches:v2 <ids>  Player season stats for teams in specific matches, same match external_match_id pattern
     sync:team-squad:v2 <id>          V2 force sync single team
 
   Utility:
