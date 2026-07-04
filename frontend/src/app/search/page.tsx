@@ -25,7 +25,7 @@ export default function SearchPage() {
   }
 
   return (
-    <main style={{ padding:'40px 24px', maxWidth:640, margin:'0 auto' }}>
+    <div style={{ maxWidth:640, margin:'0 auto' }}>
       <div style={{ fontSize:20, fontWeight:700, color:'#f0f0ff', marginBottom:6 }}>🔍 Search</div>
       <div style={{ fontSize:12, color:COLORS.muted, marginBottom:20 }}>Teams, tournaments, players</div>
 
@@ -74,6 +74,6 @@ export default function SearchPage() {
       {query.length >= 2 && !loading && teams.length === 0 && tournaments.length === 0 && (
         <div style={{ padding:30, textAlign:'center', color:COLORS.muted, fontSize:12 }}>No results for &ldquo;{query}&rdquo;</div>
       )}
-    </main>
+    </div>
   );
 }

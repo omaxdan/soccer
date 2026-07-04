@@ -21,7 +21,7 @@ export default async function TravelHub() {
   const avgTravel = (todayMatches as any[]).length ? Math.round(totalKm / (todayMatches as any[]).length) : 0;
 
   return (
-    <main style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:20 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
       {/* Hero banner — exact spec */}
       <div style={{ background:`linear-gradient(135deg, ${COLORS.blue}20, ${COLORS.purple}10)`, border:`1px solid ${COLORS.blue}30`, borderRadius:14, padding:'20px 28px' }}>
         <div style={{ fontSize:20, fontWeight:700, color:COLORS.text, marginBottom:4 }}>✈ Travel Intelligence</div>
@@ -98,6 +98,6 @@ export default async function TravelHub() {
           {(rankings as any[]).length === 0 && <div style={{ color:COLORS.dim, fontSize:11 }}>Run process:travel-load first</div>}
         </Card>
       </div>
-    </main>
+    </div>
   );
 }

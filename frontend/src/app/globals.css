@@ -557,7 +557,18 @@ th, td { text-align: left; }
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────────────── */
 @media (max-width: 1200px) { .kpi-strip { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 900px)  { .kpi-strip { grid-template-columns: repeat(2, 1fr); } .component-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 640px)  { .component-grid { grid-template-columns: repeat(2, 1fr); } .app-sidebar { display: none; } }
+@media (max-width: 640px)  { .component-grid { grid-template-columns: repeat(2, 1fr); } .app-sidebar { display: none; } .app-content { padding: 14px 12px; gap: 14px; } .rip-mobile-hide { display: none; } }
+
+/* ─── MATCHES LIST TABLE ─────────────────────────────────────────────────────────
+   .rip-mobile-hide: applied to the densest, least-essential columns (Strength/
+   Venue/Predicted-Goals/Versatility) so the essentials (Time/Match/Gap/Pick/
+   Confidence) fit a phone screen without needing horizontal scroll at all —
+   distinct from .rip-table-scroll below, which is a safety net for anything
+   that still doesn't fit, not the primary mobile strategy on its own. */
+.rip-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* ─── MOBILE-FIRST "QUOTE PAGE" PATTERN ──────────────────────────────────────────
    Built after the root cause of "data everywhere, hard to digest on mobile" was

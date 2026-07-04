@@ -115,7 +115,7 @@ export default async function LeaguesPage() {
   }
 
   return (
-    <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>Leagues</div>
         <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>Intelligence across all tracked competitions</div>
@@ -277,6 +277,6 @@ export default async function LeaguesPage() {
           })}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

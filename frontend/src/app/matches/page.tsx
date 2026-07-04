@@ -196,7 +196,7 @@ export default async function MatchCenter({
     .slice(0, 3);
 
   return (
-    <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>Match Center</div>
@@ -230,11 +230,17 @@ export default async function MatchCenter({
           <div style={{ padding: '10px 16px', borderBottom: `1px solid ${COLORS.border}`, fontSize: 11, color: COLORS.dim }}>
             {displayDate} · {enriched.length} matches
           </div>
+          <div className="rip-table-scroll">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: COLORS.surface2 }}>
-                {['★', 'TIME', 'MATCH', 'HOME', 'AWAY', 'GAP', 'STR (H/A)', 'VENUE (H/A)', 'XG (H/A)', 'VERS (H/A)', 'PICK', 'CONF %'].map(h => (
-                  <th key={h} style={{ padding: h === '★' ? '8px 4px' : '8px 10px', textAlign: h === 'MATCH' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                {[
+                  { label: '★' }, { label: 'TIME' }, { label: 'MATCH' }, { label: 'HOME' }, { label: 'AWAY' }, { label: 'GAP' },
+                  { label: 'STR (H/A)', mobileHide: true }, { label: 'VENUE (H/A)', mobileHide: true },
+                  { label: 'XG (H/A)', mobileHide: true }, { label: 'VERS (H/A)', mobileHide: true },
+                  { label: 'PICK' }, { label: 'CONF %' },
+                ].map(({ label: h, mobileHide }) => (
+                  <th key={h} className={mobileHide ? 'rip-mobile-hide' : undefined} style={{ padding: h === '★' ? '8px 4px' : '8px 10px', textAlign: h === 'MATCH' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -291,16 +297,16 @@ export default async function MatchCenter({
                                     <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(Math.min(100, Math.abs(gap) * 2)) }}>{gap >= 0 ? '+' : ''}{Math.round(gap)}</span>
                                   ) : <span style={{ color: COLORS.dim }}>—</span>}
                                 </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
                                   {homeExtras?.strength_score != null ? Math.round(homeExtras.strength_score) : '—'}/{awayExtras?.strength_score != null ? Math.round(awayExtras.strength_score) : '—'}
                                 </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
                                   {homeExtras?.venue_advantage_score != null ? Math.round(homeExtras.venue_advantage_score) : '—'}/{awayExtras?.venue_advantage_score != null ? Math.round(awayExtras.venue_advantage_score) : '—'}
                                 </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
                                   {intel?.predicted_home_goals != null ? intel.predicted_home_goals.toFixed(1) : '—'}/{intel?.predicted_away_goals != null ? intel.predicted_away_goals.toFixed(1) : '—'}
                                 </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
+                                <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
                                   {homeVersatility != null ? `${homeVersatility}%` : '—'}/{awayVersatility != null ? `${awayVersatility}%` : '—'}
                                 </td>
                                 <td style={{ padding: '8px 10px', textAlign: 'center' }}>
@@ -341,6 +347,7 @@ export default async function MatchCenter({
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -433,6 +440,6 @@ export default async function MatchCenter({
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { COLORS } from '@/design/tokens';
 export default function IntelHub() {
   return (
-    <main style={{ padding:'40px 24px', maxWidth:600, margin:'0 auto' }}>
+    <div style={{ maxWidth:600, margin:'0 auto' }}>
       <div style={{ fontSize:20, fontWeight:700, color:'#f0f0ff', marginBottom:6 }}>📊 Intelligence Hub</div>
       <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:20 }}>
         {[
@@ -19,6 +19,6 @@ export default function IntelHub() {
           </Link>
         ))}
       </div>
-    </main>
+    </div>
   );
 }

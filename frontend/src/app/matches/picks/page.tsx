@@ -182,7 +182,7 @@ export default async function MatchPicksPage({
   const displayDate    = formatDisplayDate(activeDateStr, todayStr);
 
   return (
-    <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* Header */}
       <div>
@@ -385,6 +385,6 @@ export default async function MatchPicksPage({
           · Not betting advice
         </div>
       )}
-    </main>
+    </div>
   );
 }

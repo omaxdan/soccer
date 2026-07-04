@@ -47,7 +47,7 @@ export default async function CongestionHub() {
   });
 
   return (
-    <main style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:20 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
       <div>
         <div style={{ fontSize:18, fontWeight:700, color:COLORS.text }}>📅 Fixture Congestion Hub</div>
         <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>Forward-looking fixture density — who&apos;s running on empty</div>
@@ -147,6 +147,6 @@ export default async function CongestionHub() {
           </div>
         </Card>
       </div>
-    </main>
+    </div>
   );
 }

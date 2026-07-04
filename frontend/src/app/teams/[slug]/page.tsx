@@ -199,7 +199,7 @@ export default function TeamPage() {
   }] : [];
 
   return (
-    <main style={{ padding: '16px 16px 32px', maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ── HEADER (compact — name + badge + tags, no longer competing
           with a full metrics wall right below it) ── */}
@@ -609,6 +609,6 @@ export default function TeamPage() {
           <RelatedPills items={relatedPills} />
         </div>
       )}
-    </main>
+    </div>
   );
 }

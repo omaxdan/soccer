@@ -109,7 +109,7 @@ export default function TeamsPage() {
   const multiCompCount = teams.filter(t => (t.active_competitions ?? 0) >= 2).length;
 
   return (
-    <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>Team Intelligence</div>
         <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>Browse and compare teams with readiness intelligence</div>
@@ -256,6 +256,6 @@ export default function TeamsPage() {
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

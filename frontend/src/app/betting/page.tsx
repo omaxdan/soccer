@@ -126,7 +126,7 @@ export default function BettingHub() {
   const travelAlerts = allSignals.filter(e => (e.intel?.away_travel_distance_km ?? 0) > 800).length;
 
   return (
-    <main style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:20 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
 
       {/* Disclaimer — always visible per spec */}
       <div style={{ background:COLORS.amber+'15', border:`1px solid ${COLORS.amber}35`, borderRadius:10, padding:'12px 18px', fontSize:12, color:COLORS.amber, display:'flex', gap:10, alignItems:'flex-start' }}>
@@ -322,6 +322,6 @@ export default function BettingHub() {
           )}
         </>
       )}
-    </main>
+    </div>
   );
 }

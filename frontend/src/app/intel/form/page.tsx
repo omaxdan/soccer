@@ -18,7 +18,7 @@ export default async function FormHub() {
   const cold = R.filter(t => (t.last_5_points ?? 99) <= 3);  // max 1W from last 5
 
   return (
-    <main style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:20 }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
       <div>
         <div style={{ fontSize:18, fontWeight:700, color:COLORS.text }}>📈 Form Intelligence Hub</div>
         <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>Precomputed form rankings for all tracked league teams</div>
@@ -107,6 +107,6 @@ export default async function FormHub() {
           </Card>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

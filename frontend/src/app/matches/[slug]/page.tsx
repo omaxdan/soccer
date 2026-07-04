@@ -685,7 +685,7 @@ export default function MatchPage() {
   };
 
   return (
-    <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── HERO: Match Header — unchanged (dual-sided, not a single
           QuoteHero, per the reasoning from the previous migration). ── */}
@@ -1412,6 +1412,6 @@ export default function MatchPage() {
           },
         ]} />
       </div>
-    </main>
+    </div>
   );
 }
