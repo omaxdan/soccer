@@ -3474,6 +3474,28 @@ export async function processScorelinePredictions(): Promise<{
           grid.push({ home: h, away: a, probability: p });
         }
       }
+
+      // ── Real Win/Draw/Away probability — summed from the FULL grid
+      // BEFORE truncating to top-6. The top-6-renormalized set (below)
+      // covers only ~6 of 49 cells and was never a sound basis for a
+      // W/D/L split — this sums every cell in the grid the model already
+      // computes, so it's grounded in the same Poisson model with no new
+      // assumptions, not a fabricated "confidence" number. Cap at
+      // MAX_GOALS=6 per side means a vanishingly small residual
+      // probability mass beyond 6-6 is implicitly excluded — negligible
+      // for realistic scoring rates, not worth the added complexity of
+      // an analytic tail correction.
+      let pHomeWin = 0, pDraw = 0, pAwayWin = 0;
+      for (const cell of grid) {
+        if (cell.home > cell.away) pHomeWin += cell.probability;
+        else if (cell.home === cell.away) pDraw += cell.probability;
+        else pAwayWin += cell.probability;
+      }
+      const wdlTotal = pHomeWin + pDraw + pAwayWin;
+      const winProbHome = wdlTotal > 0 ? Math.round((pHomeWin / wdlTotal) * 1000) / 10 : null;
+      const winProbDraw = wdlTotal > 0 ? Math.round((pDraw / wdlTotal) * 1000) / 10 : null;
+      const winProbAway = wdlTotal > 0 ? Math.round((pAwayWin / wdlTotal) * 1000) / 10 : null;
+
       grid.sort((x, y) => y.probability - x.probability);
       const top6 = grid.slice(0, 6);
       const top6Sum = top6.reduce((s, g) => s + g.probability, 0);
@@ -3488,6 +3510,9 @@ export async function processScorelinePredictions(): Promise<{
         predicted_home_goals: Math.round(lambdaHome * 100) / 100,
         predicted_away_goals: Math.round(lambdaAway * 100) / 100,
         predicted_scorelines: normalized,
+        win_probability_home: winProbHome,
+        win_probability_draw: winProbDraw,
+        win_probability_away: winProbAway,
         updated_at: new Date().toISOString(),
       });
     }
