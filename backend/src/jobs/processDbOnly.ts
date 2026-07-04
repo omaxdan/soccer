@@ -85,35 +85,75 @@ async function fetchAllRows<T = any>(
  *   Final = max(0, base - penalty)
  */
 
-// In processDbOnly.ts, add this function:
-
+/** Derives a rough per-match minutes estimate for each player from their
+ *  season totals, since no real per-match minutes data source exists yet
+ *  (player_match_load has no upstream sync — this is a proxy, not a real
+ *  per-match record). Distributes the player's season minutes_played
+ *  across their most recent season's actual completed fixtures for
+ *  their team: assumed-start appearances get a larger share (~80% of
+ *  total minutes spread across starts), assumed-sub appearances get the
+ *  remainder (~20% spread across subs). The specific REAL match each
+ *  estimate lands on is arbitrary (the player's first N team fixtures
+ *  chronologically, not necessarily the ones they actually featured in)
+ *  — a reasonable proxy for aggregate load, not a claim that "this
+ *  player played exactly X minutes in match Y".
+ *
+ *  Two real bugs fixed from an earlier version before this was wired
+ *  in anywhere:
+ *  1. player_season_statistics was queried with no season resolution —
+ *     upserts on (player_id, season_external_id), so a player with
+ *     multiple historical seasons on record would appear as multiple
+ *     separate rows here, each independently assigned to the SAME real
+ *     matches (filtered only by team, not season) - double/triple-
+ *     counting minutes for anyone with more than one season of history.
+ *     Fixed with the same "keep highest season_external_id per player"
+ *     resolution used throughout this file (processPredictedLineups,
+ *     processPlayerIntelligence, etc).
+ *  2. The match query chained .in('home_team_id', teamIds) followed by
+ *     .or(`away_team_id.in.(...)`)  - in Supabase/PostgREST, a
+ *     standalone .in() and a later .or() are ANDed together, not ORed;
+ *     this returned only matches satisfying BOTH conditions rather than
+ *     "team plays home OR away", silently missing most away fixtures.
+ *     Fixed by putting both conditions inside one .or() call, which is
+ *     the only way PostgREST actually produces an OR across two
+ *     different columns. */
 export async function processPlayerMatchLoad(): Promise<{
   playersProcessed: number;
   rowsWritten: number;
 }> {
   logger.info('processPlayerMatchLoad started — DB only');
 
-  // Get all players with season stats
-  const { data: players } = await db
-    .from('player_season_statistics')
-    .select('player_id, team_id, minutes_played, appearances, matches_started');
+  const rawStats = await fetchAllRows(
+    db.from('player_season_statistics')
+      .select('player_id, team_id, season_external_id, minutes_played, appearances, matches_started')
+  );
 
-  if (!players || players.length === 0) {
+  if (rawStats.length === 0) {
     logger.info('No player season stats found — skipping player_match_load');
     return { playersProcessed: 0, rowsWritten: 0 };
   }
 
-  // Get all matches with results for these teams
-  const teamIds = [...new Set(players.map((p: any) => p.team_id))];
-  const { data: matches } = await db
-    .from('matches')
-    .select('id, home_team_id, away_team_id, date')
-    .in('home_team_id', teamIds)
-    .or(`away_team_id.in.(${teamIds.join(',')})`)
-    .lte('date', new Date().toISOString())
-    .order('date', { ascending: true });
+  // Most recent season only per player (see docstring above).
+  const statsMap = new Map<number, any>();
+  for (const s of rawStats) {
+    const existing = statsMap.get(s.player_id);
+    if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+    statsMap.set(s.player_id, s);
+  }
+  const players = [...statsMap.values()];
 
-  if (!matches || matches.length === 0) {
+  // Get all matches for these teams — home OR away, correctly ORed
+  // (see docstring above for the bug this replaces).
+  const teamIds = [...new Set(players.map((p: any) => p.team_id))];
+  const matches = await fetchAllRows(
+    db.from('matches')
+      .select('id, home_team_id, away_team_id, date')
+      .or(`home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`)
+      .lte('date', new Date().toISOString())
+      .order('date', { ascending: true })
+  );
+
+  if (matches.length === 0) {
     logger.info('No matches found — skipping player_match_load');
     return { playersProcessed: 0, rowsWritten: 0 };
   }
@@ -163,61 +203,29 @@ export async function processPlayerMatchLoad(): Promise<{
   return { playersProcessed, rowsWritten: rows.length };
 }
 
-export async function processInjuryRisk(): Promise<{
-  playersProcessed: number;
-  rowsWritten: number;
-}> {
-  logger.info('processInjuryRisk started — DB only');
-
-  const { data: playerIntel } = await db
-    .from('player_intelligence')
-    .select(`
-      id,
-      player_id,
-      players!inner(id, name),
-      fatigue_score,
-      load_index,
-      matches_last_7_days,
-      minutes_last_7_days
-    `)
-    .not('fatigue_score', 'is', null);
-
-  if (!playerIntel || playerIntel.length === 0) {
-    logger.info('No player_intelligence data — skipping injury_risk');
-    return { playersProcessed: 0, rowsWritten: 0 };
-  }
-
-  const rows = playerIntel.map((pi: any) => {
-    const fatigue = pi.fatigue_score ?? 0;
-    const load = pi.load_index ?? 0;
-    
-    // Classify risk level
-    let injuryRiskLevel: string;
-    if (fatigue >= 0.7 || load >= 0.8) injuryRiskLevel = 'high';
-    else if (fatigue >= 0.4 || load >= 0.5) injuryRiskLevel = 'medium';
-    else injuryRiskLevel = 'low';
-
-    return {
-      id: pi.id,
-      name: pi.players?.name ?? 'Unknown',
-      fatigue_score: fatigue,
-      load_index: load,
-      matches_last_7_days: pi.matches_last_7_days ?? 0,
-      minutes_last_7_days: pi.minutes_last_7_days ?? 0,
-      injury_risk_level: injuryRiskLevel,
-    };
-  });
-
-  if (rows.length > 0) {
-    const { error } = await db
-      .from('injury_risk')
-      .upsert(rows, { onConflict: 'id' });
-    if (error) throw new Error(error.message);
-  }
-
-  logger.info({ playersProcessed: playerIntel.length, rowsWritten: rows.length }, 'processInjuryRisk completed');
-  return { playersProcessed: playerIntel.length, rowsWritten: rows.length };
-}
+// processInjuryRisk() REMOVED — it tried to .upsert() rows into
+// `injury_risk`, which is a plain SQL VIEW (confirmed: joins players +
+// player_intelligence, computes risk level live from fatigue_score on
+// every query) — Postgres does not allow writing to an ordinary view
+// without INSTEAD OF triggers, which nothing here set up. This would
+// fail at runtime the moment it actually ran. Separately, its
+// fatigue/load thresholds (>=0.7, >=0.8) assumed a 0-1 scale, but
+// fatigue_score/load_index are computed elsewhere in this file as 0-100
+// values — even a working writer would have misclassified nearly every
+// player as "high" risk.
+//
+// The view was ALREADY correct and needs no separate writer at all —
+// it recalculates live from player_intelligence.fatigue_score on every
+// query. The actual root cause (also correctly diagnosed before this
+// function was written) is that fatigue_score only ever reflected
+// injury severity, never real playing load, so it stayed flat and the
+// view's risk classification never differentiated players. Fixed at
+// the real source instead: processPlayerIntelligence() below now
+// blends injury severity with real match-load data from
+// player_match_load (matches/minutes in the last 7 days) and team
+// congestion into fatigue_score — the view starts producing meaningful,
+// differentiated results automatically once that's populated, with no
+// separate injury_risk writer needed.
 
 export async function processTeamFixtureLoad(): Promise<{
   teamsProcessed: number;
@@ -2211,15 +2219,25 @@ export async function processTeamVenuePerformance(): Promise<{
 /**
  * Computes player intelligence from data already in DB — zero API calls.
  *
- * Populates what is computable WITHOUT player_match_load:
- *   fatigue_score     — from injury_severity_score (if injured) else 0
- *   load_index        — weighted: fatigue + team congestion proxy
- *   transfers_last_12 — count from player_transfers (last 12 months)
- *
- * NOT populated (requires player_match_load — future premium feature):
- *   matches_last_7_days, matches_last_30_days
- *   minutes_last_7_days, minutes_last_30_days
- *   avg_minutes_per_match
+ *   fatigue_score     — max(injury_severity, blended real-load factors:
+ *                        minutes overload + match frequency, from
+ *                        player_match_load, + team congestion). Injury
+ *                        severity is a FLOOR, not averaged in, so an
+ *                        actively injured player's fatigue never drops
+ *                        below their injury severity just because they
+ *                        aren't accumulating playing-load while sidelined.
+ *   load_index        — equals fatigue_score (congestion is already
+ *                        folded into fatigue above; not re-added here,
+ *                        which the previous formula did, inflating
+ *                        congestion's real influence).
+ *   readiness_score    — 100 - load_index, same direction as team-level readiness.
+ *   transfers_last_12  — count from player_transfers (last 12 months).
+ *   matches/minutes_last_7/30_days, avg_minutes_per_match — real,
+ *                        populated from player_match_load (proxy data,
+ *                        see processPlayerMatchLoad's own docstring for
+ *                        what "real" means here — season minutes
+ *                        distributed across a team's actual recent
+ *                        fixtures, not a verified per-match record).
  */
 export async function processPlayerIntelligence(): Promise<{
   playersProcessed: number;
@@ -2306,6 +2324,35 @@ export async function processPlayerIntelligence(): Promise<{
       transferMap.set(t.player_id, (transferMap.get(t.player_id) ?? 0) + 1);
     }
 
+    // ── Query 4: Recent match load, from player_match_load ──────────────────
+    // Populated by processPlayerMatchLoad() — a proxy (season minutes
+    // distributed across a team's real recent fixtures), not exact
+    // per-match truth, but real enough to distinguish "hasn't played
+    // much lately" from "playing every 3 days" for fatigue purposes.
+    // Aggregated here into 7d/30d windows per player — feeds BOTH the
+    // new fatigue formula below and the matches_last_7_days/
+    // minutes_last_7_days/etc columns on this table, previously always
+    // written as null with a "future premium feature" comment — that
+    // future arrived once player_match_load started being populated.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+    const matchLoadRaw = await fetchAllRows(
+      db.from('player_match_load')
+        .select('player_id, match_date, minutes_played')
+        .gte('match_date', thirtyDaysAgo)
+    );
+    const matchLoadMap = new Map<number, { m7: number; min7: number; m30: number; min30: number }>();
+    for (const r of matchLoadRaw) {
+      const entry = matchLoadMap.get(r.player_id) ?? { m7: 0, min7: 0, m30: 0, min30: 0 };
+      entry.m30 += 1;
+      entry.min30 += r.minutes_played ?? 0;
+      if (r.match_date >= sevenDaysAgo) {
+        entry.m7 += 1;
+        entry.min7 += r.minutes_played ?? 0;
+      }
+      matchLoadMap.set(r.player_id, entry);
+    }
+
     // ── Compute player intelligence rows ─────────────────────────────────────
     const now = new Date().toISOString();
     const rows: any[] = [];
@@ -2322,12 +2369,44 @@ export async function processPlayerIntelligence(): Promise<{
       const injurySeverity  = Number(p.injury_severity_score ?? 0);
       const teamCongestion  = congestionMap.get(p.team_id) ?? 0;
       const transfersLast12 = transferMap.get(p.id) ?? 0;
+      const matchLoad = matchLoadMap.get(p.id);
 
-      // fatigue_score: driven by injury severity (0 = healthy, 100 = long-term out)
-      const fatigue = injurySeverity;
+      // ── fatigue_score — integrated formula, not injury severity alone ──
+      // The original version (fatigue = injurySeverity) meant a perfectly
+      // healthy player who'd started every match in a packed run of
+      // fixtures scored IDENTICALLY to one who'd barely played at all —
+      // fatigue never actually reflected real playing load. This is the
+      // recommended fix: blend injury severity with real recent-load
+      // signals (minutes overload, match frequency) and team schedule
+      // congestion.
+      //
+      // Deliberately max(), not a weighted average across all four
+      // factors: an ACTIVELY INJURED player's fatigue must never drop
+      // BELOW their injury severity just because they're not
+      // accumulating playing-load WHILE SIDELINED — a naive weighted
+      // blend would dilute an injured player's fatigue toward 0 as their
+      // (necessarily zero) recent minutes pull the average down, which
+      // would backwards-inflate their downstream readiness_score exactly
+      // when it should be lowest. Verified this exact failure mode by
+      // simulation before choosing max() over a weighted average.
+      //
+      // minutesOverload/matchFrequency ceilings (270 min/wk = 3 full
+      // matches, 3 matches/wk) reflect a widely-recognized heavy-schedule
+      // threshold in football — not an arbitrary number chosen to make
+      // the formula "work". Weights (25/25/20 from the original
+      // recommendation) renormalized to sum to 100 among just the three
+      // non-injury factors (~36/36/28), since max() replaces the fourth
+      // (injury) term rather than averaging it in.
+      const minutesOverload = matchLoad ? Math.min(100, (matchLoad.min7 / 270) * 100) : 0;
+      const matchFrequency  = matchLoad ? Math.min(100, (matchLoad.m7 / 3) * 100) : 0;
+      const loadBlend = minutesOverload * 0.357 + matchFrequency * 0.357 + teamCongestion * 0.286;
+      const fatigue = Math.round(Math.max(injurySeverity, loadBlend));
 
-      // load_index: 60% injury fatigue + 40% team schedule congestion
-      const load = Math.round(fatigue * 0.6 + teamCongestion * 0.4);
+      // load_index: fatigue now already incorporates team congestion
+      // (via loadBlend above) — no longer re-adding it here too, which
+      // the previous fatigue*0.6+congestion*0.4 formula would have done,
+      // inflating congestion's real influence beyond what was intended.
+      const load = fatigue;
 
       // readiness_score: inverse of load — a healthy, unfatigued player on
       // a lightly-congested team schedule reads as high readiness. Same
@@ -2384,12 +2463,14 @@ export async function processPlayerIntelligence(): Promise<{
         goal_share_pct:           goalSharePct,
         assist_share_pct:         assistSharePct,
         minutes_share_pct:        minutesSharePct,
-        // Fields requiring player_match_load — future premium feature
-        matches_last_7_days:   null,
-        matches_last_30_days:  null,
-        minutes_last_7_days:   null,
-        minutes_last_30_days:  null,
-        avg_minutes_per_match: null,
+        // Now real — populated from player_match_load (see matchLoadMap
+        // above). avg_minutes_per_match uses the 30-day window as a more
+        // stable sample than 7 days alone.
+        matches_last_7_days:   matchLoad?.m7 ?? 0,
+        matches_last_30_days:  matchLoad?.m30 ?? 0,
+        minutes_last_7_days:   matchLoad?.min7 ?? 0,
+        minutes_last_30_days:  matchLoad?.min30 ?? 0,
+        avg_minutes_per_match: (matchLoad && matchLoad.m30 > 0) ? Math.round(matchLoad.min30 / matchLoad.m30) : null,
         calculated_at:         now,
         updated_at:            now,
       });

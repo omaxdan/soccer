@@ -5,7 +5,7 @@ import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
-import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad, processInjuryRisk } from './jobs/processDbOnly';
+import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad } from './jobs/processDbOnly';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
@@ -76,9 +76,15 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
 
       case 'process:injury-risk': {
-        logger.info('Computing injury risk levels — DB only...');
-        const r = await processInjuryRisk();
-        logger.info(r, 'Injury risk complete');
+        // REMOVED — this tried to write into injury_risk, a plain SQL
+        // VIEW that already computes risk live from player_intelligence
+        // on every query; Postgres doesn't allow writing to an ordinary
+        // view, so this would have failed at runtime. The real fix is
+        // in process:player-intelligence, which now blends real match
+        // load into fatigue_score so the view's existing classification
+        // actually differentiates players. See processDbOnly.ts's
+        // comment where processInjuryRisk used to be defined.
+        logger.error('process:injury-risk was removed — see process:player-intelligence instead (fatigue_score now reflects real match load, which is what injury_risk\'s view actually classifies on).');
         break;
       }
 
@@ -426,7 +432,8 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
       }
 
-      // Add this case in the switch:
+      // Run before process:player-intelligence — fatigue_score now reads
+      // from player_match_load's output (see that function's docstring).
       case 'process:player-match-load': {
         logger.info('Deriving player match load from season stats — DB only...');
         const r = await processPlayerMatchLoad();
@@ -502,7 +509,7 @@ async function handleCommand(command: string, ...args: string[]) {
         const teamIntel = await processTeamIntelligencePartial();
         logger.info({ ...teamIntel }, '[L3] ✓ team intelligence');
 
-        logger.info('[L3/3] Player intelligence (needs players + team_intelligence)...');
+        logger.info('[L3/3] Player intelligence (needs players + team_intelligence + player_match_load)...');
         const playerIntel = await processPlayerIntelligence();
         logger.info({ ...playerIntel }, '[L3] ✓ player intelligence');
 
@@ -779,7 +786,7 @@ async function handleCommand(command: string, ...args: string[]) {
         // concentration risk), team_injury_impact (SUM of importance lost to
         // active injuries) — all from the same season-scoped player-stats
         // pass, no extra API calls, no extra sync needed.
-        logger.info('Computing player intelligence (fatigue, load, importance) + goal dependency + injury impact — DB only...');
+        logger.info('Computing player intelligence (fatigue now blends real match load — run process:player-match-load first if it hasn\'t run recently) + goal dependency + injury impact — DB only...');
         const r = await processPlayerIntelligence();
         logger.info(r, 'Player intelligence complete');
         break;
@@ -888,7 +895,9 @@ Commands:
     process:match-travel             Compute per-match travel burden for both teams
     process:team-intelligence        Partial team_intelligence (form+congestion+travel)
     process:match-intelligence       Partial match_intelligence (rest+congestion+travel)
+    process:player-match-load        Derive per-match player minutes from season stats (proxy, run before process:player-intelligence)
     process:player-intelligence      Player fatigue/load/importance + goal dependency + injury impact
+    process:injury-risk              REMOVED - fatigue now blends real load, see process:player-intelligence
     process:strength-ratings         Team strength (PPG, win%, market value) from form history
     process:venue-performance        Home/away performance splits from match results
 
