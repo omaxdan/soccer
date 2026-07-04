@@ -3,7 +3,7 @@ import { logger } from './utils/logger';
 import { syncTournaments, syncAllSeasons } from './jobs/syncDiscovery';
 import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
-import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad } from './jobs/syncSquadSofaScore';
+import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
@@ -142,6 +142,29 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info({ countries: countriesV2 }, 'SofaScore V2 squad sync by country...');
         const r = await syncSquadsByCountries(countriesV2);
         logger.info(r, 'V2 country squad sync complete');
+        break;
+      }
+
+      case 'sync:squads:matches:v2': {
+        // Accepts either space-separated args (sync:squads:matches:v2
+        // 12345 67890) or one comma-separated arg
+        // (sync:squads:matches:v2 "12345,67890") — flattened and parsed
+        // together so either style works, matching the ask for "at
+        // least 2 match ids parameters" without forcing one exact
+        // invocation shape.
+        const matchIds = args
+          .flatMap((a: string) => a.split(','))
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+          .map((s: string) => Number(s))
+          .filter((n: number) => !Number.isNaN(n));
+        if (matchIds.length < 2) {
+          logger.error({ received: args }, 'Usage: sync:squads:matches:v2 <externalMatchId1> <externalMatchId2> [...] — needs at least 2 match external IDs (matches.external_match_id, not this DB\'s internal id). Also accepts one comma-separated arg.');
+          break;
+        }
+        logger.info({ matchIds }, 'SofaScore V2 squad sync for teams in specific matches...');
+        const r = await syncSquadsForMatches(matchIds);
+        logger.info(r, 'Match-targeted squad sync complete');
         break;
       }
 
@@ -818,6 +841,7 @@ Commands:
   Squad Sync V2 — SofaScore (1 call populates 7 tables, throttled 1 req/2s):
     sync:squads:v2                   ⭐ PRIMARY V2: tracked leagues, all squad intelligence
     sync:squads:countries:v2 <list>  V2 by country e.g. "Brazil,Finland"
+    sync:squads:matches:v2 <ids>     V2 for teams in specific matches, by match external_match_id (needs 2+; space or comma separated)
     sync:team-squad:v2 <id>          V2 force sync single team
 
   Utility:
