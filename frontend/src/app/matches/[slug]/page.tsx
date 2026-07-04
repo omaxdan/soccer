@@ -13,7 +13,7 @@ import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory } from '@/lib/insights';
 import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
 import SignalChip from '@/components/SignalChip';
@@ -813,6 +813,52 @@ export default function MatchPage() {
             </Card>
           )}
 
+          {/* ── POSITION DEPTH — Block 3 from the source document
+              ("Position Depth Analysis": total/injured/available per
+              position). Was only ever shown buried inside each team's
+              own Squad sub-tab (TeamColumn); genuinely belongs here too,
+              alongside the lineup and injury data it's directly tied to. ── */}
+          {(homeDepth?.length > 0 || awayDepth?.length > 0) && (
+            <Card>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Position Depth
+                </div>
+                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
+                  Available vs total players per position
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                {[
+                  { team: match.home_team, depth: aggregatePositionDepth(homeDepth || []) },
+                  { team: match.away_team, depth: aggregatePositionDepth(awayDepth || []) },
+                ].map(({ team, depth }, i) => (
+                  <div key={i}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
+                      {team?.short_name ?? team?.name}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                      {['GK', 'DEF', 'MID', 'FWD'].map(pos => {
+                        const d = depth[pos];
+                        const pct = d.total > 0 ? Math.round((d.available / d.total) * 100) : 0;
+                        const color = pct < 60 ? COLORS.red : pct < 80 ? COLORS.amber : COLORS.green;
+                        return (
+                          <div key={pos} style={{ background: COLORS.surface2, borderRadius: 6, padding: '6px 8px', textAlign: 'center', border: `1px solid ${COLORS.border}` }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase' }}>{pos}</div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginTop: 2 }}>
+                              {d.total > 0 ? d.available : '—'}{d.total > 0 && <span style={{ fontSize: 10, color: COLORS.dim, fontWeight: 400 }}>/{d.total}</span>}
+                            </div>
+                            {d.injured > 0 && <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.red, marginTop: 1 }}>{d.injured} out</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {(homeGoalDep || awayGoalDep || homeInjury || awayInjury) && (
             <Card>
               <div style={{ marginBottom: 12 }}>
@@ -887,7 +933,7 @@ export default function MatchPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                    {['Player', 'Team', 'Importance', 'Goals', 'Assists', 'Rating', 'Role'].map(h => (
+                    {['Player', 'Team', 'Importance', 'Category', 'Goals', 'Assists', 'Rating', 'Role'].map(h => (
                       <th key={h} style={{ padding: '6px 8px', textAlign: h === 'Player' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{h}</th>
                     ))}
                   </tr>
@@ -900,11 +946,21 @@ export default function MatchPage() {
                     .sort((a, b) => b.importance - a.importance)
                     .map((p: any) => {
                       const role = deriveRole(p.positionCode, p.goals, p.assists);
+                      const category = deriveCategory(p.importance);
                       return (
                         <tr key={p.playerId} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
                           <td style={{ padding: '6px 8px', color: COLORS.text, fontWeight: 600 }}>{p.shortName ?? p.name}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', color: COLORS.muted, fontSize: 11 }}>{p.team}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.importance >= 20 ? COLORS.green : COLORS.text2 }}>{p.importance.toFixed(1)}%</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
+                              color: COLORS[category.color], background: COLORS[category.color]+'20',
+                              border: `1px solid ${COLORS[category.color]}40`, borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap',
+                            }}>
+                              {category.label}
+                            </span>
+                          </td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.goals}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.assists}</td>
                           <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.rating != null ? p.rating.toFixed(2) : '—'}</td>

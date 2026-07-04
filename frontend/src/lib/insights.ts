@@ -164,6 +164,27 @@ export interface ExecutiveSummaryInput extends InsightInput {
 // 🧤 Key Goalkeeper / 🔥 Main Attacker" labels — every label maps 1:1 to a
 // real stat threshold, never inferred/hallucinated.
 
+// ─── PLAYER CATEGORY — KEY PLAYER / REGULAR STARTER / SQUAD PLAYER ─────────
+// The three-tier classification concept from the source match-preview
+// documents (Block 6/9's player_category) — but NOT their thresholds
+// (>=70 Key Player, >=40 Regular Starter). Those were calibrated against
+// that document's own double-scaling bug, which inflated scores into the
+// hundreds; this codebase's real, correctly-scaled importance_score
+// realistically tops out far lower — the highest ever actually observed
+// in this codebase's data was Fitzgerald at 26.8%, and a theoretical
+// best-case all-around outfield star (35% of goals AND assists, 95% of
+// minutes, elite quality) tops out around 66 under the real formula.
+// Recalibrated to that real range: REGULAR STARTER matches the existing
+// 16% "worth listing at all" threshold used elsewhere (getMatchKeyPlayers'
+// minImportance) rather than introducing a second, disconnected number;
+// KEY PLAYER is reserved for genuinely elite real performers at
+// Fitzgerald-tier or above.
+export function deriveCategory(importance: number): { label: string; color: 'green' | 'amber' | 'muted' } {
+  if (importance >= 25) return { label: 'KEY PLAYER', color: 'green' };
+  if (importance >= 16) return { label: 'REGULAR STARTER', color: 'amber' };
+  return { label: 'SQUAD PLAYER', color: 'muted' };
+}
+
 export function deriveRole(positionCode: string, goals: number, assists: number): { emoji: string; label: string } {
   if (positionCode === 'GK') return { emoji: '🧤', label: 'Key Goalkeeper' };
   if (positionCode === 'DEF') {

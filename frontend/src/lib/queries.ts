@@ -414,12 +414,28 @@ export interface MatchKeyPlayer {
  *  quality alone, exactly like the source document's "Key Goalkeeper"
  *  entries) — so a genuinely important defender or keeper surfaces here
  *  even with zero goals, not just the top scorer.
- *  Default threshold matches the specific ask: "at least above 16%". */
+ *  Default threshold matches the specific ask: "at least above 16%".
+ *
+ *  MINIMUM-COUNT BACKFILL (added after a real report of only 1 player
+ *  per team showing up): the query was never limited to 1 — it pushes
+ *  every qualifying row with no artificial cap. The actual cause is
+ *  upstream: processPlayerIntelligence() leaves importance_score NULL
+ *  (not 0) for any player without a resolved player_season_statistics
+ *  row, and squads with sparse stats coverage can leave only one or two
+ *  players with a real, non-null score above the 16% cutoff. Backfilling
+ *  with the next-highest NON-NULL-importance players (regardless of the
+ *  16% threshold) up to minCount makes the tab robust to that sparsity
+ *  — but it can only surface players who have SOME computed importance;
+ *  it cannot invent a score for a player whose importance is genuinely
+ *  null. If a team still shows very few players after this, the real
+ *  fix is improving player_season_statistics coverage (sync:player-stats),
+ *  not this query. */
 export async function getMatchKeyPlayers(
   matchId: number,
   homeTeamId: number,
   awayTeamId: number,
-  minImportance = 16
+  minImportance = 16,
+  minCount = 3
 ): Promise<{ home: MatchKeyPlayer[]; away: MatchKeyPlayer[] }> {
   const empty = { home: [], away: [] };
 
@@ -451,12 +467,15 @@ export async function getMatchKeyPlayers(
     statsMap.set(s.player_id, s);
   }
 
-  const home: MatchKeyPlayer[] = [];
-  const away: MatchKeyPlayer[] = [];
+  // Build EVERY lineup player with a non-null importance score first
+  // (regardless of threshold) — the threshold filter and backfill both
+  // operate on this same pool, so a player never appears twice.
+  const homeAll: MatchKeyPlayer[] = [];
+  const awayAll: MatchKeyPlayer[] = [];
 
   for (const row of lineupRows) {
     const importance = intelMap.get(row.player_id);
-    if (importance == null || importance < minImportance) continue;
+    if (importance == null) continue; // genuinely no score to work with — can't backfill this player
     const player = playerMap.get(row.player_id);
     if (!player) continue;
     const stat = statsMap.get(row.player_id);
@@ -474,14 +493,25 @@ export async function getMatchKeyPlayers(
       assists: stat?.assists ?? 0,
       rating,
     };
-    if (row.team_id === homeTeamId) home.push(entry);
-    else if (row.team_id === awayTeamId) away.push(entry);
+    if (row.team_id === homeTeamId) homeAll.push(entry);
+    else if (row.team_id === awayTeamId) awayAll.push(entry);
   }
 
-  home.sort((a, b) => b.importance - a.importance);
-  away.sort((a, b) => b.importance - a.importance);
+  homeAll.sort((a, b) => b.importance - a.importance);
+  awayAll.sort((a, b) => b.importance - a.importance);
 
-  return { home, away };
+  // Primary: everyone above the threshold. Backfill: if that's fewer
+  // than minCount, take the next-highest-importance players regardless
+  // of threshold until minCount is reached (or the pool runs out).
+  const selectSide = (all: MatchKeyPlayer[]): MatchKeyPlayer[] => {
+    const primary = all.filter(p => p.importance >= minImportance);
+    if (primary.length >= minCount) return primary;
+    const primaryIds = new Set(primary.map(p => p.playerId));
+    const backfill = all.filter(p => !primaryIds.has(p.playerId)).slice(0, minCount - primary.length);
+    return [...primary, ...backfill];
+  };
+
+  return { home: selectSide(homeAll), away: selectSide(awayAll) };
 }
 
 export interface MatchWithLineups {
