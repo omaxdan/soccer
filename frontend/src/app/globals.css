@@ -558,3 +558,121 @@ th, td { text-align: left; }
 @media (max-width: 1200px) { .kpi-strip { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 900px)  { .kpi-strip { grid-template-columns: repeat(2, 1fr); } .component-grid { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 640px)  { .component-grid { grid-template-columns: repeat(2, 1fr); } .app-sidebar { display: none; } }
+
+/* ─── MOBILE-FIRST "QUOTE PAGE" PATTERN ──────────────────────────────────────────
+   Built after the root cause of "data everywhere, hard to digest on mobile" was
+   traced to a specific, fixable mechanism: every card built this session used
+   inline `style={{ gridTemplateColumns: '1fr 1fr' }}` rather than a class —
+   and inline styles cannot be touched by a @media query, so nothing collapsed
+   on a small screen, it just squeezed. These classes are the actual fix —
+   components should use className from now on, not inline grid columns, for
+   anything that needs to reflow on mobile.
+
+   .rip-stat-grid uses repeat(auto-fit, minmax(...)) rather than manual
+   breakpoints — this is a genuinely different (better) technique than the
+   .kpi-strip/.component-grid pair above: the grid reflows continuously based
+   on available width with zero JS and zero extra @media rules per new
+   pattern, rather than needing a hand-picked breakpoint for every grid that
+   gets added. Preferred for all new dense stat grids going forward.
+
+   .rip-compare-grid is for genuine side-by-side comparisons (two teams, home
+   vs away) — these must fully STACK on mobile (a side-by-side comparison is
+   unreadable squeezed into two 150px columns), so this gets an explicit
+   breakpoint rather than auto-fit reflow. ─────────────────────────────────── */
+
+.rip-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rip-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 16px;
+}
+.rip-stat-grid.dense { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px 12px; }
+
+.rip-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rip-stat-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rip-stat-value {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rip-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 560px) {
+  .rip-compare-grid { grid-template-columns: 1fr; gap: 16px; }
+}
+
+.rip-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.rip-tabs::-webkit-scrollbar { display: none; }
+.rip-tab {
+  padding: 8px 18px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+}
+.rip-tab.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
+
+.rip-pills {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.rip-pills::-webkit-scrollbar { display: none; }
+.rip-pill {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rip-pill:hover { border-color: var(--border2); }
