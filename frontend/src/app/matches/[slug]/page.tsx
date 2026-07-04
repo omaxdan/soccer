@@ -19,6 +19,8 @@ import FormString from '@/components/FormString';
 import SignalChip from '@/components/SignalChip';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { PredictedLineup } from '@/components/PredictedLineup';
+import Tabs from '@/components/Tabs';
+import RelatedPills from '@/components/RelatedPills';
 
 function Card({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, ...style }}>{children}</div>;
@@ -30,7 +32,7 @@ function Mono({ children, size = 20, color }: { children: React.ReactNode; size?
   return <div style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: size, fontWeight: 700, color: color ?? COLORS.text, lineHeight: 1 }}>{children}</div>;
 }
 
-const MARKET_TABS = ['Overview', 'Betting Signals'];
+const PAGE_TABS = ['Overview', 'Lineups', 'Squad', 'Narrative', 'Betting Signals'];
 const TEAM_TABS   = ['Form', 'Fixture Load', 'Squad', 'Intelligence'];
 
 // ─── Helper: Map detailed positions to position groups ──────────────────────
@@ -631,7 +633,12 @@ export default function MatchPage() {
   return (
     <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── HERO: Match Header ── */}
+      {/* ── HERO: Match Header — kept as the dual-gauge pattern (not
+          QuoteHero, which models ONE entity's single number; a match is
+          inherently two-sided, and the existing side-by-side gauges +
+          gap/score already serve as this page's natural "hero" — the
+          thing that answers "who's favored, by how much, what's the
+          score" in one glance). Unchanged from the pre-redesign version. ── */}
       <Card>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
           <span style={{ background:(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue)+'20', color:isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue, border:`1px solid ${(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue)}40`, borderRadius:4, padding:'1px 7px', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em' }}>
@@ -697,62 +704,18 @@ export default function MatchPage() {
         </div>
       </Card>
 
-      {/* ── TEAM FORM/FIXTURE/SQUAD/INTELLIGENCE — moved here right after
-          the hero (was previously at the bottom of the Overview tab) per
-          explicit request. Replaces the old "6 Intelligence Metric Cards"
-          grid (Rest Advantage/Travel Burden/Fixture Congestion/Active
-          Competitions/Travel Fatigue/Form Last 5) entirely — removed per
-          feedback that it was "hard to digest and understand how it
-          works". Form is no longer duplicated in the hero above (removed
-          separately) since this block already shows it in full. ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-        <TeamColumn 
-          team={match.home_team} 
-          intel={homeIntel} 
-          form={homeForm} 
-          fix={homeFix} 
-          squad={homeSquad} 
-          upcoming={homeUp}
-          depth={homeDepth}
-        />
-        <TeamColumn 
-          team={match.away_team} 
-          intel={awayIntel} 
-          form={awayForm} 
-          fix={awayFix} 
-          squad={awaySquad} 
-          upcoming={awayUp}
-          depth={awayDepth}
-        />
-      </div>
+      {/* ── PAGE TABS — real reusable Tabs.tsx (horizontally scrollable on
+          narrow screens) replacing the old inline MARKET_TABS button row.
+          Five tabs now instead of two: TeamColumn (previously ALWAYS
+          visible above the tabs — the single biggest chunk of content on
+          the page) moves into its own Squad tab; the old Overview tab's
+          six stacked cards split into Overview / Lineups / Narrative so
+          each tab is scannable on its own instead of one long scroll. ── */}
+      <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
 
-      {/* ── PAGE TABS ── */}
-      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${COLORS.border}` }}>
-        {MARKET_TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding:'8px 22px', fontSize:11, fontWeight:700,
-            borderBottom:`2px solid ${tab===t?COLORS.green:'transparent'}`,
-            color:tab===t?COLORS.green:COLORS.muted,
-            textTransform:'uppercase', letterSpacing:'0.08em', cursor:'pointer',
-          }}>{t}</button>
-        ))}
-      </div>
-
-      {/* ── OVERVIEW TAB ── */}
+      {/* ── OVERVIEW — the fast digest: summary, comparison, scoreline ── */}
       {tab === 'Overview' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {/* ── EXECUTIVE SUMMARY + TEAM COMPARISON MATRIX ──────────────────
-              Replaces the old single-line "Key Insight" card + full 7-
-              component Readiness Breakdown as the FIRST thing shown —
-              consolidates the same underlying data (team_intelligence,
-              team_strength_ratings, team_venue_performance,
-              team_goal_dependency, team_injury_impact) into one scannable
-              table instead of scattered cards, per the "page makes a lot
-              of noise, if someone isn't good at reading they'll miss a
-              lot" feedback this was built from. The detailed 7-component
-              breakdown is still available below for anyone who wants the
-              weighted contribution numbers, just no longer the first
-              thing on the page. */}
           {executiveSummary && (
             <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
@@ -791,7 +754,47 @@ export default function MatchPage() {
             />
           </Card>
 
-          {/* ── PREDICTED LINEUPS ── */}
+          {intel?.predicted_scorelines && intel.predicted_scorelines.length > 0 && (
+            <Card>
+              <div style={{ ...TYPE.sectionHeader, fontSize:11, marginBottom:10 }}>LIKELY SCORELINE</div>
+              <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
+                <div style={{ fontSize:12, color:COLORS.muted }}>
+                  Expected goals:{' '}
+                  <span style={{ fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>
+                    {intel.predicted_home_goals?.toFixed(1) ?? '—'} – {intel.predicted_away_goals?.toFixed(1) ?? '—'}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                {intel.predicted_scorelines.slice(0, 6).map((s: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{
+                      background: i === 0 ? COLORS.green+'15' : COLORS.surface2,
+                      border: `1px solid ${i === 0 ? COLORS.green+'40' : COLORS.border}`,
+                      borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 64,
+                    }}
+                  >
+                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color: i === 0 ? COLORS.green : COLORS.text }}>
+                      {s.home}–{s.away}
+                    </div>
+                    <div style={{ fontSize:10, color:COLORS.dim, marginTop:2 }}>{s.probability}%</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:10, color:COLORS.dim, marginTop:12 }}>
+                Statistical estimate from each team's recent scoring/conceding form — independent Poisson model. Not a prediction of the actual result.
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── LINEUPS — predicted XI + everything about who's playing and
+          what it means: player importance, goal-dependency and injury
+          impact ("Lineups and its related impact data"). ── */}
+      {tab === 'Lineups' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
           {(homeLineup.length > 0 || awayLineup.length > 0) && (
             <Card>
               <div style={{ marginBottom: 12 }}>
@@ -810,27 +813,6 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {/* ── DETAILED READINESS BREAKDOWN — was the first thing on the
-              page before this redesign; now supplementary detail for
-              anyone who wants the weighted 7-component contribution
-              numbers behind the Readiness row in the Comparison Matrix
-              above, rather than competing with it for attention. */}
-          <details>
-            <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
-              Detailed Readiness Breakdown
-            </summary>
-            <Card style={{ marginTop: 10 }}>
-              <ReadinessBreakdown components={readinessComponents} />
-            </Card>
-          </details>
-
-          {/* ── SQUAD RISK — "how much does each side rely on one player,
-              and who's missing" — the two questions the pre-match source
-              analysis this was built from was really trying to answer,
-              done correctly this time (see processPlayerIntelligence
-              comments for the double-scaling bug this replaces). Only
-              renders once at least one side has data — avoids an empty
-              card for matches where neither team has been processed yet. */}
           {(homeGoalDep || awayGoalDep || homeInjury || awayInjury) && (
             <Card>
               <div style={{ marginBottom: 12 }}>
@@ -841,7 +823,7 @@ export default function MatchPage() {
                   Goal-scoring concentration and injury impact for each side
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
                 {[
                   { team: match.home_team, goalDep: homeGoalDep, injury: homeInjury },
                   { team: match.away_team, goalDep: awayGoalDep, injury: awayInjury },
@@ -892,37 +874,6 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {/* ── KEY NARRATIVE THREADS — the numbered story-point block from
-              the source match-preview documents, included as a genuine,
-              visible section (not collapsed) per explicit feedback to use
-              that approach rather than only the condensed summary above. ── */}
-          {narrativeThreads.length > 0 && (
-            <Card>
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  🚨 Key Narrative Threads
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {narrativeThreads.map((t, i) => (
-                  <div key={i} style={{ borderLeft: `2px solid ${COLORS.border}`, paddingLeft: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>
-                      {i + 1}. {t.title} {t.emoji}
-                    </div>
-                    <div style={{ fontSize: 12, color: COLORS.text2, lineHeight: 1.6, marginBottom: 6 }}>{t.text}</div>
-                    <div style={{ fontSize: 11, color: COLORS.dim, fontStyle: 'italic' }}>Impact: {t.impact}</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* ── PLAYER IMPORTANCE COMPARISON — structured table version of
-              the same key-players data the narrative thread above now
-              lists in prose. Reuses the SAME matchKeyPlayers fetch, zero
-              extra queries — just a second, more scannable presentation
-              of the same real data for anyone who wants the table view
-              matching the source document's format. ── */}
           {((matchKeyPlayers?.home?.length ?? 0) > 0 || (matchKeyPlayers?.away?.length ?? 0) > 0) && (
             <Card>
               <div style={{ marginBottom: 12 }}>
@@ -965,45 +916,77 @@ export default function MatchPage() {
               </table>
             </Card>
           )}
+        </div>
+      )}
 
-          {intel?.predicted_scorelines && intel.predicted_scorelines.length > 0 && (
+      {/* ── SQUAD — the deep per-team Form/Fixture Load/Squad/Intelligence
+          breakdown (TeamColumn). Was ALWAYS visible above the tabs before
+          this redesign — the single biggest contributor to "the page is
+          a wall of data" now lives behind one tap instead of loading
+          unconditionally on every visit. ── */}
+      {tab === 'Squad' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+          <TeamColumn 
+            team={match.home_team} 
+            intel={homeIntel} 
+            form={homeForm} 
+            fix={homeFix} 
+            squad={homeSquad} 
+            upcoming={homeUp}
+            depth={homeDepth}
+          />
+          <TeamColumn 
+            team={match.away_team} 
+            intel={awayIntel} 
+            form={awayForm} 
+            fix={awayFix} 
+            squad={awaySquad} 
+            upcoming={awayUp}
+            depth={awayDepth}
+          />
+        </div>
+      )}
+
+      {/* ── NARRATIVE — the story-point synthesis, kept separate from the
+          fast Overview digest since it's meant to be read, not scanned. ── */}
+      {tab === 'Narrative' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {narrativeThreads.length > 0 && (
             <Card>
-              <div style={{ ...TYPE.sectionHeader, fontSize:11, marginBottom:10 }}>LIKELY SCORELINE</div>
-              <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
-                <div style={{ fontSize:12, color:COLORS.muted }}>
-                  Expected goals:{' '}
-                  <span style={{ fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>
-                    {intel.predicted_home_goals?.toFixed(1) ?? '—'} – {intel.predicted_away_goals?.toFixed(1) ?? '—'}
-                  </span>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  🚨 Key Narrative Threads
                 </div>
               </div>
-              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                {intel.predicted_scorelines.slice(0, 6).map((s: any, i: number) => (
-                  <div
-                    key={i}
-                    style={{
-                      background: i === 0 ? COLORS.green+'15' : COLORS.surface2,
-                      border: `1px solid ${i === 0 ? COLORS.green+'40' : COLORS.border}`,
-                      borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 64,
-                    }}
-                  >
-                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color: i === 0 ? COLORS.green : COLORS.text }}>
-                      {s.home}–{s.away}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {narrativeThreads.map((t, i) => (
+                  <div key={i} style={{ borderLeft: `2px solid ${COLORS.border}`, paddingLeft: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>
+                      {i + 1}. {t.title} {t.emoji}
                     </div>
-                    <div style={{ fontSize:10, color:COLORS.dim, marginTop:2 }}>{s.probability}%</div>
+                    <div style={{ fontSize: 12, color: COLORS.text2, lineHeight: 1.6, marginBottom: 6 }}>{t.text}</div>
+                    <div style={{ fontSize: 11, color: COLORS.dim, fontStyle: 'italic' }}>Impact: {t.impact}</div>
                   </div>
                 ))}
-              </div>
-              <div style={{ fontSize:10, color:COLORS.dim, marginTop:12 }}>
-                Statistical estimate from each team's recent scoring/conceding form — independent Poisson model. Not a prediction of the actual result.
               </div>
             </Card>
           )}
 
+          {/* ── DETAILED READINESS BREAKDOWN — the weighted 7-component
+              contribution numbers behind the Comparison Matrix's single
+              Readiness row; supplementary detail, not primary content. ── */}
+          <details>
+            <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
+              Detailed Readiness Breakdown
+            </summary>
+            <Card style={{ marginTop: 10 }}>
+              <ReadinessBreakdown components={readinessComponents} />
+            </Card>
+          </details>
         </div>
       )}
 
-      {/* ── BETTING SIGNALS TAB ── */}
+      {/* ── BETTING SIGNALS TAB — unchanged from the pre-redesign version. ── */}
       {tab === 'Betting Signals' && (
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           <div style={{ background:COLORS.amber+'15', border:`1px solid ${COLORS.amber}30`, borderRadius:8, padding:'10px 16px', fontSize:12, color:COLORS.amber }}>
@@ -1096,6 +1079,28 @@ export default function MatchPage() {
           })}
         </div>
       )}
+
+      {/* ── RELATED — pivot to either team's own "quote page" without
+          navigating back through the matches list first. ── */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+          Related
+        </div>
+        <RelatedPills items={[
+          {
+            href: teamUrl({ id: match.home_team?.id, slug: match.home_team?.slug, name: match.home_team?.name }),
+            label: match.home_team?.short_name ?? match.home_team?.name ?? 'Home',
+            value: homeReadinessAny != null ? Math.round(homeReadinessAny) : undefined,
+            valueColor: homeReadinessAny != null ? scoreColor(homeReadinessAny) : undefined,
+          },
+          {
+            href: teamUrl({ id: match.away_team?.id, slug: match.away_team?.slug, name: match.away_team?.name }),
+            label: match.away_team?.short_name ?? match.away_team?.name ?? 'Away',
+            value: awayReadinessAny != null ? Math.round(awayReadinessAny) : undefined,
+            valueColor: awayReadinessAny != null ? scoreColor(awayReadinessAny) : undefined,
+          },
+        ]} />
+      </div>
     </main>
   );
 }
