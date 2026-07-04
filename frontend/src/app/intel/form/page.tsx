@@ -24,15 +24,20 @@ export default async function FormHub() {
         <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>Precomputed form rankings for all tracked league teams</div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20 }}>
+      <div className="rip-stack-mobile" style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20 }}>
         {/* Power Rankings table */}
         <Card style={{ padding:0, overflow:'hidden' }}>
           <div style={{ padding:'12px 16px', borderBottom:`1px solid ${COLORS.border}`, fontSize:12, fontWeight:700, color:COLORS.text }}>Form Power Rankings</div>
+          <div className="rip-table-scroll">
           <table style={{ width:'100%' }}>
             <thead>
               <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
-                {['Rank','Team','Form (L5)','Last 10','Form Index','Pts L5','Pts L10'].map(h => (
-                  <th key={h} style={{ padding:'8px 12px', fontSize:9, color:COLORS.dim, textAlign:'left', textTransform:'uppercase' }}>{h}</th>
+                {[
+                  { label: 'Rank' }, { label: 'Team' },
+                  { label: 'Form (L5)', mobileHide: true }, { label: 'Last 10', mobileHide: true },
+                  { label: 'Form Index' }, { label: 'Pts L5' }, { label: 'Pts L10' },
+                ].map(({ label: h, mobileHide }) => (
+                  <th key={h} className={mobileHide ? 'rip-mobile-hide' : undefined} style={{ padding:'8px 12px', fontSize:9, color:COLORS.dim, textAlign:'left', textTransform:'uppercase' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -48,13 +53,13 @@ export default async function FormHub() {
                       <Link href={teamUrl(t.team)} style={{ fontSize:12, fontWeight:700, color:COLORS.text }}>{t.team?.name}</Link>
                       <div style={{ fontSize:9, color:COLORS.dim }}>{t.team?.country}</div>
                     </td>
-                    <td style={{ padding:'8px 12px' }}>
+                    <td className="rip-mobile-hide" style={{ padding:'8px 12px' }}>
                       <div style={{ display:'flex', gap:2 }}>
                         {/* Placeholder form display */}
                         <span style={{ fontFamily:'monospace', fontSize:10, color:COLORS.muted }}>—</span>
                       </div>
                     </td>
-                    <td style={{ padding:'8px 12px', fontFamily:'monospace', fontSize:11, color:COLORS.muted }}>—</td>
+                    <td className="rip-mobile-hide" style={{ padding:'8px 12px', fontFamily:'monospace', fontSize:11, color:COLORS.muted }}>—</td>
                     <td style={{ padding:'8px 12px' }}>
                       <span style={{ fontFamily:'monospace', fontSize:14, fontWeight:700, color:col }}>{fi}</span>
                       <span style={{ fontSize:10, color:COLORS.dim }}>/100</span>
@@ -66,6 +71,7 @@ export default async function FormHub() {
               })}
             </tbody>
           </table>
+          </div>
         </Card>
 
         {/* Hot/Cold sidebar */}

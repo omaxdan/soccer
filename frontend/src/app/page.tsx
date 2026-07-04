@@ -67,8 +67,8 @@ function ReadinessGauge({ score, size = 80, label = 'READINESS', change }: {
   const isElite = (score ?? 0) >= 85;
 
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size}>
+    <div className="rip-gauge" style={{ position: 'relative', width: 'var(--rip-gauge-size, ' + size + 'px)', height: 'var(--rip-gauge-size, ' + size + 'px)', maxWidth: size, maxHeight: size, flexShrink: 0 }}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
         {score == null ? (
           <circle cx={cx} cy={cy} r={R} fill="none" stroke="#555570" strokeWidth={SW} strokeDasharray="5 4" />
         ) : (
@@ -259,7 +259,7 @@ export default async function Dashboard() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                <div className="rip-hero-vs-row">
                   {/* Falls back to each team's current baseline (heroHomeIntel/
                       heroAwayIntel) when match_intelligence hasn't been
                       computed for this specific match yet. */}

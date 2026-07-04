@@ -224,7 +224,7 @@ export default async function MatchCenter({
         })}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2.6fr 1fr', gap: 14 }}>
+      <div className="rip-sidebar-layout">
         {/* Main table */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '10px 16px', borderBottom: `1px solid ${COLORS.border}`, fontSize: 11, color: COLORS.dim }}>

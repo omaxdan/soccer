@@ -169,7 +169,7 @@ export default function ComparePage() {
         <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>Compare teams side-by-side with readiness intelligence</div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="rip-compare-grid">
         <TeamSearch label="TEAM A" onSelect={setTeamA} selected={teamA} />
         <TeamSearch label="TEAM B" onSelect={setTeamB} selected={teamB} />
       </div>
@@ -364,7 +364,7 @@ export default function ComparePage() {
           {extras && (extras.upcoming[teamA.team.id]?.length > 0 || extras.upcoming[teamB.team.id]?.length > 0) && (
             <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Upcoming Fixtures</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <div className="rip-compare-grid">
                 {[teamA, teamB].map((t, idx) => (
                   <div key={idx}>
                     <div style={{ fontSize: 11, color: COLORS.text, fontWeight: 700, marginBottom: 6 }}>{t.team?.name}</div>

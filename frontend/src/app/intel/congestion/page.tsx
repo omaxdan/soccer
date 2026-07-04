@@ -109,7 +109,8 @@ export default async function CongestionHub() {
         {/* 7-day heatmap */}
         <Card>
           <div style={{ fontSize:12, fontWeight:700, color:COLORS.text, marginBottom:12 }}>7-Day Schedule Heatmap</div>
-          <div style={{ display:'grid', gridTemplateColumns:`80px repeat(7,1fr)`, gap:2, fontSize:9 }}>
+          <div className="rip-table-scroll">
+          <div style={{ display:'grid', gridTemplateColumns:`110px repeat(7,minmax(34px,1fr))`, gap:2, fontSize:9, minWidth:400 }}>
             {/* Header: dates */}
             <div style={{ color:COLORS.dim }}></div>
             {days.map(d => (
@@ -122,7 +123,7 @@ export default async function CongestionHub() {
             {Array.from(teamDayMap.entries()).slice(0,12).map(([teamId, dayMap]) => (
               <div key={teamId} style={{ display:'contents' }}>
                 <div style={{ fontSize:9, color:COLORS.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', paddingRight:4, alignSelf:'center' }}>
-                  {String(teamNames.get(teamId) ?? teamId).slice(0,10)}
+                  {String(teamNames.get(teamId) ?? teamId)}
                 </div>
                 {days.map(d => {
                   const count = dayMap.get(d) ?? 0;
@@ -136,6 +137,7 @@ export default async function CongestionHub() {
                 })}
               </div>
             ))}
+          </div>
           </div>
           <div style={{ display:'flex', gap:10, marginTop:12, fontSize:9 }}>
             {[['',COLORS.border,'Empty'],['1',COLORS.green,'1 match'],['2',COLORS.amber,'2 matches'],['3+',COLORS.red,'3+ matches']].map(([n,c,l]) => (

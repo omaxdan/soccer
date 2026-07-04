@@ -276,11 +276,15 @@ export default function BettingHub() {
               <div style={{ padding:'12px 16px', borderBottom:`1px solid ${COLORS.border}`, fontSize:12, fontWeight:700, color:COLORS.text }}>
                 {tab} — Signal Table
               </div>
+              <div className="rip-table-scroll">
               <table style={{ width:'100%' }}>
                 <thead>
                   <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
-                    {['Match','Competition','Market','Signal','Strength','Intelligence Driver'].map(h => (
-                      <th key={h} style={{ padding:'8px 12px', fontSize:9, color:COLORS.dim, textAlign:'left', textTransform:'uppercase' }}>{h}</th>
+                    {[
+                      { label: 'Match' }, { label: 'Competition', mobileHide: true }, { label: 'Market' },
+                      { label: 'Signal' }, { label: 'Strength' }, { label: 'Intelligence Driver', mobileHide: true },
+                    ].map(({ label: h, mobileHide }) => (
+                      <th key={h} className={mobileHide ? 'rip-mobile-hide' : undefined} style={{ padding:'8px 12px', fontSize:9, color:COLORS.dim, textAlign:'left', textTransform:'uppercase' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -296,7 +300,7 @@ export default function BettingHub() {
                           <td style={{ padding:'9px 12px', filter:isBlurred?'blur(4px)':'none' }}>
                             <Link href={matchUrl(m)} style={{ fontSize:11, fontWeight:700, color:COLORS.text }}>{m.home_team?.short_name} vs {m.away_team?.short_name}</Link>
                           </td>
-                          <td style={{ padding:'9px 12px', fontSize:10, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{m.competition}</td>
+                          <td className="rip-mobile-hide" style={{ padding:'9px 12px', fontSize:10, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{m.competition}</td>
                           <td style={{ padding:'9px 12px', fontSize:11, fontWeight:600, color:COLORS.text, filter:isBlurred?'blur(4px)':'none' }}>{sig.market}{sig.locked && <span style={{ marginLeft:4, fontSize:9, color:COLORS.purple }}>🔒</span>}</td>
                           <td style={{ padding:'9px 12px', filter:isBlurred?'blur(4px)':'none' }}>
                             <span style={{ background:(isEdge?col:COLORS.dim)+'20', color:isEdge?col:COLORS.dim, border:`1px solid ${isEdge?col:COLORS.dim}40`, borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:700 }}>{sig.signal}</span>
@@ -306,7 +310,7 @@ export default function BettingHub() {
                               {Array.from({length:6}).map((_,j) => <div key={j} style={{ width:6, height:10, borderRadius:2, background:j<sig.strength?(isEdge?col:COLORS.dim):COLORS.border }} />)}
                             </div>
                           </td>
-                          <td style={{ padding:'9px 12px', fontSize:10, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{sig.drivers}</td>
+                          <td className="rip-mobile-hide" style={{ padding:'9px 12px', fontSize:10, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{sig.drivers}</td>
                           {isBlurred && (
                             <td colSpan={0} style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:COLORS.surface+'90' }}>
                               <div style={{ background:COLORS.purple+'20', border:`1px solid ${COLORS.purple}40`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>🔒 Unlock with PRO →</div>
@@ -318,6 +322,7 @@ export default function BettingHub() {
                   )}
                 </tbody>
               </table>
+              </div>
             </Card>
           )}
         </>

@@ -151,13 +151,10 @@ export default function MatchRow({ match, homeIntel, awayIntel, homeForm = [], a
 
       {/* ── Expanded Accordion — spec: Form last 5, Congestion bars, Travel fatigue, Active comps ── */}
       {expanded && (
-        <div style={{
+        <div className="rip-compare-grid" style={{
           borderTop: `1px solid ${COLORS.border}`,
           background: COLORS.surface2,
           padding: '12px 16px',
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 14,
         }}>
           {/* Form */}
           <div>

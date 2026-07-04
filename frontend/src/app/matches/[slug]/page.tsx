@@ -509,7 +509,7 @@ export default function MatchPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {fix ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
                   {[['Last 7d','matches_last_7_days',4],['Last 14d','matches_last_14_days',6],['Next 7d','matches_next_7_days',4],['Next 14d','matches_next_14_days',6]].map(([label,key,max]: any) => (
                     <div key={key} style={{ background:COLORS.surface2, borderRadius:8, padding:'10px 12px' }}>
                       <Label>{label}</Label>
@@ -551,7 +551,7 @@ export default function MatchPage() {
           <div>
             {squad ? (
               <>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(130px, 1fr))', gap:10 }}>
                   {[
                     ['Squad Size', squad.players_count, 'players'],
                     ['Avg Age', squad.avg_age?.toFixed(1), 'yrs'],
@@ -1138,7 +1138,7 @@ export default function MatchPage() {
                   <ReadinessBreakdown components={readinessComponents} />
                 </Card>
               </details>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+              <div className="rip-compare-grid">
                 <TeamColumn team={match.home_team} intel={homeIntel} form={homeForm} fix={homeFix} squad={homeSquad} upcoming={homeUp} depth={homeDepth} />
                 <TeamColumn team={match.away_team} intel={awayIntel} form={awayForm} fix={awayFix} squad={awaySquad} upcoming={awayUp} depth={awayDepth} />
               </div>

@@ -485,7 +485,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+    <div className="rip-compare-grid">
       {renderTeamLineup(homeTeam, lineups.home)}
       {renderTeamLineup(awayTeam, lineups.away)}
     </div>

@@ -33,10 +33,21 @@ export default function ReadinessGauge({
   const fs   = size < 80 ? 18 : size < 120 ? 22 : 28;
   const ls   = size < 80 ? 7  : size < 120 ? 8  : 9;
 
+  // ── Mobile sizing — driven by a CSS custom property, not the size prop
+  // directly. The SVG itself uses width/height="100%" (scales to fill
+  // whatever box the wrapping div ends up being) rather than fixed pixel
+  // attributes, so --rip-gauge-size is the ONLY thing controlling
+  // rendered size. var(--rip-gauge-size, Npx) falls back to the desktop
+  // size prop when the custom property isn't set (desktop), and a single
+  // global @media rule in globals.css overrides --rip-gauge-size at
+  // narrow widths — every gauge in the app shrinks together with zero
+  // changes needed at any call site. ──────────────────────────────────
+  const sizeVar = `var(--rip-gauge-size, ${size}px)`;
+
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
-      <div style={{ position:'relative', width:size, height:size }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <div className="rip-gauge" style={{ position:'relative', width: sizeVar, height: sizeVar, maxWidth: size, maxHeight: size }}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
           <path d={arcPath(startAngle, arcSpan)} fill="none" stroke="var(--border)" strokeWidth={strokeWidth} strokeLinecap="round" />
           {score != null && score > 0 && (
             <path d={arcPath(startAngle, filled)} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"

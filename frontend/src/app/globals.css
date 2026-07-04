@@ -557,7 +557,7 @@ th, td { text-align: left; }
 /* ─── RESPONSIVE ─────────────────────────────────────────────────────────────── */
 @media (max-width: 1200px) { .kpi-strip { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 900px)  { .kpi-strip { grid-template-columns: repeat(2, 1fr); } .component-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 640px)  { .component-grid { grid-template-columns: repeat(2, 1fr); } .app-sidebar { display: none; } .app-content { padding: 14px 12px; gap: 14px; } .rip-mobile-hide { display: none; } }
+@media (max-width: 640px)  { .component-grid { grid-template-columns: repeat(2, 1fr); } .app-sidebar { display: none; } .app-content { padding: 14px 12px; gap: 14px; } .rip-mobile-hide { display: none; } :root { --rip-gauge-size: 84px; } }
 
 /* ─── MATCHES LIST TABLE ─────────────────────────────────────────────────────────
    .rip-mobile-hide: applied to the densest, least-essential columns (Strength/
@@ -634,6 +634,49 @@ th, td { text-align: left; }
 }
 @media (max-width: 560px) {
   .rip-compare-grid { grid-template-columns: 1fr; gap: 16px; }
+}
+
+/* ─── MAIN + SIDEBAR LAYOUT (asymmetric, e.g. matches list table + insights
+   panel) — stacks to one column on mobile same as .rip-compare-grid, but
+   ALSO reorders so the sidebar (second grid child) appears FIRST when
+   stacked, via `order` rather than reordering the actual markup — desktop
+   keeps its natural DOM order (main content first, sidebar second) with
+   no order override needed there at all. */
+.rip-sidebar-layout {
+  display: grid;
+  grid-template-columns: 2.6fr 1fr;
+  gap: 14px;
+}
+.rip-sidebar-layout > :last-child { order: 0; }
+@media (max-width: 780px) {
+  .rip-sidebar-layout { grid-template-columns: 1fr; }
+  .rip-sidebar-layout > :last-child { order: -1; }
+}
+
+/* ─── HERO GAUGE ROW — Home page's gauge / VS-gap-box / gauge row. Each
+   gauge has flexShrink:0 (deliberately, so the arc math never distorts),
+   which means without this, the row simply overflows on a narrow screen
+   rather than shrinking — stacks to a vertical column on mobile instead,
+   consistent with the same "row of columns on desktop, column of rows on
+   mobile" pattern used everywhere else in this file. */
+.rip-hero-vs-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+@media (max-width: 640px) {
+  .rip-hero-vs-row { flex-direction: column; gap: 12px; }
+}
+
+/* ─── GENERIC MOBILE STACK — for asymmetric main+sidebar grids whose
+   desktop ratio is set inline per-page (e.g. '1fr 300px') and doesn't
+   match the fixed 2.6fr:1fr .rip-sidebar-layout is built for. Only
+   defines the mobile override, leaving each page's own desktop ratio
+   untouched. Needs !important because it's specifically overriding an
+   INLINE gridTemplateColumns value — normal CSS specificity rules never
+   let a class beat an inline style otherwise, @media or not. */
+@media (max-width: 640px) {
+  .rip-stack-mobile { grid-template-columns: 1fr !important; }
 }
 
 .rip-tabs {
