@@ -5,7 +5,7 @@ import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
-import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions } from './jobs/processDbOnly';
+import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad, processInjuryRisk } from './jobs/processDbOnly';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
@@ -74,6 +74,13 @@ async function handleCommand(command: string, ...args: string[]) {
         const teamResult = await syncTeamPlayers(teamId);
         logger.info(teamResult, 'Team players sync complete');
         break;
+
+      case 'process:injury-risk': {
+        logger.info('Computing injury risk levels — DB only...');
+        const r = await processInjuryRisk();
+        logger.info(r, 'Injury risk complete');
+        break;
+      }
 
       case 'process:form:recent':
         logger.info('Processing form for recent matches...');
@@ -419,6 +426,15 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
       }
 
+      // Add this case in the switch:
+      case 'process:player-match-load': {
+        logger.info('Deriving player match load from season stats — DB only...');
+        const r = await processPlayerMatchLoad();
+        logger.info(r, 'Player match load complete');
+        break;
+      }
+
+
       case 'process:team-locations': {
         logger.info('Deriving team locations from venue history — DB only...');
         const r = await processTeamLocations();
@@ -439,6 +455,10 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('[L1/3] Form history backfill...');
         const form    = await processFormBackfill();
         logger.info({ ...form }, '[L1] ✓ form history');
+
+        logger.info('[L1/3] Player match load (needs season stats)...');
+        const matchLoad = await processPlayerMatchLoad();
+        logger.info({ ...matchLoad }, '[L1] ✓ player match load');
 
         // Needs only team_form_history (L1, just above) — recent-vs-prior
         // form trend, independent of everything else.

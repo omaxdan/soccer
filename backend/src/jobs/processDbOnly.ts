@@ -84,6 +84,141 @@ async function fetchAllRows<T = any>(
  *     1 competition=0, 2=-5, 3=-10, 4=-15, 5+=-20
  *   Final = max(0, base - penalty)
  */
+
+// In processDbOnly.ts, add this function:
+
+export async function processPlayerMatchLoad(): Promise<{
+  playersProcessed: number;
+  rowsWritten: number;
+}> {
+  logger.info('processPlayerMatchLoad started — DB only');
+
+  // Get all players with season stats
+  const { data: players } = await db
+    .from('player_season_statistics')
+    .select('player_id, team_id, minutes_played, appearances, matches_started');
+
+  if (!players || players.length === 0) {
+    logger.info('No player season stats found — skipping player_match_load');
+    return { playersProcessed: 0, rowsWritten: 0 };
+  }
+
+  // Get all matches with results for these teams
+  const teamIds = [...new Set(players.map((p: any) => p.team_id))];
+  const { data: matches } = await db
+    .from('matches')
+    .select('id, home_team_id, away_team_id, date')
+    .in('home_team_id', teamIds)
+    .or(`away_team_id.in.(${teamIds.join(',')})`)
+    .lte('date', new Date().toISOString())
+    .order('date', { ascending: true });
+
+  if (!matches || matches.length === 0) {
+    logger.info('No matches found — skipping player_match_load');
+    return { playersProcessed: 0, rowsWritten: 0 };
+  }
+
+  const rows: any[] = [];
+  let playersProcessed = 0;
+
+  for (const player of players) {
+    const playerMatches = matches.filter(
+      (m: any) => m.home_team_id === player.team_id || m.away_team_id === player.team_id
+    );
+
+    if (playerMatches.length === 0 || !player.minutes_played) continue;
+
+    // Distribute minutes proportionally: assume started matches = full 90,
+    // sub appearances = remaining minutes distributed evenly
+    const starts = player.matches_started || 0;
+    const subs = (player.appearances || 0) - starts;
+    const totalMinutes = player.minutes_played;
+    
+    // Estimate: starters get ~80 min, subs get ~20 min
+    const estimatedStartMinutes = Math.min(90, starts > 0 ? (totalMinutes * 0.8) / Math.max(starts, 1) : 0);
+    const estimatedSubMinutes = subs > 0 ? (totalMinutes * 0.2) / Math.max(subs, 1) : 0;
+
+    for (let i = 0; i < Math.min(starts + subs, playerMatches.length); i++) {
+      const isStart = i < starts;
+      rows.push({
+        player_id: player.player_id,
+        match_id: playerMatches[i].id,
+        match_date: playerMatches[i].date.split('T')[0],
+        minutes_played: Math.round(isStart ? estimatedStartMinutes : estimatedSubMinutes),
+        started: isStart,
+        substitute: !isStart,
+      });
+    }
+    playersProcessed++;
+  }
+
+  if (rows.length > 0) {
+    // Clear existing and reinsert
+    await db.from('player_match_load').delete().neq('id', 0);
+    const { error } = await db.from('player_match_load').insert(rows);
+    if (error) throw new Error(error.message);
+  }
+
+  logger.info({ playersProcessed, rowsWritten: rows.length }, 'processPlayerMatchLoad completed');
+  return { playersProcessed, rowsWritten: rows.length };
+}
+
+export async function processInjuryRisk(): Promise<{
+  playersProcessed: number;
+  rowsWritten: number;
+}> {
+  logger.info('processInjuryRisk started — DB only');
+
+  const { data: playerIntel } = await db
+    .from('player_intelligence')
+    .select(`
+      id,
+      player_id,
+      players!inner(id, name),
+      fatigue_score,
+      load_index,
+      matches_last_7_days,
+      minutes_last_7_days
+    `)
+    .not('fatigue_score', 'is', null);
+
+  if (!playerIntel || playerIntel.length === 0) {
+    logger.info('No player_intelligence data — skipping injury_risk');
+    return { playersProcessed: 0, rowsWritten: 0 };
+  }
+
+  const rows = playerIntel.map((pi: any) => {
+    const fatigue = pi.fatigue_score ?? 0;
+    const load = pi.load_index ?? 0;
+    
+    // Classify risk level
+    let injuryRiskLevel: string;
+    if (fatigue >= 0.7 || load >= 0.8) injuryRiskLevel = 'high';
+    else if (fatigue >= 0.4 || load >= 0.5) injuryRiskLevel = 'medium';
+    else injuryRiskLevel = 'low';
+
+    return {
+      id: pi.id,
+      name: pi.players?.name ?? 'Unknown',
+      fatigue_score: fatigue,
+      load_index: load,
+      matches_last_7_days: pi.matches_last_7_days ?? 0,
+      minutes_last_7_days: pi.minutes_last_7_days ?? 0,
+      injury_risk_level: injuryRiskLevel,
+    };
+  });
+
+  if (rows.length > 0) {
+    const { error } = await db
+      .from('injury_risk')
+      .upsert(rows, { onConflict: 'id' });
+    if (error) throw new Error(error.message);
+  }
+
+  logger.info({ playersProcessed: playerIntel.length, rowsWritten: rows.length }, 'processInjuryRisk completed');
+  return { playersProcessed: playerIntel.length, rowsWritten: rows.length };
+}
+
 export async function processTeamFixtureLoad(): Promise<{
   teamsProcessed: number;
   snapshotsWritten: number;
