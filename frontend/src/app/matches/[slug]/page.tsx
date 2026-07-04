@@ -13,7 +13,7 @@ import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveMatchRisk } from '@/lib/insights';
 import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
 import SignalChip from '@/components/SignalChip';
@@ -22,7 +22,7 @@ import { PredictedLineup } from '@/components/PredictedLineup';
 import Tabs from '@/components/Tabs';
 import RelatedPills from '@/components/RelatedPills';
 
-function Card({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Card({ children, style = {} }: any) {
   return <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, ...style }}>{children}</div>;
 }
 function Label({ children }: { children: React.ReactNode }) {
@@ -32,7 +32,9 @@ function Mono({ children, size = 20, color }: { children: React.ReactNode; size?
   return <div style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: size, fontWeight: 700, color: color ?? COLORS.text, lineHeight: 1 }}>{children}</div>;
 }
 
-const PAGE_TABS = ['Overview', 'Lineups', 'Squad', 'Narrative', 'Betting Signals'];
+const PAGE_TABS = ['Overview', 'Intelligence', 'Lineups', 'Insights'];
+const INTELLIGENCE_SUBTABS = ['Summary', 'Squads', 'Tactical', 'Physical', 'Models'];
+const INSIGHTS_SUBTABS = ['Preview', 'Narratives', 'Signals', 'Recommendations'];
 const TEAM_TABS   = ['Form', 'Fixture Load', 'Squad', 'Intelligence'];
 
 // ─── Helper: Map detailed positions to position groups ──────────────────────
@@ -75,6 +77,8 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab]       = useState('Overview');
   const [teamTab, setTeamTab] = useState('Form');
+  const [intelSubtab, setIntelSubtab] = useState('Summary');
+  const [insightsSubtab, setInsightsSubtab] = useState('Preview');
   const [isPro]             = useState(true);
 
   useEffect(() => {
@@ -389,6 +393,38 @@ export default function MatchPage() {
     })),
   }) : [];
 
+  // ── Match Risk — reuses the confidence engine, not a new metric ──────
+  const readinessGapAbs = (intel?.readiness_gap ?? (homeReadinessAny != null && awayReadinessAny != null ? homeReadinessAny - awayReadinessAny : null));
+  const matchRisk = matchInsight ? deriveMatchRisk(matchInsight.confidence, readinessGapAbs != null ? Math.abs(readinessGapAbs) : null) : null;
+
+  // ── Win/Draw/Away — real probability from the full Poisson grid
+  // (migration 018), not the top-6-renormalized scoreline set. Null
+  // until process:all-db has run since that migration. ────────────────
+  const winProbHome = intel?.win_probability_home ?? null;
+  const winProbDraw = intel?.win_probability_draw ?? null;
+  const winProbAway = intel?.win_probability_away ?? null;
+  const hasWinProbs = winProbHome != null && winProbDraw != null && winProbAway != null;
+  const favoredSide = hasWinProbs
+    ? (winProbHome! > winProbAway! ? 'home' : winProbAway! > winProbHome! ? 'away' : 'draw')
+    : (intel?.readiness_gap != null ? (intel.readiness_gap > 0 ? 'home' : intel.readiness_gap < 0 ? 'away' : 'draw') : null);
+  const favoredProb = hasWinProbs
+    ? (favoredSide === 'home' ? winProbHome : favoredSide === 'away' ? winProbAway : winProbDraw)
+    : null;
+
+  // ── Key Battles — highest-importance player per position group, home
+  // vs away, from data already fetched (matchKeyPlayers). Reuses the
+  // SAME getPositionGroup() helper already defined in this file for
+  // TeamColumn's position-depth aggregation, not a duplicate mapping. ──
+  const keyBattles = ['GK', 'DEF', 'MID', 'FWD'].map(group => {
+    const homeBest = (matchKeyPlayers?.home ?? [])
+      .filter((p: any) => getPositionGroup(p.positionCode) === group)
+      .sort((a: any, b: any) => b.importance - a.importance)[0];
+    const awayBest = (matchKeyPlayers?.away ?? [])
+      .filter((p: any) => getPositionGroup(p.positionCode) === group)
+      .sort((a: any, b: any) => b.importance - a.importance)[0];
+    return { group, home: homeBest, away: awayBest };
+  }).filter(b => b.home || b.away);
+
   const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
   const strongHome = signals.filter(s => s.direction === 'home' && s.strength >= 4);
   const strongAway = signals.filter(s => s.direction === 'away' && s.strength >= 4);
@@ -633,12 +669,8 @@ export default function MatchPage() {
   return (
     <main style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── HERO: Match Header — kept as the dual-gauge pattern (not
-          QuoteHero, which models ONE entity's single number; a match is
-          inherently two-sided, and the existing side-by-side gauges +
-          gap/score already serve as this page's natural "hero" — the
-          thing that answers "who's favored, by how much, what's the
-          score" in one glance). Unchanged from the pre-redesign version. ── */}
+      {/* ── HERO: Match Header — unchanged (dual-sided, not a single
+          QuoteHero, per the reasoning from the previous migration). ── */}
       <Card>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
           <span style={{ background:(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue)+'20', color:isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue, border:`1px solid ${(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue)}40`, borderRadius:4, padding:'1px 7px', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em' }}>
@@ -649,7 +681,6 @@ export default function MatchPage() {
         </div>
 
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-around' }}>
-          {/* Home */}
           <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
             <div style={{ fontSize:20, fontWeight:700, color:COLORS.text }}>{match.home_team?.name}</div>
             <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size={120} />
@@ -658,7 +689,6 @@ export default function MatchPage() {
             )}
           </div>
 
-          {/* VS / Score */}
           <div style={{ textAlign:'center', minWidth:120 }}>
             {(isDone || isLive) ? (
               <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:48, fontWeight:700, color:COLORS.text, lineHeight:1 }}>
@@ -693,7 +723,6 @@ export default function MatchPage() {
             )}
           </div>
 
-          {/* Away */}
           <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
             <div style={{ fontSize:20, fontWeight:700, color:COLORS.text }}>{match.away_team?.name}</div>
             <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size={120} />
@@ -704,41 +733,87 @@ export default function MatchPage() {
         </div>
       </Card>
 
-      {/* ── PAGE TABS — real reusable Tabs.tsx (horizontally scrollable on
-          narrow screens) replacing the old inline MARKET_TABS button row.
-          Five tabs now instead of two: TeamColumn (previously ALWAYS
-          visible above the tabs — the single biggest chunk of content on
-          the page) moves into its own Squad tab; the old Overview tab's
-          six stacked cards split into Overview / Lineups / Narrative so
-          each tab is scannable on its own instead of one long scroll. ── */}
+      {/* ── PAGE TABS — 4-tab structure per the proposed IA:
+          Overview / Intelligence / Lineups / Insights. ── */}
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
 
-      {/* ── OVERVIEW — the fast digest: summary, comparison, scoreline ── */}
+      {/* ══════════════════════════ OVERVIEW ══════════════════════════
+          The executive dashboard — prediction, risk, top signals, and
+          the full team comparison, all in one screen. ── */}
       {tab === 'Overview' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {executiveSummary && (
+
+          {/* ── PREDICTION CARD ── */}
+          {favoredSide && (
             <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-                <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue }}>
-                  💡 Executive Summary
-                </span>
+              <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue, marginBottom:12 }}>
+                🎯 Prediction
               </div>
-              <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.6 }}>{executiveSummary}</div>
-              {matchInsight && (
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
-                  <span style={{ fontSize:10, color:COLORS.dim }}>Confidence</span>
-                  <div style={{ flex:1, maxWidth:160, height:5, background:COLORS.border, borderRadius:3, overflow:'hidden' }}>
-                    <div style={{
-                      width:`${matchInsight.confidence}%`, height:'100%', borderRadius:3,
-                      background: `linear-gradient(90deg, ${COLORS.red}, ${COLORS.amber}, ${COLORS.green})`,
-                    }} />
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:16 }}>
+                <div>
+                  <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Winner</div>
+                  <div style={{ fontSize:16, fontWeight:700, color:COLORS.text, marginTop:2 }}>
+                    {favoredSide === 'draw' ? 'Draw' : favoredSide === 'home' ? (match.home_team?.short_name ?? match.home_team?.name) : (match.away_team?.short_name ?? match.away_team?.name)}
                   </div>
-                  <span style={{ fontSize:10, fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>{matchInsight.confidence}%</span>
+                </div>
+                {favoredProb != null && (
+                  <div>
+                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Probability</div>
+                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:20, fontWeight:700, color:COLORS.green, marginTop:2 }}>{favoredProb.toFixed(0)}%</div>
+                  </div>
+                )}
+                {matchInsight && (
+                  <div>
+                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Confidence</div>
+                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:20, fontWeight:700, color:scoreColor(matchInsight.confidence), marginTop:2 }}>{matchInsight.confidence}%</div>
+                  </div>
+                )}
+                {intel?.predicted_home_goals != null && (
+                  <div>
+                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Expected Score</div>
+                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color:COLORS.text, marginTop:2 }}>
+                      {intel.predicted_home_goals.toFixed(2)} – {intel.predicted_away_goals.toFixed(2)}
+                    </div>
+                  </div>
+                )}
+                {matchRisk && (
+                  <div>
+                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Match Risk</div>
+                    <span style={{
+                      display:'inline-block', marginTop:4, fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
+                      color: matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red,
+                      background: (matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red)+'20',
+                      border:`1px solid ${matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red}40`,
+                      borderRadius:4, padding:'2px 8px',
+                    }}>
+                      {matchRisk}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {!hasWinProbs && (
+                <div style={{ fontSize:9, color:COLORS.dim, marginTop:10 }}>
+                  Win/Draw/Away probability pending — run process:all-db after migration 018 for the full breakdown; showing readiness-gap-based favorite in the meantime.
                 </div>
               )}
             </Card>
           )}
 
+          {/* ── KEY SIGNALS (top 2-3) ── */}
+          {signals.length > 0 && (
+            <Card>
+              <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>
+                Key Signals
+              </div>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                {strongHome.length > 0 && <SignalChip label={`${strongHome[0].market} — ${strongHome[0].signal}`} strength={strongHome[0].strength} direction="home" />}
+                {strongAway.length > 0 && <SignalChip label={`${strongAway[0].market} — ${strongAway[0].signal}`} strength={strongAway[0].strength} direction="away" />}
+                {strongHome.length === 0 && strongAway.length === 0 && <SignalChip label="No strong signals detected" strength={1} direction="neutral" />}
+              </div>
+            </Card>
+          )}
+
+          {/* ── TEAM COMPARISON MATRIX ── */}
           <Card>
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
@@ -753,57 +828,351 @@ export default function MatchPage() {
               awayFormString={awayFormString}
             />
           </Card>
+        </div>
+      )}
 
-          {intel?.predicted_scorelines && intel.predicted_scorelines.length > 0 && (
-            <Card>
-              <div style={{ ...TYPE.sectionHeader, fontSize:11, marginBottom:10 }}>LIKELY SCORELINE</div>
-              <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
-                <div style={{ fontSize:12, color:COLORS.muted }}>
-                  Expected goals:{' '}
-                  <span style={{ fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>
-                    {intel.predicted_home_goals?.toFixed(1) ?? '—'} – {intel.predicted_away_goals?.toFixed(1) ?? '—'}
-                  </span>
-                </div>
-              </div>
-              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                {intel.predicted_scorelines.slice(0, 6).map((s: any, i: number) => (
-                  <div
-                    key={i}
-                    style={{
-                      background: i === 0 ? COLORS.green+'15' : COLORS.surface2,
-                      border: `1px solid ${i === 0 ? COLORS.green+'40' : COLORS.border}`,
-                      borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 64,
-                    }}
-                  >
-                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color: i === 0 ? COLORS.green : COLORS.text }}>
-                      {s.home}–{s.away}
-                    </div>
-                    <div style={{ fontSize:10, color:COLORS.dim, marginTop:2 }}>{s.probability}%</div>
+      {/* ══════════════════════════ INTELLIGENCE ══════════════════════════
+          The flagship tab — 5 subtabs going from fast summary to deep
+          models, matching the proposed IA. ── */}
+      {tab === 'Intelligence' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          <Tabs tabs={INTELLIGENCE_SUBTABS} active={intelSubtab} onChange={setIntelSubtab} />
+
+          {/* ── SUMMARY ── */}
+          {intelSubtab === 'Summary' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <Card>
+                <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12 }}>Readiness Battle</div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-around' }}>
+                  <Mono size={28} color={scoreColor(homeReadinessAny)}>{homeReadinessAny != null ? Math.round(homeReadinessAny) : '—'}</Mono>
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase' }}>vs</div>
+                    {readinessGapAbs != null && <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>Gap {readinessGapAbs >= 0 ? '+' : ''}{Math.round(readinessGapAbs)}</div>}
                   </div>
+                  <Mono size={28} color={scoreColor(awayReadinessAny)}>{awayReadinessAny != null ? Math.round(awayReadinessAny) : '—'}</Mono>
+                </div>
+              </Card>
+              <Card>
+                <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12 }}>Form Battle</div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-around' }}>
+                  <FormString results={homeFormString.split('')} showPoints={false} />
+                  <div style={{ fontSize:10, color:COLORS.dim }}>vs</div>
+                  <FormString results={awayFormString.split('')} showPoints={false} />
+                </div>
+              </Card>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:16 }}>
+                <Card>
+                  <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8 }}>Strength Battle</div>
+                  <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center' }}>
+                    <Mono size={22}>{homeExtras?.strength_score != null ? Math.round(homeExtras.strength_score) : '—'}</Mono>
+                    <span style={{ fontSize:10, color:COLORS.dim }}>vs</span>
+                    <Mono size={22}>{awayExtras?.strength_score != null ? Math.round(awayExtras.strength_score) : '—'}</Mono>
+                  </div>
+                </Card>
+                <Card>
+                  <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8 }}>Venue Impact</div>
+                  <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center' }}>
+                    <Mono size={22}>{homeExtras?.venue_advantage_score != null ? Math.round(homeExtras.venue_advantage_score) : '—'}</Mono>
+                    <span style={{ fontSize:10, color:COLORS.dim }}>vs</span>
+                    <Mono size={22}>{awayExtras?.venue_advantage_score != null ? Math.round(awayExtras.venue_advantage_score) : '—'}</Mono>
+                  </div>
+                </Card>
+                {matchRisk && (
+                  <Card>
+                    <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8 }}>Match Risk</div>
+                    <div style={{ textAlign:'center' }}>
+                      <span style={{
+                        fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
+                        color: matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red,
+                      }}>
+                        {matchRisk}
+                      </span>
+                    </div>
+                  </Card>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── SQUADS — "where your injury query belongs" ── */}
+          {intelSubtab === 'Squads' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:16 }}>
+                {[
+                  { team: match.home_team, injury: homeInjury, lineupCount: (homeLineup ?? []).length },
+                  { team: match.away_team, injury: awayInjury, lineupCount: (awayLineup ?? []).length },
+                ].map(({ team, injury, lineupCount }, i) => (
+                  <Card key={i}>
+                    <div style={{ fontSize:12, fontWeight:700, color:COLORS.text, marginBottom:8 }}>{team?.short_name ?? team?.name}</div>
+                    {!injury || injury.injured_count === 0 ? (
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:700, color:COLORS.green }}>{lineupCount}/{lineupCount} Starters Available</div>
+                        <div style={{ fontSize:11, color:COLORS.green, marginTop:4 }}>✓ No Key Absences</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:700, color:COLORS.amber }}>{lineupCount - injury.injured_count}/{lineupCount} Starters Available</div>
+                        <div style={{ fontSize:11, color:COLORS.red, marginTop:4 }}>{injury.injured_count} missing — {injury.total_importance_lost} importance lost</div>
+                      </div>
+                    )}
+                  </Card>
                 ))}
               </div>
-              <div style={{ fontSize:10, color:COLORS.dim, marginTop:12 }}>
-                Statistical estimate from each team's recent scoring/conceding form — independent Poisson model. Not a prediction of the actual result.
+
+              {(homeGoalDep || awayGoalDep || homeInjury || awayInjury) && (
+                <Card>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Injury Impact</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+                    {[
+                      { team: match.home_team, goalDep: homeGoalDep, injury: homeInjury },
+                      { team: match.away_team, goalDep: awayGoalDep, injury: awayInjury },
+                    ].map(({ team, goalDep, injury }, i) => (
+                      <div key={i}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>{team?.short_name ?? team?.name}</div>
+                        {goalDep ? (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
+                            <span style={{ color: COLORS.muted }}>Top scorer <span style={{ color: COLORS.dim }}>({toOne(goalDep.players)?.short_name ?? toOne(goalDep.players)?.name ?? '—'})</span></span>
+                            <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: goalDep.top_scorer_pct >= 35 ? COLORS.red : goalDep.top_scorer_pct >= 20 ? COLORS.amber : COLORS.green }}>{goalDep.top_scorer_pct}%</span>
+                          </div>
+                        ) : <div style={{ fontSize: 10, color: COLORS.dim, marginBottom: 6 }}>Not yet computed</div>}
+                        {injury ? (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                            <span style={{ color: COLORS.muted }}>
+                              {injury.injured_count} out
+                              {injury.no_replacement_positions && <span style={{ color: COLORS.red, fontWeight: 700 }}> · no cover: {injury.no_replacement_positions}</span>}
+                            </span>
+                            <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: injury.total_importance_lost >= 40 ? COLORS.red : injury.total_importance_lost >= 20 ? COLORS.amber : COLORS.green }}>−{injury.total_importance_lost}</span>
+                          </div>
+                        ) : <div style={{ fontSize: 11, color: COLORS.green, fontWeight: 600 }}>✓ Healthy squad</div>}
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {(homeDepth?.length > 0 || awayDepth?.length > 0) && (
+                <Card>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Position Depth</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                    {[
+                      { team: match.home_team, depth: aggregatePositionDepth(homeDepth || []) },
+                      { team: match.away_team, depth: aggregatePositionDepth(awayDepth || []) },
+                    ].map(({ team, depth }, i) => (
+                      <div key={i}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>{team?.short_name ?? team?.name}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                          {['GK', 'DEF', 'MID', 'FWD'].map(pos => {
+                            const d = depth[pos];
+                            const pct = d.total > 0 ? Math.round((d.available / d.total) * 100) : 0;
+                            const color = pct < 60 ? COLORS.red : pct < 80 ? COLORS.amber : COLORS.green;
+                            return (
+                              <div key={pos} style={{ background: COLORS.surface2, borderRadius: 6, padding: '6px 8px', textAlign: 'center', border: `1px solid ${COLORS.border}` }}>
+                                <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase' }}>{pos}</div>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginTop: 2 }}>
+                                  {d.total > 0 ? d.available : '—'}{d.total > 0 && <span style={{ fontSize: 10, color: COLORS.dim, fontWeight: 400 }}>/{d.total}</span>}
+                                </div>
+                                {d.injured > 0 && <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.red, marginTop: 1 }}>{d.injured} out</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {((matchKeyPlayers?.home?.length ?? 0) > 0 || (matchKeyPlayers?.away?.length ?? 0) > 0) && (
+                <Card>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>📊 Importance Rankings</div>
+                    <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>Predicted-XI players — season goals/assists/rating, from real synced data</div>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                        {['Player', 'Team', 'Importance', 'Category', 'Goals', 'Assists', 'Rating', 'Role'].map(h => (
+                          <th key={h} style={{ padding: '6px 8px', textAlign: h === 'Player' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ...(matchKeyPlayers?.home ?? []).map((p: any) => ({ ...p, team: match.home_team?.short_name ?? match.home_team?.name })),
+                        ...(matchKeyPlayers?.away ?? []).map((p: any) => ({ ...p, team: match.away_team?.short_name ?? match.away_team?.name })),
+                      ].sort((a, b) => b.importance - a.importance).map((p: any) => {
+                        const role = deriveRole(p.positionCode, p.goals, p.assists);
+                        const category = deriveCategory(p.importance);
+                        return (
+                          <tr key={p.playerId} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                            <td style={{ padding: '6px 8px', color: COLORS.text, fontWeight: 600 }}>{p.shortName ?? p.name}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', color: COLORS.muted, fontSize: 11 }}>{p.team}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.importance >= 20 ? COLORS.green : COLORS.text2 }}>{p.importance.toFixed(1)}%</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: COLORS[category.color], background: COLORS[category.color]+'20', border: `1px solid ${COLORS[category.color]}40`, borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>{category.label}</span>
+                            </td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.goals}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.assists}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.rating != null ? p.rating.toFixed(2) : '—'}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: 11, color: COLORS.text2, whiteSpace: 'nowrap' }}>{role.emoji} {role.label}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </Card>
+              )}
+
+              <Card>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Squad Readiness Impact</div>
+                <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>
+                  Informational — shown for context, does not modify the readiness score used elsewhere on this platform.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+                  {[
+                    { team: match.home_team, intel: homeIntel, injury: homeInjury },
+                    { team: match.away_team, intel: awayIntel, injury: awayInjury },
+                  ].map(({ team, intel: ti, injury }, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>{team?.short_name ?? team?.name}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                        <span style={{ color: COLORS.muted }}>Base Readiness</span>
+                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(ti?.readiness_score) }}>{ti?.readiness_score != null ? Math.round(ti.readiness_score) : '—'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                        <span style={{ color: COLORS.muted }}>Importance Lost to Injury</span>
+                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: (injury?.total_importance_lost ?? 0) > 0 ? COLORS.red : COLORS.green }}>{injury?.total_importance_lost ?? 0}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* ── TACTICAL ── */}
+          {intelSubtab === 'Tactical' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              {keyBattles.length > 0 && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Key Battles</div>
+                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>Highest-importance player per position group, each side</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {keyBattles.map((b, i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 0', borderBottom: i < keyBattles.length-1 ? `1px solid ${COLORS.border}` : 'none' }}>
+                        <div style={{ flex:1, textAlign:'right', fontSize:12, fontWeight:600, color: b.home ? COLORS.text : COLORS.dim }}>{b.home?.shortName ?? b.home?.name ?? '—'}</div>
+                        <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase', padding:'0 12px' }}>{b.group}</div>
+                        <div style={{ flex:1, fontSize:12, fontWeight:600, color: b.away ? COLORS.text : COLORS.dim }}>{b.away?.shortName ?? b.away?.name ?? '—'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+              <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'10px 16px', fontSize:11, color:COLORS.dim }}>
+                Area control and attack-vs-defence heat-map style breakdowns would need real positional/tracking data this platform doesn't have — not shown rather than estimated.
               </div>
-            </Card>
+            </div>
+          )}
+
+          {/* ── PHYSICAL — congestion, fatigue, travel, stability, full
+              per-team breakdown (TeamColumn) for anyone wanting the deep
+              dive. ── */}
+          {intelSubtab === 'Physical' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              <details open>
+                <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
+                  Readiness Component Breakdown
+                </summary>
+                <Card style={{ marginTop: 10 }}>
+                  <ReadinessBreakdown components={readinessComponents} />
+                </Card>
+              </details>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+                <TeamColumn team={match.home_team} intel={homeIntel} form={homeForm} fix={homeFix} squad={homeSquad} upcoming={homeUp} depth={homeDepth} />
+                <TeamColumn team={match.away_team} intel={awayIntel} form={awayForm} fix={awayFix} squad={awaySquad} upcoming={awayUp} depth={awayDepth} />
+              </div>
+            </div>
+          )}
+
+          {/* ── MODELS ── */}
+          {intelSubtab === 'Models' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+              {hasWinProbs && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Outcome Model</div>
+                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>Summed from the full Poisson goal-probability grid, not an estimate</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12 }}>
+                    {[
+                      { label: match.home_team?.short_name ?? 'Home', value: winProbHome },
+                      { label: 'Draw', value: winProbDraw },
+                      { label: match.away_team?.short_name ?? 'Away', value: winProbAway },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ textAlign:'center' }}>
+                        <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase' }}>{label}</div>
+                        <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:22, fontWeight:700, color:COLORS.text, marginTop:4 }}>{value?.toFixed(0)}%</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {intel?.predicted_scorelines && intel.predicted_scorelines.length > 0 && (
+                <Card>
+                  <div style={{ ...TYPE.sectionHeader, fontSize:11, marginBottom:10 }}>POISSON MODEL — LIKELY SCORELINES</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
+                    <div style={{ fontSize:12, color:COLORS.muted }}>
+                      Expected goals:{' '}
+                      <span style={{ fontFamily:'"JetBrains Mono",monospace', color:COLORS.text, fontWeight:700 }}>
+                        {intel.predicted_home_goals?.toFixed(1) ?? '—'} – {intel.predicted_away_goals?.toFixed(1) ?? '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                    {intel.predicted_scorelines.slice(0, 6).map((s: any, i: number) => (
+                      <div key={i} style={{ background: i === 0 ? COLORS.green+'15' : COLORS.surface2, border: `1px solid ${i === 0 ? COLORS.green+'40' : COLORS.border}`, borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 64 }}>
+                        <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color: i === 0 ? COLORS.green : COLORS.text }}>{s.home}–{s.away}</div>
+                        <div style={{ fontSize:10, color:COLORS.dim, marginTop:2 }}>{s.probability}%</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:10, color:COLORS.dim, marginTop:12 }}>
+                    Statistical estimate from each team's recent scoring/conceding form — independent Poisson model. Not a prediction of the actual result.
+                  </div>
+                </Card>
+              )}
+
+              {matchInsight && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Confidence Analysis</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div style={{ flex:1, height:8, background:COLORS.border, borderRadius:4, overflow:'hidden' }}>
+                      <div style={{ width:`${matchInsight.confidence}%`, height:'100%', borderRadius:4, background: `linear-gradient(90deg, ${COLORS.red}, ${COLORS.amber}, ${COLORS.green})` }} />
+                    </div>
+                    <span style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color:scoreColor(matchInsight.confidence) }}>{matchInsight.confidence}%</span>
+                  </div>
+                  <div style={{ fontSize:9, color:COLORS.dim, marginTop:10 }}>
+                    How strongly the independent evidence streams (readiness, strength, injuries, congestion, travel, stability, venue) agree with this pick — not a comparison between multiple independent models, this platform runs one integrated system.
+                  </div>
+                </Card>
+              )}
+            </div>
           )}
         </div>
       )}
 
-      {/* ── LINEUPS — predicted XI + everything about who's playing and
-          what it means: player importance, goal-dependency and injury
-          impact ("Lineups and its related impact data"). ── */}
+      {/* ══════════════════════════ LINEUPS ══════════════════════════
+          Pure squad information — no literature, no analysis. ── */}
       {tab === 'Lineups' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {(homeLineup.length > 0 || awayLineup.length > 0) && (
+          {(homeLineup.length > 0 || awayLineup.length > 0) ? (
             <Card>
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Predicted Lineups
-                </div>
-                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
-                  Based on season starts, form, and injury status • 4-4-2 formation
-                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Predicted Lineups</div>
+                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>Based on season starts, form, and injury status • 4-4-2 formation</div>
               </div>
               <PredictedLineup
                 homeTeam={match.home_team}
@@ -811,215 +1180,38 @@ export default function MatchPage() {
                 lineups={{ home: homeLineup, away: awayLineup }}
               />
             </Card>
-          )}
-
-          {/* ── POSITION DEPTH — Block 3 from the source document
-              ("Position Depth Analysis": total/injured/available per
-              position). Was only ever shown buried inside each team's
-              own Squad sub-tab (TeamColumn); genuinely belongs here too,
-              alongside the lineup and injury data it's directly tied to. ── */}
-          {(homeDepth?.length > 0 || awayDepth?.length > 0) && (
-            <Card>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Position Depth
-                </div>
-                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
-                  Available vs total players per position
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-                {[
-                  { team: match.home_team, depth: aggregatePositionDepth(homeDepth || []) },
-                  { team: match.away_team, depth: aggregatePositionDepth(awayDepth || []) },
-                ].map(({ team, depth }, i) => (
-                  <div key={i}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                      {team?.short_name ?? team?.name}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                      {['GK', 'DEF', 'MID', 'FWD'].map(pos => {
-                        const d = depth[pos];
-                        const pct = d.total > 0 ? Math.round((d.available / d.total) * 100) : 0;
-                        const color = pct < 60 ? COLORS.red : pct < 80 ? COLORS.amber : COLORS.green;
-                        return (
-                          <div key={pos} style={{ background: COLORS.surface2, borderRadius: 6, padding: '6px 8px', textAlign: 'center', border: `1px solid ${COLORS.border}` }}>
-                            <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase' }}>{pos}</div>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginTop: 2 }}>
-                              {d.total > 0 ? d.available : '—'}{d.total > 0 && <span style={{ fontSize: 10, color: COLORS.dim, fontWeight: 400 }}>/{d.total}</span>}
-                            </div>
-                            {d.injured > 0 && <div style={{ fontSize: 9, fontWeight: 700, color: COLORS.red, marginTop: 1 }}>{d.injured} out</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {(homeGoalDep || awayGoalDep || homeInjury || awayInjury) && (
-            <Card>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Squad Risk
-                </div>
-                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
-                  Goal-scoring concentration and injury impact for each side
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-                {[
-                  { team: match.home_team, goalDep: homeGoalDep, injury: homeInjury },
-                  { team: match.away_team, goalDep: awayGoalDep, injury: awayInjury },
-                ].map(({ team, goalDep, injury }, i) => (
-                  <div key={i}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                      {team?.short_name ?? team?.name}
-                    </div>
-                    {goalDep ? (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
-                        <span style={{ color: COLORS.muted }}>
-                          Top scorer{' '}
-                          <span style={{ color: COLORS.dim }}>
-                            ({toOne(goalDep.players)?.short_name ?? toOne(goalDep.players)?.name ?? '—'})
-                          </span>
-                        </span>
-                        <span style={{
-                          fontFamily: '"JetBrains Mono",monospace', fontWeight: 700,
-                          color: goalDep.top_scorer_pct >= 35 ? COLORS.red : goalDep.top_scorer_pct >= 20 ? COLORS.amber : COLORS.green,
-                        }}>
-                          {goalDep.top_scorer_pct}%
-                        </span>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 10, color: COLORS.dim, marginBottom: 6 }}>Not yet computed</div>
-                    )}
-                    {injury ? (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                        <span style={{ color: COLORS.muted }}>
-                          {injury.injured_count} out
-                          {injury.no_replacement_positions && (
-                            <span style={{ color: COLORS.red, fontWeight: 700 }}> · no cover: {injury.no_replacement_positions}</span>
-                          )}
-                        </span>
-                        <span style={{
-                          fontFamily: '"JetBrains Mono",monospace', fontWeight: 700,
-                          color: injury.total_importance_lost >= 40 ? COLORS.red : injury.total_importance_lost >= 20 ? COLORS.amber : COLORS.green,
-                        }}>
-                          −{injury.total_importance_lost}
-                        </span>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 11, color: COLORS.green, fontWeight: 600 }}>✓ Healthy squad</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {((matchKeyPlayers?.home?.length ?? 0) > 0 || (matchKeyPlayers?.away?.length ?? 0) > 0) && (
-            <Card>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  📊 Player Importance Comparison
-                </div>
-                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
-                  Predicted-XI players at 16%+ importance — season goals/assists/rating, from real synced data
-                </div>
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                    {['Player', 'Team', 'Importance', 'Category', 'Goals', 'Assists', 'Rating', 'Role'].map(h => (
-                      <th key={h} style={{ padding: '6px 8px', textAlign: h === 'Player' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ...(matchKeyPlayers?.home ?? []).map((p: any) => ({ ...p, team: match.home_team?.short_name ?? match.home_team?.name })),
-                    ...(matchKeyPlayers?.away ?? []).map((p: any) => ({ ...p, team: match.away_team?.short_name ?? match.away_team?.name })),
-                  ]
-                    .sort((a, b) => b.importance - a.importance)
-                    .map((p: any) => {
-                      const role = deriveRole(p.positionCode, p.goals, p.assists);
-                      const category = deriveCategory(p.importance);
-                      return (
-                        <tr key={p.playerId} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                          <td style={{ padding: '6px 8px', color: COLORS.text, fontWeight: 600 }}>{p.shortName ?? p.name}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', color: COLORS.muted, fontSize: 11 }}>{p.team}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.importance >= 20 ? COLORS.green : COLORS.text2 }}>{p.importance.toFixed(1)}%</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
-                              color: COLORS[category.color], background: COLORS[category.color]+'20',
-                              border: `1px solid ${COLORS[category.color]}40`, borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap',
-                            }}>
-                              {category.label}
-                            </span>
-                          </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.goals}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.assists}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.rating != null ? p.rating.toFixed(2) : '—'}</td>
-                          <td style={{ padding: '6px 8px', textAlign: 'center', fontSize: 11, color: COLORS.text2, whiteSpace: 'nowrap' }}>{role.emoji} {role.label}</td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </Card>
+          ) : (
+            <div style={{ padding:'40px 20px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
+              Predicted lineups not yet available for this match.
+            </div>
           )}
         </div>
       )}
 
-      {/* ── SQUAD — the deep per-team Form/Fixture Load/Squad/Intelligence
-          breakdown (TeamColumn). Was ALWAYS visible above the tabs before
-          this redesign — the single biggest contributor to "the page is
-          a wall of data" now lives behind one tap instead of loading
-          unconditionally on every visit. ── */}
-      {tab === 'Squad' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-          <TeamColumn 
-            team={match.home_team} 
-            intel={homeIntel} 
-            form={homeForm} 
-            fix={homeFix} 
-            squad={homeSquad} 
-            upcoming={homeUp}
-            depth={homeDepth}
-          />
-          <TeamColumn 
-            team={match.away_team} 
-            intel={awayIntel} 
-            form={awayForm} 
-            fix={awayFix} 
-            squad={awaySquad} 
-            upcoming={awayUp}
-            depth={awayDepth}
-          />
-        </div>
-      )}
+      {/* ══════════════════════════ INSIGHTS ══════════════════════════
+          The storytelling tab — 4 subtabs. ── */}
+      {tab === 'Insights' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          <Tabs tabs={INSIGHTS_SUBTABS} active={insightsSubtab} onChange={setInsightsSubtab} />
 
-      {/* ── NARRATIVE — the story-point synthesis, kept separate from the
-          fast Overview digest since it's meant to be read, not scanned. ── */}
-      {tab === 'Narrative' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {narrativeThreads.length > 0 && (
+          {insightsSubtab === 'Preview' && executiveSummary && (
+            <Card style={{ background: COLORS.blue+'0f', border: `1px solid ${COLORS.blue}30` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue }}>💡 Executive Summary</span>
+              </div>
+              <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.6 }}>{executiveSummary}</div>
+            </Card>
+          )}
+
+          {insightsSubtab === 'Narratives' && narrativeThreads.length > 0 && (
             <Card>
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  🚨 Key Narrative Threads
-                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>🚨 Key Narrative Threads</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {narrativeThreads.map((t, i) => (
                   <div key={i} style={{ borderLeft: `2px solid ${COLORS.border}`, paddingLeft: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>
-                      {i + 1}. {t.title} {t.emoji}
-                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>{i + 1}. {t.title} {t.emoji}</div>
                     <div style={{ fontSize: 12, color: COLORS.text2, lineHeight: 1.6, marginBottom: 6 }}>{t.text}</div>
                     <div style={{ fontSize: 11, color: COLORS.dim, fontStyle: 'italic' }}>Impact: {t.impact}</div>
                   </div>
@@ -1028,116 +1220,127 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {/* ── DETAILED READINESS BREAKDOWN — the weighted 7-component
-              contribution numbers behind the Comparison Matrix's single
-              Readiness row; supplementary detail, not primary content. ── */}
-          <details>
-            <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
-              Detailed Readiness Breakdown
-            </summary>
-            <Card style={{ marginTop: 10 }}>
-              <ReadinessBreakdown components={readinessComponents} />
-            </Card>
-          </details>
-        </div>
-      )}
-
-      {/* ── BETTING SIGNALS TAB — unchanged from the pre-redesign version. ── */}
-      {tab === 'Betting Signals' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          <div style={{ background:COLORS.amber+'15', border:`1px solid ${COLORS.amber}30`, borderRadius:8, padding:'10px 16px', fontSize:12, color:COLORS.amber }}>
-            ⚠ Intelligence signals are derived from precomputed data. Not betting advice. Please bet responsibly.
-          </div>
-
-          {signalsAreBaselineOnly && (
-            <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'8px 16px', fontSize:11, color:COLORS.muted }}>
-              ℹ These signals are estimated from each team's current baseline — match-specific
-              intelligence (opponent strength, home advantage, motivation) hasn't been computed
-              for this fixture yet. Precision will improve once it has.
-            </div>
-          )}
-
-          {signals.length > 0 ? (
-            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-              {strongHome.length > 0 && <SignalChip label={`Strong Home Signal — ${strongHome[0].market}`} strength={strongHome[0].strength} direction="home" />}
-              {strongAway.length > 0 && <SignalChip label={`Strong Away Signal — ${strongAway[0].market}`} strength={strongAway[0].strength} direction="away" />}
-              {strongHome.length === 0 && strongAway.length === 0 && <SignalChip label="No strong signals detected" strength={1} direction="neutral" />}
-            </div>
-          ) : (
-            <div style={{ padding:'24px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
-              No signals available yet — neither team has readiness data computed. Run process:all-db once squad/season data has synced.
-            </div>
-          )}
-
-          {[
-            { title: 'MATCH MARKETS', filter: (s: any) => s.group === '1x2' },
-            { title: 'GOAL MARKETS', filter: (s: any) => s.group === 'goals' },
-            { title: 'COMPETITION MARKETS', filter: (s: any) => s.group === 'competition' },
-            { title: 'HALF-TIME MARKETS', filter: (s: any) => s.group === 'halftime' },
-            { title: 'CARD MARKETS', filter: (s: any) => s.group === 'cards' },
-          ].map(({ title, filter }) => {
-            const group = signals.filter(filter);
-            if (group.length === 0) return null;
-            return (
-              <div key={title}>
-                <div style={{ ...TYPE.sectionHeader, fontSize:10, marginBottom:8 }}>{title}</div>
-                <Card style={{ padding:0, overflow:'hidden' }}>
-                  <table style={{ width:'100%' }}>
-                    <thead>
-                      <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
-                        {['Market','Signal','Strength','Intelligence Driver'].map(h => (
-                          <th key={h} style={{ padding:'8px 14px', fontSize:9, color:COLORS.dim, textTransform:'uppercase', letterSpacing:'0.07em', textAlign:'left', fontWeight:600 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.map((s, i) => {
-                        const col = s.direction==='home'?COLORS.green:s.direction==='away'?COLORS.red:s.direction==='avoid'?COLORS.orange:COLORS.muted;
-                        const isEdge = s.signal !== 'No Edge' && s.signal !== 'No Flag' && s.signal !== 'Balanced' && s.signal !== 'Level';
-                        const isLocked = s.locked && !isPro;
-                        const isBlurred = !isPro && i >= 3;
-                        return (
-                          <tr key={i} style={{
-                            borderBottom:`1px solid ${COLORS.border}`,
-                            background: i%2===0?'transparent':COLORS.surface2+'40',
-                            position:'relative',
-                          }}>
-                            <td style={{ padding:'10px 14px', fontSize:12, fontWeight:600, color:COLORS.text, filter:isBlurred?'blur(4px)':'none' }}>
-                              {s.market}
-                              {isLocked && <span style={{ marginLeft:5, fontSize:9, color:COLORS.purple }}>🔒 PRO</span>}
-                            </td>
-                            <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
-                              <span style={{ background:(isEdge?col:COLORS.dim)+'20', color:isEdge?col:COLORS.dim, border:`1px solid ${isEdge?col:COLORS.dim}40`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{s.signal}</span>
-                            </td>
-                            <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
-                              <div style={{ display:'flex', gap:2 }}>
-                                {Array.from({length:6}).map((_,j) => (
-                                  <div key={j} style={{ width:7, height:12, borderRadius:2, background:j<s.strength?(isEdge?col:COLORS.dim):COLORS.border }} />
-                                ))}
-                              </div>
-                            </td>
-                            <td style={{ padding:'10px 14px', fontSize:11, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{s.drivers}</td>
-                            {isBlurred && (
-                              <td style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:COLORS.surface+'90' }}>
-                                <div style={{ background:COLORS.purple+'20', border:`1px solid ${COLORS.purple}40`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
-                                  🔒 Unlock 47 more signals today →
-                                </div>
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </Card>
+          {insightsSubtab === 'Signals' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ background:COLORS.amber+'15', border:`1px solid ${COLORS.amber}30`, borderRadius:8, padding:'10px 16px', fontSize:12, color:COLORS.amber }}>
+                ⚠ Intelligence signals are derived from precomputed data. Not betting advice. Please bet responsibly.
               </div>
-            );
-          })}
+              {signalsAreBaselineOnly && (
+                <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'8px 16px', fontSize:11, color:COLORS.muted }}>
+                  ℹ These signals are estimated from each team's current baseline — match-specific intelligence hasn't been computed for this fixture yet.
+                </div>
+              )}
+              {signals.length === 0 && (
+                <div style={{ padding:'24px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
+                  No signals available yet — neither team has readiness data computed.
+                </div>
+              )}
+              {[
+                { title: 'MATCH MARKETS', filter: (s: any) => s.group === '1x2' },
+                { title: 'GOAL MARKETS', filter: (s: any) => s.group === 'goals' },
+                { title: 'COMPETITION MARKETS', filter: (s: any) => s.group === 'competition' },
+                { title: 'HALF-TIME MARKETS', filter: (s: any) => s.group === 'halftime' },
+                { title: 'CARD MARKETS', filter: (s: any) => s.group === 'cards' },
+              ].map(({ title, filter }) => {
+                const group = signals.filter(filter);
+                if (group.length === 0) return null;
+                return (
+                  <div key={title}>
+                    <div style={{ ...TYPE.sectionHeader, fontSize:10, marginBottom:8 }}>{title}</div>
+                    <Card style={{ padding:0, overflow:'hidden' }}>
+                      <table style={{ width:'100%' }}>
+                        <thead>
+                          <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
+                            {['Market','Signal','Strength','Intelligence Driver'].map(h => (
+                              <th key={h} style={{ padding:'8px 14px', fontSize:9, color:COLORS.dim, textTransform:'uppercase', letterSpacing:'0.07em', textAlign:'left', fontWeight:600 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.map((s, i) => {
+                            const col = s.direction==='home'?COLORS.green:s.direction==='away'?COLORS.red:s.direction==='avoid'?COLORS.orange:COLORS.muted;
+                            const isEdge = s.signal !== 'No Edge' && s.signal !== 'No Flag' && s.signal !== 'Balanced' && s.signal !== 'Level';
+                            const isLocked = s.locked && !isPro;
+                            const isBlurred = !isPro && i >= 3;
+                            return (
+                              <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background: i%2===0?'transparent':COLORS.surface2+'40', position:'relative' }}>
+                                <td style={{ padding:'10px 14px', fontSize:12, fontWeight:600, color:COLORS.text, filter:isBlurred?'blur(4px)':'none' }}>
+                                  {s.market}{isLocked && <span style={{ marginLeft:5, fontSize:9, color:COLORS.purple }}>🔒 PRO</span>}
+                                </td>
+                                <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
+                                  <span style={{ background:(isEdge?col:COLORS.dim)+'20', color:isEdge?col:COLORS.dim, border:`1px solid ${isEdge?col:COLORS.dim}40`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{s.signal}</span>
+                                </td>
+                                <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
+                                  <div style={{ display:'flex', gap:2 }}>
+                                    {Array.from({length:6}).map((_,j) => (
+                                      <div key={j} style={{ width:7, height:12, borderRadius:2, background:j<s.strength?(isEdge?col:COLORS.dim):COLORS.border }} />
+                                    ))}
+                                  </div>
+                                </td>
+                                <td style={{ padding:'10px 14px', fontSize:11, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{s.drivers}</td>
+                                {isBlurred && (
+                                  <td style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:COLORS.surface+'90' }}>
+                                    <div style={{ background:COLORS.purple+'20', border:`1px solid ${COLORS.purple}40`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
+                                      🔒 Unlock 47 more signals today →
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </Card>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {insightsSubtab === 'Recommendations' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              {signals.filter(s => s.strength >= 3 && s.signal !== 'No Edge' && s.signal !== 'Balanced' && s.signal !== 'Level').length === 0 ? (
+                <div style={{ padding:'24px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
+                  No signals strong enough yet for a specific recommendation.
+                </div>
+              ) : (
+                signals
+                  .filter(s => s.strength >= 3 && s.signal !== 'No Edge' && s.signal !== 'Balanced' && s.signal !== 'Level')
+                  .sort((a, b) => b.strength - a.strength)
+                  .map((s, i) => {
+                    const col = s.direction==='home'?COLORS.green:s.direction==='away'?COLORS.red:s.direction==='avoid'?COLORS.orange:COLORS.muted;
+                    const confLabel = s.strength >= 5 ? 'HIGH' : s.strength >= 3 ? 'MEDIUM' : 'LOW';
+                    return (
+                      <Card key={i}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+                          <div>
+                            <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{s.market}</div>
+                            <div style={{ fontSize:14, fontWeight:700, color:col, marginTop:2 }}>{s.signal}</div>
+                          </div>
+                          <span style={{
+                            fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
+                            color: confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted,
+                            background:(confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted)+'20',
+                            border:`1px solid ${confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted}40`,
+                            borderRadius:4, padding:'2px 8px',
+                          }}>
+                            {confLabel}
+                          </span>
+                        </div>
+                        <div style={{ fontSize:11, color:COLORS.muted }}>{s.drivers}</div>
+                      </Card>
+                    );
+                  })
+              )}
+              <div style={{ fontSize:10, color:COLORS.dim, textAlign:'center', marginTop:4 }}>
+                Derived from precomputed intelligence signals. Not betting advice — please bet responsibly.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── RELATED — pivot to either team's own "quote page" without
-          navigating back through the matches list first. ── */}
+      {/* ── RELATED — pivot to either team's own quote page. ── */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
           Related

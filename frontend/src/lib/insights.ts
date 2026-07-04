@@ -185,6 +185,24 @@ export function deriveCategory(importance: number): { label: string; color: 'gre
   return { label: 'SQUAD PLAYER', color: 'muted' };
 }
 
+// ─── MATCH RISK — Low / Medium / High ───────────────────────────────────────
+// Derived from the confidence engine already built (migration 016's
+// evidence-agreement score) — NOT a new, independent metric. "Risk" here
+// means "how predictable is this outcome", which is exactly what
+// confidence_score already measures: how strongly the independent
+// evidence streams agree. Reusing it under this label rather than
+// inventing a second, disconnected number for the same underlying
+// question. Falls back to a null-confidence default (never LOW without
+// real evidence behind it) rather than guessing.
+export function deriveMatchRisk(confidence: number | null, readinessGapAbs: number | null): 'LOW' | 'MEDIUM' | 'HIGH' {
+  if (confidence == null) {
+    return (readinessGapAbs != null && readinessGapAbs >= 8) ? 'MEDIUM' : 'HIGH';
+  }
+  if (confidence >= 70) return 'LOW';
+  if (confidence >= 55) return 'MEDIUM';
+  return 'HIGH';
+}
+
 export function deriveRole(positionCode: string, goals: number, assists: number): { emoji: string; label: string } {
   if (positionCode === 'GK') return { emoji: '🧤', label: 'Key Goalkeeper' };
   if (positionCode === 'DEF') {
