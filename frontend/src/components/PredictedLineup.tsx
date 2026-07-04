@@ -3,6 +3,7 @@
 'use client';
 
 import { COLORS } from '@/design/tokens';
+import { deriveFormation } from '@/lib/insights';
 
 // ─── Interface ──────────────────────────────────────────────────────────────
 interface LineupPlayer {
@@ -242,6 +243,15 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
     const mid = normalizedPlayers.filter(p => p.position_code === 'MID');
     const fwd = normalizedPlayers.filter(p => p.position_code === 'FWD');
 
+    // Real formation from each player's own detailed position (DC/DM/AM/
+    // ST etc — the ORIGINAL, un-normalized position_code before the
+    // GK/DEF/MID/FWD grouping above), not a hardcoded "4-4-2" regardless
+    // of the actual predicted shape.
+    const formation = deriveFormation(players.map(p => ({
+      slotCode: p.position_code,
+      detailedPosition: p.players?.primary_position ?? p.players?.position_detailed ?? null,
+    })));
+
     // ─── Format player with confidence ──────────────────────────────────────
     const formatPlayerWithConfidence = (p: LineupPlayer) => {
       const name = p.players?.name || '?';
@@ -376,7 +386,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
         </div>
 
         <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.muted, marginBottom: 10 }}>
-          Predicted Lineup (4-4-2):
+          Predicted Lineup{formation ? ` (${formation})` : ''}:
         </div>
 
         {/* GK */}

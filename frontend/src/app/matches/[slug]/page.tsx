@@ -13,7 +13,7 @@ import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveMatchRisk } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveMatchRisk, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
 import TeamComparisonMatrix, { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import FormString from '@/components/FormString';
 import SignalChip from '@/components/SignalChip';
@@ -424,6 +424,24 @@ export default function MatchPage() {
       .sort((a: any, b: any) => b.importance - a.importance)[0];
     return { group, home: homeBest, away: awayBest };
   }).filter(b => b.home || b.away);
+
+  // ── Formation + Area Versatility — real, from position_detailed/
+  // primary_position on each lineup player, not hardcoded/fabricated.
+  // Both read the SAME homeLineup/awayLineup already fetched for
+  // PredictedLineup — no new query. ────────────────────────────────────
+  const toFormationPlayers = (lineup: any[]) => (lineup ?? []).map((p: any) => ({
+    slotCode: p.position_code,
+    detailedPosition: p.players?.primary_position ?? p.players?.position_detailed ?? null,
+  }));
+  const homeFormation = deriveFormation(toFormationPlayers(homeLineup));
+  const awayFormation = deriveFormation(toFormationPlayers(awayLineup));
+
+  const toVersatilityPlayers = (lineup: any[]) => (lineup ?? []).map((p: any) => ({
+    slotCode: p.position_code,
+    positions: [p.players?.primary_position, p.players?.secondary_position, p.players?.tertiary_position],
+  }));
+  const homeAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(homeLineup));
+  const awayAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(awayLineup));
 
   const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
   const strongHome = signals.filter(s => s.direction === 'home' && s.strength >= 4);
@@ -1072,8 +1090,37 @@ export default function MatchPage() {
                   </div>
                 </Card>
               )}
+              {(Object.values(homeAreaVersatility).some(v => v != null) || Object.values(awayAreaVersatility).some(v => v != null)) && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Area Versatility</div>
+                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>
+                    Share of predicted-XI players with more than one listed position, by area — a real proxy for tactical flexibility, not a ball-control estimate (this platform has no positional-tracking data to measure actual control).
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {(['DEF', 'MID', 'FWD'] as const).map(area => (
+                      <div key={area} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                        <div style={{ width:36, fontSize:10, fontWeight:700, color:COLORS.dim, textTransform:'uppercase' }}>{area}</div>
+                        <div style={{ flex:1, display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ width:32, textAlign:'right', fontFamily:'"JetBrains Mono",monospace', fontSize:12, fontWeight:700, color:COLORS.text }}>{homeAreaVersatility[area] ?? '—'}{homeAreaVersatility[area] != null ? '%' : ''}</span>
+                          <div style={{ flex:1, display:'flex', height:6, borderRadius:3, overflow:'hidden', background:COLORS.border }}>
+                            <div style={{ width:`${homeAreaVersatility[area] ?? 0}%`, background:COLORS.blue }} />
+                          </div>
+                          <div style={{ flex:1, display:'flex', height:6, borderRadius:3, overflow:'hidden', background:COLORS.border, flexDirection:'row-reverse' }}>
+                            <div style={{ width:`${awayAreaVersatility[area] ?? 0}%`, background:COLORS.amber }} />
+                          </div>
+                          <span style={{ width:32, fontFamily:'"JetBrains Mono",monospace', fontSize:12, fontWeight:700, color:COLORS.text }}>{awayAreaVersatility[area] ?? '—'}{awayAreaVersatility[area] != null ? '%' : ''}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, fontSize:9, color:COLORS.dim }}>
+                    <span>{match.home_team?.short_name ?? match.home_team?.name}</span>
+                    <span>{match.away_team?.short_name ?? match.away_team?.name}</span>
+                  </div>
+                </Card>
+              )}
               <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'10px 16px', fontSize:11, color:COLORS.dim }}>
-                Area control and attack-vs-defence heat-map style breakdowns would need real positional/tracking data this platform doesn't have — not shown rather than estimated.
+                Real ball-control / heat-map area breakdowns would need positional-tracking data this platform doesn't have — Area Versatility above is a genuine, different proxy (squad flexibility), not an estimate of the same thing.
               </div>
             </div>
           )}
@@ -1172,7 +1219,12 @@ export default function MatchPage() {
             <Card>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Predicted Lineups</div>
-                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>Based on season starts, form, and injury status • 4-4-2 formation</div>
+                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
+                  Based on season starts, form, and injury status
+                  {(homeFormation || awayFormation) && (
+                    <> • {homeFormation ?? '—'} vs {awayFormation ?? '—'}</>
+                  )}
+                </div>
               </div>
               <PredictedLineup
                 homeTeam={match.home_team}
