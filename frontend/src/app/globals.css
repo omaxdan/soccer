@@ -671,13 +671,53 @@ th, td { text-align: left; }
    rather than shrinking — stacks to a vertical column on mobile instead,
    consistent with the same "row of columns on desktop, column of rows on
    mobile" pattern used everywhere else in this file. */
-.rip-hero-vs-row {
+/* ─── MATCH HERO — home info / home gauge / vs+gap / away gauge / away info,
+   as 5 FLAT flex siblings (not nested blocks — see page.tsx's comment on
+   why nesting caused a real bug: a taller stacked middle child made the
+   outer row's align-items:center visually sandwich the team names between
+   the two gauges instead of beside them). Natural DOM order reads
+   correctly in both directions with no `order` overrides needed: row
+   (desktop) = left-to-right home->away; column (mobile) = top-to-bottom
+   home->away. */
+.rip-match-hero {
   display: flex;
   align-items: center;
-  gap: 20px;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
 }
+.rip-match-hero-team {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.rip-match-hero-badge {
+  width: 44px; height: 44px; flex-shrink: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--text);
+}
+.rip-match-hero-name { font-size: 16px; font-weight: 700; color: var(--text); }
+.rip-match-hero-rank { font-size: 11px; color: var(--dim); }
+.rip-match-hero-team-away { justify-content: flex-end; }
+.rip-match-hero-team-away .rip-match-hero-name,
+.rip-match-hero-team-away .rip-match-hero-rank { text-align: right; }
+.rip-match-hero-center { text-align: center; flex-shrink: 0; }
+
 @media (max-width: 640px) {
-  .rip-hero-vs-row { flex-direction: column; gap: 12px; }
+  .rip-match-hero { flex-direction: column; gap: 12px; }
+  /* Once stacked, both team blocks read left-to-right the same way —
+     the desktop-only right-alignment (badge-on-the-right, text-align:
+     right) existed to mirror across the vs-row; with everything in one
+     column there's no longer a "far side" to mirror against, so away's
+     block matches home's badge-first, left-aligned layout instead of
+     looking reversed for no visible reason. */
+  .rip-match-hero-team-away { justify-content: center; flex-direction: row-reverse; }
+  .rip-match-hero-team-away .rip-match-hero-name,
+  .rip-match-hero-team-away .rip-match-hero-rank { text-align: left; }
 }
 
 /* ─── GENERIC MOBILE STACK — for asymmetric main+sidebar grids whose

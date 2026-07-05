@@ -250,59 +250,77 @@ export default async function Dashboard() {
                 </span>
               </div>
 
-              {/* Teams + gauges */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ width: 44, height: 44, background: 'var(--surface2)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text)', border: '1px solid var(--border)' }}>
+              {/* Teams + gauges — ONE flat flex container (5 direct children:
+                  home info, home gauge, vs/gap box, away gauge, away info),
+                  not the previous 3-nested-block structure. That nesting
+                  put [home-gauge, vs-box, away-gauge] inside a single middle
+                  child (a former inner .rip-hero-vs-row wrapper) that stacked to column on mobile —
+                  which made the middle child much TALLER than the two side
+                  name-blocks, and align-items:center then centered those
+                  side blocks against the new tall height, visually
+                  "sandwiching" the team names between the two gauges
+                  instead of beside them (exactly the reported bug — this
+                  was never a home/away swap, home is genuinely on the left
+                  in the code, away genuinely on the right).
+                  Flattening removes the nesting entirely: with 5 flat
+                  siblings, the SAME natural DOM order (home info -> home
+                  gauge -> comparison -> away gauge -> away info) reads
+                  correctly left-to-right when flex-direction is row
+                  (desktop) AND top-to-bottom when it's column (mobile) —
+                  no CSS `order` overrides needed, and team name blocks no
+                  longer compete with a taller sibling for vertical centering,
+                  which also fixes the reported "Šiauliai FA sags lower"
+                  issue (that was a symptom of the same centering conflict,
+                  not independently caused by text wrapping to 2 lines). */}
+              <div className="rip-match-hero">
+                <div className="rip-match-hero-team">
+                  <div className="rip-match-hero-badge">
                     {heroMatch.home_team?.short_name?.slice(0, 3) ?? '?'}
                   </div>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700 }}>{heroMatch.home_team?.name ?? '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--dim)' }}>1st</div>
+                    <div className="rip-match-hero-name">{heroMatch.home_team?.name ?? '—'}</div>
+                    <div className="rip-match-hero-rank">1st</div>
                   </div>
                 </div>
 
-                <div className="rip-hero-vs-row">
-                  {/* Falls back to each team's current baseline (heroHomeIntel/
-                      heroAwayIntel) when match_intelligence hasn't been
-                      computed for this specific match yet. */}
-                  <ReadinessGauge score={heroIntel?.home_readiness ?? heroHomeIntel?.readiness_score ?? null} size={90} change={heroIntel?.home_readiness ? 2.1 : undefined} />
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 4 }}>
-                      {(heroResult?.home_score != null && heroResult?.away_score != null) ? `${heroResult.home_score} : ${heroResult.away_score}` : 'VS'}
-                    </div>
-                    {heroIntel?.readiness_gap != null ? (
-                      <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 14px', textAlign: 'center' }}>
-                        <div className={`mono ${scoreClass(Math.abs(heroIntel.readiness_gap))}`} style={{ fontSize: 22, fontWeight: 700 }}>{Math.abs(heroIntel.readiness_gap)}</div>
-                        <div style={{ fontSize: 9, color: 'var(--dim)', textTransform: 'uppercase' }}>READINESS GAP</div>
-                        {heroIntel.readiness_gap !== 0 && (
-                          <div style={{ fontSize: 10, color: 'var(--green)', marginTop: 2 }}>
-                            {heroIntel.readiness_gap > 0 ? heroMatch.home_team?.short_name : heroMatch.away_team?.short_name} Advantage
-                          </div>
-                        )}
-                      </div>
-                    ) : (heroHomeIntel?.readiness_score != null && heroAwayIntel?.readiness_score != null) ? (
-                      // Fallback: rough gap from each team's own baseline —
-                      // not the real match-specific formula (no opponent
-                      // strength/home advantage/motivation factored in).
-                      <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 14px', textAlign: 'center' }}>
-                        <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: 'var(--amber)' }}>
-                          {Math.abs(heroHomeIntel.readiness_score - heroAwayIntel.readiness_score)}
+                <ReadinessGauge score={heroIntel?.home_readiness ?? heroHomeIntel?.readiness_score ?? null} size={90} change={heroIntel?.home_readiness ? 2.1 : undefined} />
+
+                <div className="rip-match-hero-center">
+                  <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 4 }}>
+                    {(heroResult?.home_score != null && heroResult?.away_score != null) ? `${heroResult.home_score} : ${heroResult.away_score}` : 'VS'}
+                  </div>
+                  {heroIntel?.readiness_gap != null ? (
+                    <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 14px', textAlign: 'center' }}>
+                      <div className={`mono ${scoreClass(Math.abs(heroIntel.readiness_gap))}`} style={{ fontSize: 22, fontWeight: 700 }}>{Math.abs(heroIntel.readiness_gap)}</div>
+                      <div style={{ fontSize: 9, color: 'var(--dim)', textTransform: 'uppercase' }}>READINESS GAP</div>
+                      {heroIntel.readiness_gap !== 0 && (
+                        <div style={{ fontSize: 10, color: 'var(--green)', marginTop: 2 }}>
+                          {heroIntel.readiness_gap > 0 ? heroMatch.home_team?.short_name : heroMatch.away_team?.short_name} Advantage
                         </div>
-                        <div style={{ fontSize: 9, color: 'var(--dim)', textTransform: 'uppercase' }}>GAP (est.)</div>
-                        <div style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>match-specific pending</div>
+                      )}
+                    </div>
+                  ) : (heroHomeIntel?.readiness_score != null && heroAwayIntel?.readiness_score != null) ? (
+                    // Fallback: rough gap from each team's own baseline —
+                    // not the real match-specific formula (no opponent
+                    // strength/home advantage/motivation factored in).
+                    <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 14px', textAlign: 'center' }}>
+                      <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: 'var(--amber)' }}>
+                        {Math.abs(heroHomeIntel.readiness_score - heroAwayIntel.readiness_score)}
                       </div>
-                    ) : null}
-                  </div>
-                  <ReadinessGauge score={heroIntel?.away_readiness ?? heroAwayIntel?.readiness_score ?? null} size={90} change={heroIntel?.away_readiness ? -1.4 : undefined} />
+                      <div style={{ fontSize: 9, color: 'var(--dim)', textTransform: 'uppercase' }}>GAP (est.)</div>
+                      <div style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>match-specific pending</div>
+                    </div>
+                  ) : null}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <ReadinessGauge score={heroIntel?.away_readiness ?? heroAwayIntel?.readiness_score ?? null} size={90} change={heroIntel?.away_readiness ? -1.4 : undefined} />
+
+                <div className="rip-match-hero-team rip-match-hero-team-away">
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, textAlign: 'right' }}>{heroMatch.away_team?.name ?? '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--dim)', textAlign: 'right' }}>11th</div>
+                    <div className="rip-match-hero-name">{heroMatch.away_team?.name ?? '—'}</div>
+                    <div className="rip-match-hero-rank">11th</div>
                   </div>
-                  <div style={{ width: 44, height: 44, background: 'var(--surface2)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text)', border: '1px solid var(--border)' }}>
+                  <div className="rip-match-hero-badge">
                     {heroMatch.away_team?.short_name?.slice(0, 3) ?? '?'}
                   </div>
                 </div>
