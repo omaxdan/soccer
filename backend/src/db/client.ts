@@ -20,6 +20,15 @@ export function getSupabaseClient(): SupabaseClient {
   return supabaseInstance;
 }
 
+// db.storage uses a GETTER, not a plain property assigned once at
+// module load. A plain `storage: getSupabaseClient().storage` would
+// call getSupabaseClient() eagerly the moment this file is imported -
+// a real behavioral change from db.from()'s existing lazy pattern
+// (only initializes, and only throws on missing credentials, when
+// actually invoked). A getter preserves that: db.storage still only
+// initializes the client the moment it's actually accessed, same as
+// db.from() always has.
 export const db = {
   from: (table: string) => getSupabaseClient().from(table),
+  get storage() { return getSupabaseClient().storage; },
 } as any;
