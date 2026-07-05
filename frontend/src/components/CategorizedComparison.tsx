@@ -56,10 +56,18 @@ export default function CategorizedComparison({
     const h = r.homeValue, a = r.awayValue;
     let edge: 'home' | 'away' | 'even' = 'even';
     let diff = 0;
+    let isStrong = false;
     if (h != null && a != null && h !== a) {
       diff = Math.abs(h - a);
       const homeBetter = r.higherIsBetter ? h > a : h < a;
       edge = homeBetter ? 'home' : 'away';
+      // Relative gap, not absolute — Strength Rating (0-100 scale) and
+      // Predicted Goals (0-4ish scale) can't share one fixed threshold.
+      // >=30% of the larger value reads as a genuinely lopsided gap
+      // (verified against the real screenshot data: Strength 10v81 ->
+      // 88% relative, flagged; Squad Stability 100v99 -> 1%, not flagged).
+      const relativeDiff = diff / Math.max(Math.abs(h), Math.abs(a), 1);
+      isStrong = relativeDiff >= 0.3;
     }
     const edgeText = edge === 'even'
       ? 'Even'
@@ -72,11 +80,11 @@ export default function CategorizedComparison({
           {LOWER_IS_BETTER_NOTE.has(label) && <span className="cmp-note"> · lower is better</span>}
         </div>
         <div className="cmp-row-values">
-          <span className="cmp-val mono">{fmt(h)}</span>
+          <span className={`cmp-val mono ${edge === 'home' && isStrong ? 'cmp-val-strong' : ''}`}>{fmt(h)}</span>
           <span className="cmp-vs">vs</span>
-          <span className="cmp-val mono">{fmt(a)}</span>
+          <span className={`cmp-val mono ${edge === 'away' && isStrong ? 'cmp-val-strong' : ''}`}>{fmt(a)}</span>
         </div>
-        <span className={`cmp-edge cmp-edge-${edge}`}>{edgeText}</span>
+        <span className={`cmp-edge cmp-edge-${edge}${isStrong ? ' cmp-edge-strong' : ''}`}>{edgeText}</span>
       </div>
     );
   };

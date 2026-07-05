@@ -93,6 +93,9 @@ function ReadinessGauge({ score, size = 80, label = 'READINESS', change }: {
             {change > 0 ? '▲' : '▼'}{Math.abs(change).toFixed(1)}
           </div>
         )}
+        <div style={{ fontSize: Math.max(8, size * 0.09), color: '#8888aa', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginTop: 2 }}>
+          {label}
+        </div>
       </div>
     </div>
   );
@@ -266,7 +269,7 @@ export default async function Dashboard() {
                   <ReadinessGauge score={heroIntel?.home_readiness ?? heroHomeIntel?.readiness_score ?? null} size={90} change={heroIntel?.home_readiness ? 2.1 : undefined} />
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 4 }}>
-                      {heroResult ? `${heroResult.home_score} : ${heroResult.away_score}` : 'VS'}
+                      {(heroResult?.home_score != null && heroResult?.away_score != null) ? `${heroResult.home_score} : ${heroResult.away_score}` : 'VS'}
                     </div>
                     {heroIntel?.readiness_gap != null ? (
                       <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 14px', textAlign: 'center' }}>
@@ -310,7 +313,7 @@ export default async function Dashboard() {
                   when match_intelligence's combined per-match values aren't
                   ready yet, instead of hiding the whole row. */}
               {(heroIntel || heroHomeIntel || heroAwayIntel) && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                <div className="grid-5" style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
                   {[
                     { label: 'REST DAYS', homeV: heroIntel?.home_rest_days?.toFixed(1) ?? heroHomeIntel?.rest_days_avg?.toFixed(1) ?? '—', awayV: heroIntel?.away_rest_days?.toFixed(1) ?? heroAwayIntel?.rest_days_avg?.toFixed(1) ?? '—', homeTag: heroMatch.home_team?.short_name, awayTag: heroMatch.away_team?.short_name, icon: '🛏' },
                     { label: 'TRAVEL (KM)', homeV: heroTravel?.home_team_distance_km ? Math.round(heroTravel.home_team_distance_km) : '—', awayV: heroTravel?.away_team_distance_km ? Math.round(heroTravel.away_team_distance_km) : '—', homeTag: heroMatch.home_team?.short_name, awayTag: heroMatch.away_team?.short_name, icon: '✈' },
