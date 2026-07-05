@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { withAlpha } from '@/design/tokens';
 
 export const metadata = { title: 'Players' };
 export const revalidate = 3600;
@@ -81,7 +82,7 @@ export default async function PlayersPage() {
                 </td>
                 <td style={{ fontSize: 11, color: 'var(--muted)' }}>{(p.team as any)?.name ?? '—'}</td>
                 <td>
-                  <span style={{ background: posColor(p.position) + '25', color: posColor(p.position), border: `1px solid ${posColor(p.position)}50`, borderRadius: 4, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>
+                  <span style={{ background: withAlpha(posColor(p.position), '25'), color: posColor(p.position), border: `1px solid ${withAlpha(posColor(p.position), '50')}`, borderRadius: 4, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>
                     {p.position ?? '—'}
                   </span>
                 </td>

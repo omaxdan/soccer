@@ -142,7 +142,7 @@ export default async function CongestionHub() {
           <div style={{ display:'flex', gap:10, marginTop:12, fontSize:9 }}>
             {[['',COLORS.border,'Empty'],['1',COLORS.green,'1 match'],['2',COLORS.amber,'2 matches'],['3+',COLORS.red,'3+ matches']].map(([n,c,l]) => (
               <div key={l as string} style={{ display:'flex', alignItems:'center', gap:4 }}>
-                <div style={{ width:12, height:12, background:(c as string)+'50', border:`1px solid ${c as string}60`, borderRadius:2 }} />
+                <div style={{ width:12, height:12, background:withAlpha(c as string, '50'), border:`1px solid ${withAlpha(c as string, '60')}`, borderRadius:2 }} />
                 <span style={{ color:COLORS.muted }}>{l}</span>
               </div>
             ))}

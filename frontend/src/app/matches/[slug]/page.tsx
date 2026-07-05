@@ -688,28 +688,28 @@ export default function MatchPage() {
           QuoteHero, per the reasoning from the previous migration). ── */}
       <Card>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-          <span style={{ background:(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue)+'20', color:isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue, border:`1px solid ${(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue)}40`, borderRadius:4, padding:'1px 7px', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em' }}>
+          <span className="rip-match-detail-hero-status" style={{ background:withAlpha(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue, '20'), color:isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue, border:`1px solid ${withAlpha(isLive?COLORS.red:isDone?COLORS.dim:COLORS.blue, '40')}`, borderRadius:4, textTransform:'uppercase' }}>
             {isLive ? '● LIVE' : isDone ? 'FT' : new Date(match.date).toLocaleString()}
           </span>
           <span style={{ color:COLORS.muted, fontSize:13 }}>{match.competition}</span>
           {venue && <span style={{ color:COLORS.dim, fontSize:11 }}>• {venue.name}, {venue.city}</span>}
         </div>
 
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-around' }}>
-          <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:20, fontWeight:700, color:COLORS.text, minHeight:'2.6em', display:'flex', alignItems:'center' }}>{match.home_team?.name}</div>
+        <div className="rip-match-detail-hero-row">
+          <div className="rip-match-detail-hero-team-col">
+            <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-home">{match.home_team?.name}</div>
             <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.home_readiness && homeIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
             )}
           </div>
 
-          <div style={{ textAlign:'center', minWidth:120 }}>
+          <div className="rip-match-detail-hero-score-col" style={{ minWidth:0 }}>
             {(isDone || isLive) ? (
-              <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:48, fontWeight:700, color:COLORS.text, lineHeight:1, whiteSpace:'nowrap' }}>
+              <div className="rip-match-detail-hero-score" style={{ color:COLORS.text }}>
                 {result?.home_score ?? 0} – {result?.away_score ?? 0}
                 {result?.half_time_home_score != null && (
-                  <div style={{ fontSize:12, color:COLORS.dim, marginTop:4, whiteSpace:'nowrap' }}>HT: {result.half_time_home_score}–{result.half_time_away_score}</div>
+                  <div style={{ fontSize:13, color:COLORS.dim, marginTop:4, whiteSpace:'nowrap', fontWeight:600, letterSpacing:'0.02em' }}>HT: {result.half_time_home_score}–{result.half_time_away_score}</div>
                 )}
               </div>
             ) : (
@@ -738,8 +738,8 @@ export default function MatchPage() {
             )}
           </div>
 
-          <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:20, fontWeight:700, color:COLORS.text, minHeight:'2.6em', display:'flex', alignItems:'center' }}>{match.away_team?.name}</div>
+          <div className="rip-match-detail-hero-team-col">
+            <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-away">{match.away_team?.name}</div>
             <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.away_readiness && awayIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
@@ -797,8 +797,8 @@ export default function MatchPage() {
                     <span style={{
                       display:'inline-block', marginTop:4, fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
                       color: matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red,
-                      background: (matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red)+'20',
-                      border:`1px solid ${matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red}40`,
+                      background: withAlpha(matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red, '20'),
+                      border:`1px solid ${withAlpha(matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red, '40')}`,
                       borderRadius:4, padding:'2px 8px',
                     }}>
                       {matchRisk}
@@ -1011,7 +1011,7 @@ export default function MatchPage() {
                             <td style={{ padding: '6px 8px', textAlign: 'center', color: COLORS.muted, fontSize: 11 }}>{p.team}</td>
                             <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.importance >= 20 ? COLORS.green : COLORS.text2 }}>{p.importance.toFixed(1)}%</td>
                             <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: COLORS[category.color], background: COLORS[category.color]+'20', border: `1px solid ${COLORS[category.color]}40`, borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>{category.label}</span>
+                              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', color: COLORS[category.color], background: withAlpha(COLORS[category.color], '20'), border: `1px solid ${withAlpha(COLORS[category.color], '40')}`, borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>{category.label}</span>
                             </td>
                             <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.goals}</td>
                             <td style={{ padding: '6px 8px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>{p.assists}</td>
@@ -1300,7 +1300,7 @@ export default function MatchPage() {
                                   {s.market}{isLocked && <span style={{ marginLeft:5, fontSize:9, color:COLORS.purple }}>🔒 PRO</span>}
                                 </td>
                                 <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
-                                  <span style={{ background:(isEdge?col:COLORS.dim)+'20', color:isEdge?col:COLORS.dim, border:`1px solid ${isEdge?col:COLORS.dim}40`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{s.signal}</span>
+                                  <span style={{ background:withAlpha(isEdge?col:COLORS.dim, '20'), color:isEdge?col:COLORS.dim, border:`1px solid ${withAlpha(isEdge?col:COLORS.dim, '40')}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{s.signal}</span>
                                 </td>
                                 <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
                                   <div style={{ display:'flex', gap:2 }}>
@@ -1352,8 +1352,8 @@ export default function MatchPage() {
                           <span style={{
                             fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
                             color: confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted,
-                            background:(confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted)+'20',
-                            border:`1px solid ${confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted}40`,
+                            background:withAlpha(confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted, '20'),
+                            border:`1px solid ${withAlpha(confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted, '40')}`,
                             borderRadius:4, padding:'2px 8px',
                           }}>
                             {confLabel}

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { getTeamComparisonExtras, TeamComparisonExtras } from '@/lib/queries';
 import { teamUrl, matchUrl } from '@/lib/urls';
-import { COLORS, scoreColor } from '@/design/tokens';
+import { COLORS, scoreColor, withAlpha } from '@/design/tokens';
 
 function scoreClass(s: number | null) {
   if (s == null) return COLORS.dim;
@@ -301,7 +301,7 @@ export default function ComparePage() {
                     <div style={{ fontSize: 11, color: COLORS.text, fontWeight: 600, marginBottom: 4 }}>{t.team?.name}</div>
                     <div style={{ display: 'flex', gap: 2 }}>
                       {(extras?.formPills[t.team?.id] ?? []).map((r: 'W' | 'D' | 'L', j: number) => (
-                        <span key={j} style={{ width: 16, height: 16, borderRadius: 3, background: FORM_COLOR[r] + '30', color: FORM_COLOR[r], border: `1px solid ${FORM_COLOR[r]}50`, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r}</span>
+                        <span key={j} style={{ width: 16, height: 16, borderRadius: 3, background: withAlpha(FORM_COLOR[r], '30'), color: FORM_COLOR[r], border: `1px solid ${withAlpha(FORM_COLOR[r], '50')}`, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r}</span>
                       ))}
                       {extras && (extras.formPills[t.team?.id] ?? []).length > 0 && (
                         <span style={{ marginLeft: 8, fontSize: 10, color: COLORS.dim, alignSelf: 'center' }}>{extras.ppg10[t.team?.id]} PPG</span>

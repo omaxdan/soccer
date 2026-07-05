@@ -537,6 +537,64 @@ th, td { text-align: left; }
    3-then-1 (one lone item, empty space beside it), the actual cause of
    the "unbalanced, 40% dead space" appearance in review screenshots. */
 .grid-4-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+/* ─── MATCH DETAIL HERO SCORE ROW — rigid 3-column widths ────────────────────
+   Real, verified bug this fixes: the row previously used justifyContent:
+   space-around with no width constraint on any of the 3 children, so a
+   long team name (e.g. "Suwon Samsung Bluewings") could grow wide enough
+   to physically overlap the score digits in the middle. flex-basis below
+   gives each column a hard boundary that can never be crossed regardless
+   of name length - text wraps inside its own column instead.
+   Mobile-only font scale-down (not applied on desktop, which has room):
+   team names to ~16px and the score to ~32px, keeping the row compact and
+   legible on a narrow phone without shrinking anything on wider screens
+   where the collision risk doesn't exist. */
+.rip-match-detail-hero-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.rip-match-detail-hero-team-col {
+  flex: 0 1 38%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.rip-match-detail-hero-team-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  width: 100%;
+  line-height: 1.25;
+  min-height: 2.6em;
+  display: flex;
+  align-items: center;
+}
+.rip-match-detail-hero-team-name-home { justify-content: flex-start; text-align: left; }
+.rip-match-detail-hero-team-name-away { justify-content: flex-end; text-align: right; }
+.rip-match-detail-hero-score-col { flex: 0 0 24%; min-width: 0; text-align: center; }
+.rip-match-detail-hero-score {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  font-size: 48px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.rip-match-detail-hero-status {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 9px;
+}
+
+@media (max-width: 480px) {
+  .rip-match-detail-hero-team-col { flex-basis: 36%; }
+  .rip-match-detail-hero-team-name { font-size: 16px; }
+  .rip-match-detail-hero-score-col { flex-basis: 28%; }
+  .rip-match-detail-hero-score { font-size: 32px; }
+}
 .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
 .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
 .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }

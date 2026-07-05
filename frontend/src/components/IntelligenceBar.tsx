@@ -1,5 +1,5 @@
 'use client';
-import { COLORS, scoreColor, TYPE } from '@/design/tokens';
+import { COLORS, scoreColor, TYPE, withAlpha } from '@/design/tokens';
 
 interface IntelligenceBarProps {
   homeValue: number | null;
@@ -49,7 +49,7 @@ export default function IntelligenceBar({
           <div style={{
             width: `${hPct}%`, height: '100%',
             background: hCol, borderRadius: 3,
-            boxShadow: hBetter ? `0 0 6px ${hCol}60` : 'none',
+            boxShadow: hBetter ? `0 0 6px ${withAlpha(hCol, '60')}` : 'none',
             transition: 'width 0.5s ease',
           }} />
         </div>
@@ -78,7 +78,7 @@ export default function IntelligenceBar({
           <div style={{
             width: `${aPct}%`, height: '100%',
             background: aCol, borderRadius: 3,
-            boxShadow: aBetter ? `0 0 6px ${aCol}60` : 'none',
+            boxShadow: aBetter ? `0 0 6px ${withAlpha(aCol, '60')}` : 'none',
             transition: 'width 0.5s ease',
           }} />
         </div>

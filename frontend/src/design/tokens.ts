@@ -73,11 +73,11 @@ export function scoreGlow(s: number | null | undefined): string {
 }
 
 export function scoreBg(s: number | null | undefined): string {
-  return scoreColor(s) + '18';
+  return withAlpha(scoreColor(s), '18');
 }
 
 export function scoreBorder(s: number | null | undefined): string {
-  return scoreColor(s) + '40';
+  return withAlpha(scoreColor(s), '40');
 }
 
 // Typography — exact from spec

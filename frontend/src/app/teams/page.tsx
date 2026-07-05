@@ -166,7 +166,7 @@ export default function TeamsPage() {
                   <td style={{ padding: '9px 10px' }}>
                     <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
                       {t.form_pills.length > 0 ? t.form_pills.map((r: 'W' | 'D' | 'L', j: number) => (
-                        <span key={j} style={{ width: 16, height: 16, borderRadius: 3, background: FORM_COLOR[r] + '30', color: FORM_COLOR[r], border: `1px solid ${FORM_COLOR[r]}50`, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r}</span>
+                        <span key={j} style={{ width: 16, height: 16, borderRadius: 3, background: withAlpha(FORM_COLOR[r], '30'), color: FORM_COLOR[r], border: `1px solid ${withAlpha(FORM_COLOR[r], '50')}`, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r}</span>
                       )) : <span style={{ color: COLORS.dim, fontSize: 10 }}>—</span>}
                     </div>
                   </td>

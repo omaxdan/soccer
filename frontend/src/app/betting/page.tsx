@@ -303,7 +303,7 @@ export default function BettingHub() {
                           <td className="rip-mobile-hide" style={{ padding:'9px 12px', fontSize:10, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{m.competition}</td>
                           <td style={{ padding:'9px 12px', fontSize:11, fontWeight:600, color:COLORS.text, filter:isBlurred?'blur(4px)':'none' }}>{sig.market}{sig.locked && <span style={{ marginLeft:4, fontSize:9, color:COLORS.purple }}>🔒</span>}</td>
                           <td style={{ padding:'9px 12px', filter:isBlurred?'blur(4px)':'none' }}>
-                            <span style={{ background:(isEdge?col:COLORS.dim)+'20', color:isEdge?col:COLORS.dim, border:`1px solid ${isEdge?col:COLORS.dim}40`, borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:700 }}>{sig.signal}</span>
+                            <span style={{ background:withAlpha(isEdge?col:COLORS.dim, '20'), color:isEdge?col:COLORS.dim, border:`1px solid ${withAlpha(isEdge?col:COLORS.dim, '40')}`, borderRadius:6, padding:'2px 7px', fontSize:10, fontWeight:700 }}>{sig.signal}</span>
                           </td>
                           <td style={{ padding:'9px 12px', filter:isBlurred?'blur(4px)':'none' }}>
                             <div style={{ display:'flex', gap:2 }}>

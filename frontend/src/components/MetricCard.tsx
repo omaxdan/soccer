@@ -63,8 +63,8 @@ export default function MetricCard({
       {trend != null && trend !== 0 && (
         <div style={{
           position: 'absolute', top: 12, right: 12,
-          background: (trend > 0 ? COLORS.green : COLORS.red) + '20',
-          border: `1px solid ${(trend > 0 ? COLORS.green : COLORS.red)}40`,
+          background: withAlpha(trend > 0 ? COLORS.green : COLORS.red, '20'),
+          border: `1px solid ${withAlpha(trend > 0 ? COLORS.green : COLORS.red, '40')}`,
           borderRadius: 5,
           padding: '2px 6px',
           fontSize: 10,

@@ -68,9 +68,9 @@ export default function MatchRow({ match, homeIntel, awayIntel, homeForm = [], a
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{
-              background: (isLive ? COLORS.red : isDone ? COLORS.dim : COLORS.blue) + '20',
+              background: withAlpha(isLive ? COLORS.red : isDone ? COLORS.dim : COLORS.blue, '20'),
               color: isLive ? COLORS.red : isDone ? COLORS.dim : COLORS.blue,
-              border: `1px solid ${(isLive ? COLORS.red : isDone ? COLORS.dim : COLORS.blue)}40`,
+              border: `1px solid ${withAlpha(isLive ? COLORS.red : isDone ? COLORS.dim : COLORS.blue, '40')}`,
               borderRadius: 4, padding: '1px 7px', fontSize: 10, fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.07em', ...TYPE.mono,
             }}>
