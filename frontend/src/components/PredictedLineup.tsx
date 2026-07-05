@@ -277,35 +277,54 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
     };
 
     // ─── Format player with detailed position ──────────────────────────────
-    const formatPlayerWithPosition = (p: LineupPlayer) => {
+    // One player per row: role tag (left) / name (flex-center) / confidence
+    // badge (right) - replaces the previous inline wrapped format (multiple
+    // players per line, name+position+badge as one run-on unit), which left
+    // confidence badges at inconsistent horizontal positions since name
+    // lengths vary and didn't give each player their own scannable line.
+    const renderPlayerRow = (p: LineupPlayer, isLast: boolean) => {
       const name = p.players?.name || '?';
       const positionLabel = getPositionLabel(p);
       const confidence = p.confidence || 0;
       const color = getConfidenceColor(confidence);
-      
+
       return (
-        <span key={p.player_id} style={{ display: 'inline-block' }}>
-          <span style={{ color: COLORS.text }}>{name}</span>
-          <span style={{ 
-            fontSize: 9,
-            color: COLORS.dim,
-            marginLeft: 2,
-            fontWeight: 600,
+        <div key={p.player_id} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '7px 2px',
+          borderBottom: isLast ? 'none' : `1px solid ${withAlpha(COLORS.border, '40')}`,
+        }}>
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: COLORS.dim,
+            background: COLORS.surface2, border: `1px solid ${COLORS.border}`,
+            borderRadius: 4, padding: '2px 6px', minWidth: 34, textAlign: 'center',
+            flexShrink: 0,
           }}>
-            ({positionLabel})
+            {positionLabel}
           </span>
-          <span style={{ 
-            fontWeight: 800, 
-            fontSize: 13,
-            color: color,
-            marginLeft: 3,
+          <span style={{ flex: 1, minWidth: 0, color: COLORS.text, fontSize: 13, fontWeight: 600 }}>
+            {name}
+          </span>
+          <span style={{
+            fontWeight: 800, fontSize: 13, color,
             background: withAlpha(color, '15'),
-            padding: '0 4px',
-            borderRadius: 3,
+            padding: '2px 7px', borderRadius: 4, flexShrink: 0,
           }}>
             {formatConfidence(confidence)}
           </span>
-        </span>
+        </div>
+      );
+    };
+
+    const renderPositionSection = (groupLabel: string, groupPlayers: LineupPlayer[]) => {
+      if (groupPlayers.length === 0) return null;
+      return (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
+            {groupLabel}
+          </div>
+          {groupPlayers.map((p, i) => renderPlayerRow(p, i === groupPlayers.length - 1))}
+        </div>
       );
     };
 
@@ -389,72 +408,15 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
           Predicted Lineup{formation ? ` (${formation})` : ''}:
         </div>
 
-        {/* GK */}
-        {gk.length > 0 && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'baseline', 
-            gap: 6, 
-            padding: '4px 0',
-            fontSize: 12,
-            borderBottom: `1px solid ${withAlpha(COLORS.border, '40')}`,
-          }}>
-            <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>GK:</span>
-            <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {gk.map(p => formatPlayerWithPosition(p))}
-            </span>
-          </div>
-        )}
-
-        {/* DEF */}
-        {def.length > 0 && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'baseline', 
-            gap: 6, 
-            padding: '4px 0',
-            fontSize: 12,
-            borderBottom: `1px solid ${withAlpha(COLORS.border, '40')}`,
-          }}>
-            <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>DEF:</span>
-            <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {def.map(p => formatPlayerWithPosition(p))}
-            </span>
-          </div>
-        )}
-
-        {/* MID */}
-        {mid.length > 0 && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'baseline', 
-            gap: 6, 
-            padding: '4px 0',
-            fontSize: 12,
-            borderBottom: `1px solid ${withAlpha(COLORS.border, '40')}`,
-          }}>
-            <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>MID:</span>
-            <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {mid.map(p => formatPlayerWithPosition(p))}
-            </span>
-          </div>
-        )}
-
-        {/* FWD */}
-        {fwd.length > 0 && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'baseline', 
-            gap: 6, 
-            padding: '4px 0',
-            fontSize: 12,
-          }}>
-            <span style={{ fontWeight: 700, color: COLORS.muted, minWidth: 38, fontSize: 12 }}>FWD:</span>
-            <span style={{ color: COLORS.text, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-              {fwd.map(p => formatPlayerWithPosition(p))}
-            </span>
-          </div>
-        )}
+        {/* Predicted XI, grouped by position — each section (GK/DEF/MID/FWD)
+            self-guards on its own player count via renderPositionSection,
+            so this isn't gated on any single group being non-empty. */}
+        <div>
+          {renderPositionSection('GK', gk)}
+          {renderPositionSection('DEF', def)}
+          {renderPositionSection('MID', mid)}
+          {renderPositionSection('FWD', fwd)}
+        </div>
 
         {/* Legend */}
         <div style={{ 

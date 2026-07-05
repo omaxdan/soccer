@@ -270,14 +270,30 @@ export default async function MatchCenter({
                           {rows.map(({ match: m, homeR, awayR, gap, topSignal, confidence, confidenceBand, homeExtras, awayExtras, homeVersatility, awayVersatility }) => {
                             const time = new Date(m.date).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
                             const intel = toOne(m.match_intelligence);
+                            // State-based hierarchy: dim teams + bold white
+                            // score for FT (the result is the point, not who
+                            // played), vibrant red for LIVE (no real-time
+                            // minute-tracker exists in this schema, so a
+                            // static LIVE badge, not a fabricated "67'"),
+                            // neutral gray for scheduled.
+                            const isFinished = m.status === 'finished';
+                            const isLive = m.status === 'live';
                             return (
                               <tr key={m.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
                                 <td style={{ padding: '8px 4px', textAlign: 'center' }}>
                                   <MatchWatchlistStar matchId={m.id} />
                                 </td>
-                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
+                                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace' }}>
+                                  {isFinished ? (
+                                    <span style={{ color: COLORS.muted, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em' }}>FT</span>
+                                  ) : isLive ? (
+                                    <span style={{ color: COLORS.red, fontSize: 10, fontWeight: 700, letterSpacing: '0.03em' }}>● LIVE</span>
+                                  ) : (
+                                    <span style={{ color: COLORS.muted }}>{time}</span>
+                                  )}
+                                </td>
                                 <td style={{ padding: '8px 10px' }}>
-                                  <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3 }}>
+                                  <Link href={matchUrl(m)} style={{ color: isFinished ? COLORS.muted : COLORS.text, textDecoration: 'none', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3 }}>
                                     <div>{m.home_team?.short_name ?? m.home_team?.name}</div>
                                     <div>{m.away_team?.short_name ?? m.away_team?.name}</div>
                                   </Link>
@@ -286,8 +302,9 @@ export default async function MatchCenter({
                                   {(() => {
                                     const r = toOne(m.match_results);
                                     const hasScore = r != null && r.home_score != null && r.away_score != null;
+                                    const scoreColorForState = !hasScore ? COLORS.dim : isFinished ? COLORS.text : isLive ? COLORS.red : COLORS.text;
                                     return (
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3, color: hasScore ? COLORS.green : COLORS.dim }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3, color: scoreColorForState }}>
                                         <div>{hasScore ? r.home_score : '—'}</div>
                                         <div>{hasScore ? r.away_score : '—'}</div>
                                       </div>
