@@ -3,6 +3,7 @@
 'use client';
 
 import { COLORS , withAlpha } from '@/design/tokens';
+import { getCrestUrl } from '@/lib/images';
 import { deriveFormation } from '@/lib/insights';
 
 // ─── Interface ──────────────────────────────────────────────────────────────
@@ -372,8 +373,8 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
           borderBottom: `1px solid ${COLORS.border}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {team?.crest_storage_path && (
-              <img src={team.crest_storage_path} alt={team.name} style={{ width: 24, height: 24, objectFit: 'contain' }} />
+            {getCrestUrl(team?.crest_storage_path) && (
+              <img src={getCrestUrl(team?.crest_storage_path)!} alt={team.name} style={{ width: 24, height: 24, objectFit: 'contain' }} />
             )}
             <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
               {team?.short_name || team?.name || 'Team'}

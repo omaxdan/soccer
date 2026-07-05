@@ -11,7 +11,7 @@ import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syn
 import { clearApiSamples } from './utils/apiSamples';
 import { syncSampleBands } from './jobs/sampleBands';
 import { syncTransfersForTeams } from './jobs/syncTransfersV2';
-import { syncTeamImages } from './jobs/syncTeamImages';
+import { syncTeamImages, syncTournamentImages } from './jobs/syncTeamImages';
 import { syncStandings } from './jobs/syncStandings';
 import { TRACKED_LEAGUES, getTrackedLeaguesSummary, TRACKED_LEAGUE_COUNT } from './config/trackedLeagues';
 import { sportsApiClient } from './services/sportsApiClient';
@@ -304,6 +304,17 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Backfilling team crests to Supabase Storage...');
         const r = await syncTeamImages();
         logger.info(r, 'Team image sync complete');
+        break;
+      }
+
+      case 'sync:tournament-images': {
+        // One-time backfill, same cadence reasoning as sync:images.
+        // Endpoint is unverified (see syncTeamImages.ts's docstring on
+        // syncTournamentImages) - test on a small tournament count
+        // before assuming full coverage.
+        logger.info('Backfilling tournament/league logos to Supabase Storage...');
+        const r = await syncTournamentImages();
+        logger.info(r, 'Tournament image sync complete');
         break;
       }
 
@@ -905,6 +916,8 @@ Commands:
     sync:squads:v2                   ⭐ PRIMARY V2: tracked leagues, all squad intelligence
     sync:squads:countries:v2 <list>  V2 by country e.g. "Brazil,Finland"
     sync:squads:matches:v2 <ids>     V2 for teams in specific matches, by match external_match_id (needs 2+; space or comma separated)
+    sync:images                      One-time team crest backfill to Supabase Storage (re-run manually only on rebrand)
+    sync:tournament-images           One-time tournament/league logo backfill - endpoint unverified, test small batch first
     sync:player-stats:matches:v2 <ids>  Player season stats for teams in specific matches, same match external_match_id pattern
     sync:team-squad:v2 <id>          V2 force sync single team
 

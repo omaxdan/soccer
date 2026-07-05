@@ -90,3 +90,49 @@ export async function syncTeamImages(): Promise<{ teamsProcessed: number; writte
   logger.info({ teamsProcessed: teams.length, written, errors }, 'syncTeamImages completed');
   return { teamsProcessed: teams.length, written, errors };
 }
+
+/** Tournament/league logo backfill — the half of this file's own
+ *  docstring ("TEAM/TOURNAMENT IMAGE SYNC") that was never actually
+ *  implemented. tournaments.logo_storage_path existed as a column with
+ *  nothing ever writing to it until this function.
+ *
+ *  UNVERIFIED ENDPOINT, flagged honestly rather than presented as
+ *  confirmed: no api-samples/ capture exists for a tournament/league
+ *  image endpoint anywhere in this codebase (checked before writing
+ *  this), so `/tournaments/{id}/image` below is an assumption mirroring
+ *  the team endpoint's REST convention, not a verified path. Fails
+ *  gracefully if wrong — downloadAndUpload() already returns null and
+ *  logs an error on any non-ok response rather than throwing, so a
+ *  wrong endpoint here shows up clearly as "0 written, N errors" in the
+ *  job's own return value, not a crash. Test this against a small batch
+ *  before trusting it at full scale. */
+export async function syncTournamentImages(): Promise<{ tournamentsProcessed: number; written: number; errors: number }> {
+  logger.info('syncTournamentImages started — one-time backfill (endpoint unverified, test before full run)');
+  await ensureBucket();
+
+  const { data: tournaments } = await db
+    .from('tournaments')
+    .select('id, external_id, name, logo_storage_path')
+    .is('logo_storage_path', null); // only tournaments without a logo yet
+
+  if (!tournaments || tournaments.length === 0) {
+    logger.info('No tournaments need logo backfill');
+    return { tournamentsProcessed: 0, written: 0, errors: 0 };
+  }
+
+  let written = 0, errors = 0;
+  for (const t of tournaments) {
+    const storagePath = await downloadAndUpload(`/tournaments/${t.external_id}/image`, t.external_id);
+    if (storagePath) {
+      await db.from('tournaments').update({ logo_storage_path: storagePath }).eq('id', t.id);
+      written++;
+      logger.info({ tournamentId: t.id, tournamentName: t.name, storagePath }, 'Tournament logo synced');
+    } else {
+      errors++;
+    }
+    await delay(THROTTLE_MS);
+  }
+
+  logger.info({ tournamentsProcessed: tournaments.length, written, errors }, 'syncTournamentImages completed');
+  return { tournamentsProcessed: tournaments.length, written, errors };
+}
