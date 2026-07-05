@@ -2,13 +2,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { COLORS } from '@/design/tokens';
+import { TodayIcon, MatchesIcon, IntelIcon, BettingIcon, SearchIcon } from '@/components/NavIcons';
 
 const TABS = [
-  { href: '/',        icon: '🏠', label: 'Today' },
-  { href: '/matches', icon: '🎯', label: 'Matches' },
-  { href: '/intel',   icon: '📊', label: 'Intel' },
-  { href: '/betting', icon: '🎲', label: 'Betting' },
-  { href: '/search',  icon: '🔍', label: 'Search' },
+  { href: '/',        Icon: TodayIcon,   label: 'Today' },
+  { href: '/matches', Icon: MatchesIcon, label: 'Matches' },
+  { href: '/intel',   Icon: IntelIcon,   label: 'Intel' },
+  { href: '/betting', Icon: BettingIcon, label: 'Betting' },
+  { href: '/search',  Icon: SearchIcon,  label: 'Search' },
 ];
 
 export default function MobileNav() {
@@ -30,19 +31,19 @@ export default function MobileNav() {
           .app-sidebar { display: none !important; }
         }
       `}</style>
-      {TABS.map(tab => {
-        const active = tab.href === '/' ? path === '/' : path.startsWith(tab.href);
+      {TABS.map(({ href, Icon, label }) => {
+        const active = href === '/' ? path === '/' : path.startsWith(href);
         return (
-          <Link key={tab.href} href={tab.href} style={{
+          <Link key={href} href={href} style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: 2,
             padding: '6px 0',
             color: active ? COLORS.green : COLORS.muted,
             textDecoration: 'none',
           }}>
-            <span style={{ fontSize: 20 }}>{tab.icon}</span>
+            <Icon size={20} />
             <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {tab.label}
+              {label}
             </span>
           </Link>
         );

@@ -272,18 +272,29 @@ export default async function Dashboard() {
                   which also fixes the reported "Šiauliai FA sags lower"
                   issue (that was a symptom of the same centering conflict,
                   not independently caused by text wrapping to 2 lines). */}
+              {/* 3-column grid: home | vs+gap | away — stays 3 columns at
+                  every width (does not collapse to a vertical stack).
+                  Each team column stacks its OWN content vertically
+                  (badge, name, rank, then gauge below) so the column
+                  itself stays narrow-but-legible even on a phone, rather
+                  than needing badge+name side-by-side (which only has
+                  room on a wide desktop column). grid-template-columns:
+                  1fr auto 1fr sizes the center column to its own content
+                  (the gap box) and splits the rest evenly between the two
+                  team columns.
+                  home=left, away=right throughout — matches heroMatch.
+                  home_team/away_team in the data and standard sports
+                  convention (confirmed again here since a prior request
+                  described the reverse mapping as correct; it isn't). */}
               <div className="rip-match-hero">
-                <div className="rip-match-hero-team">
+                <div className="rip-match-hero-col">
                   <div className="rip-match-hero-badge">
                     {heroMatch.home_team?.short_name?.slice(0, 3) ?? '?'}
                   </div>
-                  <div>
-                    <div className="rip-match-hero-name">{heroMatch.home_team?.name ?? '—'}</div>
-                    <div className="rip-match-hero-rank">1st</div>
-                  </div>
+                  <div className="rip-match-hero-name">{heroMatch.home_team?.name ?? '—'}</div>
+                  <div className="rip-match-hero-rank">1st</div>
+                  <ReadinessGauge score={heroIntel?.home_readiness ?? heroHomeIntel?.readiness_score ?? null} size={90} change={heroIntel?.home_readiness ? 2.1 : undefined} />
                 </div>
-
-                <ReadinessGauge score={heroIntel?.home_readiness ?? heroHomeIntel?.readiness_score ?? null} size={90} change={heroIntel?.home_readiness ? 2.1 : undefined} />
 
                 <div className="rip-match-hero-center">
                   <div style={{ fontSize: 11, color: 'var(--dim)', marginBottom: 4 }}>
@@ -313,16 +324,13 @@ export default async function Dashboard() {
                   ) : null}
                 </div>
 
-                <ReadinessGauge score={heroIntel?.away_readiness ?? heroAwayIntel?.readiness_score ?? null} size={90} change={heroIntel?.away_readiness ? -1.4 : undefined} />
-
-                <div className="rip-match-hero-team rip-match-hero-team-away">
-                  <div>
-                    <div className="rip-match-hero-name">{heroMatch.away_team?.name ?? '—'}</div>
-                    <div className="rip-match-hero-rank">11th</div>
-                  </div>
+                <div className="rip-match-hero-col">
                   <div className="rip-match-hero-badge">
                     {heroMatch.away_team?.short_name?.slice(0, 3) ?? '?'}
                   </div>
+                  <div className="rip-match-hero-name">{heroMatch.away_team?.name ?? '—'}</div>
+                  <div className="rip-match-hero-rank">11th</div>
+                  <ReadinessGauge score={heroIntel?.away_readiness ?? heroAwayIntel?.readiness_score ?? null} size={90} change={heroIntel?.away_readiness ? -1.4 : undefined} />
                 </div>
               </div>
 
