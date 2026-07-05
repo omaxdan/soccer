@@ -222,6 +222,47 @@ const MATCH_SELECT = `
   )
 `;
 
+const MIN_SAMPLE_SIZE_MATCHES = 4;
+
+/** Minimum-sample-size filter: excludes fixtures where either team has
+ *  played fewer than MIN_SAMPLE_SIZE_MATCHES games this season - early
+ *  in a season (or for a newly-tracked team), readiness/strength/form
+ *  numbers are built on too small a sample to be a reliable signal.
+ *  team_season_statistics has one row PER SEASON per team, so this
+ *  can't just filter on "any row with matches>=4" - takes the highest
+ *  season_external_id per team (same pattern already used for player
+ *  season stats a few functions up) so a stale prior-season row with
+ *  a full 38 games doesn't incorrectly pass a team that's only played
+ *  2 games in the CURRENT season.
+ *  Worth knowing: this can substantially shrink match center content
+ *  in the first few gameweeks of any tracked league's season, or for
+ *  any newly-added team/competition - by design, not a bug, but a real
+ *  content-volume tradeoff worth watching, especially with several
+ *  leagues potentially starting their seasons at different times. */
+async function filterBySampleSize<T extends { home_team_id: number; away_team_id: number }>(matches: T[]): Promise<T[]> {
+  if (matches.length === 0) return matches;
+  const teamIds = [...new Set(matches.flatMap(m => [m.home_team_id, m.away_team_id]).filter((id): id is number => id != null))];
+  if (teamIds.length === 0) return matches;
+
+  const { data } = await supabase
+    .from('team_season_statistics')
+    .select('team_id, season_external_id, matches')
+    .in('team_id', teamIds);
+
+  const latestByTeam = new Map<number, { season: number; played: number }>();
+  for (const row of data ?? []) {
+    const existing = latestByTeam.get(row.team_id);
+    if (existing && existing.season >= (row.season_external_id ?? 0)) continue;
+    latestByTeam.set(row.team_id, { season: row.season_external_id ?? 0, played: row.matches ?? 0 });
+  }
+
+  return matches.filter(m => {
+    const homePlayed = latestByTeam.get(m.home_team_id)?.played ?? 0;
+    const awayPlayed = latestByTeam.get(m.away_team_id)?.played ?? 0;
+    return homePlayed >= MIN_SAMPLE_SIZE_MATCHES && awayPlayed >= MIN_SAMPLE_SIZE_MATCHES;
+  });
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 export async function getTodaysMatches() {
@@ -236,7 +277,7 @@ export async function getTodaysMatches() {
 
   const { data, error } = await q;
   if (error) throw error;
-  return data ?? [];
+  return filterBySampleSize(data ?? []);
 }
 
 export async function getReadinessRankings(limit = 50) {
@@ -356,7 +397,7 @@ export async function getMatchesForDate(date: string) {
 
   const { data, error } = await q;
   if (error) throw error;
-  return data ?? [];
+  return filterBySampleSize(data ?? []);
 }
 
 /** Postponed / cancelled / abandoned matches — the ones excluded from

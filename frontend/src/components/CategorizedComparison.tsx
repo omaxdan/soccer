@@ -8,6 +8,7 @@
 // requirement (see .cmp-* rules there). Everything themes automatically
 // via the CSS variables, in both light and dark mode.
 import type { ComparisonRow } from '@/components/TeamComparisonMatrix';
+import FormString from '@/components/FormString';
 
 const CATEGORIES: { title: string; labels: string[] }[] = [
   { title: 'Match Context & Logistics', labels: ['Venue Advantage', 'Congestion'] },
@@ -42,9 +43,9 @@ export default function CategorizedComparison({
         <div className="cmp-row" key={label}>
           <div className="cmp-row-label">Last 5 Form</div>
           <div className="cmp-row-values">
-            <span className="cmp-val mono">{homeFormString || '—'}</span>
+            {homeFormString ? <FormString results={homeFormString.split('')} size="sm" /> : <span className="cmp-val mono">—</span>}
             <span className="cmp-vs">vs</span>
-            <span className="cmp-val mono">{awayFormString || '—'}</span>
+            {awayFormString ? <FormString results={awayFormString.split('')} size="sm" /> : <span className="cmp-val mono">—</span>}
           </div>
         </div>
       );
