@@ -284,6 +284,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
     // lengths vary and didn't give each player their own scannable line.
     const renderPlayerRow = (p: LineupPlayer, isLast: boolean) => {
       const name = p.players?.name || '?';
+      const jerseyNumber = p.players?.jersey_number;
       const positionLabel = getPositionLabel(p);
       const confidence = p.confidence || 0;
       const color = getConfidenceColor(confidence);
@@ -294,6 +295,12 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
           padding: '7px 2px',
           borderBottom: isLast ? 'none' : `1px solid ${withAlpha(COLORS.border, '40')}`,
         }}>
+          <span style={{
+            fontFamily: '"JetBrains Mono",monospace', fontSize: 11, fontWeight: 700,
+            color: COLORS.dim, minWidth: 20, textAlign: 'right', flexShrink: 0,
+          }}>
+            {jerseyNumber != null ? jerseyNumber : '—'}
+          </span>
           <span style={{
             fontSize: 9, fontWeight: 700, color: COLORS.dim,
             background: COLORS.surface2, border: `1px solid ${COLORS.border}`,
