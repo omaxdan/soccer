@@ -67,35 +67,37 @@ function ReadinessGauge({ score, size = 80, label = 'READINESS', change }: {
   const isElite = (score ?? 0) >= 85;
 
   return (
-    <div className="rip-gauge" style={{ position: 'relative', width: 'var(--rip-gauge-size, ' + size + 'px)', height: 'var(--rip-gauge-size, ' + size + 'px)', maxWidth: size, maxHeight: size, flexShrink: 0 }}>
-      <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
-        {score == null ? (
-          <circle cx={cx} cy={cy} r={R} fill="none" stroke="#555570" strokeWidth={SW} strokeDasharray="5 4" />
-        ) : (
-          <>
-            <path d={arc(START, SWEEP)} fill="none" stroke="#2a2a3a" strokeWidth={SW} strokeLinecap="round" />
-            {pct > 0 && (
-              <path d={arc(START, fillSweep)} fill="none" stroke={col} strokeWidth={SW} strokeLinecap="round"
-                style={{ filter: isElite ? `drop-shadow(0 0 6px ${withAlpha(col, '80')})` : 'none' }} />
-            )}
-          </>
-        )}
-      </svg>
-      <div style={{
-        position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)',
-        textAlign: 'center', pointerEvents: 'none',
-      }}>
-        <div className={`mono ${scoreClass(score)}`} style={{ fontSize: size * 0.24, fontWeight: 700, lineHeight: 1 }}>
-          {score ?? '—'}
-        </div>
-        {change != null && change !== 0 && (
-          <div className="mono" style={{ fontSize: size * 0.1, color: change > 0 ? '#00e676' : '#ff1744', marginTop: 1 }}>
-            {change > 0 ? '▲' : '▼'}{Math.abs(change).toFixed(1)}
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div className="rip-gauge" style={{ position: 'relative', width: 'var(--rip-gauge-size, ' + size + 'px)', height: 'var(--rip-gauge-size, ' + size + 'px)', maxWidth: size, maxHeight: size, flexShrink: 0 }}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
+          {score == null ? (
+            <circle cx={cx} cy={cy} r={R} fill="none" stroke="#555570" strokeWidth={SW} strokeDasharray="5 4" />
+          ) : (
+            <>
+              <path d={arc(START, SWEEP)} fill="none" stroke="#2a2a3a" strokeWidth={SW} strokeLinecap="round" />
+              {pct > 0 && (
+                <path d={arc(START, fillSweep)} fill="none" stroke={col} strokeWidth={SW} strokeLinecap="round"
+                  style={{ filter: isElite ? `drop-shadow(0 0 6px ${withAlpha(col, '80')})` : 'none' }} />
+              )}
+            </>
+          )}
+        </svg>
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          textAlign: 'center', pointerEvents: 'none',
+        }}>
+          <div className={`mono ${scoreClass(score)}`} style={{ fontSize: size * 0.24, fontWeight: 700, lineHeight: 1 }}>
+            {score ?? '—'}
           </div>
-        )}
-        <div style={{ fontSize: Math.max(8, size * 0.09), color: '#8888aa', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginTop: 2 }}>
-          {label}
+          {change != null && change !== 0 && (
+            <div className="mono" style={{ fontSize: size * 0.1, color: change > 0 ? '#00e676' : '#ff1744', marginTop: 1 }}>
+              {change > 0 ? '▲' : '▼'}{Math.abs(change).toFixed(1)}
+            </div>
+          )}
         </div>
+      </div>
+      <div style={{ fontSize: Math.max(9, size * 0.1), color: '#8888aa', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', marginTop: 6, textAlign: 'center' }}>
+        {label}
       </div>
     </div>
   );
