@@ -1022,12 +1022,24 @@ export async function processTeamIntelligencePartial(): Promise<{
 
     const teamIds = teams.map((t: any) => t.id);
 
-    // 2. Last 5 and 10 points from form history (most recent matches)
+    // 2. Last 5 and 10 points from form history (most recent matches).
+    // Sorted by match_date (real chronology - when the match was actually
+    // played), not created_at (when this row happened to be inserted).
+    // Those normally line up, but a backfill or re-sync that inserts older
+    // matches after newer ones were already written would silently break
+    // "last 5/10" under created_at ordering - the 5 most RECENTLY INSERTED
+    // rows aren't necessarily the 5 most recently PLAYED matches. Every
+    // write site for this table denormalizes match_date directly from the
+    // source match's real date (see migration 007) specifically so this
+    // table doesn't have to rely on insertion order - processTeamMomentum
+    // and the scoreline-prediction goals query already sorted by
+    // match_date correctly; this was the one remaining site still using
+    // created_at, found and fixed here.
     const { data: formRecords, error: fErr } = await db
       .from('team_form_history')
-      .select('team_id, points, created_at')
+      .select('team_id, points, match_date')
       .in('team_id', teamIds)
-      .order('created_at', { ascending: false });
+      .order('match_date', { ascending: false });
 
     if (fErr) throw new Error(`form history query: ${fErr.message}`);
 
