@@ -14,7 +14,7 @@ import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import TeamCrest from '@/components/TeamCrest';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveMatchRisk, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
 import { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import CategorizedComparison from '@/components/CategorizedComparison';
 import FormString from '@/components/FormString';
@@ -36,7 +36,7 @@ function Mono({ children, size = 20, color }: { children: React.ReactNode; size?
 // 6 flat top-level tabs per the redesign spec — NO nested subtabs anywhere.
 // Former subtab content flattened into ordered scrollable sections; Signals
 // and Recommendations promoted from Insights subtabs to their own tabs.
-const PAGE_TABS = ['Overview', 'Lineups', 'Intelligence', 'Insights', 'Signals', 'Recommendations'];
+const PAGE_TABS = ['Overview', 'Lineups', 'Intelligence', 'Insights', 'Readiness', 'Signals', 'Recommendations'];
 const TEAM_TABS   = ['Form', 'Fixture Load', 'Squad', 'Intelligence'];
 
 // ─── Helper: Map detailed positions to position groups ──────────────────────
@@ -395,7 +395,6 @@ export default function MatchPage() {
 
   // ── Match Risk — reuses the confidence engine, not a new metric ──────
   const readinessGapAbs = (intel?.readiness_gap ?? (homeReadinessAny != null && awayReadinessAny != null ? homeReadinessAny - awayReadinessAny : null));
-  const matchRisk = matchInsight ? deriveMatchRisk(matchInsight.confidence, readinessGapAbs != null ? Math.abs(readinessGapAbs) : null) : null;
 
   // ── Win/Draw/Away — real probability from the full Poisson grid
   // (migration 018), not the top-6-renormalized scoreline set. Null
@@ -404,12 +403,6 @@ export default function MatchPage() {
   const winProbDraw = intel?.win_probability_draw ?? null;
   const winProbAway = intel?.win_probability_away ?? null;
   const hasWinProbs = winProbHome != null && winProbDraw != null && winProbAway != null;
-  const favoredSide = hasWinProbs
-    ? (winProbHome! > winProbAway! ? 'home' : winProbAway! > winProbHome! ? 'away' : 'draw')
-    : (intel?.readiness_gap != null ? (intel.readiness_gap > 0 ? 'home' : intel.readiness_gap < 0 ? 'away' : 'draw') : null);
-  const favoredProb = hasWinProbs
-    ? (favoredSide === 'home' ? winProbHome : favoredSide === 'away' ? winProbAway : winProbDraw)
-    : null;
 
   // ── Key Battles — highest-importance player per position group, home
   // vs away, from data already fetched (matchKeyPlayers). Reuses the
@@ -761,61 +754,12 @@ export default function MatchPage() {
       {tab === 'Overview' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
 
-          {/* ── PREDICTION CARD ── */}
-          {favoredSide && (
-            <Card style={{ background: withAlpha(COLORS.blue, '0f'), border: `1px solid ${withAlpha(COLORS.blue, '30')}` }}>
-              <div style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:COLORS.blue, marginBottom:12 }}>
-                🎯 Prediction
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:16 }}>
-                <div>
-                  <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Winner</div>
-                  <div style={{ fontSize:16, fontWeight:700, color:COLORS.text, marginTop:2 }}>
-                    {favoredSide === 'draw' ? 'Draw' : favoredSide === 'home' ? (match.home_team?.short_name ?? match.home_team?.name) : (match.away_team?.short_name ?? match.away_team?.name)}
-                  </div>
-                </div>
-                {favoredProb != null && (
-                  <div>
-                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Probability</div>
-                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:20, fontWeight:700, color:COLORS.green, marginTop:2 }}>{favoredProb.toFixed(0)}%</div>
-                  </div>
-                )}
-                {matchInsight && (
-                  <div>
-                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Confidence</div>
-                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:20, fontWeight:700, color:scoreColor(matchInsight.confidence), marginTop:2 }}>{matchInsight.confidence}%</div>
-                  </div>
-                )}
-                {intel?.predicted_home_goals != null && (
-                  <div>
-                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Expected Score</div>
-                    <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:16, fontWeight:700, color:COLORS.text, marginTop:2 }}>
-                      {intel.predicted_home_goals.toFixed(2)} – {intel.predicted_away_goals.toFixed(2)}
-                    </div>
-                  </div>
-                )}
-                {matchRisk && (
-                  <div>
-                    <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase' }}>Match Risk</div>
-                    <span style={{
-                      display:'inline-block', marginTop:4, fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
-                      color: matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red,
-                      background: withAlpha(matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red, '20'),
-                      border:`1px solid ${withAlpha(matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red, '40')}`,
-                      borderRadius:4, padding:'2px 8px',
-                    }}>
-                      {matchRisk}
-                    </span>
-                  </div>
-                )}
-              </div>
-              {!hasWinProbs && (
-                <div style={{ fontSize:9, color:COLORS.dim, marginTop:10 }}>
-                  Win/Draw/Away probability pending — run process:all-db after migration 018 for the full breakdown; showing readiness-gap-based favorite in the meantime.
-                </div>
-              )}
-            </Card>
-          )}
+          {/* ── PREDICTION CARD removed — Winner/Probability/outcome-Confidence/
+              Match Risk were all directional betting recommendations, not
+              raw analytical facts. This page is informational only now;
+              the underlying readiness gap, form, and model numbers are
+              still shown below via CategorizedComparison and the
+              Intelligence tab. ── */}
 
           {/* ── CATEGORIZED TEAM COMPARISON — the Overview landing content per
               the 6-tab redesign spec: four named category groups, 4-col
@@ -853,17 +797,16 @@ export default function MatchPage() {
                   <Mono size={28} color={scoreColor(awayReadinessAny)}>{awayReadinessAny != null ? Math.round(awayReadinessAny) : '—'}</Mono>
                 </div>
               </Card>
-              <Card>
-                <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:12 }}>Form Battle</div>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-around' }}>
-                  <FormString results={homeFormString.split('')} showPoints={false} />
-                  <div style={{ fontSize:10, color:COLORS.dim }}>vs</div>
-                  <FormString results={awayFormString.split('')} showPoints={false} />
-                </div>
-              </Card>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:16 }}>
+              {/* Strength + Venue Impact condensed into a 2-col row (Match
+                  Risk dropped here too — it's a directional risk call, not
+                  a raw stat, consistent with removing it from the
+                  Overview Prediction card above). Form Battle removed
+                  entirely — its content (last-5/10 form, form index) is
+                  now reachable in full depth via the embedded team tabs
+                  directly below, not duplicated as a second summary. */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:12 }}>
                 <Card>
-                  <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8 }}>Strength Battle</div>
+                  <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8, textAlign:'center' }}>Strength</div>
                   <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center' }}>
                     <Mono size={22}>{homeExtras?.strength_score != null ? Math.round(homeExtras.strength_score) : '—'}</Mono>
                     <span style={{ fontSize:10, color:COLORS.dim }}>vs</span>
@@ -871,26 +814,21 @@ export default function MatchPage() {
                   </div>
                 </Card>
                 <Card>
-                  <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8 }}>Venue Impact</div>
+                  <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8, textAlign:'center' }}>Venue Impact</div>
                   <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center' }}>
                     <Mono size={22}>{homeExtras?.venue_advantage_score != null ? Math.round(homeExtras.venue_advantage_score) : '—'}</Mono>
                     <span style={{ fontSize:10, color:COLORS.dim }}>vs</span>
                     <Mono size={22}>{awayExtras?.venue_advantage_score != null ? Math.round(awayExtras.venue_advantage_score) : '—'}</Mono>
                   </div>
                 </Card>
-                {matchRisk && (
-                  <Card>
-                    <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8 }}>Match Risk</div>
-                    <div style={{ textAlign:'center' }}>
-                      <span style={{
-                        fontSize:13, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
-                        color: matchRisk==='LOW'?COLORS.green:matchRisk==='MEDIUM'?COLORS.amber:COLORS.red,
-                      }}>
-                        {matchRisk}
-                      </span>
-                    </div>
-                  </Card>
-                )}
+              </div>
+              {/* Deep team tabs (Form/Fixture Load/Squad/Intelligence),
+                  moved up from the old separate "Physical" section below
+                  the condensed row per the requested layout - one
+                  continuous path from summary numbers to full depth. */}
+              <div className="rip-compare-grid">
+                <TeamColumn team={match.home_team} intel={homeIntel} form={homeForm} fix={homeFix} squad={homeSquad} upcoming={homeUp} depth={homeDepth} />
+                <TeamColumn team={match.away_team} intel={awayIntel} form={awayForm} fix={awayFix} squad={awaySquad} upcoming={awayUp} depth={awayDepth} />
               </div>
             </div>
           )}
@@ -898,6 +836,75 @@ export default function MatchPage() {
           {/* ── SQUADS — "where your injury query belongs" ── */}
           {tab === 'Lineups' && (
             <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+              {/* 1 — Area Versatility, moved to the top per the requested
+                  hierarchy (was previously after all the squad/injury
+                  content). */}
+              {(Object.values(homeAreaVersatility).some(v => v != null) || Object.values(awayAreaVersatility).some(v => v != null)) && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Area Versatility</div>
+                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>
+                    Share of predicted-XI players with more than one listed position, by area — a real proxy for tactical flexibility, not a ball-control estimate (this platform has no positional-tracking data to measure actual control).
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                    {(['DEF', 'MID', 'FWD'] as const).map(area => (
+                      <div key={area} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                        <div style={{ width:36, fontSize:10, fontWeight:700, color:COLORS.dim, textTransform:'uppercase' }}>{area}</div>
+                        <div style={{ flex:1, display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ width:32, textAlign:'right', fontFamily:'"JetBrains Mono",monospace', fontSize:12, fontWeight:700, color:COLORS.text }}>{homeAreaVersatility[area] ?? '—'}{homeAreaVersatility[area] != null ? '%' : ''}</span>
+                          <div style={{ flex:1, display:'flex', height:6, borderRadius:3, overflow:'hidden', background:COLORS.border }}>
+                            <div style={{ width:`${homeAreaVersatility[area] ?? 0}%`, background:COLORS.blue }} />
+                          </div>
+                          <div style={{ flex:1, display:'flex', height:6, borderRadius:3, overflow:'hidden', background:COLORS.border, flexDirection:'row-reverse' }}>
+                            <div style={{ width:`${awayAreaVersatility[area] ?? 0}%`, background:COLORS.amber }} />
+                          </div>
+                          <span style={{ width:32, fontFamily:'"JetBrains Mono",monospace', fontSize:12, fontWeight:700, color:COLORS.text }}>{awayAreaVersatility[area] ?? '—'}{awayAreaVersatility[area] != null ? '%' : ''}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, fontSize:9, color:COLORS.dim }}>
+                    <span>{match.home_team?.short_name ?? match.home_team?.name}</span>
+                    <span>{match.away_team?.short_name ?? match.away_team?.name}</span>
+                  </div>
+                </Card>
+              )}
+              <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'10px 16px', fontSize:11, color:COLORS.dim }}>
+                Real ball-control / heat-map area breakdowns would need positional-tracking data this platform doesn't have — Area Versatility above is a genuine, different proxy (squad flexibility), not an estimate of the same thing.
+              </div>
+
+              {/* 2 — Predicted Lineups grid, moved up directly under Area
+                  Versatility (was previously a separate block further
+                  down the page). */}
+              {(homeLineup.length > 0 || awayLineup.length > 0) ? (
+                <Card>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Predicted Lineups</div>
+                    <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
+                      Based on season starts, form, and injury status
+                      {(homeFormation || awayFormation) && (
+                        <> • {homeFormation ?? '—'} vs {awayFormation ?? '—'}</>
+                      )}
+                    </div>
+                  </div>
+                  <PredictedLineup
+                    homeTeam={match.home_team}
+                    awayTeam={match.away_team}
+                    lineups={{ home: homeLineup, away: awayLineup }}
+                  />
+                </Card>
+              ) : (
+                <div style={{ padding:'40px 20px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
+                  Predicted lineups not yet available for this match.
+                </div>
+              )}
+
+              {/* 3 — Squad Readiness Impact, consolidated: Starters
+                  Available + Injury Impact + Base Readiness were three
+                  separate, differently-titled cards before; now one
+                  named section containing all three in sequence. */}
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>Squad Readiness Impact</div>
+
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:16 }}>
                 {[
                   { team: match.home_team, injury: homeInjury, lineupCount: (homeLineup ?? []).length },
@@ -953,6 +960,32 @@ export default function MatchPage() {
                 </Card>
               )}
 
+              <Card>
+                <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>
+                  Base Readiness — informational, does not modify the readiness score used elsewhere on this platform.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+                  {[
+                    { team: match.home_team, intel: homeIntel, injury: homeInjury },
+                    { team: match.away_team, intel: awayIntel, injury: awayInjury },
+                  ].map(({ team, intel: ti, injury }, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>{team?.short_name ?? team?.name}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                        <span style={{ color: COLORS.muted }}>Base Readiness</span>
+                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(ti?.readiness_score) }}>{ti?.readiness_score != null ? Math.round(ti.readiness_score) : '—'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                        <span style={{ color: COLORS.muted }}>Importance Lost to Injury</span>
+                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: (injury?.total_importance_lost ?? 0) > 0 ? COLORS.red : COLORS.green }}>{injury?.total_importance_lost ?? 0}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* 4 — Deep breakdown metrics: Position Depth, then the rest
+                  (Importance Rankings, Key Battles). */}
               {(homeDepth?.length > 0 || awayDepth?.length > 0) && (
                 <Card>
                   <div style={{ marginBottom: 12 }}>
@@ -1028,65 +1061,6 @@ export default function MatchPage() {
                 </Card>
               )}
 
-              <Card>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Squad Readiness Impact</div>
-                <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>
-                  Informational — shown for context, does not modify the readiness score used elsewhere on this platform.
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-                  {[
-                    { team: match.home_team, intel: homeIntel, injury: homeInjury },
-                    { team: match.away_team, intel: awayIntel, injury: awayInjury },
-                  ].map(({ team, intel: ti, injury }, i) => (
-                    <div key={i}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>{team?.short_name ?? team?.name}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-                        <span style={{ color: COLORS.muted }}>Base Readiness</span>
-                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(ti?.readiness_score) }}>{ti?.readiness_score != null ? Math.round(ti.readiness_score) : '—'}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                        <span style={{ color: COLORS.muted }}>Importance Lost to Injury</span>
-                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: (injury?.total_importance_lost ?? 0) > 0 ? COLORS.red : COLORS.green }}>{injury?.total_importance_lost ?? 0}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* ── TACTICAL ── */}
-          {tab === 'Lineups' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              {(Object.values(homeAreaVersatility).some(v => v != null) || Object.values(awayAreaVersatility).some(v => v != null)) && (
-                <Card>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Area Versatility</div>
-                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 12 }}>
-                    Share of predicted-XI players with more than one listed position, by area — a real proxy for tactical flexibility, not a ball-control estimate (this platform has no positional-tracking data to measure actual control).
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    {(['DEF', 'MID', 'FWD'] as const).map(area => (
-                      <div key={area} style={{ display:'flex', alignItems:'center', gap:12 }}>
-                        <div style={{ width:36, fontSize:10, fontWeight:700, color:COLORS.dim, textTransform:'uppercase' }}>{area}</div>
-                        <div style={{ flex:1, display:'flex', alignItems:'center', gap:8 }}>
-                          <span style={{ width:32, textAlign:'right', fontFamily:'"JetBrains Mono",monospace', fontSize:12, fontWeight:700, color:COLORS.text }}>{homeAreaVersatility[area] ?? '—'}{homeAreaVersatility[area] != null ? '%' : ''}</span>
-                          <div style={{ flex:1, display:'flex', height:6, borderRadius:3, overflow:'hidden', background:COLORS.border }}>
-                            <div style={{ width:`${homeAreaVersatility[area] ?? 0}%`, background:COLORS.blue }} />
-                          </div>
-                          <div style={{ flex:1, display:'flex', height:6, borderRadius:3, overflow:'hidden', background:COLORS.border, flexDirection:'row-reverse' }}>
-                            <div style={{ width:`${awayAreaVersatility[area] ?? 0}%`, background:COLORS.amber }} />
-                          </div>
-                          <span style={{ width:32, fontFamily:'"JetBrains Mono",monospace', fontSize:12, fontWeight:700, color:COLORS.text }}>{awayAreaVersatility[area] ?? '—'}{awayAreaVersatility[area] != null ? '%' : ''}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, fontSize:9, color:COLORS.dim }}>
-                    <span>{match.home_team?.short_name ?? match.home_team?.name}</span>
-                    <span>{match.away_team?.short_name ?? match.away_team?.name}</span>
-                  </div>
-                </Card>
-              )}
               {keyBattles.length > 0 && (
                 <Card>
                   <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Key Battles</div>
@@ -1102,30 +1076,17 @@ export default function MatchPage() {
                   </div>
                 </Card>
               )}
-              <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'10px 16px', fontSize:11, color:COLORS.dim }}>
-                Real ball-control / heat-map area breakdowns would need positional-tracking data this platform doesn't have — Area Versatility above is a genuine, different proxy (squad flexibility), not an estimate of the same thing.
-              </div>
             </div>
           )}
 
-          {/* ── PHYSICAL — congestion, fatigue, travel, stability, full
-              per-team breakdown (TeamColumn) for anyone wanting the deep
-              dive. ── */}
-          {tab === 'Intelligence' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              <details open>
-                <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 0' }}>
-                  Readiness Component Breakdown
-                </summary>
-                <Card style={{ marginTop: 10 }}>
-                  <ReadinessBreakdown components={readinessComponents} />
-                </Card>
-              </details>
-              <div className="rip-compare-grid">
-                <TeamColumn team={match.home_team} intel={homeIntel} form={homeForm} fix={homeFix} squad={homeSquad} upcoming={homeUp} depth={homeDepth} />
-                <TeamColumn team={match.away_team} intel={awayIntel} form={awayForm} fix={awayFix} squad={awaySquad} upcoming={awayUp} depth={awayDepth} />
-              </div>
-            </div>
+          {/* ── READINESS — its own top-level tab now, not a collapsible
+              sub-section buried inside Intelligence. TeamColumn (the deep
+              per-team tabs) moved up into the Intelligence Summary block
+              above; this tab is ReadinessBreakdown alone. ── */}
+          {tab === 'Readiness' && (
+            <Card>
+              <ReadinessBreakdown components={readinessComponents} />
+            </Card>
           )}
 
           {/* ── MODELS ── */}
@@ -1194,34 +1155,8 @@ export default function MatchPage() {
         </div>
       )}
 
-      {/* ══════════════════════════ LINEUPS ══════════════════════════
-          Pure squad information — no literature, no analysis. ── */}
-      {tab === 'Lineups' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {(homeLineup.length > 0 || awayLineup.length > 0) ? (
-            <Card>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Predicted Lineups</div>
-                <div style={{ fontSize: 10, color: COLORS.dim, marginTop: 2 }}>
-                  Based on season starts, form, and injury status
-                  {(homeFormation || awayFormation) && (
-                    <> • {homeFormation ?? '—'} vs {awayFormation ?? '—'}</>
-                  )}
-                </div>
-              </div>
-              <PredictedLineup
-                homeTeam={match.home_team}
-                awayTeam={match.away_team}
-                lineups={{ home: homeLineup, away: awayLineup }}
-              />
-            </Card>
-          ) : (
-            <div style={{ padding:'40px 20px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
-              Predicted lineups not yet available for this match.
-            </div>
-          )}
-        </div>
-      )}
+      {/* Predicted Lineups now lives inside the consolidated Lineups tab
+          above, position 2 in the requested hierarchy. */}
 
       {/* ══════════════════════════ INSIGHTS ══════════════════════════
           The storytelling tab — 4 subtabs. ── */}
