@@ -697,7 +697,7 @@ export default function MatchPage() {
 
         <div className="rip-match-detail-hero-row">
           <div className="rip-match-detail-hero-team-col">
-            <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-home">{match.home_team?.name}</div>
+            <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-home">{match.home_team?.short_name ?? match.home_team?.name}</div>
             <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.home_readiness && homeIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
@@ -739,7 +739,7 @@ export default function MatchPage() {
           </div>
 
           <div className="rip-match-detail-hero-team-col">
-            <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-away">{match.away_team?.name}</div>
+            <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-away">{match.away_team?.short_name ?? match.away_team?.name}</div>
             <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.away_readiness && awayIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
