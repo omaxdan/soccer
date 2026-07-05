@@ -238,12 +238,12 @@ export default async function MatchCenter({
             <thead>
               <tr style={{ background: COLORS.surface2 }}>
                 {[
-                  { label: '★' }, { label: 'TIME' }, { label: 'MATCH' }, { label: 'HOME' }, { label: 'AWAY' }, { label: 'GAP' },
+                  { label: '★' }, { label: 'TIME' }, { label: 'MATCH' }, { label: 'SCORE' }, { label: 'HOME' }, { label: 'AWAY' }, { label: 'GAP' },
                   { label: 'STR (H/A)', mobileHide: true }, { label: 'VENUE (H/A)', mobileHide: true },
                   { label: 'XG (H/A)', mobileHide: true }, { label: 'VERS (H/A)', mobileHide: true },
                   { label: 'PICK' }, { label: 'CONF %' },
                 ].map(({ label: h, mobileHide }) => (
-                  <th key={h} className={mobileHide ? 'rip-mobile-hide' : undefined} style={{ padding: h === '★' ? '8px 4px' : '8px 10px', textAlign: h === 'MATCH' ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} className={mobileHide ? 'rip-mobile-hide' : undefined} style={{ padding: h === '★' ? '8px 4px' : '8px 10px', textAlign: (h === 'MATCH' || h === 'SCORE') ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -254,7 +254,7 @@ export default async function MatchCenter({
                 return (
                   <React.Fragment key={`country-${country}`}>
                     <tr>
-                      <td colSpan={12} style={{ padding: '10px 10px 4px', fontSize: 12, fontWeight: 800, color: COLORS.text, background: COLORS.bg }}>
+                      <td colSpan={13} style={{ padding: '10px 10px 4px', fontSize: 12, fontWeight: 800, color: COLORS.text, background: COLORS.bg }}>
                         {country}
                       </td>
                     </tr>
@@ -263,7 +263,7 @@ export default async function MatchCenter({
                       return (
                         <React.Fragment key={`comp-${country}-${competition}`}>
                           <tr>
-                            <td colSpan={12} style={{ padding: '6px 10px 6px 22px', fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: `1px solid ${COLORS.border}` }}>
+                            <td colSpan={13} style={{ padding: '6px 10px 6px 22px', fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: `1px solid ${COLORS.border}` }}>
                               {competition}
                             </td>
                           </tr>
@@ -277,21 +277,22 @@ export default async function MatchCenter({
                                 </td>
                                 <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: m.status === 'finished' ? COLORS.green : COLORS.muted, fontSize: m.status === 'finished' ? 10 : undefined, fontWeight: m.status === 'finished' ? 700 : undefined }}>{m.status === 'finished' ? 'FT' : time}</td>
                                 <td style={{ padding: '8px 10px' }}>
-                                  <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600 }}>
-                                    {(() => {
-                                      const r = toOne(m.match_results);
-                                      const hasScore = r != null && r.home_score != null && r.away_score != null;
-                                      return (
-                                        <>
-                                          {m.home_team?.short_name ?? m.home_team?.name}{' '}
-                                          {hasScore
-                                            ? <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.green, fontWeight: 700 }}>{r.home_score}–{r.away_score}</span>
-                                            : <span style={{ color: COLORS.dim, fontWeight: 400 }}>v</span>}
-                                          {' '}{m.away_team?.short_name ?? m.away_team?.name}
-                                        </>
-                                      );
-                                    })()}
+                                  <Link href={matchUrl(m)} style={{ color: COLORS.text, textDecoration: 'none', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3 }}>
+                                    <div>{m.home_team?.short_name ?? m.home_team?.name}</div>
+                                    <div>{m.away_team?.short_name ?? m.away_team?.name}</div>
                                   </Link>
+                                </td>
+                                <td style={{ padding: '8px 10px', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700 }}>
+                                  {(() => {
+                                    const r = toOne(m.match_results);
+                                    const hasScore = r != null && r.home_score != null && r.away_score != null;
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3, color: hasScore ? COLORS.green : COLORS.dim }}>
+                                        <div>{hasScore ? r.home_score : '—'}</div>
+                                        <div>{hasScore ? r.away_score : '—'}</div>
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                                 <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(homeR) }}>{homeR != null ? Math.round(homeR) : '—'}</td>
                                 <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(awayR) }}>{awayR != null ? Math.round(awayR) : '—'}</td>
@@ -342,7 +343,7 @@ export default async function MatchCenter({
                 );
               })}
               {enriched.length === 0 && (
-                <tr><td colSpan={12} style={{ padding: 32, textAlign: 'center', color: loadError ? COLORS.red : COLORS.dim }}>
+                <tr><td colSpan={13} style={{ padding: 32, textAlign: 'center', color: loadError ? COLORS.red : COLORS.dim }}>
                   {loadError
                     ? `Match data failed to load (${loadError}) — check migrations/RLS, this is a data error, not an empty day`
                     : `No fixtures found for ${displayDate}`}

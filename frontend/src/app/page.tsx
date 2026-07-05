@@ -339,21 +339,32 @@ export default async function Dashboard() {
               {/* Key metrics row — falls back to each team's own baseline
                   (congestion_score/active_competitions from team_intelligence)
                   when match_intelligence's combined per-match values aren't
-                  ready yet, instead of hiding the whole row. */}
+                  ready yet, instead of hiding the whole row.
+                  Travel Advantage split out from this grid entirely - it's
+                  structurally different from the other 4 (a single derived
+                  value, no home-vs-away pair), and being the 5th item in a
+                  2-per-row mobile grid was the actual cause of the uneven
+                  "2x2 plus one lone item with empty space beside it" wrap
+                  visible in review screenshots. The 4 real paired metrics
+                  now get their own dedicated grid that always stays 4
+                  columns (never collapses, unlike most grids elsewhere in
+                  this app) - these are short labels/2-3 digit values, not
+                  free-form team names, so 4-across stays legible even on a
+                  narrow phone without the truncation risk that ruled out
+                  the same "always N columns" approach for team-name blocks. */}
               {(heroIntel || heroHomeIntel || heroAwayIntel) && (
-                <div className="grid-5" style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                <div className="grid-4-metrics" style={{ paddingTop: 16, borderTop: '1px solid var(--border)' }}>
                   {[
                     { label: 'REST DAYS', homeV: heroIntel?.home_rest_days?.toFixed(1) ?? heroHomeIntel?.rest_days_avg?.toFixed(1) ?? '—', awayV: heroIntel?.away_rest_days?.toFixed(1) ?? heroAwayIntel?.rest_days_avg?.toFixed(1) ?? '—', homeTag: heroMatch.home_team?.short_name, awayTag: heroMatch.away_team?.short_name, icon: '🛏' },
                     { label: 'TRAVEL (KM)', homeV: heroTravel?.home_team_distance_km ? Math.round(heroTravel.home_team_distance_km) : '—', awayV: heroTravel?.away_team_distance_km ? Math.round(heroTravel.away_team_distance_km) : '—', homeTag: heroMatch.home_team?.short_name, awayTag: heroMatch.away_team?.short_name, icon: '✈' },
                     { label: 'CONGESTION', homeV: heroIntel?.congestion_factor ? Math.round(heroIntel.congestion_factor) : (heroHomeIntel?.congestion_score ? Math.round(heroHomeIntel.congestion_score) : '—'), awayV: heroIntel?.congestion_factor ? Math.round(heroIntel.congestion_factor) : (heroAwayIntel?.congestion_score ? Math.round(heroAwayIntel.congestion_score) : '—'), homeTag: heroMatch.home_team?.short_name, awayTag: heroMatch.away_team?.short_name, icon: '📅' },
                     { label: 'COMPETITIONS', homeV: heroIntel?.home_active_competitions ?? heroHomeIntel?.active_competitions ?? '—', awayV: heroIntel?.away_active_competitions ?? heroAwayIntel?.active_competitions ?? '—', homeTag: heroMatch.home_team?.short_name, awayTag: heroMatch.away_team?.short_name, icon: '🏆' },
-                    { label: 'TRAVEL ADVANTAGE', homeV: heroTravel?.travel_advantage_km ? `${Math.round(heroTravel.travel_advantage_km)}km` : '—', awayV: '', homeTag: heroMatch.home_team?.short_name, awayTag: '', icon: '⚡' },
                   ].map((metric, i) => (
-                    <div key={i}>
+                    <div key={i} style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 9, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
                         {metric.icon} {metric.label}
                       </div>
-                      <div style={{ display: 'flex', gap: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: 10 }}>
                         <div>
                           <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>{metric.homeV}</div>
                           <div style={{ fontSize: 9, color: 'var(--dim)' }}>{metric.homeTag}</div>
@@ -367,6 +378,21 @@ export default async function Dashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Travel Advantage — a single derived value (home-only, no
+                  away pair), rendered on its own rather than as an odd
+                  5th item inside the 4-column paired-metrics grid above. */}
+              {heroTravel?.travel_advantage_km != null && (
+                <div style={{ textAlign: 'center', paddingTop: 14, marginTop: 14, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                    ⚡ TRAVEL ADVANTAGE
+                  </div>
+                  <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>
+                    {Math.round(heroTravel.travel_advantage_km)}km
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--dim)' }}>{heroMatch.home_team?.short_name}</div>
                 </div>
               )}
 

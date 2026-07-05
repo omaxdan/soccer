@@ -45,7 +45,7 @@ export default function ReadinessGauge({
   const sizeVar = `var(--rip-gauge-size, ${size}px)`;
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
       <div className="rip-gauge" style={{ position:'relative', width: sizeVar, height: sizeVar, maxWidth: size, maxHeight: size }}>
         <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
           <path d={arcPath(startAngle, arcSpan)} fill="none" stroke="var(--border)" strokeWidth={strokeWidth} strokeLinecap="round" />
@@ -58,10 +58,10 @@ export default function ReadinessGauge({
           <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:fs, fontWeight:800, color: score != null ? color : 'var(--dim)', lineHeight:1 }}>
             {score != null ? Math.round(score) : '—'}
           </div>
-          {showLabel && <div style={{ fontSize:ls, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--muted)' }}>{label}</div>}
           {change != null && <div style={{ fontSize:ls, fontWeight:600, color: change >= 0 ? 'var(--green)' : 'var(--red)' }}>{change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}</div>}
         </div>
       </div>
+      {showLabel && <div style={{ fontSize:ls, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--muted)', textAlign:'center' }}>{label}</div>}
     </div>
   );
 }

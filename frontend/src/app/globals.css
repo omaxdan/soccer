@@ -526,6 +526,17 @@ th, td { text-align: left; }
 .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 @media (max-width: 1200px) { .grid-5 { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 640px)  { .grid-5 { grid-template-columns: repeat(2, 1fr); } }
+
+/* ─── 4-METRIC ROW (Rest Days / Travel / Congestion / Competitions on the
+   home page hero) — deliberately stays 4 columns at every width, unlike
+   most grids in this file. These are short labels + 2-3 digit values,
+   not free-form team names, so 4-across stays legible even narrow.
+   Kept separate from .grid-5 above: that class collapses at breakpoints,
+   which is right for its own 5-item KPI row but was WRONG for this one -
+   with exactly 4 items, .grid-5's 3-column step at 1200px wrapped as
+   3-then-1 (one lone item, empty space beside it), the actual cause of
+   the "unbalanced, 40% dead space" appearance in review screenshots. */
+.grid-4-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
 .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
 .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }

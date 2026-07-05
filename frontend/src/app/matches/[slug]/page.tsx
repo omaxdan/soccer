@@ -695,9 +695,9 @@ export default function MatchPage() {
           {venue && <span style={{ color:COLORS.dim, fontSize:11 }}>• {venue.name}, {venue.city}</span>}
         </div>
 
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-around' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-around' }}>
           <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:20, fontWeight:700, color:COLORS.text }}>{match.home_team?.name}</div>
+            <div style={{ fontSize:20, fontWeight:700, color:COLORS.text, minHeight:'2.6em', display:'flex', alignItems:'center' }}>{match.home_team?.name}</div>
             <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.home_readiness && homeIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
@@ -706,10 +706,10 @@ export default function MatchPage() {
 
           <div style={{ textAlign:'center', minWidth:120 }}>
             {(isDone || isLive) ? (
-              <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:48, fontWeight:700, color:COLORS.text, lineHeight:1 }}>
+              <div style={{ fontFamily:'"JetBrains Mono",monospace', fontSize:48, fontWeight:700, color:COLORS.text, lineHeight:1, whiteSpace:'nowrap' }}>
                 {result?.home_score ?? 0} – {result?.away_score ?? 0}
                 {result?.half_time_home_score != null && (
-                  <div style={{ fontSize:12, color:COLORS.dim, marginTop:4 }}>HT: {result.half_time_home_score}–{result.half_time_away_score}</div>
+                  <div style={{ fontSize:12, color:COLORS.dim, marginTop:4, whiteSpace:'nowrap' }}>HT: {result.half_time_home_score}–{result.half_time_away_score}</div>
                 )}
               </div>
             ) : (
@@ -739,7 +739,7 @@ export default function MatchPage() {
           </div>
 
           <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:20, fontWeight:700, color:COLORS.text }}>{match.away_team?.name}</div>
+            <div style={{ fontSize:20, fontWeight:700, color:COLORS.text, minHeight:'2.6em', display:'flex', alignItems:'center' }}>{match.away_team?.name}</div>
             <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.away_readiness && awayIntel?.readiness_score != null && (
               <div style={{ fontSize: 9, color: COLORS.dim }}>baseline — match-specific pending</div>
