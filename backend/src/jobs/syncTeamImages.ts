@@ -60,17 +60,20 @@ async function downloadAndUpload(path: string, externalId: number): Promise<stri
   }
 }
 
-export async function syncTeamImages(): Promise<{ teamsProcessed: number; written: number; errors: number }> {
-  logger.info('syncTeamImages started — one-time backfill');
+export async function syncTeamImages(externalIds?: number[]): Promise<{ teamsProcessed: number; written: number; errors: number }> {
+  const targeted = externalIds != null && externalIds.length > 0;
+  logger.info(targeted ? { externalIds } : {}, targeted ? 'syncTeamImages started — targeted re-sync' : 'syncTeamImages started — one-time backfill');
   await ensureBucket();
 
-  const { data: teams } = await db
-    .from('teams')
-    .select('id, external_id, name, crest_storage_path')
-    .is('crest_storage_path', null); // only teams without an image yet
+  const q = db.from('teams').select('id, external_id, name, crest_storage_path');
+  // Targeted mode re-syncs the given teams regardless of whether they
+  // already have an image (the real use case: a club rebrand, or
+  // confirming a specific team's crest looks right). Default mode keeps
+  // the original backfill-only-missing behavior unchanged.
+  const { data: teams } = targeted ? await q.in('external_id', externalIds!) : await q.is('crest_storage_path', null);
 
   if (!teams || teams.length === 0) {
-    logger.info('No teams need image backfill');
+    logger.info('No teams to sync');
     return { teamsProcessed: 0, written: 0, errors: 0 };
   }
 
@@ -106,17 +109,16 @@ export async function syncTeamImages(): Promise<{ teamsProcessed: number; writte
  *  wrong endpoint here shows up clearly as "0 written, N errors" in the
  *  job's own return value, not a crash. Test this against a small batch
  *  before trusting it at full scale. */
-export async function syncTournamentImages(): Promise<{ tournamentsProcessed: number; written: number; errors: number }> {
-  logger.info('syncTournamentImages started — one-time backfill (endpoint unverified, test before full run)');
+export async function syncTournamentImages(externalIds?: number[]): Promise<{ tournamentsProcessed: number; written: number; errors: number }> {
+  const targeted = externalIds != null && externalIds.length > 0;
+  logger.info(targeted ? { externalIds } : {}, targeted ? 'syncTournamentImages started — targeted re-sync (endpoint unverified)' : 'syncTournamentImages started — one-time backfill (endpoint unverified, test before full run)');
   await ensureBucket();
 
-  const { data: tournaments } = await db
-    .from('tournaments')
-    .select('id, external_id, name, logo_storage_path')
-    .is('logo_storage_path', null); // only tournaments without a logo yet
+  const q = db.from('tournaments').select('id, external_id, name, logo_storage_path');
+  const { data: tournaments } = targeted ? await q.in('external_id', externalIds!) : await q.is('logo_storage_path', null);
 
   if (!tournaments || tournaments.length === 0) {
-    logger.info('No tournaments need logo backfill');
+    logger.info('No tournaments to sync');
     return { tournamentsProcessed: 0, written: 0, errors: 0 };
   }
 

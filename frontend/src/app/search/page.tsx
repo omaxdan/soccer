@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { searchTeams, searchTournaments } from '@/lib/queries';
-import { COLORS , withAlpha } from '@/design/tokens';
+import { COLORS } from '@/design/tokens';
 import { teamUrl, leagueUrl } from '@/lib/urls';
+import TeamCrest from '@/components/TeamCrest';
+import { getCrestUrl } from '@/lib/images';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
@@ -50,7 +52,7 @@ export default function SearchPage() {
           <div style={{ padding:'8px 14px', borderBottom:`1px solid ${COLORS.border}`, fontSize:10, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em' }}>Teams</div>
           {teams.map((t: any) => (
             <Link key={t.id} href={teamUrl(t)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${COLORS.border}`, textDecoration:'none' }}>
-              <div style={{ width:28, height:28, background:withAlpha(COLORS.green, '20'), borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'monospace', fontSize:10, fontWeight:700, color:COLORS.green }}>{t.short_name?.slice(0,3)}</div>
+              <TeamCrest team={t} size={28} borderRadius={6} />
               <div>
                 <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{t.name}</div>
                 <div style={{ fontSize:10, color:COLORS.muted }}>{t.country}</div>
@@ -65,6 +67,9 @@ export default function SearchPage() {
           <div style={{ padding:'8px 14px', borderBottom:`1px solid ${COLORS.border}`, fontSize:10, color:COLORS.muted, textTransform:'uppercase', letterSpacing:'0.08em' }}>Tournaments</div>
           {tournaments.map((t: any) => (
             <Link key={t.id} href={leagueUrl(t)} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${COLORS.border}`, textDecoration:'none' }}>
+              {getCrestUrl(t.logo_storage_path) && (
+                <img src={getCrestUrl(t.logo_storage_path)!} alt={t.name} width={24} height={24} style={{ objectFit:'contain', borderRadius:4, flexShrink:0 }} />
+              )}
               <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{t.name}</div>
             </Link>
           ))}

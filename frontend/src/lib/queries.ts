@@ -245,7 +245,7 @@ export async function getReadinessRankings(limit = 50) {
   const q = supabase.from('team_intelligence')
     .select(`team_id, readiness_score, form_index, congestion_score, travel_fatigue_score,
       active_competitions, last_5_points, last_10_points,
-      team:teams!team_id(id, name, short_name, slug, country)`)
+      team:teams!team_id(id, name, short_name, slug, country, crest_storage_path)`)
     .not('readiness_score', 'is', null)
     .order('readiness_score', { ascending: false })
     .limit(limit);
@@ -1256,7 +1256,7 @@ export async function getTrackedTournaments() {
   // Fetch all rows with matching slugs, then narrow by category in JS
   const { data } = await supabase
     .from('tournaments')
-    .select('id, name, slug, category')
+    .select('id, name, slug, category, logo_storage_path')
     .in('slug', TRACKED_SLUGS)
     .order('category', { ascending: true })
     .order('name', { ascending: true });
@@ -1383,7 +1383,7 @@ export async function getFormPowerRankings(limit = 30) {
 
 export async function searchTeams(q: string, limit = 10) {
   const teamIds = await getTrackedTeamIds();
-  const query   = supabase.from('teams').select('id, name, short_name, slug, country')
+  const query   = supabase.from('teams').select('id, name, short_name, slug, country, crest_storage_path')
     .ilike('name', `%${q}%`).limit(limit);
   if (teamIds.length > 0) query.in('id', teamIds);
   const { data } = await query;
@@ -1392,7 +1392,7 @@ export async function searchTeams(q: string, limit = 10) {
 
 export async function searchTournaments(q: string, limit = 10) {
   const { data } = await supabase.from('tournaments')
-    .select('id, name, slug, category')
+    .select('id, name, slug, category, logo_storage_path')
     .in('slug', TRACKED_SLUGS)
     .ilike('name', `%${q}%`)
     .limit(limit);
@@ -1529,12 +1529,13 @@ async function computeLeagueReadinessRankingsLive(
 
 export interface LeagueDetailTeamRow {
   id: number; name: string; short_name: string | null; slug: string | null; country: string | null;
+  crest_storage_path: string | null;
   readiness_score: number | null; form_index: number | null; congestion_score: number | null;
   rest_days_avg: number | null; travel_fatigue_score: number | null;
 }
 
 export interface LeagueDetailData {
-  tournament: { id: number; name: string; slug: string; category: string | null } | null;
+  tournament: { id: number; name: string; slug: string; category: string | null; logo_storage_path: string | null } | null;
   teams: LeagueDetailTeamRow[];
   seasonStats: {
     avgGoalsPerMatch: number | null;
@@ -1554,7 +1555,7 @@ export interface LeagueDetailData {
 export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetailData> {
   const { data: tournament } = await supabase
     .from('tournaments')
-    .select('id, name, slug, category')
+    .select('id, name, slug, category, logo_storage_path')
     .eq('id', tournamentId)
     .maybeSingle();
 
@@ -1570,7 +1571,7 @@ export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetai
 
   const { data: teamsData } = await supabase
     .from('teams')
-    .select('id, name, short_name, slug, country')
+    .select('id, name, short_name, slug, country, crest_storage_path')
     .in('id', teamIds);
 
   const { data: intel } = await supabase
@@ -1651,6 +1652,7 @@ export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetai
 
 export interface TeamIntelRow {
   id: number; name: string; short_name: string | null; slug: string | null; country: string | null;
+  crest_storage_path: string | null;
   league: string | null; position: number | null;
   readiness_score: number | null; form_index: number | null;
   congestion_score: number | null; rest_days_avg: number | null; active_competitions: number | null;
@@ -1673,7 +1675,7 @@ export async function getTeamIntelligenceList(limit = 10000): Promise<TeamIntelR
 
   const q = supabase.from('team_intelligence')
     .select(`team_id, readiness_score, form_index, congestion_score, rest_days_avg, active_competitions,
-      team:teams!team_id(id, name, short_name, slug, country)`)
+      team:teams!team_id(id, name, short_name, slug, country, crest_storage_path)`)
     .not('readiness_score', 'is', null)
     .order('readiness_score', { ascending: false })
     .limit(limit);
@@ -1734,6 +1736,7 @@ export async function getTeamIntelligenceList(limit = 10000): Promise<TeamIntelR
     const standing = standingsMap.get(r.team_id);
     return {
       id: r.team.id, name: r.team.name, short_name: r.team.short_name, slug: r.team.slug, country: r.team.country,
+      crest_storage_path: r.team.crest_storage_path ?? null,
       league: standing?.league ?? null, position: standing?.position ?? null,
       readiness_score: r.readiness_score, form_index: r.form_index,
       congestion_score: r.congestion_score, rest_days_avg: r.rest_days_avg, active_competitions: r.active_competitions,

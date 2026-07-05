@@ -2,6 +2,8 @@ import { getLeagueDetail } from '@/lib/queries';
 import { parseIdFromSlug, teamUrl } from '@/lib/urls';
 import { COLORS, scoreColor } from '@/design/tokens';
 import Link from 'next/link';
+import TeamCrest from '@/components/TeamCrest';
+import { getCrestUrl } from '@/lib/images';
 
 export const revalidate = 3600;
 
@@ -117,9 +119,14 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
       </div>
 
       {/* Header */}
-      <div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{tournament.name}</div>
-        <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 3 }}>{tournament.category ?? '—'} · {teams.length} teams tracked</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {getCrestUrl(tournament.logo_storage_path) && (
+          <img src={getCrestUrl(tournament.logo_storage_path)!} alt={tournament.name} width={40} height={40} style={{ objectFit: 'contain', borderRadius: 8, flexShrink: 0 }} />
+        )}
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.text }}>{tournament.name}</div>
+          <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 3 }}>{tournament.category ?? '—'} · {teams.length} teams tracked</div>
+        </div>
       </div>
 
       {/* KPI Strip */}
@@ -153,9 +160,7 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
                   <td style={{ padding: '8px 12px', color: COLORS.dim, fontFamily: '"JetBrains Mono",monospace' }}>{i + 1}</td>
                   <td style={{ padding: '8px 12px' }}>
                     <Link href={teamUrl(t)} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                      <div style={{ width: 22, height: 22, background: COLORS.surface2, borderRadius: 5, border: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, flexShrink: 0, color: COLORS.text }}>
-                        {t.short_name?.slice(0, 3) ?? t.name?.slice(0, 3)}
-                      </div>
+                      <TeamCrest team={t} size={22} borderRadius={5} />
                       <span style={{ color: COLORS.text, fontWeight: 500 }}>{t.name}</span>
                     </Link>
                   </td>

@@ -13,6 +13,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { COLORS, scoreColor , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
+import TeamCrest from '@/components/TeamCrest';
 import FormString from '@/components/FormString';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
@@ -85,7 +86,7 @@ export default function TeamPage() {
       const teamId = parseInt(id);
       setLoading(true);
       try {
-        const { data: td } = await supabase.from('teams').select('id,name,short_name,country,slug').eq('id', teamId).single();
+        const { data: td } = await supabase.from('teams').select('id,name,short_name,country,slug,crest_storage_path').eq('id', teamId).single();
         setTeam(td);
         const [intel, form, fix, travel, squad, upcoming, trend, keyPlayers, positionBreakdown, nextMatch, fixtureDifficulty, momentum, goalDependency, injuryImpact] = await Promise.all([
           getTeamIntelligence(teamId).catch(() => null),
@@ -204,9 +205,7 @@ export default function TeamPage() {
       {/* ── HEADER (compact — name + badge + tags, no longer competing
           with a full metrics wall right below it) ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 48, height: 48, background: withAlpha(COLORS.green, '20'), border: `2px solid ${withAlpha(COLORS.green, '40')}`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', color: COLORS.green, flexShrink: 0 }}>
-          {team.short_name?.slice(0, 3) ?? team.name?.slice(0, 3)}
-        </div>
+        <TeamCrest team={team} size={48} borderRadius={12} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</div>
           <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>

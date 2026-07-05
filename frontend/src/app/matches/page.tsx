@@ -6,6 +6,7 @@ import { computeMatchSignals } from '@/lib/signals';
 import { matchUrl } from '@/lib/urls';
 import { COLORS, scoreColor } from '@/design/tokens';
 import MatchWatchlistStar from '@/components/MatchWatchlistStar';
+import TeamCrest from '@/components/TeamCrest';
 import Link from 'next/link';
 
 export const metadata = { title: 'Match Center | NinetyData RIP' };
@@ -293,9 +294,15 @@ export default async function MatchCenter({
                                   )}
                                 </td>
                                 <td style={{ padding: '8px 10px' }}>
-                                  <Link href={matchUrl(m)} style={{ color: isFinished ? COLORS.muted : COLORS.text, textDecoration: 'none', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3 }}>
-                                    <div>{m.home_team?.short_name ?? m.home_team?.name}</div>
-                                    <div>{m.away_team?.short_name ?? m.away_team?.name}</div>
+                                  <Link href={matchUrl(m)} style={{ color: isFinished ? COLORS.muted : COLORS.text, textDecoration: 'none', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 4, lineHeight: 1.3 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <TeamCrest team={m.home_team} size={16} borderRadius={3} />
+                                      <span>{m.home_team?.short_name ?? m.home_team?.name}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <TeamCrest team={m.away_team} size={16} borderRadius={3} />
+                                      <span>{m.away_team?.short_name ?? m.away_team?.name}</span>
+                                    </div>
                                   </Link>
                                 </td>
                                 <td style={{ padding: '8px 10px', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700 }}>

@@ -9,6 +9,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import { teamUrl, matchUrl } from '@/lib/urls';
+import TeamCrest from '@/components/TeamCrest';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 export const revalidate = 1800;
@@ -290,9 +291,7 @@ export default async function Dashboard() {
                   described the reverse mapping as correct; it isn't). */}
               <div className="rip-match-hero">
                 <div className="rip-match-hero-col">
-                  <div className="rip-match-hero-badge">
-                    {heroMatch.home_team?.short_name?.slice(0, 3) ?? '?'}
-                  </div>
+                  <TeamCrest team={heroMatch.home_team} size={40} borderRadius={10} />
                   <div className="rip-match-hero-name">{heroMatch.home_team?.name ?? '—'}</div>
                   <div className="rip-match-hero-rank">1st</div>
                   <ReadinessGauge score={heroIntel?.home_readiness ?? heroHomeIntel?.readiness_score ?? null} size={90} change={heroIntel?.home_readiness ? 2.1 : undefined} />
@@ -327,9 +326,7 @@ export default async function Dashboard() {
                 </div>
 
                 <div className="rip-match-hero-col">
-                  <div className="rip-match-hero-badge">
-                    {heroMatch.away_team?.short_name?.slice(0, 3) ?? '?'}
-                  </div>
+                  <TeamCrest team={heroMatch.away_team} size={40} borderRadius={10} />
                   <div className="rip-match-hero-name">{heroMatch.away_team?.name ?? '—'}</div>
                   <div className="rip-match-hero-rank">11th</div>
                   <ReadinessGauge score={heroIntel?.away_readiness ?? heroAwayIntel?.readiness_score ?? null} size={90} change={heroIntel?.away_readiness ? -1.4 : undefined} />
@@ -431,9 +428,7 @@ export default async function Dashboard() {
                   <td className="mono" style={{ color: 'var(--dim)', width: 24 }}>{i + 1}</td>
                   <td>
                     <Link href={teamUrl(t.team)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 24, height: 24, background: 'var(--surface2)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, border: '1px solid var(--border)', flexShrink: 0 }}>
-                        {t.team?.short_name?.slice(0, 3) ?? '?'}
-                      </div>
+                      <TeamCrest team={t.team} size={24} borderRadius={4} />
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{t.team?.name}</div>
                         <div style={{ fontSize: 10, color: 'var(--dim)' }}>{t.team?.country}</div>

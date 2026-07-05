@@ -318,6 +318,54 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
       }
 
+      case 'sync:images:targeted': {
+        // Targeted image (re)sync for specific teams, leagues, and/or
+        // matches - any one or more of the three, combined in one call.
+        // IDs are external_id (the source API's id, matching the
+        // established convention from syncSingleTeamSquad/
+        // resolveTeamsFromMatches elsewhere in this file), NOT this DB's
+        // internal auto-increment id - flagged clearly here since
+        // "reading id from DB" could reasonably be read either way.
+        //
+        // Usage: sync:images:targeted --teams 1,2,3 --leagues 5,6 --matches 100,101
+        // Any of the three flags may be omitted; at least one is required.
+        // Match IDs are match external_match_id, resolved to their two
+        // teams via the same resolveTeamsFromMatches() helper
+        // sync:squads:matches:v2 already uses - not a second, separate
+        // resolution implementation.
+        const parseIdFlag = (flag: string): number[] => {
+          const idx = args.indexOf(flag);
+          if (idx === -1 || idx + 1 >= args.length) return [];
+          return args[idx + 1].split(',').map(s => Number(s.trim())).filter(n => !Number.isNaN(n));
+        };
+        const teamIds = parseIdFlag('--teams');
+        const leagueIds = parseIdFlag('--leagues');
+        const matchIds = parseIdFlag('--matches');
+
+        if (teamIds.length === 0 && leagueIds.length === 0 && matchIds.length === 0) {
+          logger.error('Usage: sync:images:targeted --teams <ids> --leagues <ids> --matches <ids> — at least one flag required, each accepting one or more comma-separated external IDs');
+          break;
+        }
+
+        let resolvedTeamIds = [...teamIds];
+        if (matchIds.length > 0) {
+          if (matchIds.length < 2) {
+            logger.error('--matches requires at least 2 match external IDs (resolveTeamsFromMatches\' own requirement, same as sync:squads:matches:v2)');
+            break;
+          }
+          const { teams, matchesNotFound } = await resolveTeamsFromMatches(matchIds);
+          if (matchesNotFound.length > 0) logger.warn({ matchesNotFound }, 'Some match IDs did not resolve');
+          resolvedTeamIds = [...new Set([...resolvedTeamIds, ...teams.map(t => t.external_id)])];
+        }
+
+        logger.info({ teamIds: resolvedTeamIds, leagueIds }, 'Running targeted image sync...');
+        const results: any = {};
+        if (resolvedTeamIds.length > 0) results.teams = await syncTeamImages(resolvedTeamIds);
+        if (leagueIds.length > 0) results.leagues = await syncTournamentImages(leagueIds);
+        logger.info(results, 'Targeted image sync complete');
+        break;
+      }
+
       case 'sync:standings': {
         // Weekly cadence — per TOURNAMENT not per team (~42 calls total,
         // not 766). Resolves league_position in team_strength_ratings.
@@ -918,6 +966,7 @@ Commands:
     sync:squads:matches:v2 <ids>     V2 for teams in specific matches, by match external_match_id (needs 2+; space or comma separated)
     sync:images                      One-time team crest backfill to Supabase Storage (re-run manually only on rebrand)
     sync:tournament-images           One-time tournament/league logo backfill - endpoint unverified, test small batch first
+    sync:images:targeted             Targeted (re)sync for specific teams/leagues/matches: --teams <ids> --leagues <ids> --matches <ids> (any 1+, combinable, external_id not internal id)
     sync:player-stats:matches:v2 <ids>  Player season stats for teams in specific matches, same match external_match_id pattern
     sync:team-squad:v2 <id>          V2 force sync single team
 

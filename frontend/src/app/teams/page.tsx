@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { getTeamIntelligenceList, TeamIntelRow } from '@/lib/queries';
 import { COLORS, scoreColor , withAlpha } from '@/design/tokens';
 import { teamUrl } from '@/lib/urls';
+import TeamCrest from '@/components/TeamCrest';
 
 import { loadWatchlist, saveWatchlist } from '@/lib/watchlist';
 
@@ -152,9 +153,7 @@ export default function TeamsPage() {
                   <td style={{ padding: '9px 10px', color: COLORS.dim, fontFamily: '"JetBrains Mono",monospace' }}>{i + 1}</td>
                   <td style={{ padding: '9px 10px' }}>
                     <Link href={teamUrl(t)} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                      <div style={{ width: 20, height: 20, background: COLORS.surface2, borderRadius: 5, border: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 700, flexShrink: 0, color: COLORS.text }}>
-                        {t.short_name?.slice(0, 3) ?? t.name.slice(0, 3)}
-                      </div>
+                      <TeamCrest team={t} size={20} borderRadius={5} />
                       <span style={{ color: COLORS.text, fontWeight: 600 }}>{t.name}</span>
                     </Link>
                   </td>

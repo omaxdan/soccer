@@ -12,6 +12,7 @@ import {
 import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
+import TeamCrest from '@/components/TeamCrest';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
 import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveMatchRisk, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
 import { ComparisonRow } from '@/components/TeamComparisonMatrix';
@@ -697,6 +698,7 @@ export default function MatchPage() {
 
         <div className="rip-match-detail-hero-row">
           <div className="rip-match-detail-hero-team-col">
+            <TeamCrest team={match.home_team} size={36} borderRadius={8} />
             <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-home">{match.home_team?.short_name ?? match.home_team?.name}</div>
             <ReadinessGauge score={intel?.home_readiness ?? homeIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.home_readiness && homeIntel?.readiness_score != null && (
@@ -739,6 +741,7 @@ export default function MatchPage() {
           </div>
 
           <div className="rip-match-detail-hero-team-col">
+            <TeamCrest team={match.away_team} size={36} borderRadius={8} />
             <div className="rip-match-detail-hero-team-name rip-match-detail-hero-team-name-away">{match.away_team?.short_name ?? match.away_team?.name}</div>
             <ReadinessGauge score={intel?.away_readiness ?? awayIntel?.readiness_score ?? null} label="READINESS" size={120} />
             {!intel?.away_readiness && awayIntel?.readiness_score != null && (

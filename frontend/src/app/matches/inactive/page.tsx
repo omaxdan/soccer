@@ -3,6 +3,7 @@ import { getInactiveMatches } from '@/lib/queries';
 import { matchUrl } from '@/lib/urls';
 import { COLORS , withAlpha } from '@/design/tokens';
 import Link from 'next/link';
+import TeamCrest from '@/components/TeamCrest';
 
 export const metadata = { title: 'Postponed & Cancelled | NinetyData RIP' };
 export const revalidate = 900;
@@ -67,8 +68,15 @@ export default async function InactiveMatchesPage() {
                     <div style={{ color: COLORS.dim, minWidth: 76, fontFamily: '"JetBrains Mono",monospace', fontSize: 11 }}>
                       {new Date(m.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                     </div>
-                    <div style={{ flex: 1, color: COLORS.text, fontWeight: 600 }}>
-                      {m.home_team?.short_name ?? m.home_team?.name} <span style={{ color: COLORS.dim, fontWeight: 400 }}>v</span> {m.away_team?.short_name ?? m.away_team?.name}
+                    <div style={{ flex: 1, color: COLORS.text, fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <TeamCrest team={m.home_team} size={16} borderRadius={3} />
+                        <span>{m.home_team?.short_name ?? m.home_team?.name}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <TeamCrest team={m.away_team} size={16} borderRadius={3} />
+                        <span>{m.away_team?.short_name ?? m.away_team?.name}</span>
+                      </div>
                     </div>
                     <div className="rip-mobile-hide" style={{ color: COLORS.muted, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
                       {m.competition}
