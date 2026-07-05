@@ -223,42 +223,51 @@ const MATCH_SELECT = `
 `;
 
 const MIN_SAMPLE_SIZE_MATCHES = 4;
+const SAMPLE_SIZE_WINDOW_DAYS = 200; // generous single-season window
 
 /** Minimum-sample-size filter: excludes fixtures where either team has
- *  played fewer than MIN_SAMPLE_SIZE_MATCHES games this season - early
+ *  fewer than MIN_SAMPLE_SIZE_MATCHES recorded matches recently - early
  *  in a season (or for a newly-tracked team), readiness/strength/form
  *  numbers are built on too small a sample to be a reliable signal.
- *  team_season_statistics has one row PER SEASON per team, so this
- *  can't just filter on "any row with matches>=4" - takes the highest
- *  season_external_id per team (same pattern already used for player
- *  season stats a few functions up) so a stale prior-season row with
- *  a full 38 games doesn't incorrectly pass a team that's only played
- *  2 games in the CURRENT season.
- *  Worth knowing: this can substantially shrink match center content
- *  in the first few gameweeks of any tracked league's season, or for
- *  any newly-added team/competition - by design, not a bug, but a real
- *  content-volume tradeoff worth watching, especially with several
- *  leagues potentially starting their seasons at different times. */
+ *
+ *  Uses team_form_history, NOT team_season_statistics.matches - a real
+ *  bug found after shipping the season_external_id version: that table
+ *  has one row PER TOURNAMENT per season (it has a tournament_id
+ *  column), so a team tracked across multiple competitions can have
+ *  several rows with different season_external_id values. "Take the
+ *  highest season_external_id" picks whichever ROW happens to have the
+ *  numerically largest id, regardless of which competition it belongs
+ *  to - which can select an irrelevant low-match-count row (e.g. a cup
+ *  run they've barely started) while their actual relevant league
+ *  season has plenty of matches, or vice versa. team_form_history has
+ *  no such ambiguity: one row per match, no tournament split at all -
+ *  and it's the exact same source the Form Last 10 / Last 5 Pts display
+ *  already reads from, so the filter and what the user visually sees
+ *  can no longer disagree. Windowed to the last 200 days (a generous
+ *  single-season span) rather than all-time, since this table
+ *  accumulates indefinitely and an unbounded count would let a team
+ *  with zero games THIS season pass on the strength of matches from
+ *  several seasons ago. */
 async function filterBySampleSize<T extends { home_team_id: number; away_team_id: number }>(matches: T[]): Promise<T[]> {
   if (matches.length === 0) return matches;
   const teamIds = [...new Set(matches.flatMap(m => [m.home_team_id, m.away_team_id]).filter((id): id is number => id != null))];
   if (teamIds.length === 0) return matches;
 
+  const windowStart = new Date(Date.now() - SAMPLE_SIZE_WINDOW_DAYS * 86400000).toISOString();
   const { data } = await supabase
-    .from('team_season_statistics')
-    .select('team_id, season_external_id, matches')
-    .in('team_id', teamIds);
+    .from('team_form_history')
+    .select('team_id')
+    .in('team_id', teamIds)
+    .gte('match_date', windowStart);
 
-  const latestByTeam = new Map<number, { season: number; played: number }>();
+  const countByTeam = new Map<number, number>();
   for (const row of data ?? []) {
-    const existing = latestByTeam.get(row.team_id);
-    if (existing && existing.season >= (row.season_external_id ?? 0)) continue;
-    latestByTeam.set(row.team_id, { season: row.season_external_id ?? 0, played: row.matches ?? 0 });
+    countByTeam.set(row.team_id, (countByTeam.get(row.team_id) ?? 0) + 1);
   }
 
   return matches.filter(m => {
-    const homePlayed = latestByTeam.get(m.home_team_id)?.played ?? 0;
-    const awayPlayed = latestByTeam.get(m.away_team_id)?.played ?? 0;
+    const homePlayed = countByTeam.get(m.home_team_id) ?? 0;
+    const awayPlayed = countByTeam.get(m.away_team_id) ?? 0;
     return homePlayed >= MIN_SAMPLE_SIZE_MATCHES && awayPlayed >= MIN_SAMPLE_SIZE_MATCHES;
   });
 }
