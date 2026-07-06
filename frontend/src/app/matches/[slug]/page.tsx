@@ -7,9 +7,8 @@ import Link from 'next/link';
 import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
-  getMatchWithLineups, getTeamPositionDepth, getMatchSignals, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers,
+  getMatchWithLineups, getTeamPositionDepth, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers,
 } from '@/lib/queries';
-import { computeMatchSignals } from '@/lib/signals';
 import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import TeamCrest from '@/components/TeamCrest';
@@ -36,7 +35,7 @@ function Mono({ children, size = 20, color }: { children: React.ReactNode; size?
 // 6 flat top-level tabs per the redesign spec — NO nested subtabs anywhere.
 // Former subtab content flattened into ordered scrollable sections; Signals
 // and Recommendations promoted from Insights subtabs to their own tabs.
-const PAGE_TABS = ['Overview', 'Lineups', 'Intelligence', 'Insights', 'Readiness', 'Signals', 'Recommendations'];
+const PAGE_TABS = ['Overview', 'Lineups', 'Intelligence', 'Insights', 'Readiness'];
 const TEAM_TABS   = ['Form', 'Fixture Load', 'Squad', 'Intelligence'];
 
 // ─── Helper: Map detailed positions to position groups ──────────────────────
@@ -79,7 +78,6 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab]       = useState('Overview');
   const [teamTab, setTeamTab] = useState('Form');
-  const [isPro]             = useState(true);
 
   useEffect(() => {
     async function load() {
@@ -98,7 +96,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, storedSignals, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -113,7 +111,6 @@ export default function MatchPage() {
           getTeamUpcomingMatches(awayId).catch(() => []),
           getTeamPositionDepth(homeId).catch(() => []),
           getTeamPositionDepth(awayId).catch(() => []),
-          getMatchSignals(parseInt(id)).catch(() => []),
           getTeamGoalDependency(homeId).catch(() => null),
           getTeamGoalDependency(awayId).catch(() => null),
           getTeamInjuryImpact(homeId).catch(() => null),
@@ -140,7 +137,6 @@ export default function MatchPage() {
           awayLineup,
           homeDepth: hDepth,
           awayDepth: aDepth,
-          storedSignals,
           homeGoalDep: hGoalDep,
           awayGoalDep: aGoalDep,
           homeInjury: hInjury,
@@ -176,7 +172,6 @@ export default function MatchPage() {
     awayLineup,
     homeDepth,
     awayDepth,
-    storedSignals,
     homeGoalDep,
     awayGoalDep,
     homeInjury,
@@ -193,50 +188,13 @@ export default function MatchPage() {
   const isDone  = match.status === 'finished';
 
 
-  // Signals — PRECOMPUTED FIRST (process:match-signals, see backend
-  // processDbOnly.ts), falling back to live computeMatchSignals() only
-  // when this match hasn't been through that job yet (e.g. freshly
-  // synced, or the daily cycle hasn't reached it). This is the same
-  // "match_intelligence lags behind matches.id, fall back to baseline"
-  // pattern already used elsewhere on this page — nothing regresses for
-  // matches without a precomputed row, they just compute live exactly as
-  // before until the next process:match-signals run catches up.
   const homeReadinessAny = intel?.home_readiness ?? homeIntel?.readiness_score ?? null;
   const awayReadinessAny = intel?.away_readiness ?? awayIntel?.readiness_score ?? null;
+  // Shared gate for matchInsight/executiveSummary/narrativeThreads below -
+  // NOT specific to the removed Signals/Recommendations tabs, despite the
+  // name (kept as-is rather than renamed, to avoid touching more code
+  // than the actual removal required).
   const hasEnoughForSignals = homeReadinessAny != null && awayReadinessAny != null;
-
-  const liveSignals = hasEnoughForSignals ? computeMatchSignals({
-    home_readiness: homeReadinessAny,
-    away_readiness: awayReadinessAny,
-    readiness_gap: intel?.readiness_gap ?? (homeReadinessAny - awayReadinessAny),
-    congestion_factor: intel?.congestion_factor ??
-      ((homeIntel?.congestion_score != null && awayIntel?.congestion_score != null)
-        ? (homeIntel.congestion_score + awayIntel.congestion_score) / 2
-        : null),
-    home_rest_days: intel?.home_rest_days ?? homeIntel?.rest_days_avg,
-    away_rest_days: intel?.away_rest_days ?? awayIntel?.rest_days_avg,
-    home_travel_distance_km: intel?.home_travel_distance_km,
-    away_travel_distance_km: intel?.away_travel_distance_km,
-    home_active_competitions: intel?.home_active_competitions ?? homeIntel?.active_competitions,
-    away_active_competitions: intel?.away_active_competitions ?? awayIntel?.active_competitions,
-    home_form_index: homeIntel?.form_index,
-    away_form_index: awayIntel?.form_index,
-    home_travel_fatigue: homeIntel?.travel_fatigue_score,
-    away_travel_fatigue: awayIntel?.travel_fatigue_score,
-    home_congestion: homeIntel?.congestion_score,
-    away_congestion: awayIntel?.congestion_score,
-    home_last_5_pts: homeIntel?.last_5_points,
-    away_last_5_pts: awayIntel?.last_5_points,
-    travel_advantage_km: travel?.travel_advantage_km,
-    home_squad_depth:    homeIntel?.squad_depth_score,
-    away_squad_depth:    awayIntel?.squad_depth_score,
-    home_injury_burden:  homeIntel?.injury_burden_score,
-    away_injury_burden:  awayIntel?.injury_burden_score,
-    home_squad_stability: homeIntel?.squad_stability_score,
-    away_squad_stability: awayIntel?.squad_stability_score,
-  }) : [];
-
-  const signals = (storedSignals && storedSignals.length > 0) ? storedSignals : liveSignals;
 
   // Readiness components
   const readinessComponents: ReadinessComponent[] = [
@@ -435,8 +393,6 @@ export default function MatchPage() {
   }));
   const homeAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(homeLineup));
   const awayAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(awayLineup));
-
-  const signalsAreBaselineOnly = hasEnoughForSignals && !intel;
 
   // ─── Team Column Renderer ───────────────────────────────────────────────────
   const TeamColumn = ({ team, intel: ti, form, fix, squad, upcoming, depth }: any) => {
@@ -744,13 +700,17 @@ export default function MatchPage() {
         </div>
       </Card>
 
-      {/* ── PAGE TABS — 4-tab structure per the proposed IA:
-          Overview / Intelligence / Lineups / Insights. ── */}
+      {/* ── PAGE TABS: Overview / Lineups / Intelligence / Insights /
+          Readiness. Signals and Recommendations removed entirely — this
+          platform is strictly informational, no betting signals or
+          directional recommendations anywhere on this page. ── */}
       <Tabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
 
       {/* ══════════════════════════ OVERVIEW ══════════════════════════
-          The executive dashboard — prediction, risk, top signals, and
-          the full team comparison, all in one screen. ── */}
+          The landing tab — match context and the full categorized team
+          comparison, all in one screen. Strictly informational: no
+          prediction, risk classification, or betting signals live here
+          or anywhere else on this page anymore. ── */}
       {tab === 'Overview' && (
         <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
 
@@ -765,7 +725,9 @@ export default function MatchPage() {
               the 6-tab redesign spec: four named category groups, 4-col
               desktop / stacked mobile, edge pills. Replaces both the flat
               matrix (same data, categorized presentation) and the old Key
-              Signals card (signals now have their own top-level tab). ── */}
+              Signals card (Signals/Recommendations tabs removed entirely
+              from this page, along with the betting-signal computation
+              that fed them). ── */}
           <CategorizedComparison
             homeTeam={match.home_team?.short_name ?? match.home_team?.name ?? 'Home'}
             awayTeam={match.away_team?.short_name ?? match.away_team?.name ?? 'Away'}
@@ -1190,123 +1152,6 @@ export default function MatchPage() {
             </Card>
           )}
 
-          {tab === 'Signals' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div style={{ background:withAlpha(COLORS.amber, '15'), border:`1px solid ${withAlpha(COLORS.amber, '30')}`, borderRadius:8, padding:'10px 16px', fontSize:12, color:COLORS.amber }}>
-                ⚠ Intelligence signals are derived from precomputed data. Not betting advice. Please bet responsibly.
-              </div>
-              {signalsAreBaselineOnly && (
-                <div style={{ background:COLORS.surface2, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:'8px 16px', fontSize:11, color:COLORS.muted }}>
-                  ℹ These signals are estimated from each team's current baseline — match-specific intelligence hasn't been computed for this fixture yet.
-                </div>
-              )}
-              {signals.length === 0 && (
-                <div style={{ padding:'24px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
-                  No signals available yet — neither team has readiness data computed.
-                </div>
-              )}
-              {[
-                { title: 'MATCH MARKETS', filter: (s: any) => s.group === '1x2' },
-                { title: 'GOAL MARKETS', filter: (s: any) => s.group === 'goals' },
-                { title: 'COMPETITION MARKETS', filter: (s: any) => s.group === 'competition' },
-                { title: 'HALF-TIME MARKETS', filter: (s: any) => s.group === 'halftime' },
-                { title: 'CARD MARKETS', filter: (s: any) => s.group === 'cards' },
-              ].map(({ title, filter }) => {
-                const group = signals.filter(filter);
-                if (group.length === 0) return null;
-                return (
-                  <div key={title}>
-                    <div style={{ ...TYPE.sectionHeader, fontSize:10, marginBottom:8 }}>{title}</div>
-                    <Card style={{ padding:0, overflow:'hidden' }}>
-                      <table style={{ width:'100%' }}>
-                        <thead>
-                          <tr style={{ borderBottom:`1px solid ${COLORS.border}` }}>
-                            {['Market','Signal','Strength','Intelligence Driver'].map(h => (
-                              <th key={h} style={{ padding:'8px 14px', fontSize:9, color:COLORS.dim, textTransform:'uppercase', letterSpacing:'0.07em', textAlign:'left', fontWeight:600 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.map((s, i) => {
-                            const col = s.direction==='home'?COLORS.green:s.direction==='away'?COLORS.red:s.direction==='avoid'?COLORS.orange:COLORS.muted;
-                            const isEdge = s.signal !== 'No Edge' && s.signal !== 'No Flag' && s.signal !== 'Balanced' && s.signal !== 'Level';
-                            const isLocked = s.locked && !isPro;
-                            const isBlurred = !isPro && i >= 3;
-                            return (
-                              <tr key={i} style={{ borderBottom:`1px solid ${COLORS.border}`, background: i%2===0?'transparent':withAlpha(COLORS.surface2, '40'), position:'relative' }}>
-                                <td style={{ padding:'10px 14px', fontSize:12, fontWeight:600, color:COLORS.text, filter:isBlurred?'blur(4px)':'none' }}>
-                                  {s.market}{isLocked && <span style={{ marginLeft:5, fontSize:9, color:COLORS.purple }}>🔒 PRO</span>}
-                                </td>
-                                <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
-                                  <span style={{ background:withAlpha(isEdge?col:COLORS.dim, '20'), color:isEdge?col:COLORS.dim, border:`1px solid ${withAlpha(isEdge?col:COLORS.dim, '40')}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{s.signal}</span>
-                                </td>
-                                <td style={{ padding:'10px 14px', filter:isBlurred?'blur(4px)':'none' }}>
-                                  <div style={{ display:'flex', gap:2 }}>
-                                    {Array.from({length:6}).map((_,j) => (
-                                      <div key={j} style={{ width:7, height:12, borderRadius:2, background:j<s.strength?(isEdge?col:COLORS.dim):COLORS.border }} />
-                                    ))}
-                                  </div>
-                                </td>
-                                <td style={{ padding:'10px 14px', fontSize:11, color:COLORS.muted, filter:isBlurred?'blur(4px)':'none' }}>{s.drivers}</td>
-                                {isBlurred && (
-                                  <td style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:withAlpha(COLORS.surface, '90') }}>
-                                    <div style={{ background:withAlpha(COLORS.purple, '20'), border:`1px solid ${withAlpha(COLORS.purple, '40')}`, borderRadius:8, padding:'4px 14px', fontSize:11, color:COLORS.purple, fontWeight:700 }}>
-                                      🔒 Unlock 47 more signals today →
-                                    </div>
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </Card>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {tab === 'Recommendations' && (
-            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              {signals.filter(s => s.strength >= 3 && s.signal !== 'No Edge' && s.signal !== 'Balanced' && s.signal !== 'Level').length === 0 ? (
-                <div style={{ padding:'24px', textAlign:'center', color:COLORS.dim, fontSize:12 }}>
-                  No signals strong enough yet for a specific recommendation.
-                </div>
-              ) : (
-                signals
-                  .filter(s => s.strength >= 3 && s.signal !== 'No Edge' && s.signal !== 'Balanced' && s.signal !== 'Level')
-                  .sort((a, b) => b.strength - a.strength)
-                  .map((s, i) => {
-                    const col = s.direction==='home'?COLORS.green:s.direction==='away'?COLORS.red:s.direction==='avoid'?COLORS.orange:COLORS.muted;
-                    const confLabel = s.strength >= 5 ? 'HIGH' : s.strength >= 3 ? 'MEDIUM' : 'LOW';
-                    return (
-                      <Card key={i}>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
-                          <div>
-                            <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{s.market}</div>
-                            <div style={{ fontSize:14, fontWeight:700, color:col, marginTop:2 }}>{s.signal}</div>
-                          </div>
-                          <span style={{
-                            fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.04em',
-                            color: confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted,
-                            background:withAlpha(confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted, '20'),
-                            border:`1px solid ${withAlpha(confLabel==='HIGH'?COLORS.red:confLabel==='MEDIUM'?COLORS.amber:COLORS.muted, '40')}`,
-                            borderRadius:4, padding:'2px 8px',
-                          }}>
-                            {confLabel}
-                          </span>
-                        </div>
-                        <div style={{ fontSize:11, color:COLORS.muted }}>{s.drivers}</div>
-                      </Card>
-                    );
-                  })
-              )}
-              <div style={{ fontSize:10, color:COLORS.dim, textAlign:'center', marginTop:4 }}>
-                Derived from precomputed intelligence signals. Not betting advice — please bet responsibly.
-              </div>
-            </div>
-          )}
         </div>
       )}
 
