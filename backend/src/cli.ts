@@ -6,6 +6,7 @@ import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsF
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad } from './jobs/processDbOnly';
+import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
@@ -748,6 +749,35 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
       }
 
+      case 'archive:readiness-snapshot': {
+        // Append-only pre-match snapshot. Run nightly AFTER sync + process
+        // stages, so it snapshots fully-computed readiness. Insert-if-absent:
+        // safe to run repeatedly; a match already snapshotted is skipped, its
+        // first pre-match reading preserved. See docs/league-gap-analytics-spec.md.
+        logger.info('Archiving pre-match readiness snapshot...');
+        const r = await archiveReadinessSnapshot();
+        logger.info(r, 'Readiness snapshot complete');
+        break;
+      }
+
+      case 'archive:link-results': {
+        // Finalization: fills result columns on snapshots whose match has
+        // finished. Writes ONLY result columns, never the frozen prediction.
+        logger.info('Linking finished results to readiness snapshots...');
+        const r = await linkReadinessResults();
+        logger.info(r, 'Result linking complete');
+        break;
+      }
+
+      case 'analytics:refresh-league-gap': {
+        // Rebuild the per-(league × gap tier) accuracy aggregates the League
+        // Analytics page reads. Run nightly after archive:link-results.
+        logger.info('Rebuilding league gap analytics aggregates...');
+        const r = await refreshLeagueGapAnalytics();
+        logger.info(r, 'League gap analytics refresh complete');
+        break;
+      }
+
       case 'process:match-intelligence:today': {
         // Targeted — only today's matches (UTC). Fast, cheap, safe to run
         // after sync:today/sync:tomorrow without reprocessing all 480+ matches.
@@ -954,6 +984,9 @@ Commands:
     process:match-travel             Compute per-match travel burden for both teams
     process:team-intelligence        Partial team_intelligence (form+congestion+travel)
     process:match-intelligence       Partial match_intelligence (rest+congestion+travel)
+    archive:readiness-snapshot       Append-only pre-match readiness snapshot (run nightly after processing)
+    archive:link-results             Fill result columns on snapshots whose match has finished
+    analytics:refresh-league-gap     Rebuild per-league gap-accuracy aggregates for the analytics page
     process:player-match-load        Derive per-match player minutes from season stats (proxy, run before process:player-intelligence)
     process:player-intelligence      Player fatigue/load/importance + goal dependency + injury impact
     process:injury-risk              REMOVED - fatigue now blends real load, see process:player-intelligence

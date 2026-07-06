@@ -1449,6 +1449,54 @@ export async function searchTournaments(q: string, limit = 10) {
   return (data ?? []).filter((t: any) => isTrackedTournament(t.slug ?? '', t.category ?? ''));
 }
 
+// ─── LEAGUE GAP ANALYTICS ───────────────────────────────────────────────────
+// Read-only accessors for the nightly-precomputed accuracy aggregates
+// (backend: refreshLeagueGapAnalytics). The page does zero aggregation at
+// request time — it reads these finished summaries, matching the platform's
+// precompute-everything architecture.
+
+export interface LeagueGapSummaryRow {
+  league_name: string;
+  total_picks: number;
+  hit_rate_strict: number | null;
+  hit_rate_lenient: number | null;
+  avg_winning_gap: number | null;
+  baseline_rate: number | null;
+  lift_over_baseline: number | null;
+  readiness_status: string | null;
+  meets_sample_gate: boolean;
+  computed_at: string;
+}
+
+export interface LeagueGapTierRow {
+  league_name: string;
+  gap_tier: string;
+  total_picks: number;
+  hit_rate_strict: number | null;
+  hit_rate_lenient: number | null;
+  avg_winning_gap: number | null;
+  avg_losing_gap: number | null;
+  baseline_rate: number | null;
+  lift_over_baseline: number | null;
+  versatility_coverage: number | null;
+}
+
+export async function getLeagueGapSummary(): Promise<LeagueGapSummaryRow[]> {
+  const { data } = await supabase
+    .from('league_gap_summary')
+    .select('*')
+    .order('total_picks', { ascending: false });
+  return (data ?? []) as LeagueGapSummaryRow[];
+}
+
+export async function getLeagueGapTiers(): Promise<LeagueGapTierRow[]> {
+  const { data } = await supabase
+    .from('league_gap_analytics')
+    .select('*')
+    .order('total_picks', { ascending: false });
+  return (data ?? []) as LeagueGapTierRow[];
+}
+
 // ─── LEAGUE OVERVIEW ────────────────────────────────────────────────────────
 
 export interface LeagueReadinessRow {
