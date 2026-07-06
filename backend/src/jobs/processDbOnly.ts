@@ -1003,6 +1003,90 @@ export async function processMatchTravelIntelligence(opts?: {
  * match_intelligence.home_readiness / away_readiness. That is the number
  * that should be used for match predictions and betting signals.
  */
+// ─── LINEUP VERSATILITY — shared helper ──────────────────────────────────────
+// Computes a 0-100 versatility score per team from the PREDICTED XI, not the
+// full squad. Bench versatility matters less than starter versatility — a
+// manager's in-game flexibility depends on who's expected to play.
+//
+// Uses players.position_detailed (a comma-separated string like "DR,DC" or
+// "MC,DM,AM", populated from SofaScore's positionsDetailed array) joined
+// through match_predicted_lineups. Falls back gracefully to null if no
+// predicted lineup exists for a team (no penalty for missing data).
+//
+// Score formula:
+//   versatile_pct    = (XI players with 2+ position codes) / XI_count × 100
+//   cross_group_pct  = (XI players covering 2+ broad zones D/M/F)  / XI_count × 100
+//   versatility_score = versatile_pct × 0.6 + cross_group_pct × 0.4
+//
+// Rationale for the split: being listed in two positions within the same
+// zone (e.g. DR,DC — both defenders) is a lesser signal than spanning zones
+// (e.g. DM,MC — bridges defense and midfield). The 0.6/0.4 weighting
+// reflects that multi-position listing is a precondition, but cross-zone
+// coverage is the stronger tactical-resilience signal.
+
+function codeToZoneGroup(code: string): string | null {
+  const c = code.toUpperCase().trim();
+  if (['G', 'GK', 'D', 'DC', 'DR', 'DL', 'DM'].includes(c)) return 'D';
+  if (['M', 'MC', 'ML', 'MR', 'AM', 'RW', 'LW'].includes(c)) return 'M';
+  if (['F', 'ST', 'CF'].includes(c)) return 'F';
+  return null;
+}
+
+async function computeLineupVersatilityByTeam(): Promise<Map<number, number | null>> {
+  const result = new Map<number, number | null>();
+
+  const lineupRows = await fetchAllRows(
+    db.from('match_predicted_lineups')
+      .select('team_id, player_id, players:player_id(position_detailed)')
+  );
+
+  if (!lineupRows || lineupRows.length === 0) return result;
+
+  // Keep only the most recent occurrence per (team_id, player_id): the table
+  // accumulates across matches, so the same player appears in multiple rows.
+  // First-seen wins here since fetchAllRows returns whatever the DB orders
+  // by default (insertion order ≈ recency for append-only tables).
+  const latestByTeamPlayer = new Map<string, any>();
+  for (const row of lineupRows) {
+    const key = `${row.team_id}:${row.player_id}`;
+    if (!latestByTeamPlayer.has(key)) latestByTeamPlayer.set(key, row);
+  }
+
+  // Group into team → list of position_detailed strings for their predicted XI
+  const byTeam = new Map<number, (string | null)[]>();
+  for (const row of latestByTeamPlayer.values()) {
+    const posDetailed = (row.players as any)?.position_detailed ?? null;
+    if (!byTeam.has(row.team_id)) byTeam.set(row.team_id, []);
+    byTeam.get(row.team_id)!.push(posDetailed);
+  }
+
+  for (const [teamId, posDetailedList] of byTeam) {
+    const xiCount = posDetailedList.length;
+    if (xiCount === 0) { result.set(teamId, null); continue; }
+
+    let versatileCount  = 0; // players with 2+ position codes in position_detailed
+    let crossGroupCount = 0; // players spanning 2+ broad zones (D/M/F)
+    let hasAnyData      = false;
+
+    for (const posDetailed of posDetailedList) {
+      if (!posDetailed) continue; // null = no position_detailed synced; skip, don't count as 0
+      hasAnyData = true;
+      const codes = posDetailed.split(',').map((c: string) => c.trim()).filter(Boolean);
+      if (codes.length >= 2) versatileCount++;
+      const zones = new Set(codes.map(codeToZoneGroup).filter((z): z is string => z !== null));
+      if (zones.size >= 2) crossGroupCount++;
+    }
+
+    if (!hasAnyData) { result.set(teamId, null); continue; }
+
+    const versatilePct  = (versatileCount  / xiCount) * 100;
+    const crossGroupPct = (crossGroupCount / xiCount) * 100;
+    result.set(teamId, Math.min(100, Math.max(0, Math.round(versatilePct * 0.6 + crossGroupPct * 0.4))));
+  }
+
+  return result;
+}
+
 export async function processTeamIntelligencePartial(): Promise<{
   teamsProcessed: number;
   rowsWritten: number;
@@ -1194,6 +1278,11 @@ export async function processTeamIntelligencePartial(): Promise<{
       playersByTeam.get(p.team_id)!.push(p);
     }
 
+    // 9. Lineup Versatility — computed from match_predicted_lineups joined
+    // to players.position_detailed. One call, result shared across all teams
+    // in the per-team loop below. Null for teams with no predicted lineup.
+    const versatilityMap = await computeLineupVersatilityByTeam();
+
     // 7. Compute intelligence per team
     const rows: any[] = [];
 
@@ -1290,11 +1379,10 @@ export async function processTeamIntelligencePartial(): Promise<{
       // boost/penalty it would with fuller data. This matters directly for
       // category B/C tournaments that may have sparser stats coverage.
       const posDepth = positionDepthMap.get(teamId) ?? [];
+      const lineupVersatilityScore = versatilityMap.get(teamId) ?? null;
       let squadDepthScore: number | null = null;
       if (posDepth.length > 0) {
-        // Same rating-scale normalization used nowhere else yet — football
-        // match ratings in this dataset realistically span ~5.0 (poor) to
-        // ~8.5 (excellent) as a season average; map that range to 0-100.
+        // Same rating-scale normalization used elsewhere in this file.
         const normalizeRating = (avgRating: number) =>
           Math.max(0, Math.min(100, Math.round(((avgRating - 5.0) / 3.5) * 100)));
 
@@ -1303,10 +1391,22 @@ export async function processTeamIntelligencePartial(): Promise<{
           .map(p => {
             const availabilityRatio = ((p.available_count ?? 0) / p.player_count) * 100;
             const q = qualityByTeamPosition.get(`${teamId}:${p.position_code}`);
-            if (!q || q.sumCountRating === 0) return availabilityRatio; // fallback — no quality data
-            const avgRating = q.sumTotalRating / q.sumCountRating;
-            const qualityScore = normalizeRating(avgRating);
-            return availabilityRatio * 0.6 + qualityScore * 0.4;
+            const avgRating = (q && q.sumCountRating > 0) ? q.sumTotalRating / q.sumCountRating : null;
+            const qualityScore = avgRating !== null ? normalizeRating(avgRating) : null;
+
+            // New formula per spec: Availability 0.4 + avg_rating 0.3 + versatility 0.3
+            // Versatility is a team-level score applied equally to each position bucket,
+            // because versatility benefits the team as a whole — a DM/DC player helps
+            // every position slot, not just the one they're deployed in.
+            // Weights renormalize when components are unavailable (no penalty for gaps).
+            const components = [
+              { v: availabilityRatio,          w: 0.4 },
+              qualityScore !== null            ? { v: qualityScore,            w: 0.3 } : null,
+              lineupVersatilityScore !== null  ? { v: lineupVersatilityScore,  w: 0.3 } : null,
+            ].filter((c): c is { v: number; w: number } => c !== null);
+
+            const totalW = components.reduce((s, c) => s + c.w, 0);
+            return components.reduce((s, c) => s + c.v * c.w, 0) / totalW;
           });
 
         if (positionScores.length > 0) {
@@ -1353,6 +1453,7 @@ export async function processTeamIntelligencePartial(): Promise<{
         travel_load_km:          travelLoadKm,
         squad_stability_score:   squadStabilityScore,
         squad_depth_score:       squadDepthScore,
+        lineup_versatility_score: lineupVersatilityScore,
         injury_burden_score:     injuryBurdenScore,
         // NOTE: no `|| null` here — a team with zero injured/available market
         // value (e.g. fully fit squad, or squad data not yet synced) is a
@@ -2030,6 +2131,11 @@ export async function processTeamStrengthRatings(): Promise<{
     const normalizeRating = (avgRating: number) =>
       Math.max(0, Math.min(100, Math.round(((avgRating - 5.0) / 3.5) * 100)));
 
+    // Lineup Versatility — same helper used by processTeamIntelligencePartial.
+    // Called here so strength_rating incorporates the same tactical-flexibility
+    // signal. Null for teams with no predicted lineup (weight renormalizes out).
+    const strengthVersatilityMap = await computeLineupVersatilityByTeam();
+
     const rows: any[] = [];
     for (const [teamId, stats] of teamStats) {
       if (stats.matches === 0) continue;
@@ -2057,18 +2163,21 @@ export async function processTeamStrengthRatings(): Promise<{
         ? normalizeRating(q.sumTotalRating / q.sumCountRating)
         : null;
 
-      // ── Strength Score: 35% PPG + 25% Win% + 25% League Position +
-      // 15% Squad Quality (NEW — see docstring for full reasoning).
-      // Weights renormalize automatically via totalWeight below whenever
-      // a component is unavailable (no standings yet, no stats yet, etc.)
-      // — a team is never penalized for a data gap, it just falls back to
-      // whichever components ARE available, same as the original formula
-      // already did for positionScore.
+      const lineupVersatility = strengthVersatilityMap.get(teamId) ?? null;
+
+      // ── Strength Score: 30% PPG + 20% Win% + 20% League Position +
+      // 15% Squad Quality + 15% Lineup Versatility.
+      // Lineup Versatility (% of predicted-XI players covering multiple
+      // positions/zones) reflects tactical resilience — a team with 4
+      // versatile starters absorbs in-game injuries/suspensions better
+      // than one with 11 specialists. Null when no predicted lineup
+      // exists; weight renormalizes as with all other optional components.
       const components = [
-        { v: (ppg / 3) * 100, w: 35 },
-        { v: winPct,          w: 25 },
-        positionScore     !== null ? { v: positionScore,     w: 25 } : null,
+        { v: (ppg / 3) * 100, w: 30 },
+        { v: winPct,          w: 20 },
+        positionScore    !== null ? { v: positionScore,    w: 20 } : null,
         squadQualityScore !== null ? { v: squadQualityScore, w: 15 } : null,
+        lineupVersatility !== null ? { v: lineupVersatility, w: 15 } : null,
       ].filter((c): c is { v: number; w: number } => c !== null);
 
       const totalWeight = components.reduce((s, c) => s + c.w, 0);
@@ -2077,13 +2186,14 @@ export async function processTeamStrengthRatings(): Promise<{
       );
 
       rows.push({
-        team_id:          teamId,
-        league_position:  leaguePosition,
-        points_per_game:  ppg,
-        win_percentage:   winPct,
-        strength_score:   Math.min(100, Math.max(0, strength)),
-        market_value_eur: mvMap.get(teamId) || null,
-        calculated_at:    new Date().toISOString(),
+        team_id:                  teamId,
+        league_position:          leaguePosition,
+        points_per_game:          ppg,
+        win_percentage:           winPct,
+        strength_score:           Math.min(100, Math.max(0, strength)),
+        lineup_versatility_score: lineupVersatility,
+        market_value_eur:         mvMap.get(teamId) || null,
+        calculated_at:            new Date().toISOString(),
       });
     }
 
