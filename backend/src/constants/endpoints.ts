@@ -89,10 +89,10 @@ export const ENDPOINT_REGISTRY: EndpointRegistry = {
 
   tournament_team_events: {
     path: '/tournament/{tournamentId}/season/{seasonId}/team-events',
-    description: 'Get all events for teams in a tournament season. Same structure as schedule feed. Accepts ?type=total|home|away. Use seasonId=0 for the current active season (API resolves automatically — no DB lookup needed).',
+    description: 'Get all events for teams in a tournament season. Same structure as schedule feed. Accepts ?type=total|home|away. seasonId must be a real season external_id from the seasons table — the API returns 404 for seasonId=0 (confirmed in live testing). Use resolveSeasonIds() in syncTournamentEvents.ts to look up the correct value.',
     params: {
       tournamentId: 'tournament external_id (uniqueTournament.id)',
-      seasonId:     'season external_id — pass 0 for current active season',
+      seasonId:     'season external_id from seasons table — MUST be a real ID, not 0',
     },
   },
 };

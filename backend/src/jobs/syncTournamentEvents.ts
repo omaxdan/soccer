@@ -13,8 +13,11 @@ import { db } from '../db/client';
 // winner resolution. The endpoint returns the same fixture structure as the
 // schedule feed, just scoped to a tournament rather than a date.
 //
-// seasonId is always passed as 0 — the API resolves 0 to the current active
-// season automatically, so no DB lookup or season tracking is needed here.
+// Season ID resolution: follows the same DB-lookup pattern as syncStandings.
+// The `seasonId=0` shortcut was assumed to mean "current season" but the API
+// returns 404 for it — a real season external_id must be resolved from the
+// seasons table first. Tournaments with no season in the DB are skipped with
+// a warning (same graceful behaviour as syncStandings).
 //
 // Supported event types mirror the API's ?type= parameter:
 //   total (default) — all home + away fixtures
@@ -23,12 +26,47 @@ import { db } from '../db/client';
 //
 // Country mode: when called with country names instead of tournament IDs,
 // resolves those names against tournaments.country_id → countries.name in
-// the DB, then syncs all matching tournaments. This mirrors the
+// the DB, then syncs all matching tournaments. Mirrors the
 // sync:squads:countries:v2 pattern for consistency.
 
-const SEASON_AUTO = 0; // API resolves 0 → current active season
-
 export type TournamentEventType = 'total' | 'home' | 'away';
+
+/** Resolves tournament external_ids → real season external_ids from the DB.
+ *  Mirrors getTournamentSeasons() in syncStandings.ts exactly — seasons table,
+ *  highest external_id per tournament = most recent season. */
+async function resolveSeasonIds(
+  tournamentExternalIds: number[],
+): Promise<Map<number, number>> {
+  const result = new Map<number, number>(); // tournamentExternalId → seasonExternalId
+
+  const { data: tournaments } = await db
+    .from('tournaments')
+    .select('id, external_id')
+    .in('external_id', tournamentExternalIds);
+  if (!tournaments || tournaments.length === 0) return result;
+
+  const internalIds = tournaments.map((t: any) => t.id);
+  const { data: seasons } = await db
+    .from('seasons')
+    .select('external_id, tournament_id')
+    .in('tournament_id', internalIds)
+    .order('external_id', { ascending: false });
+
+  // Highest season external_id = most recent season — same logic as syncStandings.
+  const seasonByTournamentInternalId = new Map<number, number>();
+  for (const s of seasons ?? []) {
+    if (!seasonByTournamentInternalId.has(s.tournament_id)) {
+      seasonByTournamentInternalId.set(s.tournament_id, s.external_id);
+    }
+  }
+
+  for (const t of tournaments) {
+    const seasonExternalId = seasonByTournamentInternalId.get(t.id);
+    if (seasonExternalId) result.set(t.external_id, seasonExternalId);
+  }
+
+  return result;
+}
 
 // ─── ID-BASED SYNC ──────────────────────────────────────────────────────────
 
@@ -43,21 +81,36 @@ export async function syncTournamentEvents(
 }> {
   logger.info({ tournamentIds: tournamentExternalIds, eventType }, 'syncTournamentEvents started');
 
+  // Resolve real season IDs from the DB — the API returns 404 for seasonId=0.
+  // Tournaments with no season synced yet are skipped with a warning.
+  // Same DB-lookup pattern as syncStandings.ts:getTournamentSeasons().
+  const seasonMap = await resolveSeasonIds(tournamentExternalIds);
+  const missingSeasons = tournamentExternalIds.filter(id => !seasonMap.has(id));
+  if (missingSeasons.length > 0) {
+    logger.warn(
+      { missingSeasons },
+      'No season found in DB for these tournament IDs — skipping them. Run sync:today or sync:discovery first to populate the seasons table.',
+    );
+  }
+
   let tournamentsProcessed = 0;
   let totalMatches = 0;
   let totalTeams = 0;
   let errors = 0;
 
   for (const tournamentId of tournamentExternalIds) {
+    const seasonId = seasonMap.get(tournamentId);
+    if (!seasonId) continue; // already warned above
+
     try {
-      const result = await syncOneTournament(tournamentId, eventType);
+      const result = await syncOneTournament(tournamentId, seasonId, eventType);
       tournamentsProcessed++;
       totalMatches += result.matchesProcessed;
       totalTeams   += result.teamsDiscovered;
-      logger.info({ tournamentId, ...result }, 'Tournament sync complete');
+      logger.info({ tournamentId, seasonId, ...result }, 'Tournament sync complete');
     } catch (err: any) {
       errors++;
-      logger.error({ tournamentId, err: err.message }, 'Tournament sync failed — continuing to next');
+      logger.error({ tournamentId, seasonId, err: err.message }, 'Tournament sync failed — continuing to next');
     }
   }
 
@@ -129,11 +182,12 @@ export async function syncTournamentEventsByCountries(
 
 async function syncOneTournament(
   tournamentId: number,
+  seasonId: number,
   eventType: TournamentEventType,
 ): Promise<{ matchesProcessed: number; teamsDiscovered: number }> {
   const path = resolveEndpoint('tournament_team_events', {
     tournamentId,
-    seasonId: SEASON_AUTO,
+    seasonId,
   });
 
   // ?type= is a query parameter, not a path parameter — pass via the
