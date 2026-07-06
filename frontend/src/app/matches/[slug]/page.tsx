@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
-  getMatchWithLineups, getTeamPositionDepth, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers,
+  getMatchWithLineups, getTeamPositionDepth, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers, getMatchKeyPlayerBattle,
 } from '@/lib/queries';
 import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
@@ -96,7 +96,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers, keyPlayerBattle] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -117,6 +117,7 @@ export default function MatchPage() {
           getTeamInjuryImpact(awayId).catch(() => null),
           getMatchComparisonExtras([homeId, awayId]).catch(() => new Map()),
           getMatchKeyPlayers(parseInt(id), homeId, awayId).catch(() => ({ home: [], away: [] })),
+          getMatchKeyPlayerBattle(homeId, awayId).catch(() => ({ home: [], away: [] })),
         ]);
         
         setData({ 
@@ -143,6 +144,7 @@ export default function MatchPage() {
           awayInjury: aInjury,
           matchExtras,
           matchKeyPlayers,
+          keyPlayerBattle,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
@@ -178,6 +180,7 @@ export default function MatchPage() {
     awayInjury,
     matchExtras,
     matchKeyPlayers,
+    keyPlayerBattle,
   } = data;
   
   const intel   = toOne(match.match_intelligence);
@@ -1033,6 +1036,87 @@ export default function MatchPage() {
                         <div style={{ flex:1, textAlign:'right', fontSize:12, fontWeight:600, color: b.home ? COLORS.text : COLORS.dim }}>{b.home?.shortName ?? b.home?.name ?? '—'}</div>
                         <div style={{ fontSize:9, color:COLORS.dim, textTransform:'uppercase', padding:'0 12px' }}>{b.group}</div>
                         <div style={{ flex:1, fontSize:12, fontWeight:600, color: b.away ? COLORS.text : COLORS.dim }}>{b.away?.shortName ?? b.away?.name ?? '—'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+
+              {/* Key Player Battle — goal/card risk per team, 2 players each.
+                  Distinct from Key Battles above (which is positional matchup
+                  pairs). This surfaces who IS the scoring threat and who is
+                  close to suspension, from season stats, not just lineup
+                  importance rank. ── */}
+              {((keyPlayerBattle?.home?.length ?? 0) > 0 || (keyPlayerBattle?.away?.length ?? 0) > 0) && (
+                <Card>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Key Player Battle</div>
+                  <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 14 }}>
+                    Goal contribution &amp; card risk — top 2 per team from the predicted XI pool, sorted by goals then assists
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {([
+                      { label: match.home_team?.short_name ?? match.home_team?.name ?? 'Home', players: keyPlayerBattle?.home ?? [] },
+                      { label: match.away_team?.short_name ?? match.away_team?.name ?? 'Away', players: keyPlayerBattle?.away ?? [] },
+                    ] as const).map(({ label, players }) => (
+                      <div key={label}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {players.map((p: any, pi: number) => {
+                            const depColor = p.goalDependency === 'CRITICAL' ? COLORS.red
+                              : p.goalDependency === 'HIGH' ? COLORS.amber
+                              : p.goalDependency === 'NOTABLE' ? COLORS.orange
+                              : COLORS.dim;
+                            const cardColor = p.cardRisk === 'VERY HIGH' ? COLORS.red
+                              : p.cardRisk === 'HIGH' ? COLORS.amber
+                              : p.cardRisk === 'MODERATE' ? COLORS.orange
+                              : null;
+                            return (
+                              <div key={p.playerId} style={{ paddingTop: pi > 0 ? 10 : 0, borderTop: pi > 0 ? `1px solid ${COLORS.border}` : 'none' }}>
+                                {/* name + position */}
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 5 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.text }}>{p.shortName ?? p.name}</span>
+                                  {p.position && <span style={{ fontSize: 9, color: COLORS.dim }}>{p.position}</span>}
+                                </div>
+
+                                {/* goal contribution */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                                  <span style={{ color: COLORS.muted }}>G / A</span>
+                                  <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: COLORS.text }}>{p.goals} / {p.assists}</span>
+                                </div>
+                                {p.goalSharePct != null && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                    <span style={{ color: COLORS.muted }}>Goal share</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.goalDependency ? depColor : COLORS.text }}>{p.goalSharePct}%{p.goalDependency ? ` · ${p.goalDependency}` : ''}</span>
+                                  </div>
+                                )}
+                                {p.assistSharePct != null && p.assists > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                    <span style={{ color: COLORS.muted }}>Assist share</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.text }}>{p.assistSharePct}%</span>
+                                  </div>
+                                )}
+
+                                {/* card/suspension risk */}
+                                {(p.yellowCards > 0 || p.redCards > 0) && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                    <span style={{ color: COLORS.muted }}>Cards (Y/R)</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: cardColor ?? COLORS.text }}>
+                                      {p.yellowCards}Y {p.redCards}R
+                                      {p.cardsPerGame != null && ` · ${p.cardsPerGame}/g`}
+                                      {p.cardRisk && ` · ${p.cardRisk}`}
+                                    </span>
+                                  </div>
+                                )}
+                                {p.suspensionRisk && (
+                                  <div style={{ fontSize: 10, color: p.suspensionRisk.includes('BAN') ? COLORS.red : COLORS.amber, marginTop: 2 }}>⚠ {p.suspensionRisk}</div>
+                                )}
+                                {p.suspensionImpact && (
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.red, marginTop: 2 }}>🔴 {p.suspensionImpact}</div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     ))}
                   </div>

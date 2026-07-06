@@ -485,6 +485,180 @@ export interface MatchKeyPlayer {
   rating: number | null;
 }
 
+// ─── KEY PLAYER BATTLE — goal/card risk breakdown ─────────────────────────
+// Separate from MatchKeyPlayer (which is importance-score based from
+// player_intelligence). This computes goal share, assist share, and card
+// risk directly from player_season_statistics per team — 2 players per
+// team, selected by goal then assist contribution from the top 11 by
+// total_rating. The "top 11 by total_rating" pool mirrors the SQL approach
+// in the feature spec exactly.
+//
+// Inclusion threshold: ≥16% goal share OR ≥20% assist share OR
+// (≥3 yellow cards AND ≥0.15 cards-per-game). If no player passes,
+// falls back to top 2 by goals/assists so the section always has content.
+//
+// NOTE: player_season_statistics does NOT have fouls or tackles columns —
+// the spec's SQL referenced them but they don't exist in this schema.
+// Card risk is therefore computed from yellow_cards + red_cards*2 only,
+// which is the correct formulation regardless.
+
+export interface KeyPlayerBattleRow {
+  playerId: number;
+  name: string;
+  shortName: string | null;
+  position: string | null;
+  goals: number;
+  assists: number;
+  expectedGoals: number | null;
+  expectedAssists: number | null;
+  yellowCards: number;
+  redCards: number;
+  appearances: number;
+  goalSharePct: number | null;
+  goalDependency: 'CRITICAL' | 'HIGH' | 'NOTABLE' | null;
+  assistSharePct: number | null;
+  cardsPerGame: number | null;
+  cardRisk: 'VERY HIGH' | 'HIGH' | 'MODERATE' | null;
+  suspensionRisk: string | null;
+  suspensionImpact: string | null;
+}
+
+function computeKeyBattleRow(
+  p: any,
+  lineupTotalGoals: number,
+  lineupTotalAssists: number,
+): KeyPlayerBattleRow {
+  const goals       = p.goals ?? 0;
+  const assists     = p.assists ?? 0;
+  const yellows     = p.yellow_cards ?? 0;
+  const reds        = p.red_cards ?? 0;
+  const appearances = p.appearances ?? 0;
+
+  const goalSharePct   = lineupTotalGoals   > 0 ? Math.round((goals   / lineupTotalGoals)   * 1000) / 10 : null;
+  const assistSharePct = lineupTotalAssists > 0 ? Math.round((assists / lineupTotalAssists) * 1000) / 10 : null;
+
+  const goalDependency: KeyPlayerBattleRow['goalDependency'] =
+    lineupTotalGoals > 0 && goals > 0
+      ? goals / lineupTotalGoals >= 0.40 ? 'CRITICAL'
+      : goals / lineupTotalGoals >= 0.25 ? 'HIGH'
+      : goals / lineupTotalGoals >= 0.16 ? 'NOTABLE'
+      : null
+    : null;
+
+  const cardWeight   = yellows + reds * 2;
+  const cardsPerGame = appearances > 0 ? Math.round((cardWeight / appearances) * 100) / 100 : null;
+
+  const cardRisk: KeyPlayerBattleRow['cardRisk'] =
+    cardsPerGame == null ? null
+    : cardsPerGame >= 0.5 ? 'VERY HIGH'
+    : cardsPerGame >= 0.3 ? 'HIGH'
+    : cardsPerGame >= 0.15 ? 'MODERATE'
+    : null;
+
+  const suspensionRisk =
+    yellows >= 7 ? 'DUE FOR BAN'
+    : yellows >= 5 ? 'ONE FROM BAN'
+    : yellows >= 4 ? 'CLOSE TO BAN'
+    : yellows >= 3 ? 'WATCH'
+    : null;
+
+  const suspensionImpact =
+    goalSharePct != null && goalSharePct >= 16 && yellows >= 4
+      ? 'KEY PLAYER SUSPENSION RISK'
+      : null;
+
+  return {
+    playerId: p.player_id,
+    name: p.players?.name ?? '—',
+    shortName: p.players?.short_name ?? null,
+    position: p.players?.position ?? null,
+    goals,
+    assists,
+    expectedGoals: p.expected_goals ?? null,
+    expectedAssists: p.expected_assists ?? null,
+    yellowCards: yellows,
+    redCards: reds,
+    appearances,
+    goalSharePct,
+    goalDependency,
+    assistSharePct,
+    cardsPerGame,
+    cardRisk,
+    suspensionRisk,
+    suspensionImpact,
+  };
+}
+
+async function buildKeyBattle(teamId: number): Promise<KeyPlayerBattleRow[]> {
+  const { data } = await supabase
+    .from('player_season_statistics')
+    .select(`
+      player_id, team_id, season_external_id,
+      goals, assists, expected_goals, expected_assists,
+      yellow_cards, red_cards, appearances,
+      total_rating, count_rating,
+      players:player_id(id, name, short_name, position)
+    `)
+    .eq('team_id', teamId)
+    .not('total_rating', 'is', null);
+
+  if (!data || data.length === 0) return [];
+
+  // Deduplicate: keep the highest season_external_id row per player
+  // (same resolution used throughout this codebase).
+  const byPlayer = new Map<number, any>();
+  for (const row of data) {
+    const ex = byPlayer.get(row.player_id);
+    if (ex && (ex.season_external_id ?? 0) >= (row.season_external_id ?? 0)) continue;
+    byPlayer.set(row.player_id, row);
+  }
+
+  // Top 11 by total_rating — mirrors the SQL spec's CTE exactly.
+  const top11 = [...byPlayer.values()]
+    .sort((a, b) => (b.total_rating ?? 0) - (a.total_rating ?? 0))
+    .slice(0, 11);
+
+  const lineupTotalGoals   = top11.reduce((s, p) => s + (p.goals > 0 ? p.goals : 0), 0);
+  const lineupTotalAssists = top11.reduce((s, p) => s + (p.assists > 0 ? p.assists : 0), 0);
+
+  const rows = top11.map(p => computeKeyBattleRow(p, lineupTotalGoals, lineupTotalAssists));
+
+  // Primary: players meeting the inclusion threshold.
+  const passes = (r: KeyPlayerBattleRow) =>
+    (r.goalSharePct   != null && r.goalSharePct   >= 16)
+    || (r.assistSharePct != null && r.assistSharePct >= 20)
+    || (r.yellowCards >= 3 && r.cardsPerGame != null && r.cardsPerGame >= 0.15);
+
+  const primary = rows.filter(passes)
+    .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+    .slice(0, 2);
+
+  if (primary.length >= 2) return primary;
+
+  // Backfill: if fewer than 2 pass the threshold, take the next-best
+  // by goals/assists so the section always has content to show.
+  const primaryIds = new Set(primary.map(r => r.playerId));
+  const backfill = rows
+    .filter(r => !primaryIds.has(r.playerId))
+    .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+    .slice(0, 2 - primary.length);
+
+  return [...primary, ...backfill];
+}
+
+export async function getMatchKeyPlayerBattle(
+  homeTeamId: number,
+  awayTeamId: number,
+): Promise<{ home: KeyPlayerBattleRow[]; away: KeyPlayerBattleRow[] }> {
+  const [home, away] = await Promise.all([
+    buildKeyBattle(homeTeamId).catch(() => []),
+    buildKeyBattle(awayTeamId).catch(() => []),
+  ]);
+  return { home, away };
+}
+
+
+
 /** Every predicted-XI player above an importance threshold, for both
  *  sides of a match — the data the "Key Player Battle" narrative thread
  *  was only using a single name from (team_goal_dependency's top scorer
