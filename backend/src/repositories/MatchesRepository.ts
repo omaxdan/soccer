@@ -58,7 +58,14 @@ export class MatchesRepository {
   async upsertBatch(matches: Match[]): Promise<number> {
     if (matches.length === 0) return 0;
 
-    const { error } = await db.from('matches').upsert(matches, {
+    // Strip id (which transformMatch sets to 0) before upserting — Postgres
+    // treats an explicit id:0 as a real value to INSERT, so a batch containing
+    // multiple new matches all with id:0 causes a self-conflict on the PK.
+    // Dropping id lets the DB generate it on INSERT and ignores it on UPDATE
+    // (the conflict resolution key is external_match_id, not id).
+    const payload = matches.map(({ id: _id, ...rest }) => rest);
+
+    const { error } = await db.from('matches').upsert(payload, {
       onConflict: 'external_match_id',
     });
 
