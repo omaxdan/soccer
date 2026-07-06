@@ -86,6 +86,15 @@ export const ENDPOINT_REGISTRY: EndpointRegistry = {
       limit: '1–30 (use 30 for full upcoming schedule)',
     },
   },
+
+  tournament_team_events: {
+    path: '/tournament/{tournamentId}/season/{seasonId}/team-events',
+    description: 'Get all events for teams in a tournament season. Same structure as schedule feed. Accepts ?type=total|home|away. Use seasonId=0 for the current active season (API resolves automatically — no DB lookup needed).',
+    params: {
+      tournamentId: 'tournament external_id (uniqueTournament.id)',
+      seasonId:     'season external_id — pass 0 for current active season',
+    },
+  },
 };
 
 // ─── SOFASCORE API ENDPOINTS ──────────────────────────────────────────────────

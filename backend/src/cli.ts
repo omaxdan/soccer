@@ -14,6 +14,7 @@ import { syncSampleBands } from './jobs/sampleBands';
 import { syncTransfersForTeams } from './jobs/syncTransfersV2';
 import { syncTeamImages, syncTournamentImages } from './jobs/syncTeamImages';
 import { syncStandings } from './jobs/syncStandings';
+import { syncTournamentEvents, syncTournamentEventsByCountries, TournamentEventType } from './jobs/syncTournamentEvents';
 import { TRACKED_LEAGUES, getTrackedLeaguesSummary, TRACKED_LEAGUE_COUNT } from './config/trackedLeagues';
 import { sportsApiClient } from './services/sportsApiClient';
 
@@ -373,6 +374,83 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Syncing tournament standings (~42 calls, one per tracked league)...');
         const r = await syncStandings();
         logger.info(r, 'Standings sync complete');
+        break;
+      }
+
+      case 'sync:tournament-events': {
+        // Space-separated tournament external IDs with an optional trailing
+        // event-type (total|home|away). Mirrors the sync:squads:matches:v2
+        // ID-list pattern — also accepts comma-separated IDs, or a mix.
+        // Minimum 2 tournament IDs required.
+        //
+        // Examples:
+        //   sync:tournament-events 42 55 108
+        //   sync:tournament-events 42 55 home
+        //   sync:tournament-events "42,55,108"
+        //   sync:tournament-events "42,55" away
+        const EVENT_TYPES = new Set<string>(['total', 'home', 'away']);
+        const rawArgs = args.flatMap((a: string) => a.split(','))
+          .map((s: string) => s.trim()).filter(Boolean);
+
+        // If the last token is a valid event type, pop it; otherwise default to total.
+        let eventType: TournamentEventType = 'total';
+        const lastArg = rawArgs[rawArgs.length - 1];
+        const idArgs = EVENT_TYPES.has(lastArg)
+          ? rawArgs.slice(0, -1)
+          : rawArgs;
+        if (EVENT_TYPES.has(lastArg)) eventType = lastArg as TournamentEventType;
+
+        const tournamentIds = idArgs
+          .map((s: string) => Number(s))
+          .filter((n: number) => !Number.isNaN(n) && n > 0);
+
+        if (tournamentIds.length < 2) {
+          logger.error(
+            { received: args },
+            'Usage: sync:tournament-events <id1> <id2> [...] [total|home|away] — needs at least 2 tournament external_ids. Optional trailing type defaults to total.'
+          );
+          break;
+        }
+        logger.info({ tournamentIds, eventType }, 'Syncing tournament events...');
+        const r = await syncTournamentEvents(tournamentIds, eventType);
+        logger.info(r, 'Tournament events sync complete');
+        break;
+      }
+
+      case 'sync:tournament-events:countries': {
+        // Country-based variant — resolves country names to tournament
+        // external_ids via tournaments JOIN countries in the DB, then
+        // syncs all matching tournaments. Mirrors sync:squads:countries:v2.
+        //
+        // Examples:
+        //   sync:tournament-events:countries "Brazil,Argentina"
+        //   sync:tournament-events:countries "Lithuania" away
+        //   sync:tournament-events:countries Brazil home
+        const EVENT_TYPES = new Set<string>(['total', 'home', 'away']);
+        const rawCountryArgs = args.map((a: string) => a.trim()).filter(Boolean);
+
+        // If the last token is a valid event type, pop it.
+        let eventTypeC: TournamentEventType = 'total';
+        const lastCountryArg = rawCountryArgs[rawCountryArgs.length - 1];
+        const countryArgs = EVENT_TYPES.has(lastCountryArg)
+          ? rawCountryArgs.slice(0, -1)
+          : rawCountryArgs;
+        if (EVENT_TYPES.has(lastCountryArg)) eventTypeC = lastCountryArg as TournamentEventType;
+
+        // Countries come either as one comma-separated arg or space-separated;
+        // flatten and split both, same as the countries:v2 pattern.
+        const countries = countryArgs
+          .flatMap((a: string) => a.split(','))
+          .map((c: string) => c.trim())
+          .filter(Boolean);
+
+        if (countries.length === 0) {
+          logger.error('Usage: sync:tournament-events:countries <Country1,Country2,...> [total|home|away]');
+          break;
+        }
+        logger.info({ countries, eventType: eventTypeC }, 'Syncing tournament events by country...');
+        const r = await syncTournamentEventsByCountries(countries, eventTypeC);
+        logger.info(r, 'Country tournament events sync complete');
         break;
       }
 
@@ -997,6 +1075,16 @@ Commands:
     sync:squads:v2                   ⭐ PRIMARY V2: tracked leagues, all squad intelligence
     sync:squads:countries:v2 <list>  V2 by country e.g. "Brazil,Finland"
     sync:squads:matches:v2 <ids>     V2 for teams in specific matches, by match external_match_id (needs 2+; space or comma separated)
+    sync:tournament-events <ids> [type]          Sync all fixtures for specific tournaments (season auto-resolved, same
+                                                 structure as schedule feed). Needs 2+ tournament external_ids, optional
+                                                 trailing type: total|home|away (default total).
+                                                 e.g. sync:tournament-events 42 55 108
+                                                 e.g. sync:tournament-events 42 55 home
+    sync:tournament-events:countries <c> [type]  Same sync by country name — resolves tournaments from DB via
+                                                 tournaments JOIN countries. Accepts comma-separated or space-separated
+                                                 country names + optional trailing type.
+                                                 e.g. sync:tournament-events:countries "Brazil,Lithuania"
+                                                 e.g. sync:tournament-events:countries Lithuania away
     sync:images                      One-time team crest backfill to Supabase Storage (re-run manually only on rebrand)
     sync:tournament-images           One-time tournament/league logo backfill - endpoint unverified, test small batch first
     sync:images:targeted             Targeted (re)sync for specific teams/leagues/matches: --teams <ids> --leagues <ids> --matches <ids> (any 1+, combinable, external_id not internal id)
