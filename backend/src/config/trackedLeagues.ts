@@ -28,7 +28,7 @@ export interface TrackedLeague {
   name: string;           // Human-readable label for logs
   apiNameMatch: string;   // Partial match against tournament.name from schedule API
   slug: string;           // EXACT match against tournaments.slug in DB
-  country?: string;       // Category/country for disambiguation
+  country?: string | string[];  // Category/country — array for multi-country leagues
   dbNames?: string[];     // Exact tournament.name values actually found in the DB —
                           // handles cases where the API's name and what ends up
                           // stored differ (e.g. API says "Série A", DB stores
@@ -69,14 +69,17 @@ const COUNTRY_ALIASES: Record<string, string[]> = {
  * country check that silently passes when category data is missing) lets
  * all of those through. This must never default to "permit on missing data".
  */
-function countriesMatch(a: string | undefined, b: string | undefined): boolean {
+function countriesMatch(a: string | undefined, b: string | string[] | undefined): boolean {
   if (!a || !b) return false; // missing data = no match, not a free pass
   const aLower = a.toLowerCase().trim();
-  const bLower = b.toLowerCase().trim();
-  if (aLower === bLower) return true;
-  const aliasesA = COUNTRY_ALIASES[aLower] ?? [];
-  const aliasesB = COUNTRY_ALIASES[bLower] ?? [];
-  return aliasesA.includes(bLower) || aliasesB.includes(aLower);
+  const candidates = Array.isArray(b) ? b : [b];
+  return candidates.some(country => {
+    const bLower = country.toLowerCase().trim();
+    if (aLower === bLower) return true;
+    const aliasesA = COUNTRY_ALIASES[aLower] ?? [];
+    const aliasesB = COUNTRY_ALIASES[bLower] ?? [];
+    return aliasesA.includes(bLower) || aliasesB.includes(aLower);
+  });
 }
 
 export const TRACKED_LEAGUES: TrackedLeague[] = [
@@ -85,13 +88,13 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
 
   // England
   { name: 'Premier League',         apiNameMatch: 'Premier League',   slug: 'premier-league',        country: 'England',      tier: 1, band: 'A',         region: 'Europe' },
-  { name: 'EFL Championship',       apiNameMatch: 'Championship',     slug: 'championship',          country: 'England',      tier: 2, band: 'A',         region: 'Europe' },
+  { name: 'EFL Championship',       apiNameMatch: 'Championship',     slug: 'championship',          country: ['England', 'Wales'],      tier: 2, band: 'A',         region: 'Europe' },
   { name: 'EFL League One',         apiNameMatch: 'League One',       slug: 'league-one',            country: 'England',      tier: 3, band: 'B',         region: 'Europe' },
-  { name: 'EFL League Two',         apiNameMatch: 'League Two',       slug: 'league-two',            country: 'England',      tier: 4, band: 'B',         region: 'Europe' },
+  { name: 'EFL League Two',         apiNameMatch: 'League Two',       slug: 'league-two',            country: ['England', 'Wales'],      tier: 4, band: 'B',         region: 'Europe' },
 
   // Spain
   { name: 'La Liga',                apiNameMatch: 'La Liga',          slug: 'laliga',                country: 'Spain',        tier: 1, band: 'A',         region: 'Europe' },
-  { name: 'Segunda División',       apiNameMatch: 'Segunda División', slug: 'laliga-2',              country: 'Spain',        tier: 2, band: 'B',         region: 'Europe' },
+  { name: 'Segunda División',       apiNameMatch: 'Segunda División', slug: 'laliga-2',              country: ['Spain', 'Andorra'],        tier: 2, band: 'B',         region: 'Europe' },
 
   // Germany
   { name: 'Bundesliga',             apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            country: 'Germany',      tier: 1, band: 'A',         region: 'Europe' },
@@ -102,7 +105,7 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
   { name: 'Serie B (Italian)',      apiNameMatch: 'Serie B',          slug: 'serie-b',               country: 'Italy',        tier: 2, band: 'B',         region: 'Europe' },
 
   // France
-  { name: 'Ligue 1',                apiNameMatch: 'Ligue 1',          slug: 'ligue-1',               country: 'France',       tier: 1, band: 'A',         region: 'Europe' },
+  { name: 'Ligue 1',                apiNameMatch: 'Ligue 1',          slug: 'ligue-1',               country: ['France', 'Monaco'],       tier: 1, band: 'A',         region: 'Europe' },
 
   // Netherlands
   { name: 'Eredivisie',             apiNameMatch: 'Eredivisie',       slug: 'eredivisie',            country: 'Netherlands',  tier: 1, band: 'B',         region: 'Europe' },
@@ -129,7 +132,7 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
   { name: 'Allsvenskan',            apiNameMatch: 'Allsvenskan',      slug: 'allsvenskan',           country: 'Sweden',       tier: 1, band: 'B',         region: 'Europe' },
 
   // Switzerland
-  { name: 'Swiss Super League',     apiNameMatch: 'Super League',     slug: 'super-league',          country: 'Switzerland',  tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Swiss Super League',     apiNameMatch: 'Super League',     slug: 'super-league',          country: ['Switzerland', 'Liechtenstein'],  tier: 1, band: 'B',         region: 'Europe' },
 
   // Austria
   { name: 'Austrian Bundesliga',    apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            country: 'Austria',      tier: 1, band: 'B',         region: 'Europe' },
@@ -155,7 +158,7 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
 
   // ── NORTH AMERICA ─────────────────────────────────────────────────────────
 
-  { name: 'MLS',                    apiNameMatch: 'MLS',              slug: 'mls',                   country: 'USA',          tier: 1, band: 'A',         region: 'North America' },
+  { name: 'MLS',                    apiNameMatch: 'MLS',              slug: 'mls',                   country: ['USA', 'Canada'],          tier: 1, band: 'A',         region: 'North America' },
   { name: 'Liga MX',                apiNameMatch: 'Liga MX',          slug: 'liga-mx',               country: 'Mexico',       tier: 1, band: 'B',         region: 'North America' },
 
   // ── AFRICA ────────────────────────────────────────────────────────────────
@@ -325,8 +328,13 @@ export function findTrackedLeagueByDbName(
  * Returns {slug, country} pairs for DB slug-based lookup.
  * This is the PRECISE path — no partial name collisions.
  */
-export function getTrackedLeagueSlugs(): Array<{ slug: string; country: string | undefined }> {
-  return TRACKED_LEAGUES.map(l => ({ slug: l.slug, country: l.country?.toLowerCase() }));
+export function getTrackedLeagueSlugs(): Array<{ slug: string; country: string | string[] | undefined }> {
+  return TRACKED_LEAGUES.map(l => ({
+    slug: l.slug,
+    country: Array.isArray(l.country)
+      ? l.country.map(c => c.toLowerCase())
+      : l.country?.toLowerCase(),
+  }));
 }
 
 /**

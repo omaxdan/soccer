@@ -184,10 +184,15 @@ async function getTrackedLeagueTeams(): Promise<any[]> {
     for (const tracked of trackedSlugs) {
       if (tracked.slug.toLowerCase() !== tSlug) continue;
 
-      // Category check: if config has a country, it must match
-      const countryOk = !tracked.country ||
-        tCategory === tracked.country ||
-        tCategory.includes(tracked.country);
+      // Category check: if config has a country (or array of countries), at
+      // least one must match the DB tournament's category. Handles both the
+      // legacy single-string form and the new multi-country array form (e.g.
+      // MLS: ['USA', 'Canada'], EFL Championship: ['England', 'Wales']).
+      const countryOk = !tracked.country || (
+        Array.isArray(tracked.country)
+          ? tracked.country.some(c => tCategory === c || tCategory.includes(c))
+          : tCategory === tracked.country || tCategory.includes(tracked.country)
+      );
 
       if (countryOk) {
         exactTournamentNames.add(dbT.name);
