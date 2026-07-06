@@ -2,6 +2,7 @@
 
 /* ─── DARK THEME (default) ───────────────────────────────────────────────────── */
 :root, [data-theme="dark"] {
+  --card-border: 1px solid var(--border);
   --bg:        #0a0a0f;
   --surface:   #111118;
   --surface2:  #1a1a24;
@@ -44,36 +45,53 @@
 
 /* ─── LIGHT THEME ────────────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --bg:        #f0f2f8;
+  --card-border: none;
+  --bg:        #f6f8fa;
   --surface:   #ffffff;
-  --surface2:  #f4f5fb;
-  --surface3:  #e8eaf4;
-  --border:    #d0d4e8;
-  --border2:   #b8bdd8;
-  --text:      #0d0e1a;
-  --text2:     #2a2b3d;
-  --muted:     #5a5c78;
-  --dim:       #9496ae;
+  --surface2:  #f6f8fa;
+  --surface3:  #eef1f6;
+  --border:    #e2e8f0;
+  --border2:   #cbd5e1;
+  --text:      #0f172a;
+  --text2:     #1e293b;
+  --muted:     #64748b;
+  --dim:       #94a3b8;
   --green:     #00b050;
   --green2:    #33c47a;
-  --amber:     #d97700;
-  --orange:    #c94e00;
-  --red:       #d4000f;
-  --blue:      #1a5fd4;
+  --amber:     #d97706;
+  --orange:    #f97316;
+  --red:       #ef4444;
+  --blue:      #0057ff;
   --blue2:     #3474e8;
   --purple:    #7c00cc;
   --purple2:   #9933ee;
   --cyan:      #0099cc;
   --score-elite:  #00b050;
   --score-good:   #33c47a;
-  --score-mod:    #d97700;
-  --score-poor:   #c94e00;
-  --score-crit:   #d4000f;
-  --score-null:   #9496ae;
-  --shadow-card: 0 2px 12px rgba(0,0,0,0.08);
+  --score-mod:    #d97706;
+  --score-poor:   #f97316;
+  --score-crit:   #ef4444;
+  --score-null:   #94a3b8;
+  --shadow-card: 0 0.125rem 0.5rem rgba(0,0,0,0.04);
   --shadow-glow-green: 0 0 12px rgba(0,176,80,0.15);
   --shadow-glow-red:   0 0 12px rgba(212,0,15,0.15);
   --shadow-glow-amber: 0 0 12px rgba(217,119,0,0.15);
+}
+
+/* ─── LIGHT MODE — zero-border card evolution ──────────────────────────────────
+   Scoped to light mode only (dark mode keeps its existing bordered-card look
+   untouched). Shape is defined by the white-card-on-ice-canvas contrast plus
+   an ambient low-opacity shadow, not a hard outline. Only genuine "card"
+   containers are touched here - small controls like .theme-toggle,
+   .topbar-btn, and badge/pill elements keep their border, since that's a
+   normal functional affordance on an interactive control, not the "hard
+   card outline" the light-mode redesign is about. */
+[data-theme="light"] .card,
+[data-theme="light"] .kpi-card,
+[data-theme="light"] .component-card,
+[data-theme="light"] .cmp-category {
+  border: none;
+  box-shadow: var(--shadow-card);
 }
 
 /* ─── RESET ─────────────────────────────────────────────────────────────────── */
@@ -654,6 +672,8 @@ th, td { text-align: left; }
 .rip-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* ─── MOBILE-FIRST "QUOTE PAGE" PATTERN ──────────────────────────────────────────

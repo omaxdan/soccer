@@ -7,7 +7,7 @@ export const metadata = { title: 'Fixture Congestion Hub' };
 export const revalidate = 1800;
 
 function Card({ children, style={} }: any) {
-  return <div style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:12, padding:16, ...style }}>{children}</div>;
+  return <div style={{ background:COLORS.surface, border: COLORS.cardBorder, boxShadow: COLORS.shadowCard, borderRadius:12, padding:16, ...style }}>{children}</div>;
 }
 
 export default async function CongestionHub() {
@@ -42,8 +42,8 @@ export default async function CongestionHub() {
   // Get team names from heatmap matches
   const teamNames = new Map<number, string>();
   (heatmap as any[]).forEach((m: any) => {
-    if (m.home_team_id) teamNames.set(m.home_team_id, String(m.home_team?.name ?? m.home_team_id));
-    if (m.away_team_id) teamNames.set(m.away_team_id, String(m.away_team?.name ?? m.away_team_id));
+    if (m.home_team_id) teamNames.set(m.home_team_id, String(m.home_team?.short_name ?? m.home_team?.name ?? m.home_team_id));
+    if (m.away_team_id) teamNames.set(m.away_team_id, String(m.away_team?.short_name ?? m.away_team?.name ?? m.away_team_id));
   });
 
   return (

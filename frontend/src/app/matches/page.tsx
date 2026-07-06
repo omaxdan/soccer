@@ -1,6 +1,7 @@
 import React from 'react';
 import { getTodaysMatches, getMatchesForDate, getTeamIntelligenceMap, getMatchConfidenceMap, getMatchComparisonExtras, getMatchLineupVersatility } from '@/lib/queries';
 import { toOne } from '@/lib/relations';
+import GapDistributionPanel from '@/components/GapDistributionPanel';
 import { generateMatchInsight } from '@/lib/insights';
 import { computeMatchSignals } from '@/lib/signals';
 import { matchUrl } from '@/lib/urls';
@@ -169,17 +170,22 @@ export default async function MatchCenter({
   const sortedCountries = [...grouped.keys()].sort((a, b) => a.localeCompare(b));
   const displayDate = formatDisplayDate(activeDateStr, todayStr);
 
-  // Readiness gap distribution buckets
-  const gapBuckets = { strong: 0, moderate: 0, small: 0, negative: 0 };
+  // Readiness gap distribution buckets - captures the matches themselves
+  // (not just counts), feeding the expandable per-tier list in
+  // GapDistributionPanel below. Counts are derived from array length, not
+  // tracked separately, to avoid two sources of truth for the same number.
+  const gapTierMatches: Record<'strong' | 'moderate' | 'small' | 'negative', typeof enriched> = {
+    strong: [], moderate: [], small: [], negative: [],
+  };
   for (const e of enriched) {
     const g = e.gap != null ? Math.abs(e.gap) : null;
     if (g == null) continue;
-    if (g >= 20) gapBuckets.strong++;
-    else if (g >= 10) gapBuckets.moderate++;
-    else if (g > 0) gapBuckets.small++;
-    else gapBuckets.negative++;
+    if (g >= 20) gapTierMatches.strong.push(e);
+    else if (g >= 10) gapTierMatches.moderate.push(e);
+    else if (g > 0) gapTierMatches.small.push(e);
+    else gapTierMatches.negative.push(e);
   }
-  const totalWithGap = gapBuckets.strong + gapBuckets.moderate + gapBuckets.small + gapBuckets.negative;
+  const totalWithGap = gapTierMatches.strong.length + gapTierMatches.moderate.length + gapTierMatches.small.length + gapTierMatches.negative.length;
 
   const highestTravelAway = [...enriched].filter(e => e.intel?.away_travel_distance_km != null)
     .sort((a, b) => (b.intel.away_travel_distance_km ?? 0) - (a.intel.away_travel_distance_km ?? 0))[0];
@@ -409,47 +415,7 @@ export default async function MatchCenter({
           </div>
 
           {totalWithGap > 0 && (
-            <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Readiness Gap Distribution</div>
-              <div style={{ position: 'relative', width: 90, height: 90, margin: '0 auto 10px' }}>
-                <svg width={90} height={90} viewBox="0 0 100 100">
-                  {(() => {
-                    const segs = [
-                      { count: gapBuckets.strong, color: COLORS.green },
-                      { count: gapBuckets.moderate, color: COLORS.amber },
-                      { count: gapBuckets.small, color: COLORS.orange },
-                      { count: gapBuckets.negative, color: COLORS.red },
-                    ];
-                    let cum = 0;
-                    return segs.map((s, i) => {
-                      const start = (cum / totalWithGap) * 360; cum += s.count;
-                      const end = (cum / totalWithGap) * 360;
-                      const large = end - start > 180 ? 1 : 0;
-                      const toXY = (deg: number) => { const r = (deg - 90) * Math.PI / 180; return [50 + 42 * Math.cos(r), 50 + 42 * Math.sin(r)]; };
-                      const [x1, y1] = toXY(start); const [x2, y2] = toXY(end);
-                      return <path key={i} d={`M 50 50 L ${x1} ${y1} A 42 42 0 ${large} 1 ${x2} ${y2} Z`} fill={s.color} opacity={0.85} />;
-                    });
-                  })()}
-                  <circle cx={50} cy={50} r={26} fill={COLORS.surface} />
-                </svg>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: 18, fontWeight: 700, color: COLORS.text }}>{totalWithGap}</div>
-                  <div style={{ fontSize: 7, color: COLORS.dim }}>MATCHES</div>
-                </div>
-              </div>
-              {[
-                { label: '20+ Strong Edge', count: gapBuckets.strong, color: COLORS.green },
-                { label: '10-20 Moderate Edge', count: gapBuckets.moderate, color: COLORS.amber },
-                { label: '0-10 Small Edge', count: gapBuckets.small, color: COLORS.orange },
-                { label: 'Negative Edge', count: gapBuckets.negative, color: COLORS.red },
-              ].map(s => (
-                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, marginBottom: 4 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: 2, background: s.color }} />
-                  <span style={{ color: COLORS.muted }}>{s.label}</span>
-                  <span style={{ marginLeft: 'auto', fontFamily: '"JetBrains Mono",monospace', color: COLORS.text }}>{s.count} ({Math.round((s.count / totalWithGap) * 100)}%)</span>
-                </div>
-              ))}
-            </div>
+            <GapDistributionPanel tierMatches={gapTierMatches} totalWithGap={totalWithGap} />
           )}
 
           {upcomingHighSignal.length > 0 && (

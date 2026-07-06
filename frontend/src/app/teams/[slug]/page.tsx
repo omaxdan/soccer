@@ -23,7 +23,7 @@ import Tabs from '@/components/Tabs';
 import RelatedPills from '@/components/RelatedPills';
 
 function Card({ children, style = {} }: { children: React.ReactNode; style?: any }) {
-  return <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, ...style }}>{children}</div>;
+  return <div style={{ background: COLORS.surface, border: COLORS.cardBorder, boxShadow: COLORS.shadowCard, borderRadius: 12, padding: 16, ...style }}>{children}</div>;
 }
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>{children}</div>;

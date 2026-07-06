@@ -23,6 +23,10 @@ export const COLORS = {
   // Borders
   border:   'var(--border)',
   border2:  'var(--border2)',
+  // Full card border shorthand - "1px solid var(--border)" in dark mode,
+  // "none" in light mode (light mode defines shape via shadow, not outline).
+  cardBorder: 'var(--card-border)',
+  shadowCard: 'var(--shadow-card)',
 
   // Text
   text:    'var(--text)',

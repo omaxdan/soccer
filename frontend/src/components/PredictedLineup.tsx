@@ -18,6 +18,7 @@ interface LineupPlayer {
   players: {
     id: number;
     name: string;
+    short_name: string | null;
     position: string;
     position_detailed: string | null;
     primary_position: string | null;
@@ -120,7 +121,7 @@ function PlayerBadge({ player }: { player: LineupPlayer }) {
   const playerData = player.players;
   const confidencePercent = Math.round((player.confidence || 0) * 100);
   const isInjured = playerData?.current_injury || false;
-  const playerName = playerData?.name || '?';
+  const playerName = playerData?.short_name || playerData?.name || '?';
   const jerseyNumber = playerData?.jersey_number || '—';
   const positionLabel = getPositionLabel(player);
   const versatility = getVersatility(player);
@@ -255,7 +256,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
 
     // ─── Format player with confidence ──────────────────────────────────────
     const formatPlayerWithConfidence = (p: LineupPlayer) => {
-      const name = p.players?.name || '?';
+      const name = p.players?.short_name || p.players?.name || '?';
       const confidence = p.confidence || 0;
       const color = getConfidenceColor(confidence);
       
@@ -284,7 +285,7 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
     // confidence badges at inconsistent horizontal positions since name
     // lengths vary and didn't give each player their own scannable line.
     const renderPlayerRow = (p: LineupPlayer, isLast: boolean) => {
-      const name = p.players?.name || '?';
+      const name = p.players?.short_name || p.players?.name || '?';
       const jerseyNumber = p.players?.jersey_number;
       const positionLabel = getPositionLabel(p);
       const confidence = p.confidence || 0;

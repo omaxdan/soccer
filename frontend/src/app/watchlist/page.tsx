@@ -8,7 +8,7 @@ import { teamUrl, matchUrl } from '@/lib/urls';
 import { SkeletonCard } from '@/components/SkeletonCard';
 
 function Card({ children, style = {} }: any) {
-  return <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16, ...style }}>{children}</div>;
+  return <div style={{ background: COLORS.surface, border: COLORS.cardBorder, boxShadow: COLORS.shadowCard, borderRadius: 12, padding: 16, ...style }}>{children}</div>;
 }
 
 export default function WatchlistPage() {

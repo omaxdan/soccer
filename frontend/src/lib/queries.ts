@@ -637,6 +637,7 @@ export async function getMatchWithLineups(id: number): Promise<MatchWithLineups 
       players:player_id (
         id, 
         name, 
+        short_name,
         position, 
         position_detailed,
         primary_position,
@@ -1402,8 +1403,8 @@ export async function getWeekHeatmap() {
 
   const q = supabase.from('matches')
     .select(`date, home_team_id, away_team_id,
-      home_team:teams!home_team_id(name),
-      away_team:teams!away_team_id(name)`)
+      home_team:teams!home_team_id(name, short_name),
+      away_team:teams!away_team_id(name, short_name)`)
     .gte('date', now.toISOString()).lte('date', end.toISOString())
     .order('date', { ascending: true });
   if (names.length > 0) q.in('competition', names);
