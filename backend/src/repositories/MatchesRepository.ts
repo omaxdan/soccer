@@ -164,9 +164,13 @@ export class MatchResultsRepository {
   }
 
   async upsert(data: MatchResult): Promise<MatchResult> {
+    // Strip id (transformMatchResult sets it to 0) for the same reason as
+    // matchesRepository.upsertBatch — an explicit id:0 conflicts on the PK
+    // before the ON CONFLICT (match_id) clause can fire.
+    const { id: _id, ...payload } = data;
     const { data: result, error } = await db
       .from('match_results')
-      .upsert(data as any, { onConflict: 'match_id' })
+      .upsert(payload as any, { onConflict: 'match_id' })
       .select()
       .single();
 
@@ -184,7 +188,8 @@ export class MatchResultsRepository {
   async upsertBatch(results: MatchResult[]): Promise<number> {
     if (results.length === 0) return 0;
 
-    const { error } = await db.from('match_results').upsert(results, {
+    const payload = results.map(({ id: _id, ...rest }) => rest);
+    const { error } = await db.from('match_results').upsert(payload, {
       onConflict: 'match_id',
     });
 
