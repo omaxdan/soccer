@@ -197,7 +197,26 @@ async function syncOneTournament(
   // the URL string.
   const response = await sportsApiClient.get<any>(path, { type: eventType });
 
-  const fixtures: any[] = response.events || response.data?.events || [];
+  // Real structure (confirmed from live response):
+  //   response.data.tournamentTeamEvents = {
+  //     [teamExternalId]: { [roundOrGroupId]: [ event, event, ... ] }
+  //   }
+  // Two levels of nesting before the event arrays. Each match appears twice
+  // (once under homeTeam's entry, once under awayTeam's) — deduplicate by
+  // event.id so every fixture is only inserted once.
+  const tournamentTeamEvents = response?.data?.tournamentTeamEvents ?? {};
+  const seenIds = new Set<number>();
+  const fixtures: any[] = [];
+  for (const teamRounds of Object.values(tournamentTeamEvents) as any[]) {
+    for (const events of Object.values(teamRounds) as any[]) {
+      for (const event of events as any[]) {
+        if (event?.id && !seenIds.has(event.id)) {
+          seenIds.add(event.id);
+          fixtures.push(event);
+        }
+      }
+    }
+  }
   logger.info({ tournamentId, eventType, count: fixtures.length }, 'Fetched tournament fixtures');
 
   if (fixtures.length === 0) {
