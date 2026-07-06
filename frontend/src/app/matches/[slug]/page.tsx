@@ -1042,16 +1042,14 @@ export default function MatchPage() {
                 </Card>
               )}
 
-              {/* Key Player Battle — goal/card risk per team, 2 players each.
-                  Distinct from Key Battles above (which is positional matchup
-                  pairs). This surfaces who IS the scoring threat and who is
-                  close to suspension, from season stats, not just lineup
-                  importance rank. ── */}
+              {/* Key Player Battle — 3 per team, one from each zone (ATK/MID/DEF),
+                  selected by position-weighted composite score not just goals.
+                  Versatile players (DM/DC etc.) eligible for multiple zones. ── */}
               {((keyPlayerBattle?.home?.length ?? 0) > 0 || (keyPlayerBattle?.away?.length ?? 0) > 0) && (
                 <Card>
                   <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Key Player Battle</div>
                   <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 14 }}>
-                    Goal contribution &amp; card risk — top 2 per team from the predicted XI pool, sorted by goals then assists
+                    Top 3 per team by overall contribution — one attacker, one midfielder, one defender. Rating drives selection for defenders; goal involvement for attackers.
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     {([
@@ -1060,47 +1058,95 @@ export default function MatchPage() {
                     ] as const).map(({ label, players }) => (
                       <div key={label}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: COLORS.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                           {players.map((p: any, pi: number) => {
+                            const zoneColor = p.zone === 'ATTACK' ? COLORS.green
+                              : p.zone === 'MIDFIELD' ? COLORS.blue
+                              : COLORS.amber;
+                            const zoneLabel = p.zone === 'ATTACK' ? 'ATK' : p.zone === 'MIDFIELD' ? 'MID' : 'DEF';
                             const depColor = p.goalDependency === 'CRITICAL' ? COLORS.red
                               : p.goalDependency === 'HIGH' ? COLORS.amber
-                              : p.goalDependency === 'NOTABLE' ? COLORS.orange
-                              : COLORS.dim;
+                              : COLORS.orange;
                             const cardColor = p.cardRisk === 'VERY HIGH' ? COLORS.red
                               : p.cardRisk === 'HIGH' ? COLORS.amber
                               : p.cardRisk === 'MODERATE' ? COLORS.orange
                               : null;
+                            const isDefOrGK = p.zone === 'DEFENSE';
+
                             return (
-                              <div key={p.playerId} style={{ paddingTop: pi > 0 ? 10 : 0, borderTop: pi > 0 ? `1px solid ${COLORS.border}` : 'none' }}>
-                                {/* name + position */}
-                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 5 }}>
+                              <div key={p.playerId} style={{ paddingTop: pi > 0 ? 12 : 0, borderTop: pi > 0 ? `1px solid ${COLORS.border}` : 'none' }}>
+                                {/* name + zone + versatility */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
                                   <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.text }}>{p.shortName ?? p.name}</span>
-                                  {p.position && <span style={{ fontSize: 9, color: COLORS.dim }}>{p.position}</span>}
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                                    background: `color-mix(in srgb, ${zoneColor} 15%, transparent)`,
+                                    border: `1px solid color-mix(in srgb, ${zoneColor} 30%, transparent)`,
+                                    color: zoneColor,
+                                  }}>{zoneLabel}</span>
+                                  {p.isVersatile && (
+                                    <span style={{
+                                      fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+                                      background: `color-mix(in srgb, ${COLORS.purple} 12%, transparent)`,
+                                      border: `1px solid color-mix(in srgb, ${COLORS.purple} 25%, transparent)`,
+                                      color: COLORS.purple,
+                                    }}>Versatile</span>
+                                  )}
                                 </div>
 
-                                {/* goal contribution */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-                                  <span style={{ color: COLORS.muted }}>G / A</span>
-                                  <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: COLORS.text }}>{p.goals} / {p.assists}</span>
-                                </div>
-                                {p.goalSharePct != null && (
+                                {/* avg rating — primary metric for defenders/GKs, secondary for others */}
+                                {p.avgRating != null && (
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
-                                    <span style={{ color: COLORS.muted }}>Goal share</span>
-                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.goalDependency ? depColor : COLORS.text }}>{p.goalSharePct}%{p.goalDependency ? ` · ${p.goalDependency}` : ''}</span>
+                                    <span style={{ color: COLORS.muted }}>{isDefOrGK ? '★ Rating' : 'Rating'}</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: isDefOrGK ? 700 : 400, color: isDefOrGK ? COLORS.text : COLORS.text2 }}>
+                                      {p.avgRating.toFixed(2)}/10
+                                    </span>
                                   </div>
                                 )}
+
+                                {/* goal involvement — primary for attackers */}
+                                {(p.goals > 0 || p.assists > 0) && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                    <span style={{ color: COLORS.muted }}>G / A</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: !isDefOrGK ? 700 : 400, color: !isDefOrGK ? COLORS.text : COLORS.text2 }}>
+                                      {p.goals} / {p.assists}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* goal share (attackers/mids only — a 0% defensive contribution is noise) */}
+                                {p.goalSharePct != null && p.goals > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                    <span style={{ color: COLORS.muted }}>Goal share</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: p.goalDependency ? depColor : COLORS.text2 }}>
+                                      {p.goalSharePct}%{p.goalDependency ? ` · ${p.goalDependency}` : ''}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* assist share */}
                                 {p.assistSharePct != null && p.assists > 0 && (
                                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
                                     <span style={{ color: COLORS.muted }}>Assist share</span>
-                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.text }}>{p.assistSharePct}%</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.text2 }}>{p.assistSharePct}%</span>
+                                  </div>
+                                )}
+
+                                {/* xG + xA — underlying quality, shown when data exists */}
+                                {(p.expectedGoals != null || p.expectedAssists != null) && !isDefOrGK && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                    <span style={{ color: COLORS.muted }}>xG / xA</span>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: COLORS.dim }}>
+                                      {(p.expectedGoals ?? 0).toFixed(1)} / {(p.expectedAssists ?? 0).toFixed(1)}
+                                    </span>
                                   </div>
                                 )}
 
                                 {/* card/suspension risk */}
                                 {(p.yellowCards > 0 || p.redCards > 0) && (
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 3 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 2 }}>
                                     <span style={{ color: COLORS.muted }}>Cards (Y/R)</span>
-                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: cardColor ?? COLORS.text }}>
+                                    <span style={{ fontFamily: '"JetBrains Mono",monospace', color: cardColor ?? COLORS.text2 }}>
                                       {p.yellowCards}Y {p.redCards}R
                                       {p.cardsPerGame != null && ` · ${p.cardsPerGame}/g`}
                                       {p.cardRisk && ` · ${p.cardRisk}`}

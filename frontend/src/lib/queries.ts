@@ -485,32 +485,58 @@ export interface MatchKeyPlayer {
   rating: number | null;
 }
 
-// ─── KEY PLAYER BATTLE — goal/card risk breakdown ─────────────────────────
-// Separate from MatchKeyPlayer (which is importance-score based from
-// player_intelligence). This computes goal share, assist share, and card
-// risk directly from player_season_statistics per team — 2 players per
-// team, selected by goal then assist contribution from the top 11 by
-// total_rating. The "top 11 by total_rating" pool mirrors the SQL approach
-// in the feature spec exactly.
+// ─── KEY PLAYER BATTLE — overall contribution, position-aware ─────────────
+// 3 players per team, one from each zone (ATTACK / MIDFIELD / DEFENSE),
+// selected by a position-weighted composite score rather than goals alone.
 //
-// Inclusion threshold: ≥16% goal share OR ≥20% assist share OR
-// (≥3 yellow cards AND ≥0.15 cards-per-game). If no player passes,
-// falls back to top 2 by goals/assists so the section always has content.
+// Schema reality, verified before building:
+//   player_season_statistics has: goals, assists, expected_goals,
+//   expected_assists, total_rating, count_rating, appearances,
+//   yellow_cards, red_cards. That is ALL. Tackles, interceptions,
+//   clearances, clean sheets (at player level) do NOT exist.
+//   avg_rating (total_rating / count_rating) is therefore the only
+//   reliable signal for defensive contribution — and it's a good one,
+//   because SofaScore's per-match rating already incorporates defensive
+//   actions. A CB with a 7.4 avg_rating over 25 games DID perform well
+//   defensively; we just can't decompose into tackle counts.
 //
-// NOTE: player_season_statistics does NOT have fouls or tackles columns —
-// the spec's SQL referenced them but they don't exist in this schema.
-// Card risk is therefore computed from yellow_cards + red_cards*2 only,
-// which is the correct formulation regardless.
+// Composite formula (normalized within the team's top-11 pool):
+//   DEFENSE:  avg_rating × 0.75 + goal_involvement × 0.15 + xGI × 0.10
+//   MIDFIELD: avg_rating × 0.45 + goal_involvement × 0.30 + xGI × 0.25
+//   ATTACK:   avg_rating × 0.30 + goal_involvement × 0.40 + xGI × 0.30
+//   Versatility bonus: +0.03 for each secondary zone covered (capped at +0.06),
+//   because a player a manager deploys in multiple roles genuinely provides
+//   more tactical value than a pure single-position specialist.
+//
+// Versatility-aware zone classification:
+//   primary_position / secondary_position / tertiary_position map to zones,
+//   so a DM/DC player covers BOTH MIDFIELD and DEFENSE. For the diversity
+//   selection, they are eligible to fill either zone — which means they
+//   never block a pure defender or pure midfielder from being picked.
+//
+// Zone selection strategy:
+//   - Try to pick exactly one player from each zone (ATTACK, MID, DEF)
+//   - Versatile players are eligible for any of their zones
+//   - Backfill from highest composite if any zone is empty in the top-11
+//
+// Suspension impact is position-aware: losing a key defender to a ban
+// matters differently than losing a striker — both flagged, but labeled.
+
+export type KPBZone = 'DEFENSE' | 'MIDFIELD' | 'ATTACK';
 
 export interface KeyPlayerBattleRow {
   playerId: number;
   name: string;
   shortName: string | null;
   position: string | null;
+  zone: KPBZone;
+  isVersatile: boolean;
+  secondaryZones: KPBZone[];
   goals: number;
   assists: number;
   expectedGoals: number | null;
   expectedAssists: number | null;
+  avgRating: number | null;
   yellowCards: number;
   redCards: number;
   appearances: number;
@@ -521,73 +547,46 @@ export interface KeyPlayerBattleRow {
   cardRisk: 'VERY HIGH' | 'HIGH' | 'MODERATE' | null;
   suspensionRisk: string | null;
   suspensionImpact: string | null;
+  compositeScore: number;
 }
 
-function computeKeyBattleRow(
-  p: any,
-  lineupTotalGoals: number,
-  lineupTotalAssists: number,
-): KeyPlayerBattleRow {
-  const goals       = p.goals ?? 0;
-  const assists     = p.assists ?? 0;
-  const yellows     = p.yellow_cards ?? 0;
-  const reds        = p.red_cards ?? 0;
-  const appearances = p.appearances ?? 0;
-
-  const goalSharePct   = lineupTotalGoals   > 0 ? Math.round((goals   / lineupTotalGoals)   * 1000) / 10 : null;
-  const assistSharePct = lineupTotalAssists > 0 ? Math.round((assists / lineupTotalAssists) * 1000) / 10 : null;
-
-  const goalDependency: KeyPlayerBattleRow['goalDependency'] =
-    lineupTotalGoals > 0 && goals > 0
-      ? goals / lineupTotalGoals >= 0.40 ? 'CRITICAL'
-      : goals / lineupTotalGoals >= 0.25 ? 'HIGH'
-      : goals / lineupTotalGoals >= 0.16 ? 'NOTABLE'
-      : null
-    : null;
-
-  const cardWeight   = yellows + reds * 2;
-  const cardsPerGame = appearances > 0 ? Math.round((cardWeight / appearances) * 100) / 100 : null;
-
-  const cardRisk: KeyPlayerBattleRow['cardRisk'] =
-    cardsPerGame == null ? null
-    : cardsPerGame >= 0.5 ? 'VERY HIGH'
-    : cardsPerGame >= 0.3 ? 'HIGH'
-    : cardsPerGame >= 0.15 ? 'MODERATE'
-    : null;
-
-  const suspensionRisk =
-    yellows >= 7 ? 'DUE FOR BAN'
-    : yellows >= 5 ? 'ONE FROM BAN'
-    : yellows >= 4 ? 'CLOSE TO BAN'
-    : yellows >= 3 ? 'WATCH'
-    : null;
-
-  const suspensionImpact =
-    goalSharePct != null && goalSharePct >= 16 && yellows >= 4
-      ? 'KEY PLAYER SUSPENSION RISK'
-      : null;
-
-  return {
-    playerId: p.player_id,
-    name: p.players?.name ?? '—',
-    shortName: p.players?.short_name ?? null,
-    position: p.players?.position ?? null,
-    goals,
-    assists,
-    expectedGoals: p.expected_goals ?? null,
-    expectedAssists: p.expected_assists ?? null,
-    yellowCards: yellows,
-    redCards: reds,
-    appearances,
-    goalSharePct,
-    goalDependency,
-    assistSharePct,
-    cardsPerGame,
-    cardRisk,
-    suspensionRisk,
-    suspensionImpact,
-  };
+// Broad position code → zone. Covers the real values confirmed in squad samples:
+// broad: G, D, M, F — detailed: GK, DC, DR, DL, DM, MC, ML, MR, AM, RW, LW, ST, CF
+function codeToZone(code: string | null | undefined): KPBZone | null {
+  if (!code) return null;
+  const c = code.toUpperCase();
+  if (['G', 'GK'].includes(c) || ['DC', 'DR', 'DL', 'D'].includes(c)) return 'DEFENSE';
+  if (['DM', 'MC', 'ML', 'MR', 'M'].includes(c)) return 'MIDFIELD';
+  if (['AM', 'RW', 'LW'].includes(c)) return 'ATTACK'; // classic "attack-minded MF/wide"
+  if (['F', 'ST', 'CF'].includes(c)) return 'ATTACK';
+  return null;
 }
+
+// All zones a player covers across their primary + secondary + tertiary positions.
+// A DM who also plays DC spans both MIDFIELD and DEFENSE; they're eligible
+// for either zone slot in the diversity selection.
+function playerZones(row: any): KPBZone[] {
+  const codes = [
+    row.players?.position,
+    row.players?.primary_position,
+    row.players?.secondary_position,
+    row.players?.tertiary_position,
+  ];
+  const seen = new Set<KPBZone>();
+  for (const c of codes) {
+    const z = codeToZone(c);
+    if (z) seen.add(z);
+  }
+  // Fallback when position data is absent — use MIDFIELD (safest neutral)
+  if (seen.size === 0) seen.add('MIDFIELD');
+  return [...seen];
+}
+
+const ZONE_WEIGHTS: Record<KPBZone, { rating: number; gi: number; xgi: number }> = {
+  DEFENSE:  { rating: 0.75, gi: 0.15, xgi: 0.10 },
+  MIDFIELD: { rating: 0.45, gi: 0.30, xgi: 0.25 },
+  ATTACK:   { rating: 0.30, gi: 0.40, xgi: 0.30 },
+};
 
 async function buildKeyBattle(teamId: number): Promise<KeyPlayerBattleRow[]> {
   const { data } = await supabase
@@ -597,15 +596,15 @@ async function buildKeyBattle(teamId: number): Promise<KeyPlayerBattleRow[]> {
       goals, assists, expected_goals, expected_assists,
       yellow_cards, red_cards, appearances,
       total_rating, count_rating,
-      players:player_id(id, name, short_name, position)
+      players:player_id(id, name, short_name, position,
+        primary_position, secondary_position, tertiary_position)
     `)
     .eq('team_id', teamId)
     .not('total_rating', 'is', null);
 
   if (!data || data.length === 0) return [];
 
-  // Deduplicate: keep the highest season_external_id row per player
-  // (same resolution used throughout this codebase).
+  // Deduplicate to most-recent season per player (same pattern throughout codebase)
   const byPlayer = new Map<number, any>();
   for (const row of data) {
     const ex = byPlayer.get(row.player_id);
@@ -613,37 +612,144 @@ async function buildKeyBattle(teamId: number): Promise<KeyPlayerBattleRow[]> {
     byPlayer.set(row.player_id, row);
   }
 
-  // Top 11 by total_rating — mirrors the SQL spec's CTE exactly.
+  // Top 11 by total_rating — the talent pool
   const top11 = [...byPlayer.values()]
     .sort((a, b) => (b.total_rating ?? 0) - (a.total_rating ?? 0))
     .slice(0, 11);
 
-  const lineupTotalGoals   = top11.reduce((s, p) => s + (p.goals > 0 ? p.goals : 0), 0);
-  const lineupTotalAssists = top11.reduce((s, p) => s + (p.assists > 0 ? p.assists : 0), 0);
+  // Pool-level totals for share calculations
+  const poolGoals   = top11.reduce((s, p) => s + Math.max(0, p.goals ?? 0), 0);
+  const poolAssists = top11.reduce((s, p) => s + Math.max(0, p.assists ?? 0), 0);
 
-  const rows = top11.map(p => computeKeyBattleRow(p, lineupTotalGoals, lineupTotalAssists));
+  // Max values for normalization within the pool
+  const maxRating = Math.max(...top11.map(p => (p.count_rating ?? 0) > 0 ? (p.total_rating ?? 0) / p.count_rating : 0), 0.001);
+  const maxGI     = Math.max(...top11.map(p => (p.goals ?? 0) + (p.assists ?? 0)), 0.001);
+  const maxXGI    = Math.max(...top11.map(p => (p.expected_goals ?? 0) + (p.expected_assists ?? 0)), 0.001);
 
-  // Primary: players meeting the inclusion threshold.
-  const passes = (r: KeyPlayerBattleRow) =>
-    (r.goalSharePct   != null && r.goalSharePct   >= 16)
-    || (r.assistSharePct != null && r.assistSharePct >= 20)
-    || (r.yellowCards >= 3 && r.cardsPerGame != null && r.cardsPerGame >= 0.15);
+  // Enrich each player with zone info and composite score
+  const enriched = top11.map(p => {
+    const goals       = p.goals ?? 0;
+    const assists     = p.assists ?? 0;
+    const yellows     = p.yellow_cards ?? 0;
+    const reds        = p.red_cards ?? 0;
+    const appearances = p.appearances ?? 0;
 
-  const primary = rows.filter(passes)
-    .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
-    .slice(0, 2);
+    const avgRating = (p.count_rating ?? 0) > 0 ? Math.round(((p.total_rating ?? 0) / p.count_rating) * 100) / 100 : null;
+    const gi  = goals + assists;
+    const xgi = (p.expected_goals ?? 0) + (p.expected_assists ?? 0);
 
-  if (primary.length >= 2) return primary;
+    const normRating = maxRating > 0 ? (avgRating ?? 0) / maxRating : 0;
+    const normGI     = maxGI > 0 ? gi / maxGI : 0;
+    const normXGI    = maxXGI > 0 ? xgi / maxXGI : 0;
 
-  // Backfill: if fewer than 2 pass the threshold, take the next-best
-  // by goals/assists so the section always has content to show.
-  const primaryIds = new Set(primary.map(r => r.playerId));
-  const backfill = rows
-    .filter(r => !primaryIds.has(r.playerId))
-    .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
-    .slice(0, 2 - primary.length);
+    const zones = playerZones(p);
+    const primaryZone = zones[0]; // first zone = primary classification
+    const secondaryZones = zones.slice(1);
+    const isVersatile = zones.length > 1;
 
-  return [...primary, ...backfill];
+    const w = ZONE_WEIGHTS[primaryZone];
+    const baseScore = w.rating * normRating + w.gi * normGI + w.xgi * normXGI;
+    // Versatility bonus: each additional zone covered adds 0.03 (capped at 0.06),
+    // rewarding players who provide tactical flexibility to the manager.
+    const versatilityBonus = Math.min(secondaryZones.length * 0.03, 0.06);
+    const compositeScore = baseScore + versatilityBonus;
+
+    // Goal/assist share within the pool
+    const goalSharePct   = poolGoals   > 0 && goals   > 0 ? Math.round((goals   / poolGoals)   * 1000) / 10 : null;
+    const assistSharePct = poolAssists > 0 && assists > 0 ? Math.round((assists / poolAssists) * 1000) / 10 : null;
+
+    const goalDependency: KeyPlayerBattleRow['goalDependency'] =
+      poolGoals > 0 && goals > 0
+        ? goals / poolGoals >= 0.40 ? 'CRITICAL'
+        : goals / poolGoals >= 0.25 ? 'HIGH'
+        : goals / poolGoals >= 0.16 ? 'NOTABLE'
+        : null
+      : null;
+
+    const cardWeight   = yellows + reds * 2;
+    const cardsPerGame = appearances > 0 ? Math.round((cardWeight / appearances) * 100) / 100 : null;
+    const cardRisk: KeyPlayerBattleRow['cardRisk'] =
+      cardsPerGame == null ? null
+      : cardsPerGame >= 0.5 ? 'VERY HIGH'
+      : cardsPerGame >= 0.3 ? 'HIGH'
+      : cardsPerGame >= 0.15 ? 'MODERATE'
+      : null;
+
+    const suspensionRisk =
+      yellows >= 7 ? 'DUE FOR BAN'
+      : yellows >= 5 ? 'ONE FROM BAN'
+      : yellows >= 4 ? 'CLOSE TO BAN'
+      : yellows >= 3 ? 'WATCH'
+      : null;
+
+    // Position-aware suspension impact — losing a key defender is a different
+    // alert than losing a striker; both matter, but in different ways.
+    const isHighImpact = compositeScore >= 0.35; // roughly top-3 quality
+    const suspensionImpact =
+      isHighImpact && yellows >= 4
+        ? primaryZone === 'DEFENSE' ? 'KEY DEFENDER SUSPENSION RISK'
+        : primaryZone === 'MIDFIELD' ? 'KEY MIDFIELDER SUSPENSION RISK'
+        : 'KEY ATTACKER SUSPENSION RISK'
+      : null;
+
+    return {
+      playerId: p.player_id,
+      name: p.players?.name ?? '—',
+      shortName: p.players?.short_name ?? null,
+      position: p.players?.position ?? null,
+      zone: primaryZone,
+      isVersatile,
+      secondaryZones,
+      goals, assists,
+      expectedGoals: p.expected_goals ?? null,
+      expectedAssists: p.expected_assists ?? null,
+      avgRating,
+      yellowCards: yellows,
+      redCards: reds,
+      appearances,
+      goalSharePct, goalDependency, assistSharePct,
+      cardsPerGame, cardRisk,
+      suspensionRisk, suspensionImpact,
+      compositeScore,
+    } as KeyPlayerBattleRow & { _zones: KPBZone[] };
+  }) as Array<KeyPlayerBattleRow & { _zones: KPBZone[] }>;
+
+  // Reattach full zone list for diversity selection (stripped from final interface)
+  for (let i = 0; i < top11.length; i++) {
+    (enriched[i] as any)._zones = playerZones(top11[i]);
+  }
+
+  // ── Zone-diversity selection: 1 from ATTACK, 1 from MIDFIELD, 1 from DEFENSE ─
+  // Versatile players are eligible for any of their zones — a DM/DC can fill
+  // either the MID or DEF slot, whichever still needs filling.
+  // Order: highest composite within each zone, no player used twice.
+  const sorted = [...enriched].sort((a, b) => b.compositeScore - a.compositeScore);
+  const ZONE_PRIORITY: KPBZone[] = ['ATTACK', 'MIDFIELD', 'DEFENSE'];
+  const selected: typeof sorted = [];
+  const usedIds = new Set<number>();
+
+  for (const targetZone of ZONE_PRIORITY) {
+    const candidate = sorted.find(p =>
+      !usedIds.has(p.playerId) &&
+      ((p as any)._zones as KPBZone[]).includes(targetZone)
+    );
+    if (candidate) {
+      selected.push(candidate);
+      usedIds.add(candidate.playerId);
+    }
+  }
+
+  // Backfill if any zone was empty (e.g. squad with no recognized defenders)
+  for (const player of sorted) {
+    if (selected.length >= 3) break;
+    if (!usedIds.has(player.playerId)) {
+      selected.push(player);
+      usedIds.add(player.playerId);
+    }
+  }
+
+  // Strip the internal _zones field before returning
+  return selected.map(({ _zones: _, ...rest }) => rest as KeyPlayerBattleRow);
 }
 
 export async function getMatchKeyPlayerBattle(
