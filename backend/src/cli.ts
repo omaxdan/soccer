@@ -235,15 +235,31 @@ async function handleCommand(command: string, ...args: string[]) {
         // otherwise every fetched row gets filtered out for lack of a
         // matching internal player_id, wasting the API calls.
         //
-        // Accepts EITHER a country list ("Brazil,Argentina") OR one or more
-        // space-separated numeric team external_ids ("416 456 567") — same
-        // override pattern as sync:team-squad:v2 <teamExternalId>, for
-        // force-refreshing specific teams without waiting on the cap/cooldown.
-        const playerStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
-        const playerStatsTeamIds = playerStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
-        const playerStatsCountries = !playerStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
-        logger.info({ countries: playerStatsCountries ?? 'n/a', teamIds: playerStatsTeamIds ?? 'n/a' }, 'Syncing player season statistics (rating, minutes, starts)...');
-        const r = await syncPlayerSeasonStatistics(playerStatsCountries, playerStatsTeamIds);
+        // Accepts:
+        //   - No args → default, uses cooldown + cap
+        //   - [days] (1-4) → teams with matches in next N days only
+        //   - Country list ("Brazil,Argentina") → scoped to countries
+        //   - Team external_ids ("416 456 567") → scoped to team IDs
+        const firstArg = args[0];
+        const isSingleDay = firstArg && /^\d$/.test(firstArg); // single digit 1-9
+        
+        let playerStatsTeamIds: number[] | undefined;
+        let playerStatsCountries: string[] | undefined;
+        let playerStatsDaysAhead: number | undefined;
+        
+        if (isSingleDay) {
+          // Days ahead variant
+          playerStatsDaysAhead = Math.max(1, Math.min(4, Number(firstArg)));
+          logger.info({ daysAhead: playerStatsDaysAhead }, `Syncing player stats for teams with matches in next ${playerStatsDaysAhead} days`);
+        } else {
+          // Original country/team-ID pattern
+          const playerStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
+          playerStatsTeamIds = playerStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
+          playerStatsCountries = !playerStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
+          logger.info({ countries: playerStatsCountries ?? 'n/a', teamIds: playerStatsTeamIds ?? 'n/a' }, 'Syncing player season statistics (rating, minutes, starts)...');
+        }
+        
+        const r = await syncPlayerSeasonStatistics(playerStatsCountries, playerStatsTeamIds, playerStatsDaysAhead);
         logger.info(r, 'Player season statistics sync complete');
         break;
       }
@@ -286,14 +302,31 @@ async function handleCommand(command: string, ...args: string[]) {
         // Daily invocation recommended — cooldown + per-run cap (40 teams)
         // self-throttle, same model as sync:squads:v2.
         //
-        // Accepts EITHER a country list ("England,Spain") OR one or more
-        // space-separated numeric team external_ids ("416 456 567") for a
-        // multi-team force-refresh, same as sync:player-stats above.
-        const teamStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
-        const teamStatsTeamIds = teamStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
-        const teamStatsCountries = !teamStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
-        logger.info({ countries: teamStatsCountries ?? 'n/a', teamIds: teamStatsTeamIds ?? 'n/a' }, 'Syncing team season statistics...');
-        const r = await syncTeamSeasonStatistics(teamStatsCountries, teamStatsTeamIds);
+        // Accepts:
+        //   - No args → default, uses cooldown + cap
+        //   - [days] (1-4) → teams with matches in next N days only
+        //   - Country list ("England,Spain") → scoped to countries
+        //   - Team external_ids ("416 456 567") → scoped to team IDs
+        const firstArg = args[0];
+        const isSingleDay = firstArg && /^\d$/.test(firstArg); // single digit 1-9
+        
+        let teamStatsTeamIds: number[] | undefined;
+        let teamStatsCountries: string[] | undefined;
+        let teamStatsDaysAhead: number | undefined;
+        
+        if (isSingleDay) {
+          // Days ahead variant
+          teamStatsDaysAhead = Math.max(1, Math.min(4, Number(firstArg)));
+          logger.info({ daysAhead: teamStatsDaysAhead }, `Syncing team stats for teams with matches in next ${teamStatsDaysAhead} days`);
+        } else {
+          // Original country/team-ID pattern
+          const teamStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
+          teamStatsTeamIds = teamStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
+          teamStatsCountries = !teamStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
+          logger.info({ countries: teamStatsCountries ?? 'n/a', teamIds: teamStatsTeamIds ?? 'n/a' }, 'Syncing team season statistics...');
+        }
+        
+        const r = await syncTeamSeasonStatistics(teamStatsCountries, teamStatsTeamIds, teamStatsDaysAhead);
         logger.info(r, 'Team season statistics sync complete');
         break;
       }
