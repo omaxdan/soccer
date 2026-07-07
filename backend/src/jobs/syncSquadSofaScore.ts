@@ -155,7 +155,7 @@ function isLikelyNonClubTeam(teamName: string, country: string | null): boolean 
  * This is far more precise than name-based partial matching.
  * Falls back to name-based filter if no tournaments found in DB.
  */
-async function getTrackedLeagueTeams(): Promise<any[]> {
+async function getTrackedLeagueTeams(daysAhead = 1): Promise<any[]> {
 
   // ── Step 1: Get exact tracked tournament names from DB via slug + category ─
 
@@ -212,6 +212,10 @@ async function getTrackedLeagueTeams(): Promise<any[]> {
   // ── Step 2: Get team IDs from matches WHERE competition is exactly tracked ─
 
   // Supabase .in() has a limit; chunk if needed (most cases < 50 names)
+  // Date window: only matches within the daysAhead window
+  const now    = new Date().toISOString();
+  const cutoff = new Date(Date.now() + daysAhead * 86400000).toISOString();
+
   const nameList = Array.from(exactTournamentNames);
   const teamIds  = new Set<number>();
   const chunkSize = 50;
@@ -220,7 +224,9 @@ async function getTrackedLeagueTeams(): Promise<any[]> {
     const { data: matchRows } = await db
       .from('matches')
       .select('home_team_id, away_team_id')
-      .in('competition', nameList.slice(i, i + chunkSize));
+      .in('competition', nameList.slice(i, i + chunkSize))
+      .gte('date', now)
+      .lte('date', cutoff);
 
     for (const m of matchRows ?? []) {
       if (m.home_team_id) teamIds.add(m.home_team_id);
@@ -708,13 +714,14 @@ async function syncOneTeamSquad(
 // ─── PUBLIC EXPORTS ───────────────────────────────────────────────────────────
 
 export async function syncSquadsForTrackedLeagues(
+  daysAhead = 1,
   delayMs = THROTTLE_MS
 ): Promise<{ synced: number; skipped: number; failed: number; teams: number }> {
-  logger.info('syncSquadsForTrackedLeagues started (V2 — SportsAPI Pro/SofaScore data, single-call ingestion)');
+  logger.info({ daysAhead }, 'syncSquadsForTrackedLeagues started (V2 — SportsAPI Pro/SofaScore data, single-call ingestion)');
   logger.info('Initializing Supabase client...');
 
-  const teams     = await getTrackedLeagueTeams();
-  const upcoming  = await getTeamsWithUpcomingMatches(3);
+  const teams     = await getTrackedLeagueTeams(daysAhead);
+  const upcoming  = await getTeamsWithUpcomingMatches(daysAhead);
 
   // Priority: upcoming matches first
   const prioritised = [

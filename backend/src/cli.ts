@@ -144,9 +144,17 @@ async function handleCommand(command: string, ...args: string[]) {
       case 'sync:squads:v2': {
         // PRIMARY V2: SofaScore single-call squad intelligence
         // Populates players, injuries, transfers, squad snapshot,
-        // position depth, transfer intelligence, team intelligence
-        logger.info('SofaScore V2 squad sync — tracked leagues only...');
-        const r = await syncSquadsForTrackedLeagues();
+        // position depth, transfer intelligence, team intelligence.
+        // daysAhead scopes which teams are eligible: only teams with
+        // matches within the next N days. Default 1 = today only.
+        // Examples:
+        //   sync:squads:v2        → today only (default)
+        //   sync:squads:v2 2      → today + tomorrow
+        //   sync:squads:v2 4      → next 4 days
+        const daysArg = args[0] ? parseInt(args[0], 10) : 1;
+        const daysAhead = (!Number.isNaN(daysArg) && daysArg > 0) ? daysArg : 1;
+        logger.info({ daysAhead }, `SofaScore V2 squad sync — next ${daysAhead} day(s) only...`);
+        const r = await syncSquadsForTrackedLeagues(daysAhead);
         logger.info(r, 'V2 squad sync complete');
         break;
       }
@@ -1072,7 +1080,7 @@ Commands:
     process:venue-performance        Home/away performance splits from match results
 
   Squad Sync V2 — SofaScore (1 call populates 7 tables, throttled 1 req/2s):
-    sync:squads:v2                   ⭐ PRIMARY V2: tracked leagues, all squad intelligence
+    sync:squads:v2 [days]            ⭐ PRIMARY V2: tracked leagues, teams playing within next N days (default 1=today)
     sync:squads:countries:v2 <list>  V2 by country e.g. "Brazil,Finland"
     sync:squads:matches:v2 <ids>     V2 for teams in specific matches, by match external_match_id (needs 2+; space or comma separated)
     sync:tournament-events <ids> [type]          Sync all fixtures for specific tournaments (season auto-resolved, same
