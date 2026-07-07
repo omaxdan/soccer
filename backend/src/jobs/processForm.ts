@@ -48,6 +48,9 @@ export async function processFormForMatch(
 
     const homeScore = result.home_score ?? 0;
     const awayScore = result.away_score ?? 0;
+    const htHomeScore = result.half_time_home_score ?? null;
+    const htAwayScore = result.half_time_away_score ?? null;
+    const btts       = homeScore > 0 && awayScore > 0;
 
     // Determine home result and points
     let homeResult = 'D';
@@ -77,6 +80,11 @@ export async function processFormForMatch(
       goals_for: homeScore,
       goals_against: awayScore,
       points: homePoints,
+      // ── migration 021 enrichment fields ──
+      is_home: true,
+      half_time_score_for:     htHomeScore,
+      half_time_score_against: htAwayScore,
+      btts,
       created_at: new Date().toISOString(),
     };
 
@@ -89,6 +97,11 @@ export async function processFormForMatch(
       goals_for: awayScore,
       goals_against: homeScore,
       points: awayPoints,
+      // ── migration 021 enrichment fields ──
+      is_home: false,
+      half_time_score_for:     htAwayScore,
+      half_time_score_against: htHomeScore,
+      btts,
       created_at: new Date().toISOString(),
     };
 

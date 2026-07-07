@@ -1219,15 +1219,20 @@ export async function getTeamIntelligenceMap(teamIds: number[]): Promise<Map<num
   return new Map((data ?? []).map((t: any) => [t.team_id, t]));
 }
 
-export async function getTeamFormHistory(teamId: number, limit = 10) {
+export async function getTeamFormHistory(teamId: number, limit = 15) {
+  // Select includes the migration 021 enrichment fields (is_home, btts,
+  // half_time_score_for/against). Null on rows pre-dating the backfill —
+  // computeFormNarratives handles nulls gracefully.
+  // Ordered by match_date (real chronology) not created_at.
   const { data, error } = await supabase
     .from('team_form_history')
-    .select(`result, goals_for, goals_against, points, created_at,
+    .select(`result, goals_for, goals_against, points, match_date,
+      is_home, btts, half_time_score_for, half_time_score_against,
       match:matches!match_id(date, competition,
         home_team:teams!home_team_id(name),
         away_team:teams!away_team_id(name))`)
     .eq('team_id', teamId)
-    .order('created_at', { ascending: false })
+    .order('match_date', { ascending: false })
     .limit(limit);
   if (error) throw error;
   return data ?? [];

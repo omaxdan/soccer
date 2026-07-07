@@ -219,6 +219,11 @@ export interface TeamFormHistory {
   goals_for: number | null;
   goals_against: number | null;
   points: number | null;
+  // ── enriched fields added in migration 021 ──
+  is_home: boolean | null;             // denormalized from matches — eliminates JOIN for venue-split narratives
+  half_time_score_for: number | null;  // denormalized from match_results — eliminates JOIN for HT narratives
+  half_time_score_against: number | null;
+  btts: boolean | null;                // goals_for > 0 AND goals_against > 0, precomputed
   created_at: string;
 }
 
