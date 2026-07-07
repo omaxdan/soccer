@@ -3743,7 +3743,7 @@ export async function processScorelinePredictions(): Promise<{
 
     const { data: matches, error: mErr } = await db
       .from('matches')
-      .select('id, home_team_id, away_team_id, date')
+      .select('id, home_team_id, away_team_id, date, competition')
       .eq('status', 'scheduled')
       .gte('date', now)
       .lte('date', weekOut);
@@ -3754,6 +3754,7 @@ export async function processScorelinePredictions(): Promise<{
     }
 
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+    const competitions = [...new Set(matches.map((m: any) => m.competition).filter(Boolean))];
 
     // Last 10 form-history rows per team, most recent first
     const { data: formRows } = await db
@@ -3775,6 +3776,48 @@ export async function processScorelinePredictions(): Promise<{
     const avg = (arr: number[]): number | null =>
       arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
 
+    // ── League average scoring rates — the shrinkage prior ────────────────
+    // For each competition featuring in this run's matches, compute the
+    // average home goals and away goals from ALL finished results in that
+    // competition. Teams with few form history rows are then pulled toward
+    // the league mean rather than relying on a 2-3 game sample. Also
+    // allows generating a prediction for teams with zero form history
+    // (previously hard-skipped) by using league averages as the sole input.
+    //
+    // Minimum 5 finished games in a competition before using its average
+    // as a prior — below that threshold the league rate itself is noise.
+    //
+    // Fetch only competitions present in this run's match set.
+    const MIN_LEAGUE_GAMES = 5;
+    const leagueAvgByComp = new Map<string, { homeGoals: number; awayGoals: number }>();
+
+    if (competitions.length > 0) {
+      const { data: finishedRows } = await db
+        .from('matches')
+        .select('competition, match_results!inner(home_score, away_score)')
+        .in('competition', competitions)
+        .not('competition', 'is', null);
+
+      const compBuckets = new Map<string, { home: number[]; away: number[] }>();
+      for (const row of finishedRows ?? []) {
+        if (!row.competition) continue;
+        // PostgREST embeds UNIQUE FK as object; defensively handle array too
+        const res: any = Array.isArray(row.match_results) ? row.match_results[0] : row.match_results;
+        if (!res || res.home_score == null || res.away_score == null) continue;
+        if (!compBuckets.has(row.competition)) compBuckets.set(row.competition, { home: [], away: [] });
+        compBuckets.get(row.competition)!.home.push(res.home_score);
+        compBuckets.get(row.competition)!.away.push(res.away_score);
+      }
+      for (const [comp, data] of compBuckets) {
+        if (data.home.length < MIN_LEAGUE_GAMES) continue;
+        leagueAvgByComp.set(comp, {
+          homeGoals: data.home.reduce((s, v) => s + v, 0) / data.home.length,
+          awayGoals: data.away.reduce((s, v) => s + v, 0) / data.away.length,
+        });
+      }
+      logger.debug({ competitions: [...leagueAvgByComp.keys()].length }, 'League average rates computed');
+    }
+
     // Poisson PMF: P(X = k) = (λ^k × e^-λ) / k!
     function poissonPMF(k: number, lambda: number): number {
       let factorial = 1;
@@ -3794,15 +3837,37 @@ export async function processScorelinePredictions(): Promise<{
       const awayScoringRate  = awayStats ? avg(awayStats.for)     : null;
       const awayConcedeRate  = awayStats ? avg(awayStats.against) : null;
 
-      // Need at least one side of data for each team to produce a lambda —
-      // if a team has zero form history, skip this match entirely rather
-      // than guess with a fabricated default rate.
-      if (homeScoringRate == null || homeConcedeRate == null || awayScoringRate == null || awayConcedeRate == null) {
+      // League prior: home team's competition average rates (if available)
+      const leagueStats = m.competition ? leagueAvgByComp.get(m.competition) : null;
+
+      // Shrinkage weights: team form × 0.70, league average × 0.30.
+      // When team form data is absent (new team, no results yet), fall back
+      // to the league average as the sole input rather than hard-skipping.
+      // When league data is also absent, skip — we can't generate a
+      // prediction without at least one signal.
+      const TEAM_W = 0.70, LEAGUE_W = 0.30;
+      const blend = (teamRate: number | null, leagueRate: number | null): number | null => {
+        if (teamRate != null && leagueRate != null) return teamRate * TEAM_W + leagueRate * LEAGUE_W;
+        if (teamRate != null) return teamRate;   // team-only (no league data)
+        if (leagueRate != null) return leagueRate; // league-only fallback
+        return null;
+      };
+
+      // lambdaHome: blended home scoring vs blended away defensive vulnerability
+      // lambdaAway: blended away scoring vs blended home defensive vulnerability
+      // League rates: homeGoals ≈ avg home team scoring ≈ avg away team conceding
+      //               awayGoals ≈ avg away team scoring ≈ avg home team conceding
+      const effHomeScoring = blend(homeScoringRate, leagueStats?.homeGoals ?? null);
+      const effHomeConcede = blend(homeConcedeRate, leagueStats?.awayGoals ?? null);
+      const effAwayScoring = blend(awayScoringRate, leagueStats?.awayGoals ?? null);
+      const effAwayConcede = blend(awayConcedeRate, leagueStats?.homeGoals ?? null);
+
+      if (effHomeScoring == null || effHomeConcede == null || effAwayScoring == null || effAwayConcede == null) {
         continue;
       }
 
-      const lambdaHome = ((homeScoringRate + awayConcedeRate) / 2) * 1.10;
-      const lambdaAway = ((awayScoringRate + homeConcedeRate) / 2) * 0.95;
+      const lambdaHome = ((effHomeScoring + effAwayConcede) / 2) * 1.10;
+      const lambdaAway = ((effAwayScoring + effHomeConcede) / 2) * 0.95;
 
       // Build full probability grid, then keep top 6
       const grid: { home: number; away: number; probability: number }[] = [];
