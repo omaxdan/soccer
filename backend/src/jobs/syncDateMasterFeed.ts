@@ -141,8 +141,8 @@ const STATUS_MAP: Record<number, string> = {
  */
 function getPrimaryLeagueCountry(
   tournamentName: string,
-  tournamentSlug: string | undefined | null,
-  categoryName: string | undefined | null
+  tournamentSlug: string | undefined,
+  categoryName: string | undefined
 ): string | null {
   // Try slug-based lookup first (most precise)
   if (tournamentSlug) {
