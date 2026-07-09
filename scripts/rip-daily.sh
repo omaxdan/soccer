@@ -30,8 +30,11 @@ exec >> "$LOG" 2>&1
   echo "[$(date -Is)] sync:team-stats 2"
   "$NODE" dist/cli.js sync:team-stats 2
 
-  echo "[$(date -Is)] process:all-db"
-  "$NODE" dist/cli.js process:all-db
+  # ── PHASE 2: Compute all intelligence (DB-only) ─────────
+  # Using today-scoped variant so match-intelligence only
+  # processes today's/tomorrow's matches, not all 1000+
+  echo "[$(date -Is)] process:all-db:today"
+  "$NODE" dist/cli.js process:all-db:today
 
   echo "[$(date -Is)] archive:readiness-snapshot"
   "$NODE" dist/cli.js archive:readiness-snapshot
