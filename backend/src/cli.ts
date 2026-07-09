@@ -6,7 +6,7 @@ import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsF
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad } from './jobs/processDbOnly';
-import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics } from './jobs/archiveReadinessHistory';
+import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
@@ -865,6 +865,70 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing match intelligence (all matches) — DB only...');
         const r = await processMatchIntelligencePartial();
         logger.info(r, 'Match intelligence complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:yesterday': {
+        const yest = new Date();
+        yest.setUTCDate(yest.getUTCDate() - 1);
+        const dateStr = yest.toISOString().split('T')[0];
+        logger.info({ date: dateStr }, 'Archiving readiness snapshot for YESTERDAY...');
+        const r = await archiveReadinessSnapshotForDate(dateStr);
+        logger.info(r, 'Yesterday snapshot complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:date': {
+        const d = args[0];
+        if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          logger.error('Usage: archive:readiness-snapshot:date YYYY-MM-DD');
+          break;
+        }
+        logger.info({ date: d }, 'Archiving readiness snapshot for specific date...');
+        const r = await archiveReadinessSnapshotForDate(d);
+        logger.info(r, 'Date snapshot complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:range': {
+        const from = args[0];
+        const to = args[1];
+        if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+          logger.error('Usage: archive:readiness-snapshot:range YYYY-MM-DD YYYY-MM-DD');
+          break;
+        }
+        if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+          logger.error('End date must be YYYY-MM-DD if provided');
+          break;
+        }
+
+        const start = new Date(from);
+        const end = to ? new Date(to) : new Date();
+        const results: any[] = [];
+        
+        for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+          const r = await archiveReadinessSnapshotForDate(dateStr);
+          results.push({ date: dateStr, ...r });
+        }
+        
+        logger.info({ results }, 'Date range snapshot complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:catchup': {
+        const daysBack = args[0] && /^\d+$/.test(args[0]) ? Number(args[0]) : 3;
+        const results: any[] = [];
+        
+        for (let i = daysBack; i >= 1; i--) {
+          const d = new Date();
+          d.setUTCDate(d.getUTCDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const r = await archiveReadinessSnapshotForDate(dateStr);
+          results.push({ date: dateStr, ...r });
+        }
+        
+        logger.info({ daysBack, results }, `Catch-up snapshot for last ${daysBack} days complete`);
         break;
       }
 

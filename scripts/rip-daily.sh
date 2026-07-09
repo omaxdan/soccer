@@ -1,8 +1,4 @@
 #!/bin/bash
-# NinetyData RIP — Daily cron wrapper
-# Guarded by flock so overlapping runs don't pile up.
-# Output → ~/logs/rip-daily.log
-
 set -euo pipefail
 
 LOCK="/home/mybrzklx/.locks/rip-daily.lock"
@@ -27,6 +23,12 @@ exec >> "$LOG" 2>&1
 
   echo "[$(date -Is)] sync:squads:v2 2"
   "$NODE" dist/cli.js sync:squads:v2 2
+
+  echo "[$(date -Is)] sync:player-stats 2"
+  "$NODE" dist/cli.js sync:player-stats 2
+
+  echo "[$(date -Is)] sync:team-stats 2"
+  "$NODE" dist/cli.js sync:team-stats 2
 
   echo "[$(date -Is)] process:all-db"
   "$NODE" dist/cli.js process:all-db

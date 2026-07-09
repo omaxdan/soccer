@@ -177,6 +177,23 @@ export class TeamFormHistoryRepository {
 
     return (count || 0) > 0;
   }
+  async getExistingMatchIds(): Promise<number[]> {
+  const { data, error } = await db
+    .from('team_form_history')
+    .select('match_id');
+
+  if (error) {
+    logger.error(
+      { error: error.message },
+      'Failed to get existing form history match IDs'
+    );
+    throw error;
+  }
+
+  // Deduplicate — each match has 2 rows (home + away)
+  const rows = (data || []) as { match_id: number }[];
+  return [...new Set(rows.map(row => row.match_id))];
+}
 }
 
 export const teamFormHistoryRepository = new TeamFormHistoryRepository();
