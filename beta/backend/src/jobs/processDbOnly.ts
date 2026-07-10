@@ -573,12 +573,15 @@ export async function processTeamTravelLoad(): Promise<{
     const ago7     = new Date(today.getTime() - 7  * 86400000).toISOString();
 
     // 1. Load all team home locations
+    // team_locations: PK is team_id (no id column) — order override required
     const locations = await fetchAllRows(
       db
         .from('team_locations')
         .select('team_id, latitude, longitude')
         .not('latitude',  'is', null)
-        .not('longitude', 'is', null)
+        .not('longitude', 'is', null),
+      1000,
+      'team_id'
     );
 
     if (!locations || locations.length === 0) {
@@ -819,8 +822,9 @@ export async function processMatchTravelIntelligence(opts?: {
     }
 
     // Load all matches with a venue
-
-    const { data: matches, error: mErr } = await matchQuery;
+    // BETA FIX (audit P0): same conditionally-built-query cap as
+    // processMatchIntelligencePartial — ALL-matches mode got 1000 newest.
+    const matches = await fetchAllRows(matchQuery);
 
     if (!matches || matches.length === 0) {
       logger.warn('No matches with venue_id in scope — run sync:today first or widen date range');
@@ -833,12 +837,15 @@ export async function processMatchTravelIntelligence(opts?: {
       ...matches.map((m: any) => m.away_team_id),
     ].filter(Boolean))];
 
+    // team_locations: PK is team_id (no id column) — order override required
     const locs = await fetchAllRows(
       db
         .from('team_locations')
         .select('team_id, latitude, longitude')
         .in('team_id', teamIds)
-        .not('latitude', 'is', null)
+        .not('latitude', 'is', null),
+      1000,
+      'team_id'
     );
 
     const locMap = new Map<number, { lat: number; lng: number }>(
@@ -1618,7 +1625,11 @@ export async function processMatchIntelligencePartial(opts?: {
     }
     // No filter = existing behaviour: processes all matches (full pipeline)
 
-    const { data: matches, error: mErr } = await matchQuery;
+    // BETA FIX (audit P0): `await matchQuery` was silently capped at 1000 by
+    // PostgREST in ALL-matches mode (builder assembled conditionally, so the
+    // read sweep's pattern missed it). Match intelligence — the core product
+    // table — only ever covered the 1000 newest matches.
+    const matches = await fetchAllRows(matchQuery);
 
     if (!matches || matches.length === 0) {
       return { matchesProcessed: 0, rowsWritten: 0 };

@@ -1,3 +1,4 @@
+import { fetchAllRows } from '../db/fetchAllRows';
 import { db } from '../db/client';
 import { Player } from '../types/index';
 import { logger } from '../utils/logger';
@@ -120,9 +121,12 @@ export class PlayersRepository {
       query = query.eq('team_id', teamId);
     }
 
-    const { data, error } = await query;
-
-    if (error) {
+    // BETA FIX: unscoped position reads span all teams (>1000 rows) — paginate.
+    let data: any[] = [];
+    try {
+      data = await fetchAllRows(query);
+    } catch (e: any) {
+      const error = { message: e.message };
       logger.error(
         { error: error.message, position, teamId },
         'Failed to get players by position'

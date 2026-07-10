@@ -1926,6 +1926,11 @@ export interface LeagueDetailTeamRow {
   crest_storage_path: string | null;
   readiness_score: number | null; form_index: number | null; congestion_score: number | null;
   rest_days_avg: number | null; travel_fatigue_score: number | null;
+  squad_stability_score: number | null; fatigue_index: number | null; rotation_pressure_index: number | null;
+  // Traditional standings (standings_type='total', latest season)
+  position: number | null; played: number | null; wins: number | null; draws: number | null;
+  losses: number | null; goals_for: number | null; goals_against: number | null;
+  goal_diff: number | null; points: number | null;
 }
 
 export interface LeagueDetailData {
@@ -1953,12 +1958,20 @@ export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetai
     .eq('id', tournamentId)
     .maybeSingle();
 
-  const { data: standings } = await supabase
+  const { data: standingsAll } = await supabase
     .from('tournament_standings')
-    .select('team_id, season_external_id')
+    .select('team_id, season_external_id, standings_type, position, matches, wins, draws, losses, scores_for, scores_against, points')
     .eq('tournament_id', tournamentId);
 
-  const teamIds = [...new Set((standings ?? []).map((s: any) => s.team_id))];
+  // Latest season only, 'total' table only — one row per team for the
+  // unified standings + intelligence dashboard.
+  const latestSeason = Math.max(0, ...((standingsAll ?? []).map((s: any) => Number(s.season_external_id) || 0)));
+  const standings = (standingsAll ?? []).filter(
+    (s: any) => Number(s.season_external_id) === latestSeason && (s.standings_type ?? 'total') === 'total'
+  );
+  const standingsMap = new Map<number, any>(standings.map((s: any) => [s.team_id, s]));
+
+  const teamIds = [...new Set((standingsAll ?? []).map((s: any) => s.team_id))];
   if (teamIds.length === 0) {
     return { tournament, teams: [], seasonStats: { avgGoalsPerMatch: null, avgCleanSheetsPerMatch: null, avgRedCardsPerMatch: null, homeWinPct: null, awayWinPct: null }, fixtureCongestion: [] };
   }
@@ -1970,13 +1983,14 @@ export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetai
 
   const { data: intel } = await supabase
     .from('team_intelligence')
-    .select('team_id, readiness_score, form_index, congestion_score, rest_days_avg, travel_fatigue_score')
+    .select('team_id, readiness_score, form_index, congestion_score, rest_days_avg, travel_fatigue_score, squad_stability_score, fatigue_index, rotation_pressure_index')
     .in('team_id', teamIds);
 
   const intelMap = new Map<number, any>((intel ?? []).map((i: any) => [i.team_id, i]));
 
   const teams: LeagueDetailTeamRow[] = (teamsData ?? []).map((t: any) => {
     const i = intelMap.get(t.id);
+    const st = standingsMap.get(t.id);
     return {
       ...t,
       readiness_score: i?.readiness_score ?? null,
@@ -1984,6 +1998,18 @@ export async function getLeagueDetail(tournamentId: number): Promise<LeagueDetai
       congestion_score: i?.congestion_score ?? null,
       rest_days_avg: i?.rest_days_avg ?? null,
       travel_fatigue_score: i?.travel_fatigue_score ?? null,
+      squad_stability_score: i?.squad_stability_score ?? null,
+      fatigue_index: i?.fatigue_index ?? null,
+      rotation_pressure_index: i?.rotation_pressure_index ?? null,
+      position: st?.position ?? null,
+      played: st?.matches ?? null,
+      wins: st?.wins ?? null,
+      draws: st?.draws ?? null,
+      losses: st?.losses ?? null,
+      goals_for: st?.scores_for ?? null,
+      goals_against: st?.scores_against ?? null,
+      goal_diff: (st?.scores_for != null && st?.scores_against != null) ? st.scores_for - st.scores_against : null,
+      points: st?.points ?? null,
     };
   }).sort((a, b) => (b.readiness_score ?? -1) - (a.readiness_score ?? -1));
 

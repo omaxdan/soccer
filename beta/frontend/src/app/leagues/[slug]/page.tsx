@@ -139,57 +139,62 @@ export default async function LeaguePage({ params }: { params: Promise<{ slug: s
         <KpiCard icon="🧤" value={seasonStats.avgCleanSheetsPerMatch ?? '—'} label="Clean Sheets / Match" />
       </div>
 
-      {/* League Table + Readiness Distribution */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 14 }}>
-        <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>League Table (Readiness)</span>
-            <span style={{ fontSize: 10, color: COLORS.dim }}>Sorted by readiness score</span>
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      {/* Unified League Dashboard — standings + readiness intelligence */}
+      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>League Dashboard — Standings × Readiness</span>
+          <span style={{ fontSize: 10, color: COLORS.dim }}>{teams.length} teams · sorted by readiness score</span>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5, minWidth: 980 }}>
             <thead>
               <tr style={{ background: COLORS.surface2 }}>
-                {['#', 'TEAM', 'READINESS', 'FORM', 'CONGESTION', 'REST DAYS'].map(h => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: h === 'TEAM' ? 'left' : 'center', fontSize: 10, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{h}</th>
+                {['POS', 'TEAM', 'P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'PTS', 'READY', 'FORM', 'CONG', 'TRAVEL', 'FATIGUE', 'STAB', 'ROT'].map((h, idx) => (
+                  <th key={h} style={{ padding: '8px 8px', textAlign: h === 'TEAM' ? 'left' : 'center', fontSize: 9.5, color: idx >= 10 ? COLORS.blue : COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, whiteSpace: 'nowrap', borderLeft: idx === 10 ? `1px solid ${COLORS.border}` : undefined }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {teams.slice(0, 10).map((t, i) => (
-                <tr key={t.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
-                  <td style={{ padding: '8px 12px', color: COLORS.dim, fontFamily: '"JetBrains Mono",monospace' }}>{i + 1}</td>
-                  <td style={{ padding: '8px 12px' }}>
-                    <Link href={teamUrl(t)} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                      <TeamCrest team={t} size={22} borderRadius={5} />
-                      <span style={{ color: COLORS.text, fontWeight: 500 }}>{t.name}</span>
-                    </Link>
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, color: scoreColor(t.readiness_score) }}>
-                    {t.readiness_score != null ? Math.round(t.readiness_score) : '—'}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: scoreColor(t.form_index) }}>
-                    {t.form_index != null ? Math.round(t.form_index) : '—'}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: t.congestion_score != null ? (t.congestion_score > 60 ? COLORS.red : t.congestion_score > 40 ? COLORS.amber : COLORS.green) : COLORS.dim }}>
-                    {t.congestion_score != null ? Math.round(t.congestion_score) : '—'}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', color: COLORS.muted }}>
-                    {t.rest_days_avg != null ? t.rest_days_avg.toFixed(1) : '—'}
-                  </td>
-                </tr>
-              ))}
+              {teams.map((t) => {
+                const num = (v: number | null | undefined) => (v != null ? v : '—');
+                const mono: React.CSSProperties = { fontFamily: '"JetBrains Mono",monospace' };
+                return (
+                  <tr key={t.id} style={{ borderTop: `1px solid ${COLORS.border}` }}>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.dim, ...mono }}>{num(t.position)}</td>
+                    <td style={{ padding: '7px 8px' }}>
+                      <Link href={teamUrl(t)} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+                        <TeamCrest team={t} size={20} borderRadius={5} />
+                        <span style={{ color: COLORS.text, fontWeight: 500, whiteSpace: 'nowrap' }}>{t.short_name ?? t.name}</span>
+                      </Link>
+                    </td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.muted, ...mono }}>{num(t.played)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.muted, ...mono }}>{num(t.wins)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.muted, ...mono }}>{num(t.draws)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.muted, ...mono }}>{num(t.losses)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.muted, ...mono }}>{num(t.goals_for)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.muted, ...mono }}>{num(t.goals_against)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: t.goal_diff != null ? (t.goal_diff > 0 ? COLORS.green : t.goal_diff < 0 ? COLORS.red : COLORS.muted) : COLORS.dim, ...mono }}>{t.goal_diff != null ? (t.goal_diff > 0 ? `+${t.goal_diff}` : t.goal_diff) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: COLORS.text, fontWeight: 700, ...mono }}>{num(t.points)}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 700, color: scoreColor(t.readiness_score), borderLeft: `1px solid ${COLORS.border}`, ...mono }}>{t.readiness_score != null ? Math.round(t.readiness_score) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: scoreColor(t.form_index), ...mono }}>{t.form_index != null ? Math.round(t.form_index) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: t.congestion_score != null ? (t.congestion_score > 60 ? COLORS.red : t.congestion_score > 40 ? COLORS.amber : COLORS.green) : COLORS.dim, ...mono }}>{t.congestion_score != null ? Math.round(t.congestion_score) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: t.travel_fatigue_score != null ? (t.travel_fatigue_score > 60 ? COLORS.red : t.travel_fatigue_score > 40 ? COLORS.amber : COLORS.green) : COLORS.dim, ...mono }}>{t.travel_fatigue_score != null ? Math.round(t.travel_fatigue_score) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: t.fatigue_index != null ? scoreColor(100 - t.fatigue_index) : COLORS.dim, ...mono }}>{t.fatigue_index != null ? Math.round(t.fatigue_index) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: scoreColor(t.squad_stability_score), ...mono }}>{t.squad_stability_score != null ? Math.round(t.squad_stability_score) : '—'}</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', color: t.rotation_pressure_index != null ? scoreColor(100 - t.rotation_pressure_index) : COLORS.dim, ...mono }}>{t.rotation_pressure_index != null ? Math.round(t.rotation_pressure_index) : '—'}</td>
+                  </tr>
+                );
+              })}
               {teams.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: COLORS.dim }}>No standings synced for this league yet — run sync:standings</td></tr>
+                <tr><td colSpan={17} style={{ padding: 32, textAlign: 'center', color: COLORS.dim }}>No standings synced for this league yet — run sync:standings</td></tr>
               )}
             </tbody>
           </table>
-          {teams.length > 10 && (
-            <div style={{ padding: '10px 16px', textAlign: 'center', borderTop: `1px solid ${COLORS.border}` }}>
-              <span style={{ fontSize: 11, color: COLORS.blue }}>View Full Table ({teams.length} teams) →</span>
-            </div>
-          )}
         </div>
+      </div>
 
+      {/* Readiness Distribution */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Readiness Distribution</div>
           <Donut

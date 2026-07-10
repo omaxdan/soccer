@@ -48,6 +48,7 @@
 
 import { sportsApiClient } from '../services/sportsApiClient';
 import { getTrackedLeagueSlugs, getBandBySlug } from '../config/trackedLeagues';
+import { fetchAllRows } from '../db/fetchAllRows';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { logApiSample } from '../utils/apiSamples';
@@ -187,8 +188,10 @@ async function getEligibleTeams(
   if (countries && countries.length > 0) {
     query = query.in('country', countries);
   }
-  const { data: teams } = await query;
-  if (!teams) return [];
+  // BETA FIX: teams table (1365+) exceeds the 1000-row cap — stats sync was
+  // silently skipping teams that fell outside the first page.
+  const teams = await fetchAllRows(query);
+  if (!teams || teams.length === 0) return [];
 
   const { data: recentlySynced } = await db
     .from(table)

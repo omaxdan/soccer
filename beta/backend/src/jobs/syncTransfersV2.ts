@@ -29,6 +29,7 @@
  */
 
 import { sportsApiClient } from '../services/sportsApiClient';
+import { fetchAllRows } from '../db/fetchAllRows';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { logApiSample } from '../utils/apiSamples';
@@ -52,7 +53,8 @@ async function getTeamsForCountries(countries?: string[]): Promise<any[]> {
   if (countries && countries.length > 0) {
     query = query.in('country', countries);
   }
-  const { data } = await query;
+  // BETA FIX: teams table exceeds the 1000-row cap — paginate.
+  const data = await fetchAllRows(query);
   return data ?? [];
 }
 
