@@ -19,8 +19,9 @@ OK=0; FAILED=0; CRITICAL_FAILED=0
 run() { # run <critical|best-effort> <cli-command...>
   local tier="$1"; shift
   echo "[$(date -Is)] $*"
-  if "$NODE" --max-old-space-size=1024 dist/cli.js "$@"; then OK=$((OK+1)); return 0; fi
+  "$NODE" --max-old-space-size=1024 dist/cli.js "$@"
   local rc=$?
+  if [ "$rc" -eq 0 ]; then OK=$((OK+1)); return 0; fi
   echo "[$(date -Is)] STEP FAILED (rc=$rc, tier=$tier): $*"
   FAILED=$((FAILED+1))
   [ "$tier" = "critical" ] && CRITICAL_FAILED=$((CRITICAL_FAILED+1))
