@@ -19,7 +19,8 @@ CRITICAL_FAILED=0
 runc() { # critical: mark failure, keep going so the sibling still runs
   echo "[$(date -Is)] $*"
   if ! "$NODE" --max-old-space-size=768 dist/cli.js "$@"; then
-    echo "[$(date -Is)] CRITICAL STEP FAILED (rc=$?): $*"
+    local rc=$?
+    echo "[$(date -Is)] CRITICAL STEP FAILED (rc=$rc): $*"
     CRITICAL_FAILED=$((CRITICAL_FAILED+1))
   fi
 }

@@ -23,7 +23,7 @@ OK=0; FAILED=0
 run() {
   echo "[$(date -Is)] $*"
   if "$NODE" --max-old-space-size=768 dist/cli.js "$@"; then OK=$((OK+1));
-  else echo "[$(date -Is)] STEP FAILED (rc=$?): $*"; FAILED=$((FAILED+1)); fi
+  else local rc=$?; echo "[$(date -Is)] STEP FAILED (rc=$rc): $*"; FAILED=$((FAILED+1)); fi
 }
 
 (
