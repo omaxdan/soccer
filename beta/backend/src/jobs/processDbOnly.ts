@@ -326,12 +326,14 @@ export async function processTeamFixtureLoad(): Promise<{
     // 1 competition = -0, 2 = -5, 3 = -10, 4 = -15, 5+ = -20
     // Computed from matches in the last 90 days (same logic as team_intelligence).
     const ago90 = new Date(today.getTime() - 90 * 86400000).toISOString();
-    const { data: compMatches90 } = await db
-      .from('matches')
-      .select('home_team_id, away_team_id, competition')
-      .gte('date', ago90)
-      .not('competition', 'is', null)
-      .not('status', 'in', '("cancelled","postponed")');
+    const compMatches90 = await fetchAllRows(
+      db
+        .from('matches')
+        .select('home_team_id, away_team_id, competition')
+        .gte('date', ago90)
+        .not('competition', 'is', null)
+        .not('status', 'in', '("cancelled","postponed")')
+    );
 
     const teamCompCount = new Map<number, Set<string>>();
     for (const m of compMatches90 || []) {
@@ -369,7 +371,6 @@ export async function processTeamFixtureLoad(): Promise<{
       const { error } = await db
         .from('team_fixture_load')
         .upsert(chunk, { onConflict: 'team_id,snapshot_date' });
-      if (error) throw new Error(`team_fixture_load upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -407,12 +408,13 @@ export async function processTeamLocations(): Promise<{
 
   try {
     // Get all home matches that have a venue
-    const { data: homeMatches, error: mErr } = await db
-      .from('matches')
-      .select('home_team_id, venue_id')
-      .not('venue_id', 'is', null);
+    const homeMatches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('home_team_id, venue_id')
+        .not('venue_id', 'is', null)
+    );
 
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
     if (!homeMatches || homeMatches.length === 0) {
       logger.warn('No matches with venue_id found — run sync:today first');
       return { teamsProcessed: 0, locationsWritten: 0, teamsWithNoVenue: 0 };
@@ -442,24 +444,26 @@ export async function processTeamLocations(): Promise<{
 
     // Fetch all relevant stadiums in one query
     const stadiumIds = Array.from(new Set(teamHomeVenue.values()));
-    const { data: stadiums, error: sErr } = await db
-      .from('stadiums')
-      .select('id, city, country, latitude, longitude')
-      .in('id', stadiumIds);
+    const stadiums = await fetchAllRows(
+      db
+        .from('stadiums')
+        .select('id, city, country, latitude, longitude')
+        .in('id', stadiumIds)
+    );
 
-    if (sErr) throw new Error(`stadiums query: ${sErr.message}`);
     const stadiumMap = new Map<number, any>(
       (stadiums || []).map((s: any) => [s.id, s])
     );
 
     // Fetch teams for name/country context
     const teamIds = Array.from(teamHomeVenue.keys());
-    const { data: teams, error: tErr } = await db
-      .from('teams')
-      .select('id, country')
-      .in('id', teamIds);
+    const teams = await fetchAllRows(
+      db
+        .from('teams')
+        .select('id, country')
+        .in('id', teamIds)
+    );
 
-    if (tErr) throw new Error(`teams query: ${tErr.message}`);
     const teamMap = new Map<number, any>(
       (teams || []).map((t: any) => [t.id, t])
     );
@@ -492,7 +496,6 @@ export async function processTeamLocations(): Promise<{
       const { error } = await db
         .from('team_locations')
         .upsert(chunk, { onConflict: 'team_id' });
-      if (error) throw new Error(`team_locations upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -570,13 +573,14 @@ export async function processTeamTravelLoad(): Promise<{
     const ago7     = new Date(today.getTime() - 7  * 86400000).toISOString();
 
     // 1. Load all team home locations
-    const { data: locations, error: locErr } = await db
-      .from('team_locations')
-      .select('team_id, latitude, longitude')
-      .not('latitude',  'is', null)
-      .not('longitude', 'is', null);
+    const locations = await fetchAllRows(
+      db
+        .from('team_locations')
+        .select('team_id, latitude, longitude')
+        .not('latitude',  'is', null)
+        .not('longitude', 'is', null)
+    );
 
-    if (locErr) throw new Error(`team_locations query: ${locErr.message}`);
     if (!locations || locations.length === 0) {
       logger.warn('No team_locations with coordinates — run process:team-locations first');
       return { teamsProcessed: 0, rowsWritten: 0, teamsSkippedNoLocation: 0 };
@@ -587,28 +591,29 @@ export async function processTeamTravelLoad(): Promise<{
     );
 
     // 2. Load away matches with venue coordinates (last 30 days)
-    const { data: awayMatches, error: mErr } = await db
-      .from('matches')
-      .select('away_team_id, venue_id, date')
-      .gte('date', ago30)
-      .not('venue_id', 'is', null)
-      .in('status', ['finished', 'live']);
-
-    if (mErr) throw new Error(`away matches query: ${mErr.message}`);
+    const awayMatches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('away_team_id, venue_id, date')
+        .gte('date', ago30)
+        .not('venue_id', 'is', null)
+        .in('status', ['finished', 'live'])
+    );
 
     // 3. Load stadium coordinates
     const venueIds = [...new Set((awayMatches || []).map((m: any) => m.venue_id).filter(Boolean))];
     const stadiumCoordMap = new Map<number, { lat: number; lng: number }>();
 
     if (venueIds.length > 0) {
-      const { data: stadiums, error: sErr } = await db
-        .from('stadiums')
-        .select('id, latitude, longitude')
-        .in('id', venueIds)
-        .not('latitude',  'is', null)
-        .not('longitude', 'is', null);
+      const stadiums = await fetchAllRows(
+        db
+          .from('stadiums')
+          .select('id, latitude, longitude')
+          .in('id', venueIds)
+          .not('latitude',  'is', null)
+          .not('longitude', 'is', null)
+      );
 
-      if (sErr) throw new Error(`stadiums query: ${sErr.message}`);
       for (const s of stadiums || []) {
         stadiumCoordMap.set(s.id, { lat: s.latitude, lng: s.longitude });
       }
@@ -701,12 +706,14 @@ export async function processTeamTravelLoad(): Promise<{
     // Spec: GoodScore - (active_competitions × 3). Since our column is
     // inverted (bad-high), this becomes: fatigue + (active_competitions × 3).
     const ago90b = new Date(today.getTime() - 90 * 86400000).toISOString();
-    const { data: compMatches90b } = await db
-      .from('matches')
-      .select('home_team_id, away_team_id, competition')
-      .gte('date', ago90b)
-      .not('competition', 'is', null)
-      .not('status', 'in', '("cancelled","postponed")');
+    const compMatches90b = await fetchAllRows(
+      db
+        .from('matches')
+        .select('home_team_id, away_team_id, competition')
+        .gte('date', ago90b)
+        .not('competition', 'is', null)
+        .not('status', 'in', '("cancelled","postponed")')
+    );
 
     const teamCompCountTravel = new Map<number, Set<string>>();
     for (const m of compMatches90b || []) {
@@ -735,7 +742,6 @@ export async function processTeamTravelLoad(): Promise<{
       const { error } = await db
         .from('team_travel_load')
         .upsert(chunk, { onConflict: 'team_id,snapshot_date' });
-      if (error) throw new Error(`team_travel_load upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -816,7 +822,6 @@ export async function processMatchTravelIntelligence(opts?: {
 
     const { data: matches, error: mErr } = await matchQuery;
 
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
     if (!matches || matches.length === 0) {
       logger.warn('No matches with venue_id in scope — run sync:today first or widen date range');
       return { matchesProcessed: 0, rowsWritten: 0, skippedNoVenue: 0 };
@@ -828,26 +833,28 @@ export async function processMatchTravelIntelligence(opts?: {
       ...matches.map((m: any) => m.away_team_id),
     ].filter(Boolean))];
 
-    const { data: locs, error: lErr } = await db
-      .from('team_locations')
-      .select('team_id, latitude, longitude')
-      .in('team_id', teamIds)
-      .not('latitude', 'is', null);
+    const locs = await fetchAllRows(
+      db
+        .from('team_locations')
+        .select('team_id, latitude, longitude')
+        .in('team_id', teamIds)
+        .not('latitude', 'is', null)
+    );
 
-    if (lErr) throw new Error(`team_locations query: ${lErr.message}`);
     const locMap = new Map<number, { lat: number; lng: number }>(
       (locs || []).map((l: any) => [l.team_id, { lat: l.latitude, lng: l.longitude }])
     );
 
     // Load all relevant stadium coordinates
     const venueIds = [...new Set(matches.map((m: any) => m.venue_id).filter(Boolean))];
-    const { data: stadiums, error: sErr } = await db
-      .from('stadiums')
-      .select('id, latitude, longitude')
-      .in('id', venueIds)
-      .not('latitude', 'is', null);
+    const stadiums = await fetchAllRows(
+      db
+        .from('stadiums')
+        .select('id, latitude, longitude')
+        .in('id', venueIds)
+        .not('latitude', 'is', null)
+    );
 
-    if (sErr) throw new Error(`stadiums query: ${sErr.message}`);
     const stadiumMap = new Map<number, { lat: number; lng: number }>(
       (stadiums || []).map((s: any) => [s.id, { lat: s.latitude, lng: s.longitude }])
     );
@@ -901,7 +908,6 @@ export async function processMatchTravelIntelligence(opts?: {
       const { error } = await db
         .from('match_travel_intelligence')
         .upsert(chunk, { onConflict: 'match_id' });
-      if (error) throw new Error(`match_travel_intelligence upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -1052,10 +1058,11 @@ export async function processTeamIntelligencePartial(): Promise<{
     const today = new Date().toISOString().split('T')[0];
 
     // 1. Get all team IDs
-    const { data: teams, error: tErr } = await db
-      .from('teams')
-      .select('id');
-    if (tErr) throw new Error(`teams query: ${tErr.message}`);
+    const teams = await fetchAllRows(
+      db
+        .from('teams')
+        .select('id')
+    );
     if (!teams || teams.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
 
     const teamIds = teams.map((t: any) => t.id);
@@ -1145,17 +1152,21 @@ export async function processTeamIntelligencePartial(): Promise<{
 
     // 6. Squad Stability inputs — PER SPEC (section 6):
     //    Retention(50%) + TransferContinuity(25%) + Availability(25%)
-    const { data: transferIntel } = await db
-      .from('team_transfer_intelligence')
-      .select('team_id, retention_percentage, transfers_in, transfers_out');
+    const transferIntel = await fetchAllRows(
+      db
+        .from('team_transfer_intelligence')
+        .select('team_id, retention_percentage, transfers_in, transfers_out')
+    );
     const transferMap = new Map<number, any>(
       (transferIntel ?? []).map((t: any) => [t.team_id, t])
     );
 
-    const { data: squadSnapshots } = await db
-      .from('team_squads_snapshot')
-      .select('team_id, players_count, injured_player_count, snapshot_date')
-      .order('snapshot_date', { ascending: false });
+    const squadSnapshots = await fetchAllRows(
+      db
+        .from('team_squads_snapshot')
+        .select('team_id, players_count, injured_player_count, snapshot_date')
+        .order('snapshot_date', { ascending: false })
+    );
     const squadMap = new Map<number, any>();
     for (const s of squadSnapshots ?? []) {
       if (!squadMap.has(s.team_id)) squadMap.set(s.team_id, s);
@@ -1461,7 +1472,6 @@ export async function processTeamIntelligencePartial(): Promise<{
       const { error } = await db
         .from('team_intelligence')
         .upsert(chunk, { onConflict: 'team_id' });
-      if (error) throw new Error(`team_intelligence upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -1610,45 +1620,48 @@ export async function processMatchIntelligencePartial(opts?: {
 
     const { data: matches, error: mErr } = await matchQuery;
 
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
     if (!matches || matches.length === 0) {
       return { matchesProcessed: 0, rowsWritten: 0 };
     }
 
     // ── Load team_intelligence: form, congestion, travel, stability, comps ──
-    const { data: teamIntel, error: tiErr } = await db
-      .from('team_intelligence')
-      .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score');
-    if (tiErr) throw new Error(`team_intelligence query: ${tiErr.message}`);
-
+    const teamIntel = await fetchAllRows(
+      db
+        .from('team_intelligence')
+        .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score')
+    );
     const intelMap = new Map<number, any>(
       (teamIntel || []).map((t: any) => [t.team_id, t])
     );
 
     // ── Load team_strength_ratings: for Opponent Strength (cross-wise) ──────
-    const { data: strengthRows } = await db
-      .from('team_strength_ratings')
-      .select('team_id, strength_score');
+    const strengthRows = await fetchAllRows(
+      db
+        .from('team_strength_ratings')
+        .select('team_id, strength_score')
+    );
     const strengthMap = new Map<number, number>(
       (strengthRows ?? []).map((s: any) => [s.team_id, s.strength_score ?? 50])
     );
 
     // ── Load team_venue_performance: for Home Advantage ──────────────────────
-    const { data: venueRows } = await db
-      .from('team_venue_performance')
-      .select('team_id, venue_advantage_score');
+    const venueRows = await fetchAllRows(
+      db
+        .from('team_venue_performance')
+        .select('team_id, venue_advantage_score')
+    );
     const venueMap = new Map<number, number>(
       (venueRows ?? []).map((v: any) => [v.team_id, v.venue_advantage_score ?? 50])
     );
 
     // Build last-match-date map for each team (for rest days)
-    const { data: allMatches, error: amErr } = await db
-      .from('matches')
-      .select('id, home_team_id, away_team_id, date')
-      .eq('status', 'finished')
-      .order('date', { ascending: false });
-
-    if (amErr) throw new Error(`all matches query: ${amErr.message}`);
+    const allMatches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id, date')
+        .eq('status', 'finished')
+        .order('date', { ascending: false })
+    );
 
     const teamMatchDates = new Map<number, Date[]>();
     for (const m of allMatches || []) {
@@ -1661,12 +1674,13 @@ export async function processMatchIntelligencePartial(opts?: {
 
     // Get travel intelligence per match
     const matchIds = matches.map((m: any) => m.id);
-    const { data: travelRows, error: trErr } = await db
-      .from('match_travel_intelligence')
-      .select('match_id, home_team_distance_km, away_team_distance_km, travel_advantage_km')
-      .in('match_id', matchIds);
+    const travelRows = await fetchAllRows(
+      db
+        .from('match_travel_intelligence')
+        .select('match_id, home_team_distance_km, away_team_distance_km, travel_advantage_km')
+        .in('match_id', matchIds)
+    );
 
-    if (trErr) throw new Error(`match_travel_intelligence query: ${trErr.message}`);
     const travelMap = new Map<number, any>(
       (travelRows || []).map((t: any) => [t.match_id, t])
     );
@@ -1934,7 +1948,6 @@ export async function processMatchIntelligencePartial(opts?: {
       const { error } = await db
         .from('match_intelligence')
         .upsert(chunk, { onConflict: 'match_id' });
-      if (error) throw new Error(`match_intelligence upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -2038,9 +2051,11 @@ export async function processTeamStrengthRatings(): Promise<{
     // multi-group response would provide (see backend/docs/api-samples/
     // standings/ once populated) — flagging honestly rather than guessing
     // at a normalization scheme without that data in hand.
-    const { data: standingsRowsRaw } = await db
-      .from('tournament_standings')
-      .select('team_id, tournament_id, position, standings_type');
+    const standingsRowsRaw = await fetchAllRows(
+      db
+        .from('tournament_standings')
+        .select('team_id, tournament_id, position, standings_type')
+    );
 
     const standingsRows: any[] = [];
     const seenTeams = new Set<number>();
@@ -2071,9 +2086,11 @@ export async function processTeamStrengthRatings(): Promise<{
     // removes market value from the strength_score formula (PPG/Win%/League
     // Position only) now that real league_position exists. Still populated
     // for display purposes (team profile pages, etc.) where it's useful context.
-    const { data: tiRows } = await db
-      .from('team_intelligence')
-      .select('team_id, available_market_value, injured_market_value');
+    const tiRows = await fetchAllRows(
+      db
+        .from('team_intelligence')
+        .select('team_id, available_market_value, injured_market_value')
+    );
     const mvMap = new Map<number, number>(
       (tiRows ?? []).map((t: any) => [t.team_id, (t.available_market_value ?? 0) + (t.injured_market_value ?? 0)])
     );
@@ -2176,7 +2193,6 @@ export async function processTeamStrengthRatings(): Promise<{
       const { error } = await db
         .from('team_strength_ratings')
         .upsert(rows.slice(i, i + chunkSize), { onConflict: 'team_id' });
-      if (error) throw new Error(`team_strength_ratings upsert: ${error.message}`);
       written += rows.slice(i, i + chunkSize).length;
     }
 
@@ -2295,7 +2311,6 @@ export async function processTeamVenuePerformance(): Promise<{
       const { error } = await db
         .from('team_venue_performance')
         .upsert(rows.slice(i, i + chunkSize), { onConflict: 'team_id' });
-      if (error) throw new Error(`team_venue_performance upsert: ${error.message}`);
       written += rows.slice(i, i + chunkSize).length;
     }
 
@@ -2393,12 +2408,15 @@ export async function processPlayerIntelligence(): Promise<{
     }
 
     // ── Query 2: Team congestion scores (keyed by team_id)
-    const { data: teamIntels, error: tiErr } = await db
-      .from('team_intelligence')
-      .select('team_id, congestion_score');
-
-    if (tiErr) {
-      logger.warn({ error: tiErr.message }, 'team_intelligence query failed — congestion will default to 0');
+    let teamIntels: any[] = [];
+    try {
+      teamIntels = await fetchAllRows(
+      db
+        .from('team_intelligence')
+        .select('team_id, congestion_score')
+      );
+    } catch (e: any) {
+      logger.warn({ error: e.message }, 'team_intelligence query failed — continuing degraded');
     }
 
     const congestionMap = new Map<number, number>(
@@ -2408,10 +2426,12 @@ export async function processPlayerIntelligence(): Promise<{
     // ── Query 3: Transfer counts per player (last 12 months)
     const yearAgo = new Date();
     yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-    const { data: transfers } = await db
-      .from('player_transfers')
-      .select('player_id')
-      .gte('transfer_date', yearAgo.toISOString().split('T')[0]);
+    const transfers = await fetchAllRows(
+      db
+        .from('player_transfers')
+        .select('player_id')
+        .gte('transfer_date', yearAgo.toISOString().split('T')[0])
+    );
 
     const transferMap = new Map<number, number>();
     for (const t of transfers ?? []) {
@@ -2578,7 +2598,6 @@ export async function processPlayerIntelligence(): Promise<{
       const { error } = await db
         .from('player_intelligence')
         .upsert(chunk, { onConflict: 'player_id' });
-      if (error) throw new Error(`player_intelligence upsert chunk ${i}: ${error.message}`);
       written += chunk.length;
       logger.debug({ written, total: rows.length }, 'Player intelligence chunk written');
     }
@@ -2692,10 +2711,12 @@ export async function processPlayerIntelligence(): Promise<{
       // Fill in no_replacement_positions from team_position_depth
       // (available_count === 0 at a position with player_count > 0).
       if (injuryRows.length > 0) {
-        const { data: posDepth } = await db
-          .from('team_position_depth')
-          .select('team_id, position_code, available_count, player_count')
-          .in('team_id', injuryRows.map(r => r.team_id));
+        const posDepth = await fetchAllRows(
+          db
+            .from('team_position_depth')
+            .select('team_id, position_code, available_count, player_count')
+            .in('team_id', injuryRows.map(r => r.team_id))
+        );
         const noReplMap = new Map<number, string[]>();
         for (const pd of posDepth ?? []) {
           if ((pd.player_count ?? 0) > 0 && (pd.available_count ?? 0) === 0) {
@@ -2785,14 +2806,15 @@ export async function processPredictedLineups(): Promise<{
     const now = new Date().toISOString();
     const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
 
-    const { data: matches, error: mErr } = await db
-      .from('matches')
-      .select('id, home_team_id, away_team_id, date')
-      .eq('status', 'scheduled')
-      .gte('date', now)
-      .lte('date', weekOut);
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id, date')
+        .eq('status', 'scheduled')
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
 
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
     if (!matches || matches.length === 0) {
       logger.info('No upcoming matches in next 7 days');
       return { matchesProcessed: 0, playersWritten: 0 };
@@ -2862,14 +2884,17 @@ export async function processPredictedLineups(): Promise<{
 
     // ── 4. Get active injuries from player_injuries table ──────────────────
     // This gives us more detailed injury info than the current_injury boolean
-    const { data: injuries, error: injErr } = await db
-      .from('player_injuries')
-      .select('player_id, injury_reason, injury_status, expected_return_days, days_out, injury_severity_score')
-      .eq('active', true)
-      .in('player_id', [...statsMap.keys()]);
-
-    if (injErr) {
-      logger.warn({ error: injErr.message }, 'Failed to fetch player_injuries — using current_injury only');
+    let injuries: any[] = [];
+    try {
+      injuries = await fetchAllRows(
+      db
+        .from('player_injuries')
+        .select('player_id, injury_reason, injury_status, expected_return_days, days_out, injury_severity_score')
+        .eq('active', true)
+        .in('player_id', [...statsMap.keys()])
+      );
+    } catch (e: any) {
+      logger.warn({ error: e.message }, 'Failed to fetch player_injuries — continuing degraded');
     }
 
     const injuryMap = new Map<number, any>();
@@ -2881,14 +2906,17 @@ export async function processPredictedLineups(): Promise<{
     const yearAgo = new Date();
     yearAgo.setFullYear(yearAgo.getFullYear() - 1);
 
-    const { data: transfers, error: tErr } = await db
-      .from('player_transfers')
-      .select('player_id, to_team_id, from_team_id, transfer_date')
-      .gte('transfer_date', yearAgo.toISOString().split('T')[0])
-      .order('transfer_date', { ascending: false });
-
-    if (tErr) {
-      logger.warn({ error: tErr.message }, 'Failed to fetch transfers — continuing without transfer filter');
+    let transfers: any[] = [];
+    try {
+      transfers = await fetchAllRows(
+        db
+          .from('player_transfers')
+          .select('player_id, to_team_id, from_team_id, transfer_date')
+          .gte('transfer_date', yearAgo.toISOString().split('T')[0])
+          .order('transfer_date', { ascending: false })
+      );
+    } catch (e: any) {
+      logger.warn({ error: e.message }, 'Failed to fetch transfers — continuing degraded');
     }
 
     // Get latest team per player (if they transferred)
@@ -3202,8 +3230,6 @@ export async function processLeagueIntelligence(): Promise<{
     });
 
     const { error } = await db.from('league_intelligence').upsert(rows, { onConflict: 'tournament_id' });
-    if (error) throw new Error(`league_intelligence upsert: ${error.message}`);
-
     logger.info({ tournamentsProcessed: rows.length }, 'processLeagueIntelligence completed');
     return { tournamentsProcessed: rows.length };
 
@@ -3280,8 +3306,6 @@ export async function processFixtureDifficulty(): Promise<{
     }
 
     const { error } = await db.from('team_fixture_difficulty').upsert(rows, { onConflict: 'team_id' });
-    if (error) throw new Error(`team_fixture_difficulty upsert: ${error.message}`);
-
     logger.info({ teamsProcessed: rows.length }, 'processFixtureDifficulty completed');
     return { teamsProcessed: rows.length };
 
@@ -3355,8 +3379,6 @@ export async function processTeamMomentum(): Promise<{
     }
 
     const { error } = await db.from('team_momentum').upsert(rows, { onConflict: 'team_id' });
-    if (error) throw new Error(`team_momentum upsert: ${error.message}`);
-
     logger.info({ teamsProcessed: rows.length }, 'processTeamMomentum completed');
     return { teamsProcessed: rows.length };
 
@@ -3409,9 +3431,11 @@ export async function processDashboardSummary(): Promise<{
     // the same way, which is why it correctly excluded leaked matches that
     // this function previously counted anyway — that mismatch is the bug
     // this fix resolves).
-    const { data: allTournaments } = await db
-      .from('tournaments')
-      .select('name, slug, category');
+    const allTournaments = await fetchAllRows(
+      db
+        .from('tournaments')
+        .select('name, slug, category')
+    );
 
     const trackedNames = new Set(
       (allTournaments ?? [])
@@ -3422,11 +3446,13 @@ export async function processDashboardSummary(): Promise<{
         .map((t: any) => t.name)
     );
 
-    const { data: todaysMatchesRaw } = await db
-      .from('matches')
-      .select('id, competition')
-      .gte('date', startOfDay.toISOString())
-      .lte('date', endOfDay.toISOString());
+    const todaysMatchesRaw = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, competition')
+        .gte('date', startOfDay.toISOString())
+        .lte('date', endOfDay.toISOString())
+    );
 
     const todaysMatches = (todaysMatchesRaw ?? []).filter((m: any) => trackedNames.has(m.competition));
 
@@ -3442,9 +3468,11 @@ export async function processDashboardSummary(): Promise<{
     // teamsTracked: count distinct teams that appear in at least one
     // tracked-competition match — same logic, avoids counting teams that
     // only ever appeared in a now-excluded leaked competition.
-    const { data: allMatchesForTeams } = await db
-      .from('matches')
-      .select('home_team_id, away_team_id, competition');
+    const allMatchesForTeams = await fetchAllRows(
+      db
+        .from('matches')
+        .select('home_team_id, away_team_id, competition')
+    );
     const trackedTeamIds = new Set<number>();
     for (const m of allMatchesForTeams ?? []) {
       if (!trackedNames.has(m.competition)) continue;
@@ -3453,10 +3481,12 @@ export async function processDashboardSummary(): Promise<{
     }
     const teamsTracked = trackedTeamIds.size;
 
-    const { data: readinessRows } = await db
-      .from('team_intelligence')
-      .select('readiness_score')
-      .not('readiness_score', 'is', null);
+    const readinessRows = await fetchAllRows(
+      db
+        .from('team_intelligence')
+        .select('readiness_score')
+        .not('readiness_score', 'is', null)
+    );
 
     const readinessCalculatedCount = readinessRows?.length ?? 0;
     const avgReadiness = readinessCalculatedCount > 0
@@ -3657,7 +3687,6 @@ export async function processMatchSignals(): Promise<{
       const { error } = await db
         .from('match_signals')
         .upsert(chunk, { onConflict: 'match_id,market' });
-      if (error) throw new Error(`match_signals upsert: ${error.message}`);
       written += chunk.length;
     }
 
@@ -3713,14 +3742,15 @@ export async function processScorelinePredictions(): Promise<{
     const now = new Date().toISOString();
     const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
 
-    const { data: matches, error: mErr } = await db
-      .from('matches')
-      .select('id, home_team_id, away_team_id, date, competition')
-      .eq('status', 'scheduled')
-      .gte('date', now)
-      .lte('date', weekOut);
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id, date, competition')
+        .eq('status', 'scheduled')
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
 
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
     if (!matches || matches.length === 0) {
       return { matchesProcessed: 0, rowsWritten: 0 };
     }
@@ -3769,11 +3799,13 @@ export async function processScorelinePredictions(): Promise<{
     const leagueAvgByComp = new Map<string, { homeGoals: number; awayGoals: number }>();
 
     if (competitions.length > 0) {
-      const { data: finishedRows } = await db
-        .from('matches')
-        .select('competition, match_results!inner(home_score, away_score)')
-        .in('competition', competitions)
-        .not('competition', 'is', null);
+      const finishedRows = await fetchAllRows(
+        db
+          .from('matches')
+          .select('competition, match_results!inner(home_score, away_score)')
+          .in('competition', competitions)
+          .not('competition', 'is', null)
+      );
 
       const compBuckets = new Map<string, { home: number[]; away: number[] }>();
       for (const row of finishedRows ?? []) {
@@ -3992,12 +4024,16 @@ export async function processNetBattleIndex(): Promise<{
 
     for (const cat of NBSI_CATEGORIES) {
       if (cat.scope !== 'team') continue;
-      const { data, error } = await db
-        .from(cat.table)
-        .select(`team_id, ${cat.column}`)
-        .not(cat.column, 'is', null);
-      if (error) {
-        logger.warn({ category: cat.key, err: error.message }, 'NBSI population query failed — category skipped');
+      let data: any[] = [];
+      try {
+        data = await fetchAllRows(
+        db
+          .from(cat.table)
+          .select(`team_id, ${cat.column}`)
+          .not(cat.column, 'is', null)
+        );
+      } catch (e: any) {
+        logger.warn({ category: cat.key, err: e.message }, 'NBSI population query failed — category skipped');
         continue;
       }
       const rows = (data ?? []) as any[];
@@ -4027,11 +4063,13 @@ export async function processNetBattleIndex(): Promise<{
     // value across match_intelligence, treated as one pooled distribution
     // (home and away predictions pooled together, since both represent
     // "a team's predicted goals in a match", just from different sides).
-    const { data: predGoalRows } = await db
-      .from('match_intelligence')
-      .select('predicted_home_goals, predicted_away_goals')
-      .not('predicted_home_goals', 'is', null)
-      .not('predicted_away_goals', 'is', null);
+    const predGoalRows = await fetchAllRows(
+      db
+        .from('match_intelligence')
+        .select('predicted_home_goals, predicted_away_goals')
+        .not('predicted_home_goals', 'is', null)
+        .not('predicted_away_goals', 'is', null)
+    );
     const pooledPredGoals: number[] = [];
     for (const r of predGoalRows ?? []) {
       pooledPredGoals.push(Number(r.predicted_home_goals), Number(r.predicted_away_goals));
@@ -4046,23 +4084,26 @@ export async function processNetBattleIndex(): Promise<{
     // ── Step 3: upcoming matches (same 7-day window as scoreline predictions) ─
     const now = new Date().toISOString();
     const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
-    const { data: matches, error: mErr } = await db
-      .from('matches')
-      .select('id, home_team_id, away_team_id, date')
-      .eq('status', 'scheduled')
-      .gte('date', now)
-      .lte('date', weekOut);
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id, date')
+        .eq('status', 'scheduled')
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
     if (!matches || matches.length === 0) {
       return { matchesProcessed: 0, rowsWritten: 0, categoriesUsed: popStats.size };
     }
 
     // Predicted goals per match (already computed by processScorelinePredictions)
     const matchIds = matches.map((m: any) => m.id);
-    const { data: miRows } = await db
-      .from('match_intelligence')
-      .select('match_id, predicted_home_goals, predicted_away_goals')
-      .in('match_id', matchIds);
+    const miRows = await fetchAllRows(
+      db
+        .from('match_intelligence')
+        .select('match_id, predicted_home_goals, predicted_away_goals')
+        .in('match_id', matchIds)
+    );
     const predGoalsByMatch = new Map<number, { home: number | null; away: number | null }>();
     for (const r of miRows ?? []) {
       predGoalsByMatch.set(r.match_id, { home: r.predicted_home_goals, away: r.predicted_away_goals });
