@@ -1,5 +1,5 @@
 import { sportsApiClient } from '../services/sportsApiClient';
-import { isTrackedLeague, isTrackedBySlug, TRACKED_LEAGUES } from '../config/trackedLeagues';
+import { isTrackedLeague, isTrackedBySlug, TRACKED_LEAGUES, findTrackedLeague } from '../config/trackedLeagues';
 import { resolveEndpoint } from '../constants/endpoints';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
@@ -121,6 +121,48 @@ const STATUS_MAP: Record<number, string> = {
   120: 'finished',
 };
 
+// ─── Helper: resolve primary country for a tournament ────────────────────────
+
+/**
+ * Given a tournament name and category (country), resolves the primary country
+ * that should be stored in the teams.country column.
+ *
+ * For single-country leagues (England's Premier League), returns the country.
+ * For multi-country leagues (MLS = USA + Canada, EFL = England + Wales),
+ * returns the PRIMARY country (first in the array).
+ *
+ * This prevents the leak where Cardiff City (Wales-based) was being stored
+ * as country='Wales' instead of country='England' (the league's primary country).
+ *
+ * NOTE: stadiums are still stored with their actual geographic country, as
+ * that's correct — a Welsh stadium stays country='Wales'. Only teams get
+ * normalized to the league's primary country so they appear in a single
+ * country bucket when filtering/aggregating in the UI.
+ */
+function getPrimaryLeagueCountry(
+  tournamentName: string,
+  tournamentSlug: string | undefined,
+  categoryName: string | undefined
+): string | null {
+  // Try slug-based lookup first (most precise)
+  if (tournamentSlug) {
+    const league = TRACKED_LEAGUES.find(
+      l => l.slug.toLowerCase() === (tournamentSlug?.toLowerCase() ?? '')
+    );
+    if (league?.country) {
+      return Array.isArray(league.country) ? league.country[0] : league.country;
+    }
+  }
+
+  // Fall back to name-based lookup
+  const league = findTrackedLeague(tournamentName, categoryName);
+  if (league?.country) {
+    return Array.isArray(league.country) ? league.country[0] : league.country;
+  }
+
+  return null;
+}
+
 // ─── Extractor: single pass through all events ───────────────────────────────
 
 function extractEntities(events: any[]) {
@@ -189,17 +231,10 @@ function extractEntities(events: any[]) {
       });
     }
 
-    // Also capture team countries (tracked teams only at this point)
-    for (const teamData of [ev.homeTeam, ev.awayTeam]) {
-      const tc = teamData?.country;
-      if (tc?.name && !countries.has(tc.name)) {
-        countries.set(tc.name, {
-          name: tc.name,
-          alpha2: tc.alpha2 || null,
-          slug: tc.slug || tc.name.toLowerCase().replace(/\s+/g, '-'),
-        });
-      }
-    }
+    // Resolve the PRIMARY country for teams in this league (not the team's
+    // geographic country — Cardiff City is Wales-based but stored as country='England'
+    // since that's the EFL's primary country). This prevents the multi-country leak.
+    const leagueCountry = getPrimaryLeagueCountry(tournamentName, tournamentSlug, cat?.name);
 
     // ── Tournament ───────────────────────────────────────────────────────
     // external_id MUST be uniqueTournament.id — see comment block above and
@@ -228,13 +263,15 @@ function extractEntities(events: any[]) {
     }
 
     // ── Teams — only tracked-league teams ────────────────────────────────
+    // Use the league's PRIMARY country (e.g., 'England' for EFL) instead of
+    // the team's geographic country (e.g., 'Wales' for Cardiff City).
     for (const teamData of [ev.homeTeam, ev.awayTeam]) {
       if (teamData?.id && !teams.has(teamData.id)) {
         teams.set(teamData.id, {
           external_id: teamData.id,
           name: teamData.name,
           short_name: teamData.shortName || null,
-          country: teamData.country?.name || null,
+          country: leagueCountry,
           slug: teamData.slug || null,
         });
       }

@@ -167,6 +167,105 @@ export async function archiveReadinessSnapshot(): Promise<{ candidates: number; 
   return { candidates: matches.length, written, skipped };
 }
 
+/**
+ * Backfill snapshot for matches on a specific date.
+ * Unlike the nightly archive which only snapshots future matches,
+ * this captures matches from a past date that were missed.
+ * Same insert-if-absent guarantee — won't overwrite existing snapshots.
+ */
+export async function archiveReadinessSnapshotForDate(dateStr: string): Promise<{ candidates: number; written: number; skipped: number }> {
+  logger.info({ date: dateStr }, 'archiveReadinessSnapshotForDate started — backfill snapshot');
+
+  const nowIso = new Date().toISOString();
+  const dayStart = `${dateStr}T00:00:00.000Z`;
+  const dayEnd   = `${dateStr}T23:59:59.999Z`;
+
+  // Matches on that date with readiness computed — regardless of status.
+  // Using the date range instead of status filter so we catch finished,
+  // in-progress, and scheduled matches from that day.
+  const { data: matches, error } = await db
+    .from('matches')
+    .select(`
+      id, external_match_id, date, competition, home_team_id, away_team_id, status,
+      home_team:teams!home_team_id(name),
+      away_team:teams!away_team_id(name),
+      mi:match_intelligence!match_id(home_readiness, away_readiness, confidence_score)
+    `)
+    .gte('date', dayStart)
+    .lte('date', dayEnd);
+
+  if (error) throw new Error(`snapshot candidate query: ${error.message}`);
+  if (!matches || matches.length === 0) {
+    logger.info({ date: dateStr }, 'No matches found for date');
+    return { candidates: 0, written: 0, skipped: 0 };
+  }
+
+  // Which already have a snapshot? Skip those — first reading preserved.
+  const matchIds = matches.map((m: any) => m.id);
+  const { data: existing } = await db
+    .from('readiness_history')
+    .select('match_id')
+    .in('match_id', matchIds);
+  const alreadySnapshotted = new Set((existing ?? []).map((r: any) => r.match_id));
+
+  const toWrite = matches.filter((m: any) => {
+    const mi = toOne(m.mi);
+    return !alreadySnapshotted.has(m.id) && mi?.home_readiness != null && mi?.away_readiness != null;
+  });
+
+  // Department confidence from predicted lineups
+  const lineupByMatch = new Map<number, Array<{ position_code: string | null; confidence: number | null }>>();
+  if (toWrite.length > 0) {
+    const { data: lineups } = await db
+      .from('match_predicted_lineups')
+      .select('match_id, position_code, confidence')
+      .in('match_id', toWrite.map((m: any) => m.id));
+    for (const l of lineups ?? []) {
+      if (!lineupByMatch.has(l.match_id)) lineupByMatch.set(l.match_id, []);
+      lineupByMatch.get(l.match_id)!.push({ position_code: l.position_code, confidence: l.confidence });
+    }
+  }
+
+  let written = 0;
+  for (const m of toWrite) {
+    const mi = toOne(m.mi);
+    const { pick, gap } = derivePick(mi.home_readiness, mi.away_readiness);
+    const dept = deriveDepartmentConfidence(lineupByMatch.get(m.id) ?? []);
+
+    const { error: insErr } = await db.from('readiness_history').insert({
+      match_id: m.id,
+      match_external_id: m.external_match_id,
+      snapshot_at: nowIso,
+      match_date: m.date,
+      readiness_formula_version: READINESS_FORMULA_VERSION,
+      league_name: m.competition ?? 'Unknown',
+      home_team: toOne(m.home_team)?.name ?? 'Home',
+      away_team: toOne(m.away_team)?.name ?? 'Away',
+      home_team_id: m.home_team_id,
+      away_team_id: m.away_team_id,
+      home_readiness: mi.home_readiness,
+      away_readiness: mi.away_readiness,
+      predicted_gap: gap,
+      predicted_pick: pick,
+      confidence_pct: mi.confidence_score ?? 0,
+      defense_confidence_pct: dept.defense,
+      midfield_confidence_pct: dept.midfield,
+      attack_confidence_pct: dept.attack,
+    });
+
+    if (insErr) {
+      if (insErr.code === '23505') continue;
+      logger.warn({ matchId: m.id, err: insErr.message }, 'snapshot insert failed');
+      continue;
+    }
+    written++;
+  }
+
+  const skipped = matches.length - written;
+  logger.info({ date: dateStr, candidates: matches.length, written, skipped }, 'archiveReadinessSnapshotForDate completed');
+  return { candidates: matches.length, written, skipped };
+}
+
 export async function linkReadinessResults(): Promise<{ pending: number; linked: number }> {
   logger.info('linkReadinessResults started — finalizing unlinked snapshots');
 

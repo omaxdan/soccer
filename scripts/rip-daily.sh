@@ -1,8 +1,4 @@
 #!/bin/bash
-# NinetyData RIP — Daily cron wrapper
-# Guarded by flock so overlapping runs don't pile up.
-# Output → ~/logs/rip-daily.log
-
 set -euo pipefail
 
 LOCK="/home/mybrzklx/.locks/rip-daily.lock"
@@ -28,8 +24,17 @@ exec >> "$LOG" 2>&1
   echo "[$(date -Is)] sync:squads:v2 2"
   "$NODE" dist/cli.js sync:squads:v2 2
 
-  echo "[$(date -Is)] process:all-db"
-  "$NODE" dist/cli.js process:all-db
+  echo "[$(date -Is)] sync:player-stats 2"
+  "$NODE" dist/cli.js sync:player-stats 2
+
+  echo "[$(date -Is)] sync:team-stats 2"
+  "$NODE" dist/cli.js sync:team-stats 2
+
+  # ── PHASE 2: Compute all intelligence (DB-only) ─────────
+  # Using today-scoped variant so match-intelligence only
+  # processes today's/tomorrow's matches, not all 1000+
+  echo "[$(date -Is)] process:all-db:today"
+  "$NODE" dist/cli.js process:all-db:today
 
   echo "[$(date -Is)] archive:readiness-snapshot"
   "$NODE" dist/cli.js archive:readiness-snapshot

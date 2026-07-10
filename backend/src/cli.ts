@@ -6,7 +6,7 @@ import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsF
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad } from './jobs/processDbOnly';
-import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics } from './jobs/archiveReadinessHistory';
+import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
 import { clearApiSamples } from './utils/apiSamples';
@@ -235,15 +235,31 @@ async function handleCommand(command: string, ...args: string[]) {
         // otherwise every fetched row gets filtered out for lack of a
         // matching internal player_id, wasting the API calls.
         //
-        // Accepts EITHER a country list ("Brazil,Argentina") OR one or more
-        // space-separated numeric team external_ids ("416 456 567") — same
-        // override pattern as sync:team-squad:v2 <teamExternalId>, for
-        // force-refreshing specific teams without waiting on the cap/cooldown.
-        const playerStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
-        const playerStatsTeamIds = playerStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
-        const playerStatsCountries = !playerStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
-        logger.info({ countries: playerStatsCountries ?? 'n/a', teamIds: playerStatsTeamIds ?? 'n/a' }, 'Syncing player season statistics (rating, minutes, starts)...');
-        const r = await syncPlayerSeasonStatistics(playerStatsCountries, playerStatsTeamIds);
+        // Accepts:
+        //   - No args → default, uses cooldown + cap
+        //   - [days] (1-4) → teams with matches in next N days only
+        //   - Country list ("Brazil,Argentina") → scoped to countries
+        //   - Team external_ids ("416 456 567") → scoped to team IDs
+        const firstArg = args[0];
+        const isSingleDay = firstArg && /^\d$/.test(firstArg); // single digit 1-9
+        
+        let playerStatsTeamIds: number[] | undefined;
+        let playerStatsCountries: string[] | undefined;
+        let playerStatsDaysAhead: number | undefined;
+        
+        if (isSingleDay) {
+          // Days ahead variant
+          playerStatsDaysAhead = Math.max(1, Math.min(4, Number(firstArg)));
+          logger.info({ daysAhead: playerStatsDaysAhead }, `Syncing player stats for teams with matches in next ${playerStatsDaysAhead} days`);
+        } else {
+          // Original country/team-ID pattern
+          const playerStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
+          playerStatsTeamIds = playerStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
+          playerStatsCountries = !playerStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
+          logger.info({ countries: playerStatsCountries ?? 'n/a', teamIds: playerStatsTeamIds ?? 'n/a' }, 'Syncing player season statistics (rating, minutes, starts)...');
+        }
+        
+        const r = await syncPlayerSeasonStatistics(playerStatsCountries, playerStatsTeamIds, playerStatsDaysAhead);
         logger.info(r, 'Player season statistics sync complete');
         break;
       }
@@ -286,14 +302,31 @@ async function handleCommand(command: string, ...args: string[]) {
         // Daily invocation recommended — cooldown + per-run cap (40 teams)
         // self-throttle, same model as sync:squads:v2.
         //
-        // Accepts EITHER a country list ("England,Spain") OR one or more
-        // space-separated numeric team external_ids ("416 456 567") for a
-        // multi-team force-refresh, same as sync:player-stats above.
-        const teamStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
-        const teamStatsTeamIds = teamStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
-        const teamStatsCountries = !teamStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
-        logger.info({ countries: teamStatsCountries ?? 'n/a', teamIds: teamStatsTeamIds ?? 'n/a' }, 'Syncing team season statistics...');
-        const r = await syncTeamSeasonStatistics(teamStatsCountries, teamStatsTeamIds);
+        // Accepts:
+        //   - No args → default, uses cooldown + cap
+        //   - [days] (1-4) → teams with matches in next N days only
+        //   - Country list ("England,Spain") → scoped to countries
+        //   - Team external_ids ("416 456 567") → scoped to team IDs
+        const firstArg = args[0];
+        const isSingleDay = firstArg && /^\d$/.test(firstArg); // single digit 1-9
+        
+        let teamStatsTeamIds: number[] | undefined;
+        let teamStatsCountries: string[] | undefined;
+        let teamStatsDaysAhead: number | undefined;
+        
+        if (isSingleDay) {
+          // Days ahead variant
+          teamStatsDaysAhead = Math.max(1, Math.min(4, Number(firstArg)));
+          logger.info({ daysAhead: teamStatsDaysAhead }, `Syncing team stats for teams with matches in next ${teamStatsDaysAhead} days`);
+        } else {
+          // Original country/team-ID pattern
+          const teamStatsAllNumeric = args.length > 0 && args.every((a: string) => /^\d+$/.test(a));
+          teamStatsTeamIds = teamStatsAllNumeric ? args.map((a: string) => Number(a)) : undefined;
+          teamStatsCountries = !teamStatsAllNumeric && args[0] ? args[0].split(',').map((c: string) => c.trim()) : undefined;
+          logger.info({ countries: teamStatsCountries ?? 'n/a', teamIds: teamStatsTeamIds ?? 'n/a' }, 'Syncing team season statistics...');
+        }
+        
+        const r = await syncTeamSeasonStatistics(teamStatsCountries, teamStatsTeamIds, teamStatsDaysAhead);
         logger.info(r, 'Team season statistics sync complete');
         break;
       }
@@ -832,6 +865,70 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing match intelligence (all matches) — DB only...');
         const r = await processMatchIntelligencePartial();
         logger.info(r, 'Match intelligence complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:yesterday': {
+        const yest = new Date();
+        yest.setUTCDate(yest.getUTCDate() - 1);
+        const dateStr = yest.toISOString().split('T')[0];
+        logger.info({ date: dateStr }, 'Archiving readiness snapshot for YESTERDAY...');
+        const r = await archiveReadinessSnapshotForDate(dateStr);
+        logger.info(r, 'Yesterday snapshot complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:date': {
+        const d = args[0];
+        if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+          logger.error('Usage: archive:readiness-snapshot:date YYYY-MM-DD');
+          break;
+        }
+        logger.info({ date: d }, 'Archiving readiness snapshot for specific date...');
+        const r = await archiveReadinessSnapshotForDate(d);
+        logger.info(r, 'Date snapshot complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:range': {
+        const from = args[0];
+        const to = args[1];
+        if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+          logger.error('Usage: archive:readiness-snapshot:range YYYY-MM-DD YYYY-MM-DD');
+          break;
+        }
+        if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+          logger.error('End date must be YYYY-MM-DD if provided');
+          break;
+        }
+
+        const start = new Date(from);
+        const end = to ? new Date(to) : new Date();
+        const results: any[] = [];
+        
+        for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+          const r = await archiveReadinessSnapshotForDate(dateStr);
+          results.push({ date: dateStr, ...r });
+        }
+        
+        logger.info({ results }, 'Date range snapshot complete');
+        break;
+      }
+
+      case 'archive:readiness-snapshot:catchup': {
+        const daysBack = args[0] && /^\d+$/.test(args[0]) ? Number(args[0]) : 3;
+        const results: any[] = [];
+        
+        for (let i = daysBack; i >= 1; i--) {
+          const d = new Date();
+          d.setUTCDate(d.getUTCDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const r = await archiveReadinessSnapshotForDate(dateStr);
+          results.push({ date: dateStr, ...r });
+        }
+        
+        logger.info({ daysBack, results }, `Catch-up snapshot for last ${daysBack} days complete`);
         break;
       }
 

@@ -140,6 +140,28 @@ async function resolveTeamSeasonContext(): Promise<Map<number, { tournamentExter
 }
 
 /**
+ * Returns teams that have matches scheduled in the next N days.
+ * Used by the [days] parameter variant to target only active teams.
+ */
+async function getTeamsWithUpcomingMatches(daysAhead = 2): Promise<Set<number>> {
+  const now = new Date().toISOString();
+  const future = new Date(Date.now() + daysAhead * 86400000).toISOString();
+  const { data } = await db
+    .from('matches')
+    .select('home_team_id, away_team_id')
+    .eq('status', 'scheduled')
+    .gte('date', now)
+    .lte('date', future);
+
+  const ids = new Set<number>();
+  (data ?? []).forEach((m: any) => {
+    if (m.home_team_id) ids.add(m.home_team_id);
+    if (m.away_team_id) ids.add(m.away_team_id);
+  });
+  return ids;
+}
+
+/**
  * Returns teams whose stat type hasn't been refreshed within the cooldown
  * window — optionally scoped to specific countries, and always capped at
  * MAX_TEAMS_PER_RUN regardless of how large the eligible backlog is.
@@ -149,11 +171,14 @@ async function resolveTeamSeasonContext(): Promise<Map<number, { tournamentExter
  * backfill. The cap exists independently of that, as a safety net so even
  * an unscoped call on a cold start (every team simultaneously "due") can
  * never exceed a safe slice of the daily budget in one invocation.
+ *
+ * If upcomingTeamIds is provided, filters to only those teams.
  */
 async function getEligibleTeams(
   statType: 'player_stats' | 'team_stats',
   cooldownDays: number,
-  countries?: string[]
+  countries?: string[],
+  upcomingTeamIds?: Set<number>
 ): Promise<any[]> {
   const cutoff = new Date(Date.now() - cooldownDays * 86400000).toISOString();
   const table = statType === 'player_stats' ? 'player_season_statistics' : 'team_season_statistics';
@@ -171,7 +196,12 @@ async function getEligibleTeams(
     .gte('calculated_at', cutoff);
 
   const recentlySyncedIds = new Set((recentlySynced ?? []).map((r: any) => r.team_id));
-  const eligible = teams.filter((t: any) => !recentlySyncedIds.has(t.id));
+  let eligible = teams.filter((t: any) => !recentlySyncedIds.has(t.id));
+
+  // If filtering by upcoming teams, keep only those
+  if (upcomingTeamIds && upcomingTeamIds.size > 0) {
+    eligible = eligible.filter((t: any) => upcomingTeamIds.has(t.id));
+  }
 
   if (eligible.length > MAX_TEAMS_PER_RUN) {
     logger.info(
@@ -185,13 +215,13 @@ async function getEligibleTeams(
 
 // ─── PLAYER SEASON STATISTICS ────────────────────────────────────────────────
 
-export async function syncPlayerSeasonStatistics(countries?: string[], teamExternalIds?: number[]): Promise<{
+export async function syncPlayerSeasonStatistics(countries?: string[], teamExternalIds?: number[], daysAhead?: number): Promise<{
   teamsProcessed: number;
   playersWritten: number;
   skipped: number;
   errors: number;
 }> {
-  logger.info({ countries: countries ?? 'ALL (capped per-run)', teamExternalIds: teamExternalIds ?? 'n/a' }, 'syncPlayerSeasonStatistics started');
+  logger.info({ countries: countries ?? 'ALL (capped per-run)', teamExternalIds: teamExternalIds ?? 'n/a', daysAhead: daysAhead ?? 'n/a' }, 'syncPlayerSeasonStatistics started');
 
   const context = await resolveTeamSeasonContext();
 
@@ -207,6 +237,11 @@ export async function syncPlayerSeasonStatistics(countries?: string[], teamExter
       const missing = teamExternalIds.filter(id => !found.has(id));
       logger.warn({ missing }, 'Some requested external_ids were not found');
     }
+  } else if (daysAhead && daysAhead > 0) {
+    // Days variant — sync teams with matches in next N days
+    const upcomingTeamIds = await getTeamsWithUpcomingMatches(daysAhead);
+    logger.info({ daysAhead, teamsFound: upcomingTeamIds.size }, `Syncing player stats for teams with matches in next ${daysAhead} days`);
+    eligibleTeams = await getEligibleTeams('player_stats', PLAYER_STATS_COOLDOWN_DAYS, countries, upcomingTeamIds);
   } else {
     eligibleTeams = await getEligibleTeams('player_stats', PLAYER_STATS_COOLDOWN_DAYS, countries);
   }
@@ -418,13 +453,13 @@ export async function syncPlayerSeasonStatistics(countries?: string[], teamExter
 
 // ─── TEAM SEASON STATISTICS ───────────────────────────────────────────────────
 
-export async function syncTeamSeasonStatistics(countries?: string[], teamExternalIds?: number[]): Promise<{
+export async function syncTeamSeasonStatistics(countries?: string[], teamExternalIds?: number[], daysAhead?: number): Promise<{
   teamsProcessed: number;
   written: number;
   skipped: number;
   errors: number;
 }> {
-  logger.info({ countries: countries ?? 'ALL (capped per-run)', teamExternalIds: teamExternalIds ?? 'n/a' }, 'syncTeamSeasonStatistics started');
+  logger.info({ countries: countries ?? 'ALL (capped per-run)', teamExternalIds: teamExternalIds ?? 'n/a', daysAhead: daysAhead ?? 'n/a' }, 'syncTeamSeasonStatistics started');
 
   const context = await resolveTeamSeasonContext();
 
@@ -439,6 +474,11 @@ export async function syncTeamSeasonStatistics(countries?: string[], teamExterna
       const missing = teamExternalIds.filter(id => !found.has(id));
       logger.warn({ missing }, 'Some requested external_ids were not found');
     }
+  } else if (daysAhead && daysAhead > 0) {
+    // Days variant — sync teams with matches in next N days
+    const upcomingTeamIds = await getTeamsWithUpcomingMatches(daysAhead);
+    logger.info({ daysAhead, teamsFound: upcomingTeamIds.size }, `Syncing team stats for teams with matches in next ${daysAhead} days`);
+    eligibleTeams = await getEligibleTeams('team_stats', TEAM_STATS_COOLDOWN_DAYS, countries, upcomingTeamIds);
   } else {
     eligibleTeams = await getEligibleTeams('team_stats', TEAM_STATS_COOLDOWN_DAYS, countries);
   }

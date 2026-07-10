@@ -189,31 +189,38 @@ export async function processFormForRecentMatches(
   }
 }
 
-/**
- * Process Form for All Finished Matches (Backfill)
- *
- * Use this to backfill form history for all finished matches in the DB.
- * WARNING: Can be slow if large dataset.
- */
 export async function processFormBackfill(): Promise<{
   totalMatches: number;
+  alreadyProcessed: number;
   successCount: number;
   failureCount: number;
 }> {
   logger.warn('Starting form history backfill - this may take a while');
 
   const finishedMatches = await matchesRepository.getFinishedMatches(10000);
+  
+  // ── OPTIMIZATION: Single query instead of N per-match HEAD requests ──
+  const existingMatchIds = await teamFormHistoryRepository.getExistingMatchIds();
+  const existingSet = new Set(existingMatchIds);
+  
+  const unprocessedMatches = finishedMatches.filter(match => !existingSet.has(match.id));
+  
+  logger.info(
+    { 
+      total: finishedMatches.length, 
+      alreadyProcessed: finishedMatches.length - unprocessedMatches.length,
+      toProcess: unprocessedMatches.length 
+    },
+    'Form backfill: skipped already-processed matches'
+  );
+
   let successCount = 0;
   let failureCount = 0;
 
-  for (const match of finishedMatches) {
+  for (const match of unprocessedMatches) {
     try {
-      // Skip if already exists
-      const exists = await teamFormHistoryRepository.existsForMatch(match.id);
-      if (!exists) {
-        await processFormForMatch(match.id);
-        successCount++;
-      }
+      await processFormForMatch(match.id);
+      successCount++;
     } catch (error) {
       failureCount++;
       logger.error(
@@ -224,12 +231,18 @@ export async function processFormBackfill(): Promise<{
   }
 
   logger.info(
-    { totalMatches: finishedMatches.length, successCount, failureCount },
+    { 
+      totalMatches: finishedMatches.length,
+      alreadyProcessed: finishedMatches.length - unprocessedMatches.length,
+      successCount, 
+      failureCount 
+    },
     'Form backfill completed'
   );
 
   return {
     totalMatches: finishedMatches.length,
+    alreadyProcessed: finishedMatches.length - unprocessedMatches.length,
     successCount,
     failureCount,
   };

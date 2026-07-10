@@ -542,9 +542,21 @@ export default function MatchPage() {
                       const injured = data?.injured || 0;
                       const pct = total > 0 ? Math.round((available / total) * 100) : 0;
                       
-                      let color = COLORS.green;
-                      if (pct < 60) color = COLORS.red;
-                      else if (pct < 80) color = COLORS.amber;
+                      const COLORS = {
+                            green: 'var(--green)',
+                            red: 'var(--red)',
+                            amber: 'var(--amber)',
+                            blue: 'var(--blue)',
+                            surface2: 'var(--surface2)',
+                            border: 'var(--border)',
+                            muted: 'var(--muted)',
+                            text: 'var(--text)',
+                            dim: 'var(--dim)',
+                          };
+
+                          let color: string = COLORS.green;
+                          if (pct < 60) color = COLORS.red;
+                          else if (pct < 80) color = COLORS.amber;
                       
                       return (
                         <div key={pos} style={{
