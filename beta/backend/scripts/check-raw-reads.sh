@@ -14,7 +14,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-BASELINE=94   # measured 2026-07-10 across all of src/ — decrease only
+BASELINE=93   # measured 2026-07-10 across all of src/ — decrease only
 
 # A "raw read": `await db` (same or next line `.from(`) ... reaching .select(
 # without fetchAllRows / single / maybeSingle / limit in the statement.

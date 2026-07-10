@@ -103,6 +103,22 @@ export class MatchesRepository {
   }
 
   async getFinishedMatches(limit: number = 100): Promise<Match[]> {
+    // BETA FIX (audit P0): .limit(10000) returns 1000 — PostgREST caps
+    // every response at server max_rows regardless of the requested limit.
+    // The form backfill's "all finished matches" read was silently capped,
+    // so matches beyond the first 1000 NEVER got form rows. Paginate when
+    // the caller asks for more than one server page.
+    if (limit > 1000) {
+      const { fetchAllRows } = await import('../db/fetchAllRows');
+      const rows = await fetchAllRows(
+        db.from('matches')
+          .select('*')
+          .eq('status', 'finished')
+          .order('date', { ascending: false })
+      );
+      return rows.slice(0, limit);
+    }
+
     const { data, error } = await db
       .from('matches')
       .select('*')

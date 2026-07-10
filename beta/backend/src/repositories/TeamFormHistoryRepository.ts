@@ -178,17 +178,15 @@ export class TeamFormHistoryRepository {
     return (count || 0) > 0;
   }
   async getExistingMatchIds(): Promise<number[]> {
-  const { data, error } = await db
-    .from('team_form_history')
-    .select('match_id');
-
-  if (error) {
-    logger.error(
-      { error: error.message },
-      'Failed to get existing form history match IDs'
-    );
-    throw error;
-  }
+  // BETA FIX (audit P0): raw read capped at 1000 rows = only ~500 matches'
+  // IDs (2 rows per match), so the backfill's dedup set was incomplete —
+  // already-processed matches looked new. Upserts made that harmless but
+  // wasteful; the real damage was the capped getFinishedMatches read this
+  // pairs with. Both now paginate.
+  const { fetchAllRows } = await import('../db/fetchAllRows');
+  const data = await fetchAllRows(
+    db.from('team_form_history').select('match_id')
+  );
 
   // Deduplicate — each match has 2 rows (home + away)
   const rows = (data || []) as { match_id: number }[];
