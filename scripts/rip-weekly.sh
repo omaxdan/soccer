@@ -29,16 +29,21 @@ run() {
   echo "RESULT ok=$OK failed=$FAILED"
 ) 9>"$LOCK"
 
-# ─── CRONTAB — these five lines REPLACE all four current entries ─────────────
-# (Optionally add at the very top of the crontab:
-#    HEALTHCHECK_URL=https://hc-ping.com/YOUR-UUID )
+# ─── CRONTAB — these lines REPLACE all four current entries ──────────────────
+# Scripts live at /home/mybrzklx/scripts/ (they cd into APP internally, so
+# location is free choice). Optionally add at the very top of the crontab:
+#    HEALTHCHECK_URL=https://hc-ping.com/YOUR-UUID
 #
-# 0 */2 * * *  /bin/bash /home/mybrzklx/apps/rip/scripts/rip-2h.sh
-# 0 1   * * *  /bin/bash /home/mybrzklx/apps/rip/scripts/rip-fixtures.sh
-# 0 3   * * *  /bin/bash /home/mybrzklx/apps/rip/scripts/rip-enrichment.sh
-# 0 4   * * *  /bin/bash /home/mybrzklx/apps/rip/scripts/rip-intel.sh
-# 30 4  * * 1  /bin/bash /home/mybrzklx/apps/rip/scripts/rip-weekly.sh
+# 0 */2 * * *  /bin/bash /home/mybrzklx/scripts/rip-2h.sh
+# 0 1   * * *  /bin/bash /home/mybrzklx/scripts/rip-fixtures.sh
+# 0 3   * * *  /bin/bash /home/mybrzklx/scripts/rip-enrichment.sh
+# 0 2   * * 1  /bin/bash /home/mybrzklx/scripts/rip-stats.sh 2     # Mon: Mon-Tue window
+# 0 2   * * 3  /bin/bash /home/mybrzklx/scripts/rip-stats.sh 2     # Wed: Wed-Thu window
+# 0 2   * * 5  /bin/bash /home/mybrzklx/scripts/rip-stats.sh 3     # Fri: Fri-SUN window (closes the Sunday gap)
+# 0 4   * * *  /bin/bash /home/mybrzklx/scripts/rip-intel.sh
+# 30 4  * * 1  /bin/bash /home/mybrzklx/scripts/rip-weekly.sh
 #
-# QUOTA BUDGET (200/day dual-key): fixtures ~4 + enrichment 60-120 typical
-# (worst weekend ~240, squads-first ordering protects the core product) +
-# Mondays +49. The 2h and 04:00 scripts make zero API calls.
+# QUOTA BUDGET (200/day dual-key): daily = fixtures ~4 + squads 30-80.
+# MWF adds stats 60-160 (Fri heaviest). Mon adds weekly ~49 — Monday total
+# worst-case ~4+80+120+49 ≈ 250: if that ever bites, move rip-weekly to
+# Tuesday. 2h + intel scripts: zero API calls.
