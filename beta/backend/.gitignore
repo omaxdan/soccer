@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+logs/
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+.next/
+build/
+coverage/
+out/
+.turbo/
+
+# API sample logger output (backend/src/utils/apiSamples.ts) - raw debug
+# dumps of real API responses, several hundred KB per file, meant for
+# local reference during development only. One of these (squad/*.json
+# for 7 countries) was accidentally committed at ~7.3MB total in commit
+# a134609 - keep the README documenting the mechanism, ignore the dumps
+# themselves.
+docs/api-samples/**/*.json
+!docs/api-samples/README.md

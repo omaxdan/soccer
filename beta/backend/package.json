@@ -1,0 +1,27 @@
+{
+  "name": "ninetydata-beta-backend",
+  "version": "2.0.0",
+  "description": "NinetyData RIP beta backend \u2014 single-writer pipeline (audit-hardened)",
+  "main": "dist/cli.js",
+  "scripts": {
+    "build": "tsc",
+    "cli": "ts-node src/cli.ts",
+    "lint:reads": "bash scripts/check-raw-reads.sh",
+    "test": "echo 'Tests pending'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0",
+    "axios": "^1.6.0",
+    "pino": "^8.16.0",
+    "pino-pretty": "^10.2.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
