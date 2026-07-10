@@ -18,7 +18,7 @@ const TIER_ORDER: TierKey[] = ['strong', 'moderate', 'small', 'negative'];
 export default function GapDistributionPanel({
   tierMatches, totalWithGap,
 }: {
-  tierMatches: Record<TierKey, Array<{ match: any; gap: number | null }>>;
+  tierMatches: Record<TierKey, Array<{ match: any; gap: number | null; confidence?: number | null; confidenceBand?: string | null }>>;
   totalWithGap: number;
 }) {
   const [expanded, setExpanded] = useState<TierKey | null>(null);
@@ -59,7 +59,15 @@ export default function GapDistributionPanel({
         const meta = TIER_META[tier];
         const count = counts[tier];
         const isOpen = expanded === tier;
-        const fixtures = tierMatches[tier];
+        // Highest confidence first within the tier — nulls (no confidence
+        // computed yet) sorted to the end rather than treated as 0, since
+        // absence of data isn't the same as low confidence.
+        const fixtures = [...tierMatches[tier]].sort((a, b) => {
+          if (a.confidence == null && b.confidence == null) return 0;
+          if (a.confidence == null) return 1;
+          if (b.confidence == null) return -1;
+          return b.confidence - a.confidence;
+        });
         return (
           <div key={tier}>
             <button
@@ -92,8 +100,15 @@ export default function GapDistributionPanel({
                     <span style={{ fontSize: '0.875rem', color: COLORS.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '0.5rem' }}>
                       {e.match.home_team?.short_name ?? e.match.home_team?.name} vs {e.match.away_team?.short_name ?? e.match.away_team?.name}
                     </span>
-                    <span style={{ flexShrink: 0, fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, fontSize: '0.75rem', color: meta.color }}>
-                      Gap: {Math.round(Math.abs(e.gap ?? 0))}
+                    <span style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.0625rem' }}>
+                      <span style={{ fontFamily: '"JetBrains Mono",monospace', fontWeight: 700, fontSize: '0.75rem', color: meta.color }}>
+                        Gap: {Math.round(Math.abs(e.gap ?? 0))}
+                      </span>
+                      {e.confidence != null && (
+                        <span style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: '0.625rem', color: COLORS.dim }}>
+                          {Math.round(e.confidence)}% conf
+                        </span>
+                      )}
                     </span>
                   </Link>
                 ))}
