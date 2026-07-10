@@ -13,7 +13,7 @@ import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import TeamCrest from '@/components/TeamCrest';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveFormation, deriveAreaVersatility, computeCategoryAdvantageSummary } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
 import { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import CategorizedComparison from '@/components/CategorizedComparison';
 import FormString from '@/components/FormString';
@@ -397,19 +397,18 @@ export default function MatchPage() {
   const homeAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(homeLineup));
   const awayAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(awayLineup));
 
-  // Category Advantage Summary — see computeCategoryAdvantageSummary in
-  // insights.ts for the full rationale. A transparent tally, not a
-  // blended predictive score. Key player ratings/card-risk pulled from
-  // the same keyPlayerBattle data already rendered in the Lineups tab.
-  const categoryAdvantage = computeCategoryAdvantageSummary({
-    comparisonRows,
-    homeAreaVersatility,
-    awayAreaVersatility,
-    homeKeyPlayerRatings: (keyPlayerBattle?.home ?? []).map((p: any) => p.avgRating),
-    awayKeyPlayerRatings: (keyPlayerBattle?.away ?? []).map((p: any) => p.avgRating),
-    homeKeyPlayerCardRisk: (keyPlayerBattle?.home ?? []).map((p: any) => p.suspensionRisk).filter(Boolean),
-    awayKeyPlayerCardRisk: (keyPlayerBattle?.away ?? []).map((p: any) => p.suspensionRisk).filter(Boolean),
-  });
+  // Net Battle Superiority Index (NBSI) — precomputed backend-side
+  // (processNetBattleIndex, migration 022). Nothing to compute here; just
+  // read intel?.net_battle_index directly. See that migration for the
+  // full z-score-normalization methodology. Deliberately a NUMBER, not a
+  // verdict — no classification label is computed anywhere, backend or
+  // frontend.
+  const netBattleIndex = intel?.net_battle_index ?? null;
+
+  // Key player card/suspension risk — still shown as a plain factual note
+  // alongside NBSI (not folded into the number itself as a penalty).
+  const homeCardRiskNote = (keyPlayerBattle?.home ?? []).map((p: any) => p.suspensionRisk).filter(Boolean)[0] ?? null;
+  const awayCardRiskNote = (keyPlayerBattle?.away ?? []).map((p: any) => p.suspensionRisk).filter(Boolean)[0] ?? null;
 
   // ─── Team Column Renderer ───────────────────────────────────────────────────
   const TeamColumn = ({ team, intel: ti, form, fix, squad, upcoming, depth }: any) => {
@@ -750,60 +749,65 @@ export default function MatchPage() {
               still shown below via CategorizedComparison and the
               Intelligence tab. ── */}
 
-          {/* ── CATEGORY ADVANTAGE SUMMARY — a transparent tally of how many
-              tracked categories each side leads in (baseline comparison
-              rows + area versatility + key player rating), NOT a blended
-              predictive score or a "winner" verdict. Every number here
-              is directly traceable to detail shown further down this page
-              (CategorizedComparison, Lineups versatility bars, Key Player
-              Battle cards). See computeCategoryAdvantageSummary in
-              insights.ts for the full rationale — deliberately built to
-              avoid the fabricated-precision and directional-prediction
-              problems the removed Prediction card above had. ── */}
-          {categoryAdvantage.totalCategories > 0 && (
+          {/* ── NET BATTLE SUPERIORITY INDEX (NBSI) — a single computed number,
+              not a verdict. Every tracked category is converted to a
+              z-score against the REAL current population of tracked teams
+              (real mean/stddev, queried from the DB — see migration 022 /
+              processNetBattleIndex), then averaged with equal weight. No
+              category receives an invented "importance" multiplier — there
+              is no backtested evidence in this platform that one category
+              matters more than another, so equal weighting after proper
+              scale-normalization is the statistically honest default.
+              Precomputed backend-side; this page only reads and displays
+              it, exactly like Gap and Confidence elsewhere on this page.
+              No classification label (e.g. "Heavy Dominance") is computed
+              anywhere — deliberately a number the user judges themselves. ── */}
+          {netBattleIndex != null && (
             <Card>
-              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Category Advantage Summary</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Net Battle Superiority Index</div>
               <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 14 }}>
-                A tally of tracked categories each side leads in — informational, not a prediction. Full detail below.
+                Average z-score gap across all tracked categories, real-population normalized. A number, not a prediction — full detail below.
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
-                  {match.home_team?.short_name ?? match.home_team?.name} <span style={{ color: COLORS.green }}>{categoryAdvantage.homeLeads}</span>
-                </div>
-                {categoryAdvantage.even > 0 && (
-                  <div style={{ fontSize: 10, color: COLORS.dim }}>{categoryAdvantage.even} even</div>
-                )}
-                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
-                  <span style={{ color: COLORS.amber }}>{categoryAdvantage.awayLeads}</span> {match.away_team?.short_name ?? match.away_team?.name}
-                </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: netBattleIndex > 0 ? COLORS.green : COLORS.dim }}>
+                  {match.home_team?.short_name ?? match.home_team?.name}
+                </span>
+                <span style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: 24, fontWeight: 700, color: netBattleIndex === 0 ? COLORS.dim : netBattleIndex > 0 ? COLORS.green : COLORS.amber }}>
+                  {netBattleIndex > 0 ? '+' : ''}{netBattleIndex.toFixed(2)}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: netBattleIndex < 0 ? COLORS.amber : COLORS.dim }}>
+                  {match.away_team?.short_name ?? match.away_team?.name}
+                </span>
               </div>
 
-              {/* Proportional tally bar — visual only, not a probability */}
-              <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: COLORS.border }}>
-                {categoryAdvantage.homeLeads > 0 && (
-                  <div style={{ width: `${(categoryAdvantage.homeLeads / categoryAdvantage.totalCategories) * 100}%`, background: COLORS.green }} />
-                )}
-                {categoryAdvantage.even > 0 && (
-                  <div style={{ width: `${(categoryAdvantage.even / categoryAdvantage.totalCategories) * 100}%`, background: COLORS.dim }} />
-                )}
-                {categoryAdvantage.awayLeads > 0 && (
-                  <div style={{ width: `${(categoryAdvantage.awayLeads / categoryAdvantage.totalCategories) * 100}%`, background: COLORS.amber }} />
+              {/* Bar centered at 0 — magnitude clamped visually at ±3 std devs,
+                  an extreme value beyond that would overflow the bar rather
+                  than mean anything different in kind. */}
+              <div style={{ position: 'relative', height: 6, borderRadius: 3, background: COLORS.border, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: COLORS.dim }} />
+                {netBattleIndex !== 0 && (
+                  <div style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    left: netBattleIndex > 0 ? '50%' : `${50 - Math.min(50, (Math.abs(netBattleIndex) / 3) * 50)}%`,
+                    width: `${Math.min(50, (Math.abs(netBattleIndex) / 3) * 50)}%`,
+                    background: netBattleIndex > 0 ? COLORS.green : COLORS.amber,
+                  }} />
                 )}
               </div>
 
-              <div style={{ fontSize: 9, color: COLORS.dim, marginTop: 6 }}>
-                {categoryAdvantage.totalCategories} categories tracked
+              <div style={{ fontSize: 9, color: COLORS.dim, marginTop: 6, textAlign: 'center' }}>
+                Positive favors {match.home_team?.short_name ?? 'home'}, negative favors {match.away_team?.short_name ?? 'away'} — magnitude = std. deviations apart on average
               </div>
 
-              {/* Discipline risk notes — shown as plain facts, not folded into the tally as a penalty */}
-              {(categoryAdvantage.homeCardRiskNote || categoryAdvantage.awayCardRiskNote) && (
+              {/* Discipline risk notes — shown as plain facts, not folded into the index as a penalty */}
+              {(homeCardRiskNote || awayCardRiskNote) && (
                 <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {categoryAdvantage.homeCardRiskNote && (
-                    <div style={{ fontSize: 10, color: COLORS.amber }}>⚠ {match.home_team?.short_name}: key player {categoryAdvantage.homeCardRiskNote}</div>
+                  {homeCardRiskNote && (
+                    <div style={{ fontSize: 10, color: COLORS.amber }}>⚠ {match.home_team?.short_name}: key player {homeCardRiskNote}</div>
                   )}
-                  {categoryAdvantage.awayCardRiskNote && (
-                    <div style={{ fontSize: 10, color: COLORS.amber }}>⚠ {match.away_team?.short_name}: key player {categoryAdvantage.awayCardRiskNote}</div>
+                  {awayCardRiskNote && (
+                    <div style={{ fontSize: 10, color: COLORS.amber }}>⚠ {match.away_team?.short_name}: key player {awayCardRiskNote}</div>
                   )}
                 </div>
               )}

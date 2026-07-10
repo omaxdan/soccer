@@ -247,7 +247,7 @@ export default async function MatchCenter({
                 {[
                   { label: '★' }, { label: 'TIME' }, { label: 'MATCH' }, { label: 'SCORE' }, { label: 'HOME' }, { label: 'AWAY' }, { label: 'GAP' },
                   { label: 'STR (H/A)', mobileHide: true }, { label: 'VENUE (H/A)', mobileHide: true },
-                  { label: 'XG (H/A)', mobileHide: true }, { label: 'VERS (H/A)', mobileHide: true },
+                  { label: 'NBSI', mobileHide: true }, { label: 'VERS (H/A)', mobileHide: true },
                   { label: 'PICK' }, { label: 'CONF %' },
                 ].map(({ label: h, mobileHide }) => (
                   <th key={h} className={mobileHide ? 'rip-mobile-hide' : undefined} style={{ padding: h === '★' ? '8px 4px' : '8px 10px', textAlign: (h === 'MATCH' || h === 'SCORE') ? 'left' : 'center', fontSize: 9, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
@@ -337,8 +337,12 @@ export default async function MatchCenter({
                                 <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
                                   {homeExtras?.venue_advantage_score != null ? Math.round(homeExtras.venue_advantage_score) : '—'}/{awayExtras?.venue_advantage_score != null ? Math.round(awayExtras.venue_advantage_score) : '—'}
                                 </td>
-                                <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
-                                  {intel?.predicted_home_goals != null ? intel.predicted_home_goals.toFixed(1) : '—'}/{intel?.predicted_away_goals != null ? intel.predicted_away_goals.toFixed(1) : '—'}
+                                <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, fontWeight: 700 }}>
+                                  {intel?.net_battle_index != null ? (
+                                    <span style={{ color: intel.net_battle_index === 0 ? COLORS.dim : intel.net_battle_index > 0 ? COLORS.green : COLORS.amber }}>
+                                      {intel.net_battle_index > 0 ? '+' : ''}{intel.net_battle_index.toFixed(2)}
+                                    </span>
+                                  ) : <span style={{ color: COLORS.dim }}>—</span>}
                                 </td>
                                 <td className="rip-mobile-hide" style={{ padding: '8px 10px', textAlign: 'center', fontFamily: '"JetBrains Mono",monospace', fontSize: 10, color: COLORS.muted }}>
                                   {homeVersatility != null ? `${homeVersatility}%` : '—'}/{awayVersatility != null ? `${awayVersatility}%` : '—'}

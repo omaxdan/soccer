@@ -3951,3 +3951,202 @@ export async function processScorelinePredictions(): Promise<{
     return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
   }
 }
+
+// ─── NET BATTLE SUPERIORITY INDEX (NBSI) ────────────────────────────────────
+// A single, informational number summarizing how far apart two teams are
+// across every tracked comparison category, on a genuinely comparable
+// scale. See migration 022 for the full methodology rationale.
+//
+// Deliberately NOT hand-picked category weights — every category is
+// z-scored against the REAL current population of tracked teams (real
+// mean/stddev, queried from the DB), then averaged with equal weight.
+// No verdict, no classification label — a number, nothing more.
+
+interface NBSICategory {
+  key: string;
+  table: string;
+  column: string;
+  lowerIsBetter: boolean;
+  // 'team' = one row per team_id (population = all teams' current value)
+  // 'match' = one row per match (population = all currently-relevant match_intelligence rows)
+  scope: 'team' | 'match';
+}
+
+const NBSI_CATEGORIES: NBSICategory[] = [
+  { key: 'readiness',       table: 'team_intelligence',        column: 'readiness_score',        lowerIsBetter: false, scope: 'team' },
+  { key: 'form_index',      table: 'team_intelligence',        column: 'form_index',              lowerIsBetter: false, scope: 'team' },
+  { key: 'congestion',      table: 'team_intelligence',        column: 'congestion_score',        lowerIsBetter: true,  scope: 'team' },
+  { key: 'squad_stability', table: 'team_intelligence',        column: 'squad_stability_score',   lowerIsBetter: false, scope: 'team' },
+  { key: 'squad_depth',     table: 'team_intelligence',        column: 'squad_depth_score',       lowerIsBetter: false, scope: 'team' },
+  { key: 'versatility',     table: 'team_intelligence',        column: 'lineup_versatility_score',lowerIsBetter: false, scope: 'team' },
+  { key: 'strength',        table: 'team_strength_ratings',    column: 'strength_score',          lowerIsBetter: false, scope: 'team' },
+  { key: 'venue_advantage', table: 'team_venue_performance',   column: 'venue_advantage_score',   lowerIsBetter: false, scope: 'team' },
+  { key: 'goals_scored',    table: 'team_season_statistics',   column: 'goals_scored',            lowerIsBetter: false, scope: 'team' },
+  { key: 'goals_conceded',  table: 'team_season_statistics',   column: 'goals_conceded',          lowerIsBetter: true,  scope: 'team' },
+  { key: 'injury_impact',   table: 'team_injury_impact',       column: 'total_importance_lost',   lowerIsBetter: true,  scope: 'team' },
+];
+
+function mean(arr: number[]): number {
+  return arr.reduce((s, v) => s + v, 0) / arr.length;
+}
+function stddev(arr: number[], m: number): number {
+  if (arr.length < 2) return 0;
+  const variance = arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length;
+  return Math.sqrt(variance);
+}
+
+export async function processNetBattleIndex(): Promise<{
+  matchesProcessed: number;
+  rowsWritten: number;
+  categoriesUsed: number;
+  error?: string;
+}> {
+  logger.info('processNetBattleIndex started — z-score population normalization, no hand-picked weights');
+
+  try {
+    // ── Step 1: real population stats per team-level category ─────────────
+    // One query per category table, computing real mean/stddev from every
+    // team currently carrying a non-null value. Categories with fewer than
+    // 5 teams of population data are excluded — a mean/stddev from 2-3
+    // teams is noise, not a population.
+    const MIN_POPULATION = 5;
+    const popStats = new Map<string, { mean: number; stddev: number }>();
+    const teamValuesByCategory = new Map<string, Map<number, number>>();
+
+    for (const cat of NBSI_CATEGORIES) {
+      if (cat.scope !== 'team') continue;
+      const { data, error } = await db
+        .from(cat.table)
+        .select(`team_id, ${cat.column}`)
+        .not(cat.column, 'is', null);
+      if (error) {
+        logger.warn({ category: cat.key, err: error.message }, 'NBSI population query failed — category skipped');
+        continue;
+      }
+      const rows = (data ?? []) as any[];
+      const values = rows.map(r => Number(r[cat.column])).filter(v => !Number.isNaN(v));
+      if (values.length < MIN_POPULATION) {
+        logger.debug({ category: cat.key, n: values.length }, 'NBSI category below minimum population — skipped');
+        continue;
+      }
+      const m = mean(values);
+      const sd = stddev(values, m);
+      if (sd === 0) continue; // no variance = z-score undefined, skip
+      popStats.set(cat.key, { mean: m, stddev: sd });
+
+      const byTeam = new Map<number, number>();
+      for (const r of rows) {
+        const v = Number(r[cat.column]);
+        if (!Number.isNaN(v)) byTeam.set(r.team_id, v);
+      }
+      teamValuesByCategory.set(cat.key, byTeam);
+    }
+
+    logger.info({ categoriesWithPopulation: [...popStats.keys()] }, 'NBSI population stats computed');
+
+    // ── Step 2: match-level category (Predicted Goals) population ─────────
+    // Predicted goals are per-match, not a team baseline — population is
+    // every currently-populated predicted_home_goals/predicted_away_goals
+    // value across match_intelligence, treated as one pooled distribution
+    // (home and away predictions pooled together, since both represent
+    // "a team's predicted goals in a match", just from different sides).
+    const { data: predGoalRows } = await db
+      .from('match_intelligence')
+      .select('predicted_home_goals, predicted_away_goals')
+      .not('predicted_home_goals', 'is', null)
+      .not('predicted_away_goals', 'is', null);
+    const pooledPredGoals: number[] = [];
+    for (const r of predGoalRows ?? []) {
+      pooledPredGoals.push(Number(r.predicted_home_goals), Number(r.predicted_away_goals));
+    }
+    let predGoalsStats: { mean: number; stddev: number } | null = null;
+    if (pooledPredGoals.length >= MIN_POPULATION) {
+      const m = mean(pooledPredGoals);
+      const sd = stddev(pooledPredGoals, m);
+      if (sd > 0) predGoalsStats = { mean: m, stddev: sd };
+    }
+
+    // ── Step 3: upcoming matches (same 7-day window as scoreline predictions) ─
+    const now = new Date().toISOString();
+    const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
+    const { data: matches, error: mErr } = await db
+      .from('matches')
+      .select('id, home_team_id, away_team_id, date')
+      .eq('status', 'scheduled')
+      .gte('date', now)
+      .lte('date', weekOut);
+    if (mErr) throw new Error(`matches query: ${mErr.message}`);
+    if (!matches || matches.length === 0) {
+      return { matchesProcessed: 0, rowsWritten: 0, categoriesUsed: popStats.size };
+    }
+
+    // Predicted goals per match (already computed by processScorelinePredictions)
+    const matchIds = matches.map((m: any) => m.id);
+    const { data: miRows } = await db
+      .from('match_intelligence')
+      .select('match_id, predicted_home_goals, predicted_away_goals')
+      .in('match_id', matchIds);
+    const predGoalsByMatch = new Map<number, { home: number | null; away: number | null }>();
+    for (const r of miRows ?? []) {
+      predGoalsByMatch.set(r.match_id, { home: r.predicted_home_goals, away: r.predicted_away_goals });
+    }
+
+    // ── Step 4: compute NBSI per match ─────────────────────────────────────
+    let written = 0;
+    for (const match of matches) {
+      const zDiffs: number[] = [];
+
+      for (const cat of NBSI_CATEGORIES) {
+        if (cat.scope !== 'team') continue;
+        const stats = popStats.get(cat.key);
+        const byTeam = teamValuesByCategory.get(cat.key);
+        if (!stats || !byTeam) continue;
+        const homeVal = byTeam.get(match.home_team_id);
+        const awayVal = byTeam.get(match.away_team_id);
+        if (homeVal == null || awayVal == null) continue;
+
+        let zHome = (homeVal - stats.mean) / stats.stddev;
+        let zAway = (awayVal - stats.mean) / stats.stddev;
+        if (cat.lowerIsBetter) { zHome = -zHome; zAway = -zAway; }
+        zDiffs.push(zHome - zAway);
+      }
+
+      // Predicted Goals — match-level category
+      if (predGoalsStats) {
+        const pg = predGoalsByMatch.get(match.id);
+        if (pg?.home != null && pg?.away != null) {
+          const zHome = (pg.home - predGoalsStats.mean) / predGoalsStats.stddev;
+          const zAway = (pg.away - predGoalsStats.mean) / predGoalsStats.stddev;
+          zDiffs.push(zHome - zAway);
+        }
+      }
+
+      if (zDiffs.length === 0) continue; // no comparable data at all — skip, don't write a fabricated 0
+
+      const netBattleIndex = Math.round((zDiffs.reduce((s, v) => s + v, 0) / zDiffs.length) * 100) / 100;
+
+      // Upsert, not update — a plain UPDATE would silently affect zero rows
+      // for any match without an existing match_intelligence row yet (same
+      // documented gap processScorelinePredictions already fixed above).
+      const { error: updErr } = await db
+        .from('match_intelligence')
+        .upsert({
+          match_id: match.id,
+          net_battle_index: netBattleIndex,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'match_id' });
+
+      if (updErr) {
+        logger.warn({ matchId: match.id, err: updErr.message }, 'NBSI write failed');
+        continue;
+      }
+      written++;
+    }
+
+    logger.info({ matchesProcessed: matches.length, written, categoriesUsed: popStats.size }, 'processNetBattleIndex completed');
+    return { matchesProcessed: matches.length, rowsWritten: written, categoriesUsed: popStats.size };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processNetBattleIndex failed');
+    return { matchesProcessed: 0, rowsWritten: 0, categoriesUsed: 0, error: error.message };
+  }
+}

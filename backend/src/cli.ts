@@ -5,7 +5,7 @@ import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
-import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad } from './jobs/processDbOnly';
+import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad, processNetBattleIndex } from './jobs/processDbOnly';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
@@ -594,6 +594,16 @@ async function handleCommand(command: string, ...args: string[]) {
         break;
       }
 
+      case 'process:net-battle-index': {
+        // Net Battle Superiority Index (NBSI) — z-score population-normalized
+        // category comparison, no hand-picked weights, no verdict/classification.
+        // See migration 022 for full methodology. DB-only, zero API calls.
+        logger.info('Computing Net Battle Index — z-score normalized, DB only...');
+        const r = await processNetBattleIndex();
+        logger.info(r, 'Net Battle Index complete');
+        break;
+      }
+
       case 'process:dashboard-summary': {
         // DB-only — precomputes dashboard aggregates so the frontend never
         // calculates them at runtime. Run after process:all-db, or
@@ -724,6 +734,12 @@ async function handleCommand(command: string, ...args: string[]) {
         const scorelines = await processScorelinePredictions();
         logger.info({ ...scorelines }, '[L5.5] ✓ scoreline predictions');
 
+        // ── LAYER 5.6 ── Needs predicted goals (L5.5) + strength/versatility
+        // (L2/L3) already computed above.
+        logger.info('[L5.6/3] Net Battle Index (z-score normalized)...');
+        const nbsi = await processNetBattleIndex();
+        logger.info({ ...nbsi }, '[L5.6] ✓ net battle index');
+
         // ── LAYER 6 ── Needs everything above — dashboard aggregate stats ───
         logger.info('[L6/3] Dashboard summary (needs all prior layers)...');
         const dashboardSummary = await processDashboardSummary();
@@ -827,6 +843,8 @@ async function handleCommand(command: string, ...args: string[]) {
         const predictedLineups = await processPredictedLineups();
         logger.info('[L5.5] Scoreline predictions...');
         const scorelines = await processScorelinePredictions();
+        logger.info('[L5.6] Net Battle Index...');
+        const nbsi = await processNetBattleIndex();
         logger.info('[L6] Dashboard summary...');
         const dashboardSummary = await processDashboardSummary();
 
@@ -835,7 +853,7 @@ async function handleCommand(command: string, ...args: string[]) {
           durationSeconds: elapsed, scope: modeLabel,
           form, fixture, locs, travel, matchTravel,
           strength, venue, teamIntel, playerIntel, matchIntel,
-          predictedLineups, scorelines, dashboardSummary,
+          predictedLineups, scorelines, nbsi, dashboardSummary,
         }, `━━━ process:all-db:* complete in ${elapsed}s (scope: ${modeLabel}) ━━━`);
         break;
       }
@@ -1170,6 +1188,7 @@ Commands:
     archive:readiness-snapshot       Append-only pre-match readiness snapshot (run nightly after processing)
     archive:link-results             Fill result columns on snapshots whose match has finished
     analytics:refresh-league-gap     Rebuild per-league gap-accuracy aggregates for the analytics page
+    process:net-battle-index         Net Battle Index — z-score normalized category comparison, no hand-picked weights, no verdict
     process:player-match-load        Derive per-match player minutes from season stats (proxy, run before process:player-intelligence)
     process:player-intelligence      Player fatigue/load/importance + goal dependency + injury impact
     process:injury-risk              REMOVED - fatigue now blends real load, see process:player-intelligence
