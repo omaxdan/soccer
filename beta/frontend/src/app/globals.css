@@ -1,0 +1,958 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* ─── DARK THEME (default) ───────────────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --card-border: 1px solid var(--border);
+  --bg:        #0a0a0f;
+  --surface:   #111118;
+  --surface2:  #1a1a24;
+  --surface3:  #22223a;
+  --border:    #2a2a3a;
+  --border2:   #3a3a50;
+  --text:      #f0f0ff;
+  --text2:     #c8c8e8;
+  --muted:     #8888aa;
+  --dim:       #555570;
+  --green:     #00e676;
+  --green2:    #69f0ae;
+  --amber:     #ffb300;
+  --orange:    #ff6d00;
+  --red:       #ff1744;
+  --blue:      #2979ff;
+  --blue2:     #5c9fff;
+  --purple:    #aa00ff;
+  --purple2:   #cc44ff;
+  --cyan:      #00e5ff;
+  --sidebar-w: 13.75rem;
+  --topbar-h:  3.25rem;
+  --card-radius: 10px;
+  --transition: 0.15s ease;
+
+  /* Score band colors */
+  --score-elite:  #00e676;
+  --score-good:   #69f0ae;
+  --score-mod:    #ffb300;
+  --score-poor:   #ff6d00;
+  --score-crit:   #ff1744;
+  --score-null:   #555570;
+
+  /* Shadows */
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.4);
+  --shadow-glow-green: 0 0 16px rgba(0,230,118,0.25);
+  --shadow-glow-red:   0 0 16px rgba(255,23,68,0.25);
+  --shadow-glow-amber: 0 0 16px rgba(255,179,0,0.25);
+}
+
+/* ─── LIGHT THEME ────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --card-border: none;
+  --bg:        #f6f8fa;
+  --surface:   #ffffff;
+  --surface2:  #f6f8fa;
+  --surface3:  #eef1f6;
+  --border:    #e2e8f0;
+  --border2:   #cbd5e1;
+  --text:      #0f172a;
+  --text2:     #1e293b;
+  --muted:     #64748b;
+  --dim:       #94a3b8;
+  --green:     #00b050;
+  --green2:    #33c47a;
+  --amber:     #d97706;
+  --orange:    #f97316;
+  --red:       #ef4444;
+  --blue:      #0057ff;
+  --blue2:     #3474e8;
+  --purple:    #7c00cc;
+  --purple2:   #9933ee;
+  --cyan:      #0099cc;
+  --score-elite:  #00b050;
+  --score-good:   #33c47a;
+  --score-mod:    #d97706;
+  --score-poor:   #f97316;
+  --score-crit:   #ef4444;
+  --score-null:   #94a3b8;
+  --shadow-card: 0 0.125rem 0.5rem rgba(0,0,0,0.04);
+  --shadow-glow-green: 0 0 12px rgba(0,176,80,0.15);
+  --shadow-glow-red:   0 0 12px rgba(212,0,15,0.15);
+  --shadow-glow-amber: 0 0 12px rgba(217,119,0,0.15);
+}
+
+/* ─── LIGHT MODE — zero-border card evolution ──────────────────────────────────
+   Scoped to light mode only (dark mode keeps its existing bordered-card look
+   untouched). Shape is defined by the white-card-on-ice-canvas contrast plus
+   an ambient low-opacity shadow, not a hard outline. Only genuine "card"
+   containers are touched here - small controls like .theme-toggle,
+   .topbar-btn, and badge/pill elements keep their border, since that's a
+   normal functional affordance on an interactive control, not the "hard
+   card outline" the light-mode redesign is about. */
+[data-theme="light"] .card,
+[data-theme="light"] .kpi-card,
+[data-theme="light"] .component-card,
+[data-theme="light"] .cmp-category {
+  border: none;
+  box-shadow: var(--shadow-card);
+}
+
+/* ─── RESET ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--transition), color var(--transition);
+}
+a { color: inherit; text-decoration: none; }
+button { background: none; border: none; cursor: pointer; font-family: inherit; color: inherit; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; }
+
+/* ─── LAYOUT SHELL ───────────────────────────────────────────────────────────── */
+.app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+.app-sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  transition: background var(--transition), border-color var(--transition);
+}
+.app-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+.app-topbar {
+  height: var(--topbar-h);
+  min-height: var(--topbar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 1.25rem;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  transition: background var(--transition);
+}
+
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ─── CARDS ───────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1rem 1.25rem;
+  transition: background var(--transition), border-color var(--transition);
+}
+.card-sm  { padding: 0.75rem 1rem; }
+.card-lg  { padding: 1.25rem 1.5rem; }
+.card-hover:hover { border-color: var(--border2); background: var(--surface2); }
+
+/* ─── KPI STRIP (Bloomberg style — 6 cards across top) ───────────────────────── */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.75rem;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.kpi-value {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.kpi-label {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 500;
+}
+.kpi-sub { font-size: 0.6875rem; color: var(--dim); margin-top: 0.125rem; }
+.kpi-change-up   { font-size: 0.6875rem; color: var(--green); }
+.kpi-change-down { font-size: 0.6875rem; color: var(--red); }
+
+/* ─── SECTION HEADERS ─────────────────────────────────────────────────────────── */
+.section-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.section-link {
+  font-size: 0.6875rem;
+  color: var(--blue2);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.section-link:hover { color: var(--text); }
+
+/* ─── DATA TABLE ─────────────────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--dim);
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface2);
+}
+.data-table td {
+  padding: 0.5625rem 0.625rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  font-size: 0.8125rem;
+  vertical-align: middle;
+}
+.data-table tr:hover td { background: color-mix(in srgb, var(--surface2) 60%, transparent); }
+.data-table tr:last-child td { border-bottom: none; }
+
+/* ─── SCORE CHIPS ─────────────────────────────────────────────────────────────── */
+.score { font-family: "JetBrains Mono", monospace; font-weight: 700; }
+.score-elite { color: var(--score-elite); }
+.score-good  { color: var(--score-good);  }
+.score-mod   { color: var(--score-mod);   }
+.score-poor  { color: var(--score-poor);  }
+.score-crit  { color: var(--score-crit);  }
+.score-null  { color: var(--score-null);  }
+
+.score-bg-elite { background: var(--score-elite)18; border: 1px solid var(--score-elite)40; }
+.score-bg-good  { background: var(--score-good)18;  border: 1px solid var(--score-good)40;  }
+.score-bg-mod   { background: var(--score-mod)18;   border: 1px solid var(--score-mod)40;   }
+.score-bg-poor  { background: var(--score-poor)18;  border: 1px solid var(--score-poor)40;  }
+.score-bg-crit  { background: var(--score-crit)18;  border: 1px solid var(--score-crit)40;  }
+
+/* ─── READINESS COMPONENT BREAKDOWN (Image 4 style) ─────────────────────────── */
+.component-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.625rem;
+}
+.component-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.component-label {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.component-weight {
+  font-size: 0.5625rem;
+  color: var(--dim);
+}
+.component-pair {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+.component-score {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.375rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.component-team {
+  font-size: 0.5625rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.component-bar {
+  height: 0.1875rem;
+  border-radius: 2px;
+  background: var(--border);
+  margin-top: 0.25rem;
+  overflow: hidden;
+}
+.component-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* ─── FORM PILLS ────────────────────────────────────────────────────────────── */
+.form-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.form-pill-W { background: color-mix(in srgb, var(--green) 25%, transparent);  color: var(--green);  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);  }
+.form-pill-D { background: color-mix(in srgb, var(--amber) 25%, transparent);  color: var(--amber);  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);  }
+.form-pill-L { background: color-mix(in srgb, var(--red) 25%, transparent);    color: var(--red);    border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);    }
+
+/* ─── TIER BADGES ────────────────────────────────────────────────────────────── */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.5625rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.tier-strong   { color: var(--green);  background: color-mix(in srgb, var(--green) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);  }
+.tier-moderate { color: var(--amber);  background: color-mix(in srgb, var(--amber) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);  }
+.tier-high     { color: var(--green);  background: color-mix(in srgb, var(--green) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);  }
+.tier-medium   { color: var(--amber);  background: color-mix(in srgb, var(--amber) 20%, transparent);  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);  }
+.tier-low      { color: var(--orange); background: color-mix(in srgb, var(--orange) 20%, transparent); border: 1px solid color-mix(in srgb, var(--orange) 40%, transparent); }
+
+/* ─── INTELLIGENCE PANEL (Key Insight box) ───────────────────────────────────── */
+.insight-box {
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+.insight-label {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--blue2);
+  margin-bottom: 0.375rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.insight-text { font-size: 0.8125rem; color: var(--text2); line-height: 1.6; }
+
+/* ─── CONFIDENCE BAR ─────────────────────────────────────────────────────────── */
+.confidence-bar-track {
+  height: 0.375rem;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.confidence-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--score-crit), var(--score-mod), var(--score-elite));
+}
+
+/* ─── NAV SIDEBAR ITEMS ──────────────────────────────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5625rem;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 6px;
+  margin: 0.0625rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue2); font-weight: 600; border-left: 2px solid var(--blue2); border-radius: 0 6px 6px 0; margin-left: 0.375rem; }
+.nav-icon { font-size: 0.875rem; width: 1.125rem; text-align: center; flex-shrink: 0; }
+.nav-section { font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); padding: 0.75rem 1.375rem 0.25rem; }
+
+/* ─── SIDEBAR (actual classes used by components/Sidebar.tsx) */
+
+.sidebar-logo {
+  padding: 1.125rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+.sidebar-logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.sidebar-logo-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blue) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
+  color: var(--blue2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.sidebar-logo-text {
+  font-size: 1.0625rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.sidebar-logo-sub {
+  font-size: 0.625rem;
+  color: var(--dim);
+  line-height: 1.4;
+  margin-top: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sidebar-section { margin-bottom: 0.25rem; }
+.sidebar-section-last { margin-bottom: 0.25rem; }
+
+.sidebar-label {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--dim);
+  padding: 0.75rem 1.375rem 0.25rem;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5625rem;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 6px;
+  margin: 0.0625rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: all var(--transition);
+  cursor: pointer;
+}
+.sidebar-item:hover { background: var(--surface2); color: var(--text); }
+.sidebar-item.active {
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
+  color: var(--blue2);
+  font-weight: 600;
+  border-left: 2px solid var(--blue2);
+  border-radius: 0 6px 6px 0;
+  margin-left: 0.375rem;
+}
+
+.sidebar-data-status {
+  margin-top: auto;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.6875rem;
+}
+.data-status-label {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  margin-bottom: 0.5rem;
+}
+.data-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--muted);
+}
+
+/* ─── TOP NAVBAR ─────────────────────────────────────────────────────────────── */
+.topbar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.topbar-breadcrumb .current { color: var(--text); font-weight: 600; }
+.topbar-sep { color: var(--dim); }
+.topbar-actions { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+.topbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  font-size: 0.75rem;
+  color: var(--muted);
+  transition: all var(--transition);
+}
+.topbar-btn:hover { color: var(--text); border-color: var(--border2); }
+.topbar-date {
+  font-size: 0.6875rem;
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+}
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.625rem;
+  color: var(--muted);
+}
+.status-dot { width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--green); }
+.status-dot.warning { background: var(--amber); }
+.status-dot.error   { background: var(--red); }
+
+/* ─── GRID LAYOUTS ───────────────────────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; }
+@media (max-width: 1200px) { .grid-5 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px)  { .grid-5 { grid-template-columns: repeat(2, 1fr); } }
+
+/* ─── 4-METRIC ROW (Rest Days / Travel / Congestion / Competitions on the
+   home page hero) — deliberately stays 4 columns at every width, unlike
+   most grids in this file. These are short labels + 2-3 digit values,
+   not free-form team names, so 4-across stays legible even narrow.
+   Kept separate from .grid-5 above: that class collapses at breakpoints,
+   which is right for its own 5-item KPI row but was WRONG for this one -
+   with exactly 4 items, .grid-5's 3-column step at 1200px wrapped as
+   3-then-1 (one lone item, empty space beside it), the actual cause of
+   the "unbalanced, 40% dead space" appearance in review screenshots. */
+.grid-4-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.625rem; }
+
+/* ─── MATCH DETAIL HERO SCORE ROW — rigid 3-column widths ────────────────────
+   Real, verified bug this fixes: the row previously used justifyContent:
+   space-around with no width constraint on any of the 3 children, so a
+   long team name (e.g. "Suwon Samsung Bluewings") could grow wide enough
+   to physically overlap the score digits in the middle. flex-basis below
+   gives each column a hard boundary that can never be crossed regardless
+   of name length - text wraps inside its own column instead.
+   Mobile-only font scale-down (not applied on desktop, which has room):
+   team names to ~16px and the score to ~32px, keeping the row compact and
+   legible on a narrow phone without shrinking anything on wider screens
+   where the collision risk doesn't exist. */
+.rip-match-detail-hero-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.rip-match-detail-hero-team-col {
+  flex: 0 1 38%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+}
+.rip-match-detail-hero-team-name {
+  font-weight: 700;
+  color: var(--text);
+  width: 100%;
+  line-height: 1.25;
+  min-height: 2.6em;
+  display: flex;
+  align-items: center;
+  font-size: clamp(1rem, 0.85rem + 1vw, 1.25rem);
+}
+.rip-match-detail-hero-team-name-home { justify-content: flex-start; text-align: left; }
+.rip-match-detail-hero-team-name-away { justify-content: flex-end; text-align: right; }
+.rip-match-detail-hero-score-col { flex: 0 0 24%; min-width: 0; text-align: center; }
+.rip-match-detail-hero-score {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  /* clamp(min, preferred+vw, max) replaces the separate 480px media-query
+     override this used to need - scales smoothly with viewport width
+     instead of jumping abruptly at one breakpoint. Verified by
+     simulation before writing: 2rem floor at narrow phones, 3rem
+     ceiling reached and held from ~900px viewport upward, matching the
+     original min/max values exactly (just interpolated between them
+     now instead of a hard jump). */
+  font-size: clamp(2rem, 1.5rem + 3vw, 3rem);
+  line-height: 1;
+  white-space: nowrap;
+}
+.rip-match-detail-hero-status {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.125rem 0.5625rem;
+}
+
+@media (max-width: 480px) {
+  .rip-match-detail-hero-team-col { flex-basis: 36%; }
+  .rip-match-detail-hero-score-col { flex-basis: 28%; }
+}
+.grid-7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.625rem; }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+.grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
+.grid-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 1rem; }
+
+/* ─── MONO UTILITY ───────────────────────────────────────────────────────────── */
+.mono { font-family: "JetBrains Mono", monospace; }
+
+/* ─── PROGRESS BARS ──────────────────────────────────────────────────────────── */
+.progress-track { height: 0.3125rem; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-fill  { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+
+/* ─── THEME TOGGLE ───────────────────────────────────────────────────────────── */
+.theme-toggle {
+  width: 2rem; height: 2rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.theme-toggle:hover { border-color: var(--border2); background: var(--surface3); }
+
+/* ─── SCROLLBAR ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 0.25rem; height: 0.25rem; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── RESPONSIVE ─────────────────────────────────────────────────────────────── */
+@media (max-width: 1200px) { .kpi-strip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px)  { .kpi-strip { grid-template-columns: repeat(2, 1fr); } .component-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 640px)  { .component-grid { grid-template-columns: repeat(2, 1fr); } .app-sidebar { display: none; } .app-content { padding: 0.875rem 0.75rem; gap: 0.875rem; } .rip-mobile-hide { display: none; } :root { --rip-gauge-size: 84px; } }
+
+/* ─── BOTTOM NAV CLEARANCE ────────────────────────────────────────────────────
+   MobileNav is position:fixed at the bottom and becomes visible at 768px
+   (its own breakpoint — NOT the 640px used elsewhere in this file), so the
+   content area must reserve space for it at the same 768px, or the last
+   card/rows on every page scroll underneath it and can't be read.
+   72px ≈ nav height (icon + label + padding) + safe-area inset. */
+@media (max-width: 768px) {
+  .app-content { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+}
+
+/* ─── MATCHES LIST TABLE ─────────────────────────────────────────────────────────
+   .rip-mobile-hide: applied to the densest, least-essential columns (Strength/
+   Venue/Predicted-Goals/Versatility) so the essentials (Time/Match/Gap/Pick/
+   Confidence) fit a phone screen without needing horizontal scroll at all —
+   distinct from .rip-table-scroll below, which is a safety net for anything
+   that still doesn't fit, not the primary mobile strategy on its own. */
+.rip-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* ─── MOBILE-FIRST "QUOTE PAGE" PATTERN ──────────────────────────────────────────
+   Built after the root cause of "data everywhere, hard to digest on mobile" was
+   traced to a specific, fixable mechanism: every card built this session used
+   inline `style={{ gridTemplateColumns: '1fr 1fr' }}` rather than a class —
+   and inline styles cannot be touched by a @media query, so nothing collapsed
+   on a small screen, it just squeezed. These classes are the actual fix —
+   components should use className from now on, not inline grid columns, for
+   anything that needs to reflow on mobile.
+
+   .rip-stat-grid uses repeat(auto-fit, minmax(...)) rather than manual
+   breakpoints — this is a genuinely different (better) technique than the
+   .kpi-strip/.component-grid pair above: the grid reflows continuously based
+   on available width with zero JS and zero extra @media rules per new
+   pattern, rather than needing a hand-picked breakpoint for every grid that
+   gets added. Preferred for all new dense stat grids going forward.
+
+   .rip-compare-grid is for genuine side-by-side comparisons (two teams, home
+   vs away) — these must fully STACK on mobile (a side-by-side comparison is
+   unreadable squeezed into two 150px columns), so this gets an explicit
+   breakpoint rather than auto-fit reflow. ─────────────────────────────────── */
+
+.rip-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rip-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.625rem 1rem;
+}
+.rip-stat-grid.dense { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 0.5rem 0.75rem; }
+
+.rip-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.rip-stat-label {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rip-stat-value {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rip-compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+@media (max-width: 560px) {
+  .rip-compare-grid { grid-template-columns: 1fr; gap: 1rem; }
+}
+
+/* ─── MAIN + SIDEBAR LAYOUT (asymmetric, e.g. matches list table + insights
+   panel) — stacks to one column on mobile same as .rip-compare-grid, but
+   ALSO reorders so the sidebar (second grid child) appears FIRST when
+   stacked, via `order` rather than reordering the actual markup — desktop
+   keeps its natural DOM order (main content first, sidebar second) with
+   no order override needed there at all. */
+.rip-sidebar-layout {
+  display: grid;
+  grid-template-columns: 2.6fr 1fr;
+  gap: 0.875rem;
+}
+.rip-sidebar-layout > :last-child { order: 0; }
+@media (max-width: 780px) {
+  .rip-sidebar-layout { grid-template-columns: 1fr; }
+  .rip-sidebar-layout > :last-child { order: -1; }
+}
+
+/* ─── HERO GAUGE ROW — Home page's gauge / VS-gap-box / gauge row. Each
+   gauge has flexShrink:0 (deliberately, so the arc math never distorts),
+   which means without this, the row simply overflows on a narrow screen
+   rather than shrinking — stacks to a vertical column on mobile instead,
+   consistent with the same "row of columns on desktop, column of rows on
+   mobile" pattern used everywhere else in this file. */
+/* ─── MATCH HERO — home info / home gauge / vs+gap / away gauge / away info,
+   as 5 FLAT flex siblings (not nested blocks — see page.tsx's comment on
+   why nesting caused a real bug: a taller stacked middle child made the
+   outer row's align-items:center visually sandwich the team names between
+   the two gauges instead of beside them).
+   UPDATED: stays a 3-column grid at every width instead of collapsing
+   to a vertical stack on mobile. Each team column now stacks ITS OWN
+   content vertically (badge, name, rank, gauge) so the column itself
+   stays narrow-but-legible even on a phone — badge+name side-by-side
+   only had room on a wide desktop column; centering everything within
+   a single narrow column works at any width. grid-template-columns:
+   1fr auto 1fr sizes the center (vs+gap) column to its own content and
+   splits the rest evenly between the two team columns.
+   home=left, away=right throughout, matching heroMatch.home_team/
+   away_team and standard sports convention. */
+.rip-match-hero {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 0.625rem;
+  margin-bottom: 1.25rem;
+}
+.rip-match-hero-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+.rip-match-hero-badge {
+  width: 2.5rem; height: 2.5rem; flex-shrink: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.625rem; font-weight: 700; color: var(--text);
+}
+.rip-match-hero-name { font-size: clamp(0.8125rem, 0.7rem + 0.5vw, 0.9375rem); font-weight: 700; color: var(--text); text-align: center; }
+.rip-match-hero-rank { font-size: 0.6875rem; color: var(--dim); margin-bottom: 0.25rem; }
+.rip-match-hero-center { text-align: center; flex-shrink: 0; padding-top: 0.5rem; }
+
+@media (max-width: 400px) {
+  /* Only the truly narrowest phones need any further adjustment — the
+     grid itself already holds 3 columns comfortably down to ~360px. */
+  .rip-match-hero { gap: 0.25rem; }
+}
+
+/* ─── GENERIC MOBILE STACK — for asymmetric main+sidebar grids whose
+   desktop ratio is set inline per-page (e.g. '1fr 300px') and doesn't
+   match the fixed 2.6fr:1fr .rip-sidebar-layout is built for. Only
+   defines the mobile override, leaving each page's own desktop ratio
+   untouched. Needs !important because it's specifically overriding an
+   INLINE gridTemplateColumns value — normal CSS specificity rules never
+   let a class beat an inline style otherwise, @media or not. */
+@media (max-width: 640px) {
+  .rip-stack-mobile { grid-template-columns: 1fr !important; }
+}
+
+/* ─── CATEGORIZED TEAM COMPARISON (match Overview landing) ───────────────────
+   Fully class-based per the CSS-structure requirement — the component
+   (CategorizedComparison.tsx) carries zero inline styles. Desktop: one
+   row of four category columns; mobile: categories stack vertically.
+   All colors via theme variables → works in light and dark mode. */
+.cmp-categories {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.875rem;
+}
+@media (max-width: 980px) { .cmp-categories { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .cmp-categories { grid-template-columns: 1fr; } }
+
+.cmp-category {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 0.875rem;
+}
+.cmp-category-title {
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.625rem;
+  border-bottom: 1px solid var(--border);
+}
+.cmp-category-rows { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.cmp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem 0.875rem;
+}
+.cmp-row-label { flex: 1 1 auto; min-width: 5.625rem; font-size: 0.6875rem; color: var(--text2); font-weight: 600; }
+.cmp-note { font-size: 0.5625rem; color: var(--dim); font-weight: 400; font-style: italic; }
+.cmp-row-values { flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem; }
+.cmp-val { font-size: 0.8125rem; font-weight: 700; color: var(--text); }
+.cmp-val.mono { font-family: "JetBrains Mono", monospace; }
+/* Strong (>=30% relative gap) side gets extra visual weight, so a 10-vs-81
+   Strength Rating doesn't read the same as a 100-vs-99 Squad Stability tie. */
+.cmp-val-strong { font-size: 0.9375rem; text-shadow: 0 0 10px currentColor; }
+.cmp-vs { font-size: 0.5625rem; color: var(--dim); text-transform: uppercase; }
+
+.cmp-edge {
+  flex: 0 0 auto;
+  display: inline-block;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.cmp-edge-strong { font-size: 0.625rem; padding: 0.1875rem 0.625rem; }
+.cmp-edge-home {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 30%, transparent);
+}
+.cmp-edge-away {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 30%, transparent);
+}
+.cmp-edge-even {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  border-color: color-mix(in srgb, var(--muted) 25%, transparent);
+}
+.cmp-edge-home.cmp-edge-strong {
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+  border-color: var(--amber);
+}
+.cmp-edge-away.cmp-edge-strong {
+  background: color-mix(in srgb, var(--blue) 22%, transparent);
+  border-color: var(--blue);
+}
+.cmp-legend {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.rip-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.rip-tabs::-webkit-scrollbar { display: none; }
+.rip-tab {
+  padding: 0.5rem 1.125rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+}
+.rip-tab.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+}
+
+.rip-pills {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 0.125rem;
+}
+.rip-pills::-webkit-scrollbar { display: none; }
+.rip-pill {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  font-size: 0.6875rem;
+  color: var(--text2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rip-pill:hover { border-color: var(--border2); }
