@@ -13,7 +13,7 @@ import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
 import TeamCrest from '@/components/TeamCrest';
 import ReadinessBreakdown, { ReadinessComponent } from '@/components/ReadinessBreakdown';
-import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveFormation, deriveAreaVersatility } from '@/lib/insights';
+import { generateMatchInsight, generateExecutiveSummary, generateNarrativeThreads, deriveRole, deriveCategory, deriveFormation, deriveAreaVersatility, computeCategoryAdvantageSummary } from '@/lib/insights';
 import { ComparisonRow } from '@/components/TeamComparisonMatrix';
 import CategorizedComparison from '@/components/CategorizedComparison';
 import FormString from '@/components/FormString';
@@ -397,6 +397,20 @@ export default function MatchPage() {
   const homeAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(homeLineup));
   const awayAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(awayLineup));
 
+  // Category Advantage Summary — see computeCategoryAdvantageSummary in
+  // insights.ts for the full rationale. A transparent tally, not a
+  // blended predictive score. Key player ratings/card-risk pulled from
+  // the same keyPlayerBattle data already rendered in the Lineups tab.
+  const categoryAdvantage = computeCategoryAdvantageSummary({
+    comparisonRows,
+    homeAreaVersatility,
+    awayAreaVersatility,
+    homeKeyPlayerRatings: (keyPlayerBattle?.home ?? []).map((p: any) => p.avgRating),
+    awayKeyPlayerRatings: (keyPlayerBattle?.away ?? []).map((p: any) => p.avgRating),
+    homeKeyPlayerCardRisk: (keyPlayerBattle?.home ?? []).map((p: any) => p.suspensionRisk).filter(Boolean),
+    awayKeyPlayerCardRisk: (keyPlayerBattle?.away ?? []).map((p: any) => p.suspensionRisk).filter(Boolean),
+  });
+
   // ─── Team Column Renderer ───────────────────────────────────────────────────
   const TeamColumn = ({ team, intel: ti, form, fix, squad, upcoming, depth }: any) => {
     // ── Aggregate position depth ──────────────────────────────────────────────
@@ -723,6 +737,66 @@ export default function MatchPage() {
               the underlying readiness gap, form, and model numbers are
               still shown below via CategorizedComparison and the
               Intelligence tab. ── */}
+
+          {/* ── CATEGORY ADVANTAGE SUMMARY — a transparent tally of how many
+              tracked categories each side leads in (baseline comparison
+              rows + area versatility + key player rating), NOT a blended
+              predictive score or a "winner" verdict. Every number here
+              is directly traceable to detail shown further down this page
+              (CategorizedComparison, Lineups versatility bars, Key Player
+              Battle cards). See computeCategoryAdvantageSummary in
+              insights.ts for the full rationale — deliberately built to
+              avoid the fabricated-precision and directional-prediction
+              problems the removed Prediction card above had. ── */}
+          {categoryAdvantage.totalCategories > 0 && (
+            <Card>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Category Advantage Summary</div>
+              <div style={{ fontSize: 9, color: COLORS.dim, marginBottom: 14 }}>
+                A tally of tracked categories each side leads in — informational, not a prediction. Full detail below.
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
+                  {match.home_team?.short_name ?? match.home_team?.name} <span style={{ color: COLORS.green }}>{categoryAdvantage.homeLeads}</span>
+                </div>
+                {categoryAdvantage.even > 0 && (
+                  <div style={{ fontSize: 10, color: COLORS.dim }}>{categoryAdvantage.even} even</div>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
+                  <span style={{ color: COLORS.amber }}>{categoryAdvantage.awayLeads}</span> {match.away_team?.short_name ?? match.away_team?.name}
+                </div>
+              </div>
+
+              {/* Proportional tally bar — visual only, not a probability */}
+              <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: COLORS.border }}>
+                {categoryAdvantage.homeLeads > 0 && (
+                  <div style={{ width: `${(categoryAdvantage.homeLeads / categoryAdvantage.totalCategories) * 100}%`, background: COLORS.green }} />
+                )}
+                {categoryAdvantage.even > 0 && (
+                  <div style={{ width: `${(categoryAdvantage.even / categoryAdvantage.totalCategories) * 100}%`, background: COLORS.dim }} />
+                )}
+                {categoryAdvantage.awayLeads > 0 && (
+                  <div style={{ width: `${(categoryAdvantage.awayLeads / categoryAdvantage.totalCategories) * 100}%`, background: COLORS.amber }} />
+                )}
+              </div>
+
+              <div style={{ fontSize: 9, color: COLORS.dim, marginTop: 6 }}>
+                {categoryAdvantage.totalCategories} categories tracked
+              </div>
+
+              {/* Discipline risk notes — shown as plain facts, not folded into the tally as a penalty */}
+              {(categoryAdvantage.homeCardRiskNote || categoryAdvantage.awayCardRiskNote) && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {categoryAdvantage.homeCardRiskNote && (
+                    <div style={{ fontSize: 10, color: COLORS.amber }}>⚠ {match.home_team?.short_name}: key player {categoryAdvantage.homeCardRiskNote}</div>
+                  )}
+                  {categoryAdvantage.awayCardRiskNote && (
+                    <div style={{ fontSize: 10, color: COLORS.amber }}>⚠ {match.away_team?.short_name}: key player {categoryAdvantage.awayCardRiskNote}</div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* ── CATEGORIZED TEAM COMPARISON — the Overview landing content per
               the 6-tab redesign spec: four named category groups, 4-col
