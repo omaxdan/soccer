@@ -2879,7 +2879,7 @@ export async function processPredictedLineups(): Promise<{
     // ── 3. Get players with position and injury status ────────────────────
     const players = await fetchAllRows(
       db.from('players')
-        .select('id, team_id, position, current_injury, injury_status, injury_reason, injury_return_days')
+        .select('id, team_id, position, primary_position, current_injury, injury_status, injury_reason, injury_return_days')
         .in('team_id', teamIds)
     );
 
@@ -2927,68 +2927,122 @@ export async function processPredictedLineups(): Promise<{
       }
     }
 
-    // ── 6. Build per-team ranked rosters by position ──────────────────────
-    // Formation: 1 GK, 4 DEF, 4 MID, 2 FWD
+    // ── 6. Build per-team rosters with position intelligence ──────────────
+    // V2 (audit upgrade): two fixes over the broad-letter version —
+    //
+    //  a) POSITION INTELLIGENCE: the old version bucketed by the broad
+    //     `position` letter only, so a player like position='D',
+    //     primary_position='RW' (real case: Park Kyu-Min, team 299) was
+    //     selected into the BACK FOUR while actually a winger — and
+    //     fullbacks vs centre-backs were indistinguishable, so a lineup
+    //     could field four centre-backs and no fullback with full
+    //     confidence. Now primary_position (SofaScore code) both overrides
+    //     the broad group when they disagree AND drives sub-slot quotas
+    //     within the group (D: 1 right + 2 central + 1 left; M: 2 wide +
+    //     2 central). Players without primary_position stay eligible for
+    //     any sub-slot of their broad group, so sparse-data teams degrade
+    //     to exactly the old behaviour.
+    //
+    //  b) WEIGHTED RANKING replaces lexicographic tiers: 9 starts with an
+    //     8.1 rating no longer always loses to 10 starts at 5.9. Score =
+    //     50% starts + 20% appearances + 20% avg rating + 10% goal
+    //     contributions, with starts/apps normalized against the team's
+    //     own maximum (scale-free across leagues at different season
+    //     stages). Starts keeps primacy: it is the direct trusted-starter
+    //     signal, while appearances counts 5-minute cameos equally.
+
     const FORMATION: Record<string, number> = { G: 1, D: 4, M: 4, F: 2 };
+
+    // Sub-slot quotas within each broad group (sums equal FORMATION counts)
+    const SUB_SLOTS: Record<string, Record<string, number>> = {
+      G: { ANY: 1 },
+      D: { R: 1, C: 2, L: 1 },
+      M: { W: 2, C: 2 },
+      F: { ANY: 2 },
+    };
+
+    // Broad group from primary_position — overrides the coarse letter when
+    // they disagree. Wingers slot as wide midfielders in the 4-4-2 frame.
+    const groupOf = (primary: string | null, broadLetter: string): string => {
+      const p = (primary || '').toUpperCase();
+      if (p === 'GK' || p === 'G') return 'G';
+      if (['DR', 'RB', 'RWB', 'DL', 'LB', 'LWB', 'DC', 'CB', 'SW'].includes(p)) return 'D';
+      if (['DM', 'MC', 'CM', 'AM', 'CAM', 'CDM', 'MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'M';
+      if (['ST', 'CF', 'FW'].includes(p)) return 'F';
+      return ['G', 'D', 'M', 'F'].includes(broadLetter) ? broadLetter : 'M';
+    };
+
+    const subSlotOf = (primary: string | null): string => {
+      const p = (primary || '').toUpperCase();
+      if (['DR', 'RB', 'RWB'].includes(p)) return 'R';
+      if (['DL', 'LB', 'LWB'].includes(p)) return 'L';
+      if (['DC', 'CB', 'SW', 'DM', 'MC', 'CM', 'AM', 'CAM', 'CDM'].includes(p)) return 'C';
+      if (['MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'W';
+      return 'ANY'; // unknown → eligible for any sub-slot in its group
+    };
+
     const teamRosters = new Map<number, Map<string, any[]>>();
 
     for (const [playerId, stats] of statsMap) {
       const player = playerMap.get(playerId);
       if (!player) continue;
 
-      // ── Check if player is available ──────────────────────────────────
-      // 1. Exclude if current_injury is true
+      // ── Availability (unchanged from v1) ───────────────────────────────
       if (player.current_injury) continue;
-
-      // 2. Check active injuries table for detailed status
       const injury = injuryMap.get(playerId);
       if (injury) {
-        // If injury_status is 'out' or 'doubtful', exclude
-        if (injury.injury_status === 'out' || injury.injury_status === 'doubtful') {
-          continue;
-        }
-        // If expected_return_days > 0 and match is within that window, exclude
-        if (injury.expected_return_days && injury.expected_return_days > 0) {
-          // Could check against match date, but safer to exclude if injured at all
-          continue;
-        }
+        if (injury.injury_status === 'out' || injury.injury_status === 'doubtful') continue;
+        if (injury.expected_return_days && injury.expected_return_days > 0) continue;
       }
-
-      // 3. Check if player transferred out since stats snapshot
       const latestTeam = latestTeamMap.get(playerId);
       if (latestTeam && latestTeam !== player.team_id) continue;
       if (latestTeam && latestTeam !== stats.team_id) continue;
 
-      const pos = player.position || 'M'; // default bucket if unknown
-      if (!teamRosters.has(stats.team_id)) {
-        teamRosters.set(stats.team_id, new Map());
-      }
-      const posMap = teamRosters.get(stats.team_id)!;
-      if (!posMap.has(pos)) posMap.set(pos, []);
+      const group = groupOf(player.primary_position ?? null, player.position || 'M');
 
-      // Calculate average rating from total/count
+      if (!teamRosters.has(stats.team_id)) teamRosters.set(stats.team_id, new Map());
+      const posMap = teamRosters.get(stats.team_id)!;
+      if (!posMap.has(group)) posMap.set(group, []);
+
       let avgRating = 0;
       if (stats.count_rating > 0 && stats.total_rating > 0) {
         avgRating = stats.total_rating / stats.count_rating;
       }
 
-      posMap.get(pos)!.push({
-        playerId: playerId,
+      posMap.get(group)!.push({
+        playerId,
         teamId: stats.team_id,
         matchesStarted: stats.matches_started || 0,
         appearances: stats.appearances || 0,
         minutesPlayed: stats.minutes_played || 0,
-        avgRating: avgRating,
+        avgRating,
         totalRating: stats.total_rating || 0,
         countRating: stats.count_rating || 0,
         goals: stats.goals || 0,
         assists: stats.assists || 0,
-        position: pos,
+        position: group,
+        subSlot: subSlotOf(player.primary_position ?? null),
         injuryStatus: injury?.injury_status || null,
+        weightedScore: 0, // filled once team maxima are known (next pass)
       });
     }
 
-    // ── 7. Select starting XI for each match ──────────────────────────────
+    // Second pass: per-team normalization → weighted score
+    for (const posMap of teamRosters.values()) {
+      const all: any[] = ([] as any[]).concat(...[...posMap.values()]);
+      const maxStarts = Math.max(1, ...all.map((c: any) => c.matchesStarted));
+      const maxApps   = Math.max(1, ...all.map((c: any) => c.appearances));
+      for (const c of all) {
+        const startsNorm  = c.matchesStarted / maxStarts;
+        const appsNorm    = c.appearances / maxApps;
+        const ratingNorm  = Math.min(1, c.avgRating / 10);        // SofaScore scale 0-10
+        const contribNorm = Math.min(1, (c.goals + c.assists) / 10);
+        c.weightedScore =
+          50 * startsNorm + 20 * appsNorm + 20 * ratingNorm + 10 * contribNorm;
+      }
+    }
+
+    // ── 7. Select starting XI for each match (sub-slot aware) ─────────────
     const rows: any[] = [];
 
     for (const match of matches) {
@@ -3000,42 +3054,47 @@ export async function processPredictedLineups(): Promise<{
         }
 
         for (const [pos, count] of Object.entries(FORMATION)) {
-          // ── Rank players by multiple signals ──────────────────────────────
-          // Primary: matches_started (who actually plays)
-          // Secondary: appearances (fitness/reliability)
-          // Tertiary: avg_rating (quality)
-          // Quaternary: minutes_played (endurance/trust)
-          const candidates = (posMap.get(pos) || [])
-            .filter(c => c.matchesStarted > 0 || c.appearances > 0) // Only players who've played
-            .sort((a, b) => {
-              // 1. Matches started (most important)
-              if (b.matchesStarted !== a.matchesStarted) {
-                return b.matchesStarted - a.matchesStarted;
-              }
-              // 2. Appearances (reliability)
-              if (b.appearances !== a.appearances) {
-                return b.appearances - a.appearances;
-              }
-              // 3. Average rating (quality)
-              if (b.avgRating !== a.avgRating) {
-                return b.avgRating - a.avgRating;
-              }
-              // 4. Minutes played (endurance)
-              return b.minutesPlayed - a.minutesPlayed;
-            });
+          const pool = (posMap.get(pos) || [])
+            .filter((c: any) => c.matchesStarted > 0 || c.appearances > 0)
+            .sort((a: any, b: any) =>
+              b.weightedScore !== a.weightedScore
+                ? b.weightedScore - a.weightedScore
+                : b.minutesPlayed - a.minutesPlayed
+            );
 
-          const top = candidates.slice(0, count);
+          // Sub-slot pass: each quota takes the best-scored matching
+          // specialist (ANY-slot players are wildcards); any shortfall is
+          // filled from the remaining pool by score — which reduces to the
+          // old behaviour exactly when no primary_position data exists.
+          const picked: any[] = [];
+          const taken = new Set<number>();
+          for (const [slot, quota] of Object.entries(SUB_SLOTS[pos])) {
+            let filled = 0;
+            for (const c of pool) {
+              if (filled >= quota) break;
+              if (taken.has(c.playerId)) continue;
+              if (slot !== 'ANY' && c.subSlot !== slot && c.subSlot !== 'ANY') continue;
+              picked.push(c); taken.add(c.playerId); filled++;
+            }
+          }
+          for (const c of pool) {
+            if (picked.length >= count) break;
+            if (!taken.has(c.playerId)) { picked.push(c); taken.add(c.playerId); }
+          }
 
-          top.forEach((c, index) => {
-            const next = candidates[index + 1];
+          const top = picked
+            .slice(0, count)
+            .sort((a: any, b: any) => b.weightedScore - a.weightedScore);
+          const bench = pool.filter((c: any) => !taken.has(c.playerId));
 
-            // ── Calculate confidence ─────────────────────────────────────────
-            // Factors:
+          top.forEach((c: any, index: number) => {
+            const next = top[index + 1] ?? bench[0];
+
+            // ── Confidence (framework unchanged from v1) ─────────────────
             // 1. Starts gap vs next player (50% weight)
             // 2. Rating gap vs next player (20% weight)
             // 3. Appearance count (20% weight)
             // 4. Position-specific bonus (10% weight)
-
             const startsGap = next ? c.matchesStarted - next.matchesStarted : c.matchesStarted || 1;
             const ratingGap = next ? c.avgRating - next.avgRating : 0;
             const appearanceFactor = Math.min(1, c.appearances / 20);
@@ -3043,14 +3102,13 @@ export async function processPredictedLineups(): Promise<{
             let confidence = 50;
             confidence += Math.min(40, startsGap * 4); // Starts gap: max +40
             confidence += Math.min(15, ratingGap * 3); // Rating gap: max +15
-            confidence += appearanceFactor * 15; // Experience: max +15
+            confidence += appearanceFactor * 15;       // Experience: max +15
             confidence += c.matchesStarted > 10 ? 10 : 0; // Established starter: +10
 
-            // Position-specific adjustments
             if (pos === 'G' && c.matchesStarted > 5) {
-              confidence += 5; // Keepers more stable
+              confidence += 5;  // Keepers more stable
             } else if (pos === 'F' && index > 0) {
-              confidence -= 5; // 2nd forward less certain
+              confidence -= 5;  // 2nd forward less certain
             }
 
             confidence = Math.min(100, Math.max(0, Math.round(confidence)));
