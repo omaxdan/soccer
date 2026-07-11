@@ -461,6 +461,34 @@ export async function getMatchConfidenceMap(
   return result;
 }
 
+/** Starting XI Strength for a set of matches — independent overlay metric,
+ *  NOT a readiness component (see processStartingXIStrength() docstring on
+ *  the backend). Same soft-fail pattern as getMatchConfidenceMap: a
+ *  separate query so a not-yet-applied migration 027 degrades only this
+ *  one panel instead of every match page. NULL for matches without a
+ *  predicted lineup yet (beyond the 7-day horizon, or not yet computed). */
+export async function getMatchXIStrengthMap(
+  matchIds: number[]
+): Promise<Map<number, { home: number | null; away: number | null }>> {
+  const result = new Map<number, { home: number | null; away: number | null }>();
+  if (matchIds.length === 0) return result;
+  try {
+    const { data, error } = await supabase
+      .from('match_intelligence')
+      .select('match_id, home_xi_strength, away_xi_strength')
+      .in('match_id', matchIds);
+    if (error || !data) return result;
+    for (const r of data) {
+      if (r.home_xi_strength == null && r.away_xi_strength == null) continue;
+      result.set(r.match_id, { home: r.home_xi_strength ?? null, away: r.away_xi_strength ?? null });
+    }
+  } catch {
+    // Columns missing (migration 027 not applied) or transient failure —
+    // degrade the one panel, never the page.
+  }
+  return result;
+}
+
 // ─── MATCH INTELLIGENCE PAGE ──────────────────────────────────────────────────
 
 export async function getMatchById(id: number): Promise<any> {

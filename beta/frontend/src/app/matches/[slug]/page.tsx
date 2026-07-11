@@ -8,6 +8,7 @@ import {
   getMatchById, getTeamIntelligence, getTeamFormHistory,
   getTeamFixtureLoad, getTeamTravelLoad, getTeamSquadSnapshot, getTeamUpcomingMatches,
   getMatchWithLineups, getTeamPositionDepth, getTeamGoalDependency, getTeamInjuryImpact, getMatchComparisonExtras, getMatchKeyPlayers, getMatchKeyPlayerBattle,
+  getMatchXIStrengthMap,
 } from '@/lib/queries';
 import { COLORS, scoreColor, TYPE , withAlpha } from '@/design/tokens';
 import ReadinessGauge from '@/components/ReadinessGauge';
@@ -96,7 +97,7 @@ export default function MatchPage() {
         const awayLineup = match.away_lineup || [];
         
         // ── Fetch position depth ──────────────────────────────────────────────
-        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers, keyPlayerBattle] = await Promise.all([
+        const [hI, aI, hF, aF, hFix, aFix, hT, aT, hS, aS, hUp, aUp, hDepth, aDepth, hGoalDep, aGoalDep, hInjury, aInjury, matchExtras, matchKeyPlayers, keyPlayerBattle, xiStrengthMap] = await Promise.all([
           getTeamIntelligence(homeId).catch(() => null),
           getTeamIntelligence(awayId).catch(() => null),
           getTeamFormHistory(homeId, 10).catch(() => []),
@@ -118,6 +119,7 @@ export default function MatchPage() {
           getMatchComparisonExtras([homeId, awayId]).catch(() => new Map()),
           getMatchKeyPlayers(parseInt(id), homeId, awayId).catch(() => ({ home: [], away: [] })),
           getMatchKeyPlayerBattle(homeId, awayId).catch(() => ({ home: [], away: [] })),
+          getMatchXIStrengthMap([parseInt(id)]).catch(() => new Map()),
         ]);
         
         setData({ 
@@ -145,6 +147,7 @@ export default function MatchPage() {
           matchExtras,
           matchKeyPlayers,
           keyPlayerBattle,
+          xiStrength: xiStrengthMap.get(parseInt(id)) ?? null,
         });
       } catch (error) {
         console.error('❌ Error loading match:', error);
@@ -181,6 +184,7 @@ export default function MatchPage() {
     matchExtras,
     matchKeyPlayers,
     keyPlayerBattle,
+    xiStrength,
   } = data;
   
   const intel   = toOne(match.match_intelligence);
@@ -859,7 +863,7 @@ export default function MatchPage() {
                   entirely — its content (last-5/10 form, form index) is
                   now reachable in full depth via the embedded team tabs
                   directly below, not duplicated as a second summary. */}
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:12 }}>
+              <div style={{ display:'grid', gridTemplateColumns:`repeat(${xiStrength ? 3 : 2}, 1fr)`, gap:12 }}>
                 <Card>
                   <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8, textAlign:'center' }}>Strength</div>
                   <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center' }}>
@@ -876,6 +880,19 @@ export default function MatchPage() {
                     <Mono size={22}>{awayExtras?.venue_advantage_score != null ? Math.round(awayExtras.venue_advantage_score) : '—'}</Mono>
                   </div>
                 </Card>
+                {xiStrength && (
+                  <Card>
+                    <div style={{ fontSize:10, color:COLORS.dim, textTransform:'uppercase', marginBottom:8, textAlign:'center' }} title="Projected starting XI vs this team's own best-available XI. Independent overlay — not a readiness component.">
+                      Starting XI Strength
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-around', alignItems:'center' }}>
+                      <Mono size={22} color={scoreColor(xiStrength.home)}>{xiStrength.home != null ? xiStrength.home : '—'}</Mono>
+                      <span style={{ fontSize:10, color:COLORS.dim }}>vs</span>
+                      <Mono size={22} color={scoreColor(xiStrength.away)}>{xiStrength.away != null ? xiStrength.away : '—'}</Mono>
+                    </div>
+                    <div style={{ fontSize:9, color:COLORS.dim, textAlign:'center', marginTop:6 }}>vs each team's own full-strength XI</div>
+                  </Card>
+                )}
               </div>
               {/* Deep team tabs (Form/Fixture Load/Squad/Intelligence),
                   moved up from the old separate "Physical" section below

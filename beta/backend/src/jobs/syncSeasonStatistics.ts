@@ -531,6 +531,20 @@ export async function syncTeamSeasonStatistics(countries?: string[], teamExterna
         red_cards:                s.redCards ?? null,
         big_chances_created:      s.bigChancesCreated ?? null,
         big_chances_missed:       s.bigChancesMissed ?? null,
+        // BETA (migration 026 — PQI prerequisite): already present in every
+        // response above, was being discarded. Same call, zero new cost.
+        shots:                          s.shots ?? null,
+        shots_on_target:                 s.shotsOnTarget ?? null,
+        shots_off_target:                s.shotsOffTarget ?? null,
+        big_chances:                     s.bigChances ?? null,
+        shots_from_inside_the_box:       s.shotsFromInsideTheBox ?? null,
+        shots_against:                   s.shotsAgainst ?? null,
+        shots_on_target_against:         s.shotsOnTargetAgainst ?? null,
+        big_chances_against:             s.bigChancesAgainst ?? null,
+        corners_against:                 s.cornersAgainst ?? null,
+        accurate_opposition_half_passes_pct: s.accurateOppositionHalfPassesPercentage ?? null,
+        fouls:                           s.fouls ?? null,
+        offsides:                        s.offsides ?? null,
         calculated_at:            new Date().toISOString(),
         updated_at:               new Date().toISOString(),
       }, { onConflict: 'team_id,season_external_id' });

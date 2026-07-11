@@ -5,7 +5,7 @@ import { syncSchedule } from './jobs/syncSchedule';
 import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsForTrackedLeagues as syncSquadsTrackedLegacy } from './jobs/syncTeamsPlayers';
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
-import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad, processNetBattleIndex } from './jobs/processDbOnly';
+import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processStartingXIStrength, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad, processNetBattleIndex } from './jobs/processDbOnly';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
@@ -728,6 +728,13 @@ async function handleCommand(command: string, ...args: string[]) {
         const predictedLineups = await processPredictedLineups();
         logger.info({ ...predictedLineups }, '[L5] ✓ predicted lineups');
 
+        // ── LAYER 5.7 ── Needs match_predicted_lineups (L5) — Starting XI
+        // Strength overlay. Independent metric, not a readiness component;
+        // see processStartingXIStrength() docstring.
+        logger.info('[L5.7/3] Starting XI strength (needs predicted lineups)...');
+        const xiStrength = await processStartingXIStrength();
+        logger.info({ ...xiStrength }, '[L5.7] ✓ starting XI strength');
+
         // ── LAYER 5.5 ── Needs team_form_history (L1) only — independent
         // of squad/player data, can run as soon as form history exists.
         logger.info('[L5.5/3] Scoreline predictions (Poisson model, needs team_form_history)...');
@@ -749,7 +756,7 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info({
           durationSeconds: elapsed,
           form, fixture, locs, travel, matchTravel, momentum, fixtureDiff,
-          strength, venue, teamIntel, playerIntel, leagueIntel, matchIntel, matchSignals, predictedLineups, scorelines, dashboardSummary,
+          strength, venue, teamIntel, playerIntel, leagueIntel, matchIntel, matchSignals, predictedLineups, xiStrength, scorelines, dashboardSummary,
         }, '━━━ process:all-db complete in ' + elapsed + 's ━━━');
         break;
       }

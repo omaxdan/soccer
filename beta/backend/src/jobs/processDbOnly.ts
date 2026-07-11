@@ -3285,6 +3285,266 @@ export async function processPredictedLineups(): Promise<{
   }
 }
 
+// ─── STARTING XI STRENGTH — Projected XI vs Best-Available XI ───────────────
+/**
+ * Answers a different question than team_intelligence.readiness_score:
+ * not "how prepared is this club overall" but "how strong is the specific
+ * eleven expected to play THIS match, relative to the strongest eleven
+ * this team could field today." A club can be strong while its projected
+ * lineup is weak (key absences, heavy rotation) — this catches that.
+ *
+ * Deliberately NOT folded into readiness as a weighted component (per
+ * design brief): shown as an independent overlay on match_intelligence,
+ * home_xi_strength / away_xi_strength, alongside readiness_gap.
+ *
+ * Method:
+ *   1. player_strength_score per player (this function, written to
+ *      player_intelligence): 40% avg rating + 30% appearances (normalized
+ *      to team max) + 15% goal contribution + 15% position-importance
+ *      multiplier (reuses the GK/CB/CM/AM/ST weights below, min-max
+ *      normalized to 0-100 — documented simplification: the same
+ *      multiplier set does double duty as both the "importance" input
+ *      here and the absence-penalty in step 3, since both express the
+ *      same underlying idea and inventing a second unvalidated number
+ *      for one of them would be worse, not better).
+ *   2. Best-XI score: for each team, the highest-scoring AVAILABLE
+ *      (non-injured) player per sub-slot, using the exact sub-slot
+ *      machinery already built for processPredictedLineups (1-4-4-2,
+ *      D: R/C/C/L, M: W/W/C/C) — kept identical on purpose so the ratio
+ *      compares like-for-like formations rather than two different shapes.
+ *   3. Projected-XI score: the stored match_predicted_lineups XI for this
+ *      match, position-weighted the same way.
+ *   4. xi_strength = (projected / best) × 100, clamped 0-100. NULL when
+ *      no predicted lineup exists for that match yet (graceful — matches
+ *      processPredictedLineups' own 7-day horizon).
+ */
+
+// Position-importance / absence-penalty multipliers — per the design
+// brief's own numbers. Positions not explicitly given a multiplier there
+// (fullback/winger slots) default to 1.0, flagged as a filled gap, not a
+// verified figure — revisit once there's a reason to differentiate them.
+function xiMultiplier(group: string, subSlot: string): number {
+  if (group === 'G') return 1.25;
+  if (group === 'D' && subSlot === 'C') return 1.10;
+  if (group === 'M' && subSlot === 'C') return 1.15; // CM
+  if (group === 'M' && subSlot === 'W') return 1.20; // treated as AM/wide creative per brief's AM=1.20
+  if (group === 'F') return 1.25; // ST
+  return 1.00; // fullbacks and unlisted slots — documented default, not a verified weight
+}
+// Normalized 0-100 version of the same multipliers for the player_strength
+// "position importance" component (min 1.00 -> 0, max 1.25 -> 100).
+function xiImportanceScore(group: string, subSlot: string): number {
+  const m = xiMultiplier(group, subSlot);
+  return Math.round(((m - 1.00) / 0.25) * 100);
+}
+
+export async function processStartingXIStrength(): Promise<{
+  matchesProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processStartingXIStrength started — DB only, zero API calls');
+
+  try {
+    // ── 1. Upcoming matches with a predicted lineup (next 7 days, same
+    //    horizon as processPredictedLineups so this never runs ahead of
+    //    its own dependency).
+    const now = new Date().toISOString();
+    const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
+
+    const matches = await fetchAllRows(
+      db.from('matches')
+        .select('id, home_team_id, away_team_id, date')
+        .eq('status', 'scheduled')
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
+    if (!matches || matches.length === 0) {
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    // ── 2. Season stats (rating, appearances, goals/assists) — most recent
+    //    season only, same convention as processPredictedLineups.
+    const seasonStats = await fetchAllRows(
+      db.from('player_season_statistics')
+        .select('player_id, team_id, season_external_id, appearances, total_rating, count_rating, goals, assists')
+        .in('team_id', teamIds)
+    );
+    const statsMap = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsMap.get(s.player_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsMap.set(s.player_id, s);
+    }
+
+    // ── 3. Players (position, availability) ────────────────────────────
+    const players = await fetchAllRows(
+      db.from('players')
+        .select('id, team_id, position, primary_position, current_injury')
+        .in('team_id', teamIds)
+    );
+    const playerMap = new Map<number, any>(players.map((p: any) => [p.id, p]));
+
+    // ── 4. Reuse the exact position-group / sub-slot classifier from
+    //    processPredictedLineups so Best-XI and Projected-XI compare the
+    //    same formation shape.
+    const FORMATION: Record<string, number> = { G: 1, D: 4, M: 4, F: 2 };
+    const SUB_SLOTS: Record<string, Record<string, number>> = {
+      G: { ANY: 1 }, D: { R: 1, C: 2, L: 1 }, M: { W: 2, C: 2 }, F: { ANY: 2 },
+    };
+    const groupOf = (primary: string | null, broadLetter: string): string => {
+      const p = (primary || '').toUpperCase();
+      if (p === 'GK' || p === 'G') return 'G';
+      if (['DR', 'RB', 'RWB', 'DL', 'LB', 'LWB', 'DC', 'CB', 'SW'].includes(p)) return 'D';
+      if (['DM', 'MC', 'CM', 'AM', 'CAM', 'CDM', 'MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'M';
+      if (['ST', 'CF', 'FW'].includes(p)) return 'F';
+      return ['G', 'D', 'M', 'F'].includes(broadLetter) ? broadLetter : 'M';
+    };
+    const subSlotOf = (primary: string | null): string => {
+      const p = (primary || '').toUpperCase();
+      if (['DR', 'RB', 'RWB'].includes(p)) return 'R';
+      if (['DL', 'LB', 'LWB'].includes(p)) return 'L';
+      if (['DC', 'CB', 'SW', 'DM', 'MC', 'CM', 'AM', 'CAM', 'CDM'].includes(p)) return 'C';
+      if (['MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'W';
+      return 'ANY';
+    };
+
+    // ── 5. player_strength_score per player, per team (only for teams in
+    //    scope this run — cheap, and keeps player_intelligence current for
+    //    every player who could plausibly appear this week).
+    const rosterByTeam = new Map<number, any[]>();
+    for (const [playerId, stat] of statsMap) {
+      const player = playerMap.get(playerId);
+      if (!player) continue;
+      const group = groupOf(player.primary_position ?? null, player.position || 'M');
+      const subSlot = subSlotOf(player.primary_position ?? null);
+
+      const avgRating = (stat.count_rating > 0 && stat.total_rating > 0)
+        ? stat.total_rating / stat.count_rating : 0;
+      if (!rosterByTeam.has(stat.team_id)) rosterByTeam.set(stat.team_id, []);
+      rosterByTeam.get(stat.team_id)!.push({
+        playerId, teamId: stat.team_id, group, subSlot,
+        avgRating, appearances: stat.appearances || 0,
+        goals: stat.goals || 0, assists: stat.assists || 0,
+        available: !player.current_injury,
+      });
+    }
+
+    const playerStrengthRows: any[] = [];
+    for (const roster of rosterByTeam.values()) {
+      const maxApps = Math.max(1, ...roster.map((r: any) => r.appearances));
+      for (const r of roster) {
+        const ratingNorm = Math.min(100, Math.max(0, ((r.avgRating - 5.0) / 3.5) * 100));
+        const appsNorm = (r.appearances / maxApps) * 100;
+        const contribNorm = Math.min(100, (r.goals + r.assists) * 10); // 10+ G/A -> saturates at 100
+        const importance = xiImportanceScore(r.group, r.subSlot);
+        r.playerStrengthScore = Math.round(
+          ratingNorm * 0.40 + appsNorm * 0.30 + contribNorm * 0.15 + importance * 0.15
+        );
+        playerStrengthRows.push({ player_id: r.playerId, player_strength_score: r.playerStrengthScore });
+      }
+    }
+
+    // Persist onto player_intelligence (upsert on the existing player_id
+    // unique constraint — does not touch any other column on that table).
+    for (let i = 0; i < playerStrengthRows.length; i += 500) {
+      const chunk = playerStrengthRows.slice(i, i + 500);
+      const { error } = await db.from('player_intelligence')
+        .upsert(chunk, { onConflict: 'player_id' });
+      if (error) logger.warn({ error: error.message }, 'player_strength_score upsert chunk failed — continuing');
+    }
+
+    // ── 6. Best-XI score per team: highest playerStrengthScore per
+    //    sub-slot, AVAILABLE players only.
+    const bestXIByTeam = new Map<number, number>();
+    for (const [teamId, roster] of rosterByTeam) {
+      const available = roster.filter((r: any) => r.available);
+      let total = 0;
+      for (const [group, quota] of Object.entries(FORMATION)) {
+        const pool = available.filter((r: any) => r.group === group)
+          .sort((a: any, b: any) => b.playerStrengthScore - a.playerStrengthScore);
+        const picked: any[] = [];
+        const taken = new Set<number>();
+        for (const [slot, n] of Object.entries(SUB_SLOTS[group])) {
+          let filled = 0;
+          for (const c of pool) {
+            if (filled >= n) break;
+            if (taken.has(c.playerId)) continue;
+            if (slot !== 'ANY' && c.subSlot !== slot && c.subSlot !== 'ANY') continue;
+            picked.push(c); taken.add(c.playerId); filled++;
+          }
+        }
+        for (const c of pool) {
+          if (picked.length >= quota) break;
+          if (!taken.has(c.playerId)) { picked.push(c); taken.add(c.playerId); }
+        }
+        for (const c of picked.slice(0, quota)) {
+          total += c.playerStrengthScore * xiMultiplier(c.group, c.subSlot);
+        }
+      }
+      bestXIByTeam.set(teamId, total);
+    }
+
+    // ── 7. Projected-XI score per team per match, from the STORED
+    //    match_predicted_lineups (already computed by processPredictedLineups
+    //    — this function runs after it in the pipeline, see cli.ts L5.7).
+    const predictedLineups = await fetchAllRows(
+      db.from('match_predicted_lineups')
+        .select('match_id, team_id, player_id, position_code')
+        .in('match_id', matches.map((m: any) => m.id))
+    );
+    const strengthByPlayer = new Map<number, number>(
+      playerStrengthRows.map((r: any) => [r.player_id, r.player_strength_score])
+    );
+    const lineupsByMatchTeam = new Map<string, any[]>();
+    for (const pl of predictedLineups) {
+      const key = `${pl.match_id}:${pl.team_id}`;
+      if (!lineupsByMatchTeam.has(key)) lineupsByMatchTeam.set(key, []);
+      lineupsByMatchTeam.get(key)!.push(pl);
+    }
+
+    // ── 8. xi_strength = projected / best × 100, write to match_intelligence
+    let rowsWritten = 0;
+    for (const match of matches) {
+      const updates: any = {};
+      for (const [side, teamId] of [['home', match.home_team_id], ['away', match.away_team_id]] as const) {
+        const lineup = lineupsByMatchTeam.get(`${match.id}:${teamId}`);
+        const bestXI = bestXIByTeam.get(teamId);
+        if (!lineup || lineup.length === 0 || !bestXI || bestXI === 0) continue;
+
+        let projected = 0;
+        for (const pl of lineup) {
+          const score = strengthByPlayer.get(pl.player_id) ?? 0;
+          const player = playerMap.get(pl.player_id);
+          const group = groupOf(player?.primary_position ?? null, player?.position || pl.position_code);
+          const subSlot = subSlotOf(player?.primary_position ?? null);
+          projected += score * xiMultiplier(group, subSlot);
+        }
+        const xiStrength = Math.round(Math.min(100, Math.max(0, (projected / bestXI) * 100)));
+        updates[`${side}_xi_strength`] = xiStrength;
+      }
+      if (Object.keys(updates).length === 0) continue;
+
+      const { error } = await db.from('match_intelligence')
+        .update(updates)
+        .eq('match_id', match.id);
+      if (error) {
+        logger.warn({ matchId: match.id, error: error.message }, 'xi_strength update failed — continuing');
+        continue;
+      }
+      rowsWritten++;
+    }
+
+    logger.info({ matchesProcessed: matches.length, rowsWritten }, 'processStartingXIStrength completed');
+    return { matchesProcessed: matches.length, rowsWritten };
+
+  } catch (error: any) {
+    logger.error({ error: error.message, stack: error.stack }, 'processStartingXIStrength failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
 // ─── LEAGUE INTELLIGENCE — precomputed per-tournament aggregates ────────────
 
 /**
