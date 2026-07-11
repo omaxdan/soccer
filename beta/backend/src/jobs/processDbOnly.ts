@@ -1100,10 +1100,10 @@ export async function processTeamIntelligencePartial(): Promise<{
         .order('match_date', { ascending: false })
     );
 
-    const formByTeam = new Map<number, { points: number; result: string | null }[]>();
+    const formByTeam = new Map<number, { points: number; result: string | null; match_date: string | null }[]>();
     for (const f of formRecords || []) {
       if (!formByTeam.has(f.team_id)) formByTeam.set(f.team_id, []);
-      formByTeam.get(f.team_id)!.push({ points: f.points ?? 0, result: f.result ?? null });
+      formByTeam.get(f.team_id)!.push({ points: f.points ?? 0, result: f.result ?? null, match_date: f.match_date ?? null });
     }
 
     // 3. Latest fixture load snapshot per team
@@ -1210,6 +1210,31 @@ export async function processTeamIntelligencePartial(): Promise<{
     const qualityStats = await fetchAllRows(
       db.from('player_season_statistics').select('player_id, total_rating, count_rating')
     );
+
+    // ── Team fatigue inputs (audit fix: fatigue_index / rotation_pressure
+    // were hardcoded NULL with an 'awaiting player-minutes tracking' note —
+    // but the prerequisite has since been built: player_match_load is
+    // populated and processPlayerIntelligence computes per-player
+    // fatigue_score + minutes. This wires the team-level aggregation the
+    // note was waiting for.)
+    const playerIntel = await fetchAllRows(
+      db.from('player_intelligence').select('player_id, fatigue_score, minutes_last_30_days')
+    );
+    const playerTeamById = new Map<number, number>(
+      (qualityPlayers ?? []).map((p: any) => [p.id, p.team_id])
+    );
+    // team_id -> { weighted fatigue accumulator }
+    const fatigueAccum = new Map<number, { wSum: number; w: number; plain: number[] }>();
+    for (const pi of playerIntel ?? []) {
+      if (pi.fatigue_score == null) continue;
+      const tId = playerTeamById.get(pi.player_id);
+      if (tId == null) continue;
+      if (!fatigueAccum.has(tId)) fatigueAccum.set(tId, { wSum: 0, w: 0, plain: [] });
+      const acc = fatigueAccum.get(tId)!;
+      const mins = Number(pi.minutes_last_30_days ?? 0);
+      if (mins > 0) { acc.wSum += pi.fatigue_score * mins; acc.w += mins; }
+      acc.plain.push(pi.fatigue_score);
+    }
     const statsByPlayerId = new Map<number, { totalRating: number; countRating: number }>();
     for (const s of qualityStats ?? []) {
       if (s.total_rating == null || s.count_rating == null || s.count_rating === 0) continue;
@@ -1298,7 +1323,26 @@ export async function processTeamIntelligencePartial(): Promise<{
       const travel  = travelMap.get(teamId);
 
       const congestionScore    = fixture?.congestion_score    ?? null;
-      const restDaysAvg        = fixture?.avg_rest_days       ?? null;
+      // rest_days_avg: the fixture-load window (last 30d) needs >=2 matches
+      // to produce a gap average — during league breaks it is legitimately
+      // NULL. Fallback (audit fix): derive from the last 4 form-history
+      // match dates instead, capped at 30 so a two-month break reads as
+      // 'fully rested', not as a misleading 60-day average.
+      let restDaysAvg: number | null = fixture?.avg_rest_days ?? null;
+      if (restDaysAvg === null) {
+        const dates = (formByTeam.get(teamId) || [])
+          .map(r => r.match_date)
+          .filter((d): d is string => !!d)
+          .slice(0, 4)
+          .map(d => new Date(d).getTime());
+        if (dates.length >= 2) {
+          const gaps: number[] = [];
+          for (let i = 0; i < dates.length - 1; i++) {
+            gaps.push(Math.abs(dates[i] - dates[i + 1]) / 86400000);
+          }
+          restDaysAvg = Math.round(Math.min(30, gaps.reduce((s, g) => s + g, 0) / gaps.length) * 10) / 10;
+        }
+      }
       const travelFatigueScore = travel?.travel_fatigue_score ?? null;
       const travelLoadKm       = travel?.km_last_30_days      ?? null;
 
@@ -1340,11 +1384,51 @@ export async function processTeamIntelligencePartial(): Promise<{
       // readiness. It renormalizes spec weights over only the components
       // that don't require match context: Form(30) + Congestion(15) +
       // Travel(15) + Stability(5) = 65 of 100 spec weight, renormalized to 100%.
+      // ── Fatigue Index (0-100, higher = more fatigued) ────────────────
+      // Minutes-weighted mean of player_intelligence.fatigue_score across
+      // the squad — players who actually play drive team fatigue; a fresh
+      // bench doesn't mask an exhausted first XI. Falls back to a plain
+      // mean when no minutes data exists; NULL when no player intel at all
+      // (that is the honest 'awaiting squad/stats sync' state).
+      const fAcc = fatigueAccum.get(teamId);
+      const fatigueIndex: number | null = fAcc
+        ? Math.round(
+            fAcc.w > 0
+              ? fAcc.wSum / fAcc.w
+              : fAcc.plain.reduce((s, v) => s + v, 0) / fAcc.plain.length
+          )
+        : null;
+
+      // ── Rotation Pressure Index (0-100, higher = more pressure) ──────
+      // How hard is the manager being pushed to rotate? Rises with squad
+      // fatigue (0.5), fixture congestion (0.3) and shallow depth (0.2 —
+      // inverted squad_depth_score). PROVISIONAL weights, documented per
+      // this platform's migration-022 ethos: no backtested evidence yet
+      // ranks these drivers, so weights renormalize over available parts
+      // and should be revisited once readiness_history accumulates enough
+      // matches to backtest. NULL when fatigue itself is unknown.
+      let rotationPressureIndex: number | null = null;
+      if (fatigueIndex !== null) {
+        const parts = [
+          { v: fatigueIndex, w: 0.5 },
+          congestionScore !== null ? { v: congestionScore, w: 0.3 } : null,
+          squadDepthScore !== null ? { v: 100 - squadDepthScore, w: 0.2 } : null,
+        ].filter((c): c is { v: number; w: number } => c !== null);
+        const tw = parts.reduce((s, c) => s + c.w, 0);
+        rotationPressureIndex = Math.round(parts.reduce((s, c) => s + c.v * c.w, 0) / tw);
+      }
+
       const baselineComponents = [
         formIndex !== null ? { v: formIndex, w: 30 } : null,
         congestionScore !== null ? { v: 100 - congestionScore, w: 15 } : null, // inverted: low congestion = good
         travelFatigueScore !== null ? { v: 100 - travelFatigueScore, w: 15 } : null, // inverted
         squadStabilityScore !== null ? { v: squadStabilityScore, w: 5 } : null,
+        // Six-component product spec (see Team Readiness Breakdown UI):
+        // fatigue and rotation at 10 each, inverted (low = good). Rotation
+        // partially derives from congestion+fatigue+depth — the resulting
+        // partial double-count is per spec, flagged for the backtest pass.
+        fatigueIndex !== null ? { v: 100 - fatigueIndex, w: 10 } : null,
+        rotationPressureIndex !== null ? { v: 100 - rotationPressureIndex, w: 10 } : null,
       ].filter((c): c is { v: number; w: number } => c !== null);
 
       const baselineReadiness = baselineComponents.length > 0
@@ -1453,10 +1537,8 @@ export async function processTeamIntelligencePartial(): Promise<{
         // "we don't know".
         injured_market_value:    injuredMarketValue,
         available_market_value:  availableMarketValue,
-        // Player-minutes-dependent fields — left NULL until player_season_statistics
-        // (matchesStarted/minutesPlayed, see new sync:player-stats job) is synced.
-        fatigue_index:           null,
-        rotation_pressure_index: null,
+        fatigue_index:           fatigueIndex,
+        rotation_pressure_index: rotationPressureIndex,
         // Baseline readiness — see docstring. Match-context readiness lives
         // in match_intelligence.home_readiness/away_readiness instead.
         readiness_score:         baselineReadiness,
