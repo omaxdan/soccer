@@ -32,16 +32,34 @@ export async function fetchAllRows<T = any>(
 ): Promise<T[]> {
   queryBuilder.order(orderColumn, { ascending: true });
 
+  // Transient network failures (stale keep-alive sockets, connection
+  // resets, DNS blips — 'TypeError: fetch failed' from undici) are a fact
+  // of life on shared hosting. Since every read funnels through here, one
+  // retry policy hardens the whole pipeline: 3 attempts, 1s/3s backoff,
+  // retrying ONLY network-shaped errors — real errors (bad column, RLS)
+  // still throw immediately.
+  const isTransient = (msg: string) =>
+    /fetch failed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|EPIPE|socket|network|terminat/i.test(msg);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   let all: T[] = [];
   let page = 0;
 
   for (;;) {
     const from = page * pageSize;
-    const { data, error } = await queryBuilder.range(from, from + pageSize - 1);
 
-    if (error) {
-      throw new Error(`Paginated query failed at page ${page}: ${error.message}`);
+    let data: T[] | null = null;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const res = await queryBuilder.range(from, from + pageSize - 1);
+      if (!res.error) { data = res.data; break; }
+      lastErr = res.error.message ?? String(res.error);
+      if (!isTransient(lastErr) || attempt === 3) {
+        throw new Error(`Paginated query failed at page ${page}: ${lastErr}`);
+      }
+      await sleep(attempt === 1 ? 1000 : 3000);
     }
+
     if (!data || data.length === 0) break;
 
     all = all.concat(data);
