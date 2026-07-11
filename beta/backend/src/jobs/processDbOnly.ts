@@ -1399,45 +1399,6 @@ export async function processTeamIntelligencePartial(): Promise<{
           )
         : null;
 
-      // ── Rotation Pressure Index (0-100, higher = more pressure) ──────
-      // How hard is the manager being pushed to rotate? Rises with squad
-      // fatigue (0.5), fixture congestion (0.3) and shallow depth (0.2 —
-      // inverted squad_depth_score). PROVISIONAL weights, documented per
-      // this platform's migration-022 ethos: no backtested evidence yet
-      // ranks these drivers, so weights renormalize over available parts
-      // and should be revisited once readiness_history accumulates enough
-      // matches to backtest. NULL when fatigue itself is unknown.
-      let rotationPressureIndex: number | null = null;
-      if (fatigueIndex !== null) {
-        const parts = [
-          { v: fatigueIndex, w: 0.5 },
-          congestionScore !== null ? { v: congestionScore, w: 0.3 } : null,
-          squadDepthScore !== null ? { v: 100 - squadDepthScore, w: 0.2 } : null,
-        ].filter((c): c is { v: number; w: number } => c !== null);
-        const tw = parts.reduce((s, c) => s + c.w, 0);
-        rotationPressureIndex = Math.round(parts.reduce((s, c) => s + c.v * c.w, 0) / tw);
-      }
-
-      const baselineComponents = [
-        formIndex !== null ? { v: formIndex, w: 30 } : null,
-        congestionScore !== null ? { v: 100 - congestionScore, w: 15 } : null, // inverted: low congestion = good
-        travelFatigueScore !== null ? { v: 100 - travelFatigueScore, w: 15 } : null, // inverted
-        squadStabilityScore !== null ? { v: squadStabilityScore, w: 5 } : null,
-        // Six-component product spec (see Team Readiness Breakdown UI):
-        // fatigue and rotation at 10 each, inverted (low = good). Rotation
-        // partially derives from congestion+fatigue+depth — the resulting
-        // partial double-count is per spec, flagged for the backtest pass.
-        fatigueIndex !== null ? { v: 100 - fatigueIndex, w: 10 } : null,
-        rotationPressureIndex !== null ? { v: 100 - rotationPressureIndex, w: 10 } : null,
-      ].filter((c): c is { v: number; w: number } => c !== null);
-
-      const baselineReadiness = baselineComponents.length > 0
-        ? Math.round(
-            baselineComponents.reduce((s, c) => s + c.v * c.w, 0) /
-            baselineComponents.reduce((s, c) => s + c.w, 0)
-          )
-        : null;
-
       // ── Squad Depth Score — synthesized from team_position_depth ──────────
       // For each position bucket: availability ratio (available/total, as
       // before) BLENDED with quality (avg rating of available players in
@@ -1486,6 +1447,46 @@ export async function processTeamIntelligencePartial(): Promise<{
           squadDepthScore = Math.round(positionScores.reduce((s, r) => s + r, 0) / positionScores.length);
         }
       }
+
+      // ── Rotation Pressure Index (0-100, higher = more pressure) ──────
+      // How hard is the manager being pushed to rotate? Rises with squad
+      // fatigue (0.5), fixture congestion (0.3) and shallow depth (0.2 —
+      // inverted squad_depth_score, now available above). PROVISIONAL
+      // weights, documented per this platform's migration-022 ethos: no
+      // backtested evidence yet ranks these drivers, so weights
+      // renormalize over available parts and should be revisited once
+      // readiness_history accumulates enough matches to backtest. NULL
+      // when fatigue itself is unknown.
+      let rotationPressureIndex: number | null = null;
+      if (fatigueIndex !== null) {
+        const parts = [
+          { v: fatigueIndex, w: 0.5 },
+          congestionScore !== null ? { v: congestionScore, w: 0.3 } : null,
+          squadDepthScore !== null ? { v: 100 - squadDepthScore, w: 0.2 } : null,
+        ].filter((c): c is { v: number; w: number } => c !== null);
+        const tw = parts.reduce((s, c) => s + c.w, 0);
+        rotationPressureIndex = Math.round(parts.reduce((s, c) => s + c.v * c.w, 0) / tw);
+      }
+
+      const baselineComponents = [
+        formIndex !== null ? { v: formIndex, w: 30 } : null,
+        congestionScore !== null ? { v: 100 - congestionScore, w: 15 } : null, // inverted: low congestion = good
+        travelFatigueScore !== null ? { v: 100 - travelFatigueScore, w: 15 } : null, // inverted
+        squadStabilityScore !== null ? { v: squadStabilityScore, w: 5 } : null,
+        // Six-component product spec (see Team Readiness Breakdown UI):
+        // fatigue and rotation at 10 each, inverted (low = good). Rotation
+        // partially derives from congestion+fatigue+depth — the resulting
+        // partial double-count is per spec, flagged for the backtest pass.
+        fatigueIndex !== null ? { v: 100 - fatigueIndex, w: 10 } : null,
+        rotationPressureIndex !== null ? { v: 100 - rotationPressureIndex, w: 10 } : null,
+      ].filter((c): c is { v: number; w: number } => c !== null);
+
+      const baselineReadiness = baselineComponents.length > 0
+        ? Math.round(
+            baselineComponents.reduce((s, c) => s + c.v * c.w, 0) /
+            baselineComponents.reduce((s, c) => s + c.w, 0)
+          )
+        : null;
 
       // ── Injury Burden Score + Market Value split — from players ───────────
       // Burden weighted by MARKET VALUE, not just headcount — losing a
