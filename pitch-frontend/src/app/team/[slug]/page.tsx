@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
-  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty, getTeamKeyPlayers,
+  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty, getTeamKeyPlayers, getTeamRecentForm,
 } from "@/lib/queries";
 import { computePerformance } from "@/lib/performance";
 import { computeTeamProfile, type MarketRead } from "@/lib/teamProfile";
@@ -32,11 +32,12 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   if (!team) notFound();
 
   const { intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility } = await getTeamIntel(team.id);
-  const [upcoming, seasonStats, difficulty, keyPlayers] = await Promise.all([
+  const [upcoming, seasonStats, difficulty, keyPlayers, recentForm] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
     getFixtureDifficulty(team.id),
     getTeamKeyPlayers(team.id),
+    getTeamRecentForm(team.id),
   ]);
   const perf = seasonStats ? computePerformance(seasonStats) : null;
   const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf });
@@ -298,6 +299,37 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   // ── FIXTURES ──
   const fixtures = (
     <div className="space-y-4">
+      {recentForm.length > 0 && (
+        <Panel title="Recent form">
+          <ul className="space-y-2">
+            {recentForm.map((m, idx) => {
+              const resultColor = m.result === "W" ? "var(--edge)" : m.result === "L" ? "var(--risk)" : "var(--warn)";
+              return (
+                <li key={idx} className="flex items-center gap-3 border-b border-line py-1.5 last:border-0">
+                  <span className="mono grid h-5 w-5 shrink-0 place-items-center rounded-[3px] text-[0.65rem] font-bold" style={{ color: resultColor, background: `color-mix(in srgb, ${resultColor} 16%, transparent)` }}>{m.result}</span>
+                  <span className="mono w-16 shrink-0 text-[0.62rem] text-faint">{new Date(m.match_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                  <span className="mono text-[0.55rem] uppercase text-faint">{m.is_home == null ? "" : m.is_home ? "H" : "A"}</span>
+                  <span className="mono ml-auto text-[0.8rem] font-semibold tnum">{m.goals_for ?? "—"}–{m.goals_against ?? "—"}</span>
+                  {m.half_time_score_for != null && m.half_time_score_against != null && (
+                    <span className="mono text-[0.6rem] text-faint">(HT {m.half_time_score_for}-{m.half_time_score_against})</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mono mt-3 border-t border-line pt-2.5 text-[0.68rem] leading-relaxed text-muted">
+            {(() => {
+              const bttsCount = recentForm.filter((m) => m.btts === true).length;
+              const bttsKnown = recentForm.filter((m) => m.btts != null).length;
+              const cleanSheets = recentForm.filter((m) => (m.goals_against ?? 1) === 0).length;
+              const parts: string[] = [];
+              if (bttsKnown > 0) parts.push(`Both teams scored in ${bttsCount} of the last ${bttsKnown}`);
+              parts.push(`${cleanSheets} clean sheet${cleanSheets === 1 ? "" : "s"} in the last ${recentForm.length}`);
+              return parts.join(" · ");
+            })()}
+          </p>
+        </Panel>
+      )}
       {difficulty && (difficulty.next_5_difficulty != null || difficulty.next_10_difficulty != null) && (
         <Panel title="Fixture difficulty">
           <div className="grid grid-cols-2 gap-3">

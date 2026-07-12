@@ -491,6 +491,29 @@ export async function getFixtureDifficultyMap(
 }
 
 // Raw season statistics → fed into the performance intelligence engine.
+export interface TeamRecentFormRow {
+  match_date: string;
+  result: string;
+  goals_for: number | null;
+  goals_against: number | null;
+  points: number | null;
+  is_home: boolean | null;
+  btts: boolean | null;
+  half_time_score_for: number | null;
+  half_time_score_against: number | null;
+}
+export async function getTeamRecentForm(id: number, limit = 8): Promise<TeamRecentFormRow[]> {
+  const client = db();
+  if (!client) return [];
+  const { data } = await client
+    .from("team_form_history")
+    .select("match_date, result, goals_for, goals_against, points, is_home, btts, half_time_score_for, half_time_score_against")
+    .eq("team_id", id)
+    .order("match_date", { ascending: false })
+    .limit(limit);
+  return (data as TeamRecentFormRow[]) ?? [];
+}
+
 export async function getTeamSeasonStats(
   id: number
 ): Promise<import("./performance").TeamSeasonStats | null> {
