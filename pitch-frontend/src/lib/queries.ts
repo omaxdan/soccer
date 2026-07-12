@@ -119,7 +119,13 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     .single();
   if (error || !m) return M.MOCK_MATCHES.find((x) => x.id === id) ?? null;
 
-  const [intel, opp, risk, signals, weather, result, halfTime] = await Promise.all([
+  const homeTeam = teamFromRow(m.home);
+  const awayTeam = teamFromRow(m.away);
+
+  const [intel, opp, risk, signals, weather, result, halfTime,
+    teamImpactHome, teamImpactAway, impactAdvantage, keyBattlesRaw,
+    positionalMatchupsRaw, tacticalAdvantages, performanceComparison,
+    substitutionImpact, squadDepthComparison] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
@@ -127,13 +133,29 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     client.from("match_weather").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_results").select("home_score, away_score").eq("match_id", id).maybeSingle(),
     client.from("match_half_time_intelligence").select("*").eq("match_id", id).maybeSingle(),
+    client.from("team_match_impact").select("*").eq("match_id", id).eq("team_id", homeTeam.id).maybeSingle(),
+    client.from("team_match_impact").select("*").eq("match_id", id).eq("team_id", awayTeam.id).maybeSingle(),
+    client.from("match_impact_advantage").select("*").eq("match_id", id).maybeSingle(),
+    client.from("match_key_battles").select("*, home_player:players!match_key_battles_home_player_id_fkey(name), away_player:players!match_key_battles_away_player_id_fkey(name)").eq("match_id", id).order("importance_score", { ascending: false }),
+    client.from("match_positional_matchups").select("*, home_player:players!match_positional_matchups_home_player_id_fkey(name), away_player:players!match_positional_matchups_away_player_id_fkey(name)").eq("match_id", id),
+    client.from("match_tactical_advantages").select("*").eq("match_id", id),
+    client.from("match_performance_comparison").select("*").eq("match_id", id).maybeSingle(),
+    client.from("substitution_impact").select("*").eq("match_id", id).maybeSingle(),
+    client.from("match_squad_depth_comparison").select("*").eq("match_id", id).maybeSingle(),
   ]);
+
+  const keyBattles = ((keyBattlesRaw.data as any[]) ?? []).map((b) => ({
+    ...b, home_player_name: b.home_player?.name ?? null, away_player_name: b.away_player?.name ?? null,
+  }));
+  const positionalMatchups = ((positionalMatchupsRaw.data as any[]) ?? []).map((p) => ({
+    ...p, home_player_name: p.home_player?.name ?? null, away_player_name: p.away_player?.name ?? null,
+  }));
 
   return {
     id: m.id, external_match_id: m.external_match_id, date: m.date,
     status: m.status, competition: m.competition,
     tournament: normTournament(m.tournament),
-    home: teamFromRow(m.home), away: teamFromRow(m.away),
+    home: homeTeam, away: awayTeam,
     home_score: result.data?.home_score ?? null,
     away_score: result.data?.away_score ?? null,
     intel: intel.data ? normIntel(intel.data) : null,
@@ -142,6 +164,13 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     signals: (signals.data as MarketSignal[]) ?? [],
     weather: weather.data ?? null,
     halfTime: (halfTime.data as import("./types").MatchHalfTimeIntelligence) ?? null,
+    teamImpact: { home: (teamImpactHome.data as any) ?? null, away: (teamImpactAway.data as any) ?? null },
+    impactAdvantage: (impactAdvantage.data as any) ?? null,
+    keyBattles, positionalMatchups,
+    tacticalAdvantages: (tacticalAdvantages.data as any[]) ?? [],
+    performanceComparison: (performanceComparison.data as any) ?? null,
+    substitutionImpact: (substitutionImpact.data as any) ?? null,
+    squadDepthComparison: (squadDepthComparison.data as any) ?? null,
   };
 }
 
@@ -162,12 +191,41 @@ export async function getLineups(matchId: number): Promise<PredictedLineupPlayer
     if (!m) return [];
     return enrichLineup([...(M.MOCK_LINEUPS[m.home.id] ?? []), ...(M.MOCK_LINEUPS[m.away.id] ?? [])]);
   }
-  const { data } = await client
+  // FIX: secondary_position/tertiary_position/shirt_number were being
+  // selected directly off match_predicted_lineups, which has no such
+  // columns (only id, match_id, team_id, player_id, position_code,
+  // rank_in_position, matches_started, confidence, calculated_at — verified
+  // against the live schema). PostgREST errored, the error was discarded,
+  // and `data` came back null — which .map(...) ?? [] silently turned into
+  // an empty array, rendering as "not published yet" despite 5,572 real
+  // rows existing. Positions come from players.secondary_position/
+  // tertiary_position; there is no shirt_number anywhere (players has
+  // jersey_number) — mapped onto the same field name the UI expects.
+  const { data, error } = await client
     .from("match_predicted_lineups")
-    .select(`team_id, player_id, position_code, secondary_position, tertiary_position, rank_in_position, confidence, shirt_number,
-             player:players(id, name, short_name, position, current_injury, injury_status, injury_reason, injury_return_days, market_value)`)
-    .eq("match_id", matchId);
-  return (data as any[])?.map((r) => ({ ...r, player: r.player })) ?? [];
+    .select(`team_id, player_id, position_code, rank_in_position, confidence,
+             player:players(id, name, short_name, position, secondary_position, tertiary_position, jersey_number, current_injury, injury_status, injury_reason, injury_return_days, market_value)`)
+    .eq("match_id", matchId)
+    .order("team_id", { ascending: true })
+    .order("rank_in_position", { ascending: true });
+
+  if (error) {
+    console.error(`[getLineups] query failed for match ${matchId}:`, error.message);
+    return [];
+  }
+  if (!data || data.length === 0) return [];
+
+  return data.map((r: any) => ({
+    team_id: r.team_id,
+    player_id: r.player_id,
+    position_code: r.position_code,
+    secondary_position: r.player?.secondary_position ?? null,
+    tertiary_position: r.player?.tertiary_position ?? null,
+    rank_in_position: r.rank_in_position,
+    confidence: r.confidence,
+    shirt_number: r.player?.jersey_number ?? null,
+    player: r.player,
+  }));
 }
 
 // Demo lineups carry only a primary code; add plausible secondary/tertiary
@@ -307,6 +365,8 @@ export async function getTeamIntel(id: number): Promise<{
   venue: TeamVenuePerformance | null;
   momentum: TeamMomentum | null;
   depth: PositionDepth[];
+  motivation: import("./types").TeamMotivationData | null;
+  versatility: import("./types").TeamVersatilityLatest | null;
 }> {
   const client = db();
   if (!client) {
@@ -319,9 +379,11 @@ export async function getTeamIntel(id: number): Promise<{
       venue: M.MOCK_VENUE[id] ?? null,
       momentum: M.MOCK_MOMENTUM[id] ?? null,
       depth: M.MOCK_DEPTH[id] ?? [],
+      motivation: null,
+      versatility: null,
     };
   }
-  const [intel, betting, goalDep, injury, formQuality, venue, momentum, depth] = await Promise.all([
+  const [intel, betting, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility] = await Promise.all([
     client.from("team_intelligence").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_betting_intelligence").select("*").eq("team_id", id)
       .order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
@@ -331,6 +393,13 @@ export async function getTeamIntel(id: number): Promise<{
     client.from("team_venue_performance").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_momentum").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_position_depth").select("*").eq("team_id", id),
+    client.from("team_motivation").select("*").eq("team_id", id).maybeSingle(),
+    // team_versatility is per-MATCH (migration comment: rolling scalar lives
+    // on team_intelligence.lineup_versatility_score instead) — this table
+    // needs a specific match_id, so it has no single "current" row for a
+    // team profile page. Most recent computed row stands in as a proxy.
+    client.from("team_versatility").select("*").eq("team_id", id)
+      .order("calculated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   return {
     intel: intel.data ?? null,
@@ -339,6 +408,8 @@ export async function getTeamIntel(id: number): Promise<{
     injury: injury.data ?? null, formQuality: formQuality.data ?? null,
     venue: venue.data ?? null, momentum: momentum.data ?? null,
     depth: (depth.data as PositionDepth[]) ?? [],
+    motivation: (motivation.data as any) ?? null,
+    versatility: (versatility.data as any) ?? null,
   };
 }
 

@@ -29,7 +29,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const team = await getTeamBySlug(slug);
   if (!team) notFound();
 
-  const { intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth } = await getTeamIntel(team.id);
+  const { intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility } = await getTeamIntel(team.id);
   const [upcoming, seasonStats, difficulty] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
@@ -203,6 +203,38 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
             <span className="ml-auto font-semibold" style={{ color: momentum.trend === "rising" ? "var(--edge)" : momentum.trend === "falling" ? "var(--risk)" : "var(--warn)" }}>{(momentum.trend ?? "").toUpperCase()}</span>
           </div>
           <div className="mt-2"><BarMeter value={momentum.momentum_score} color="var(--edge)" height={8} /></div>
+        </Panel>
+      )}
+      {motivation && (
+        <Panel title="Motivation">
+          <div className="mb-2 flex items-center justify-between">
+            <StatCell label="Overall" value={n0(motivation.overall_motivation_score)} sub="/100" />
+            <span className="mono text-[0.65rem] font-semibold uppercase tracking-wide" style={{ color: motivation.motivation_band === "HIGH" ? "var(--edge)" : motivation.motivation_band === "VERY_LOW" || motivation.motivation_band === "LOW" ? "var(--risk)" : "var(--warn)" }}>
+              {motivation.motivation_band ?? "—"}
+            </span>
+          </div>
+          <p className="mono mb-2 text-[0.6rem] text-faint">League-table context (title race / relegation battle) — distinct from per-fixture motivation shown on the match page.</p>
+          <div className="grid grid-cols-3 gap-3">
+            <ScoreTile label="Momentum" value={motivation.momentum_factor} />
+            <ScoreTile label="Quality" value={motivation.quality_factor} />
+            <ScoreTile label="External" value={motivation.external_motivation} />
+          </div>
+        </Panel>
+      )}
+      {versatility && (
+        <Panel title="Tactical versatility">
+          <p className="mono mb-2 text-[0.6rem] text-faint">From the most recently computed predicted lineup — a per-match snapshot, not a rolling average.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreTile label="Overall" value={versatility.overall_versatility_score} />
+            <ScoreTile label="Formation flex" value={versatility.formation_flexibility_score} />
+          </div>
+          {versatility.preferred_formations && versatility.preferred_formations.length > 0 && (
+            <div className="mono mt-3 flex flex-wrap gap-2 text-[0.65rem] text-muted">
+              {versatility.preferred_formations.map((f) => (
+                <span key={f} className="rounded-term border border-line bg-raised px-2 py-0.5">{f}</span>
+              ))}
+            </div>
+          )}
         </Panel>
       )}
     </div>

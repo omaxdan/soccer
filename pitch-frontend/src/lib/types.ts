@@ -123,6 +123,100 @@ export interface MatchRow {
   home_form?: string | null;
   away_form?: string | null;
   halfTime?: MatchHalfTimeIntelligence | null;
+  teamImpact?: { home: TeamMatchImpact | null; away: TeamMatchImpact | null };
+  impactAdvantage?: MatchImpactAdvantage | null;
+  keyBattles?: MatchKeyBattle[];
+  positionalMatchups?: MatchPositionalMatchup[];
+  tacticalAdvantages?: MatchTacticalAdvantage[];
+  performanceComparison?: MatchPerformanceComparison | null;
+  substitutionImpact?: SubstitutionImpact | null;
+  squadDepthComparison?: MatchSquadDepthComparison | null;
+}
+
+export interface TeamMatchImpact {
+  match_id: number; team_id: number;
+  overall_impact_score: number | null; attack_strength: number | null;
+  midfield_control: number | null; defensive_strength: number | null;
+  set_piece_threat: number | null; experience_level: number | null;
+  form_trend: number | null; injury_impact: number | null;
+  tactical_versatility: number | null; match_specific_boost: number | null;
+  confidence_level: number | null; advantage_band: string | null;
+}
+
+export interface MatchImpactAdvantage {
+  match_id: number; home_advantage_score: number | null; away_advantage_score: number | null;
+  advantage_margin: number | null; advantage_team_id: number | null;
+  key_advantages: string[] | null; key_disadvantages: string[] | null; confidence_score: number | null;
+}
+
+export interface MatchKeyBattle {
+  match_id: number; battle_id: string; title: string; description: string | null;
+  home_player_id: number | null; away_player_id: number | null;
+  home_advantage_score: number | null; away_advantage_score: number | null;
+  importance_score: number | null; expected_impact: string | null; battle_outcome_prediction: string | null;
+  home_player_name?: string | null; away_player_name?: string | null;
+}
+
+export interface MatchPositionalMatchup {
+  match_id: number; position_code: string;
+  home_player_id: number | null; away_player_id: number | null;
+  home_impact_score: number | null; away_impact_score: number | null;
+  advantage_score: number | null; advantage_team_id: number | null;
+  advantage_type: string | null; matchup_description: string | null;
+  home_player_name?: string | null; away_player_name?: string | null;
+}
+
+export interface MatchTacticalAdvantage {
+  match_id: number; advantage_type: string; description: string | null;
+  home_advantage_score: number | null; away_advantage_score: number | null;
+  net_advantage: number | null; advantage_team_id: number | null;
+  confidence_score: number | null; tactical_notes: string | null;
+}
+
+export interface MatchPerformanceComparison {
+  match_id: number; overall_home_score: number | null; overall_away_score: number | null;
+  attacking_home_score: number | null; attacking_away_score: number | null;
+  defensive_home_score: number | null; defensive_away_score: number | null;
+  midfield_home_score: number | null; midfield_away_score: number | null;
+  tactical_home_score: number | null; tactical_away_score: number | null;
+  set_piece_home_score: number | null; set_piece_away_score: number | null;
+  form_home_score: number | null; form_away_score: number | null;
+  home_win_probability: number | null; draw_probability: number | null; away_win_probability: number | null;
+  most_likely_score: string | null; confidence_band: string | null;
+}
+
+export interface SubstitutionImpact {
+  match_id: number; home_bench_strength: number | null; away_bench_strength: number | null;
+  home_substitution_quality: number | null; away_substitution_quality: number | null;
+  home_game_changers: number | null; away_game_changers: number | null;
+  substitution_advantage: number | null; impact_notes: string | null;
+}
+
+export interface MatchSquadDepthComparison {
+  match_id: number; home_overall_depth_score: number | null; away_overall_depth_score: number | null;
+  home_depth_rating: string | null; away_depth_rating: string | null;
+  depth_advantage_band: string | null; depth_advantage_team_id: number | null;
+  home_rotation_capability: number | null; away_rotation_capability: number | null;
+}
+
+export interface TeamBettingIntelligence {
+  team_id: number; attack_rating: number | null; defence_rating: number | null;
+  team_quality_score: number | null; finishing_efficiency: number | null;
+  clean_sheet_reliability: number | null; consistency_score: number | null;
+  winner_market_score: number | null; goals_market_score: number | null;
+  btts_score: number | null;
+}
+
+export interface TeamMotivationData {
+  team_id: number; overall_motivation_score: number | null; motivation_band: string | null;
+  momentum_factor: number | null; quality_factor: number | null;
+  venue_factor: number | null; external_motivation: number | null;
+}
+
+export interface TeamVersatilityLatest {
+  team_id: number; overall_versatility_score: number | null; versatility_band: string | null;
+  tactical_versatility_score: number | null; formation_flexibility_score: number | null;
+  preferred_formations: string[] | null;
 }
 
 export interface MatchWeather {

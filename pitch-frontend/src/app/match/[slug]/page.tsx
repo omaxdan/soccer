@@ -15,7 +15,7 @@ import { SubTabs } from "@/components/SubTabs";
 import { teamSlug } from "@/lib/slug";
 import {
   kickoff, n1, km, normProb, opportunityColor, bestLean, normScorelines,
-  htFtLabel, confidenceBand,
+  htFtLabel, confidenceBand, n0, positionLabel,
 } from "@/lib/intel";
 import type { MatchRow, MarketSignal } from "@/lib/types";
 
@@ -186,6 +186,44 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         <ScorecardRow label="XI strength" home={i.home_xi_strength} away={i.away_xi_strength} />
         <ScorecardRow label="Strength rating" home={i.home_strength_rating} away={i.away_strength_rating} />
       </Panel>
+      {(m.teamImpact?.home || m.teamImpact?.away) && (
+        <Panel title="Team match impact">
+          <ScorecardRow label="Overall impact" home={m.teamImpact.home?.overall_impact_score} away={m.teamImpact.away?.overall_impact_score} />
+          <ScorecardRow label="Attack strength" home={m.teamImpact.home?.attack_strength} away={m.teamImpact.away?.attack_strength} />
+          <ScorecardRow label="Midfield control" home={m.teamImpact.home?.midfield_control} away={m.teamImpact.away?.midfield_control} />
+          <ScorecardRow label="Defensive strength" home={m.teamImpact.home?.defensive_strength} away={m.teamImpact.away?.defensive_strength} />
+          <ScorecardRow label="Tactical versatility" home={m.teamImpact.home?.tactical_versatility} away={m.teamImpact.away?.tactical_versatility} />
+          {m.impactAdvantage && (
+            <div className="mono mt-3 border-t border-line pt-3 text-[0.68rem] text-muted">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span>Advantage margin <span className="text-text">{n0(m.impactAdvantage.advantage_margin)}</span></span>
+                {m.impactAdvantage.confidence_score != null && <span>Confidence <span className="text-text">{Math.round(m.impactAdvantage.confidence_score)}%</span></span>}
+              </div>
+              {m.impactAdvantage.key_advantages && m.impactAdvantage.key_advantages.filter((a) => a !== "No clear advantages").length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {m.impactAdvantage.key_advantages.map((a, idx) => (
+                    <li key={idx} className="text-edge">+ {a}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </Panel>
+      )}
+      {(m.substitutionImpact || m.squadDepthComparison) && (
+        <Panel title="Bench & squad depth">
+          {m.substitutionImpact && (
+            <>
+              <ScorecardRow label="Bench strength" home={m.substitutionImpact.home_bench_strength} away={m.substitutionImpact.away_bench_strength} />
+              <ScorecardRow label="Substitution quality" home={m.substitutionImpact.home_substitution_quality} away={m.substitutionImpact.away_substitution_quality} />
+            </>
+          )}
+          {m.squadDepthComparison && (
+            <ScorecardRow label="Squad depth" home={m.squadDepthComparison.home_overall_depth_score} away={m.squadDepthComparison.away_overall_depth_score}
+              why={m.squadDepthComparison.depth_advantage_band ? `Depth advantage: ${m.squadDepthComparison.depth_advantage_band}` : undefined} />
+          )}
+        </Panel>
+      )}
     </div>
   ) : <Empty text="No comparative intelligence available." />;
 
@@ -267,6 +305,60 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     </div>
   ) : <Empty text="No decomposed risk factors for this fixture." />;
 
+  // ── MATCHUPS (key battles, positional grid, tactical advantages) ──
+  const hasMatchupData = (m.keyBattles?.length ?? 0) > 0 || (m.positionalMatchups?.length ?? 0) > 0 || (m.tacticalAdvantages?.length ?? 0) > 0;
+  const matchups = hasMatchupData ? (
+    <div className="space-y-4">
+      {m.keyBattles && m.keyBattles.length > 0 && (
+        <Panel title="Key battles">
+          <ul className="space-y-3">
+            {m.keyBattles.map((b) => (
+              <li key={b.battle_id} className="rounded-term border border-line bg-raised p-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[0.8rem] font-semibold text-text">{b.title}</span>
+                  <span className="mono text-[0.6rem] uppercase tracking-wide text-muted">{b.expected_impact} impact</span>
+                </div>
+                <VersusBar home={b.home_advantage_score ?? 50} away={b.away_advantage_score ?? 50} />
+                <div className="mono mt-1.5 flex items-center justify-between text-[0.65rem] text-muted">
+                  <span className="text-edge">{b.home_player_name ?? "Home"}</span>
+                  <span className="text-faint">{b.battle_outcome_prediction}</span>
+                  <span className="text-cool">{b.away_player_name ?? "Away"}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+      {m.positionalMatchups && m.positionalMatchups.length > 0 && (
+        <Panel title="Position-by-position">
+          {m.positionalMatchups.map((p) => (
+            <ScorecardRow key={p.position_code} label={positionLabel(p.position_code)}
+              home={p.home_impact_score} away={p.away_impact_score}
+              why={p.matchup_description ?? undefined} />
+          ))}
+        </Panel>
+      )}
+      {m.tacticalAdvantages && m.tacticalAdvantages.length > 0 && (
+        <Panel title="Tactical advantages">
+          <ul className="space-y-3">
+            {m.tacticalAdvantages.map((t) => (
+              <li key={t.advantage_type}>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="mono text-[0.65rem] uppercase tracking-wide text-muted">{t.advantage_type.replace(/_/g, " ")}</span>
+                  <span className="mono text-[0.6rem]" style={{ color: (t.net_advantage ?? 0) >= 0 ? "var(--edge)" : "var(--cool)" }}>
+                    {(t.net_advantage ?? 0) >= 0 ? "Home" : "Away"} +{Math.abs(t.net_advantage ?? 0)}
+                  </span>
+                </div>
+                <VersusBar home={t.home_advantage_score ?? 50} away={t.away_advantage_score ?? 50} />
+                {t.tactical_notes && <p className="mt-1 text-[0.72rem] leading-relaxed text-muted">{t.tactical_notes}</p>}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </div>
+  ) : <Empty text="No player or tactical matchup data published for this fixture yet." />;
+
   return (
     <div className="space-y-4">
       <Link href="/" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
@@ -313,6 +405,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           { id: "overview", label: "Overview", content: overview },
           { id: "signals", label: "Signals", content: signalsTab },
           { id: "teams", label: "Teams", content: teams },
+          { id: "matchups", label: "Matchups", content: matchups },
           { id: "players", label: "Players", content: players },
           { id: "goals", label: "Goals", content: goals },
           { id: "risk", label: "Risk", content: risk },
