@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
-  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats,
+  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty,
 } from "@/lib/queries";
 import { computePerformance } from "@/lib/performance";
 import { computeTeamProfile, type MarketRead } from "@/lib/teamProfile";
@@ -12,7 +12,7 @@ import { BarMeter } from "@/components/Meters";
 import { MatchCard } from "@/components/MatchCard";
 import { Tabs } from "@/components/Tabs";
 import { InsightList, SignalGrid } from "@/components/PerformanceIntel";
-import { n0, n1, pct, km, money, dependencyVerdict, positionLabel } from "@/lib/intel";
+import { n0, n1, pct, km, money, dependencyVerdict, positionLabel, difficultyBand } from "@/lib/intel";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +30,10 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   if (!team) notFound();
 
   const { intel, goalDep, injury, formQuality, venue, momentum, depth } = await getTeamIntel(team.id);
-  const [upcoming, seasonStats] = await Promise.all([
+  const [upcoming, seasonStats, difficulty] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
+    getFixtureDifficulty(team.id),
   ]);
   const perf = seasonStats ? computePerformance(seasonStats) : null;
   const profile = computeTeamProfile({ intel, formQuality, venue, goalDep, perf });
@@ -234,6 +235,14 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   // ── FIXTURES ──
   const fixtures = (
     <div className="space-y-4">
+      {difficulty && (difficulty.next_5_difficulty != null || difficulty.next_10_difficulty != null) && (
+        <Panel title="Fixture difficulty">
+          <div className="grid grid-cols-2 gap-3">
+            <DifficultyCell label="Next 5" score={difficulty.next_5_difficulty} />
+            <DifficultyCell label="Next 10" score={difficulty.next_10_difficulty} />
+          </div>
+        </Panel>
+      )}
       {intel && (
         <Panel title="Load & burden">
           <div className="grid grid-cols-3 gap-3">
@@ -311,6 +320,16 @@ function BarRow({ label, value, color }: { label: string; value: number | null; 
       <span className="mono w-24 shrink-0 text-[0.65rem] uppercase tracking-wide text-muted">{label}</span>
       <BarMeter value={value} color={color} height={8} />
       <span className="mono w-8 text-right text-[0.7rem] text-text tnum">{n0(value)}</span>
+    </div>
+  );
+}
+function DifficultyCell({ label, score }: { label: string; score: number | null }) {
+  const band = difficultyBand(score);
+  return (
+    <div className="rounded-term border border-line p-3 text-center">
+      <div className="label-cap">{label}</div>
+      <div className="mono mt-1 text-lg font-bold" style={{ color: band.color }}>{band.label}</div>
+      {score != null && <div className="mono text-[0.55rem] text-faint tnum">{Math.round(score)}/100</div>}
     </div>
   );
 }

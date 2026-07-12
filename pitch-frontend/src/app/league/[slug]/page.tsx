@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getLeagueBySlug, getLeagueTeams, getLeagueStandings } from "@/lib/queries";
+import { getLeagueBySlug, getLeagueTeams, getLeagueStandings, getFixtureDifficultyMap } from "@/lib/queries";
 import { Crest } from "@/components/Crest";
 import { StatCell } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
 import { Tabs } from "@/components/Tabs";
 import { teamSlug } from "@/lib/slug";
-import { n0, n1, km, pct } from "@/lib/intel";
+import { n0, n1, km, pct, difficultyBand } from "@/lib/intel";
 import type { TeamIntelligence, TeamLite, TournamentStanding } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
     getLeagueTeams(tournament.id),
     getLeagueStandings(tournament.id),
   ]);
+  const diffMap = await getFixtureDifficultyMap(teams.map((r) => r.team.id));
 
   const rankBy = (key: (r: Row) => number | null | undefined) =>
     [...teams].filter((r) => key(r) != null).sort((a, b) => (key(b) ?? 0) - (key(a) ?? 0));
@@ -111,12 +112,18 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const teamsTab = teams.length > 0 ? (
     <Panel title={`Clubs in ${tournament.name}`}>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {teams.map((r) => (
-          <Link key={r.team.id} href={`/team/${teamSlug(r.team)}`} className="flex items-center gap-2 rounded-term border border-line p-2.5 transition-colors hover:border-faint hover:bg-raised">
-            <Crest team={r.team} size={24} />
-            <span className="truncate text-[0.78rem]">{r.team.short_name || r.team.name}</span>
-          </Link>
-        ))}
+        {teams.map((r) => {
+          const band = difficultyBand(diffMap[r.team.id]?.next_5_difficulty);
+          return (
+            <Link key={r.team.id} href={`/team/${teamSlug(r.team)}`} className="flex items-center gap-2 rounded-term border border-line p-2.5 transition-colors hover:border-faint hover:bg-raised">
+              <Crest team={r.team} size={24} />
+              <span className="min-w-0 flex-1 truncate text-[0.78rem]">{r.team.short_name || r.team.name}</span>
+              {diffMap[r.team.id]?.next_5_difficulty != null && (
+                <span className="mono shrink-0 text-[0.5rem] font-semibold uppercase" style={{ color: band.color }} title="Next-5 fixture difficulty">{band.label}</span>
+              )}
+            </Link>
+          );
+        })}
       </div>
     </Panel>
   ) : <Empty text="No teams found for this league." />;

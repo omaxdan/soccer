@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Crest } from "./Crest";
+import { FormString } from "./Primitives";
 import { kickoff, opportunityColor, normProb, bestLean } from "@/lib/intel";
 import { matchSlug } from "@/lib/slug";
 import type { MatchRow } from "@/lib/types";
@@ -31,7 +32,7 @@ function Row({ m }: { m: MatchRow }) {
     <div className="border-b border-line last:border-0">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="grid w-full grid-cols-[2.6rem_1fr_auto] items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-raised lg:grid-cols-[3rem_1.6fr_1fr_repeat(5,3rem)_1.2rem]"
+        className="grid w-full grid-cols-[2.6rem_1fr_auto] items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-raised lg:grid-cols-[3rem_1.6fr_1fr_repeat(5,3rem)_5rem_1.2rem]"
       >
         {/* time */}
         <span className="mono text-[0.62rem] leading-tight text-muted">
@@ -54,6 +55,11 @@ function Row({ m }: { m: MatchRow }) {
         <span className="hidden text-right lg:block"><Chip value={m.intel?.readiness_gap != null ? m.intel.readiness_gap.toFixed(0) : "—"} color="var(--muted)" /></span>
         {/* goal env */}
         <span className="hidden text-right lg:block"><Chip value={tg != null ? tg.toFixed(1) : "—"} color={tg != null && tg >= 2.8 ? "var(--amber)" : "var(--muted)"} /></span>
+        {/* H/A form */}
+        <span className="hidden flex-col items-end gap-0.5 lg:flex">
+          {m.home_form ? <FormString results={m.home_form} /> : <span className="mono text-[0.55rem] text-faint">—</span>}
+          {m.away_form ? <FormString results={m.away_form} /> : <span className="mono text-[0.55rem] text-faint">—</span>}
+        </span>
         {/* mobile compact opp/risk + caret */}
         <span className="flex items-center gap-2 lg:hidden">
           <Chip value={opp != null ? String(opp) : "—"} color={opportunityColor(opp)} />
@@ -96,13 +102,14 @@ export function BoardRows({ matches }: { matches: MatchRow[] }) {
   return (
     <div className="panel overflow-hidden p-0">
       {/* header (desktop) */}
-      <div className="mono hidden grid-cols-[3rem_1.6fr_1fr_repeat(5,3rem)_1.2rem] items-center gap-2 border-b border-line px-3 py-2 text-[0.55rem] uppercase tracking-wide text-faint lg:grid">
+      <div className="mono hidden grid-cols-[3rem_1.6fr_1fr_repeat(5,3rem)_5rem_1.2rem] items-center gap-2 border-b border-line px-3 py-2 text-[0.55rem] uppercase tracking-wide text-faint lg:grid">
         <span>Time</span><span>Match</span><span>League</span>
         <span className="text-right">Opp</span>
         <span className="text-right">Risk</span>
         <span className="text-right">Conf</span>
         <span className="text-right">RdGap</span>
         <span className="text-right">Goals</span>
+        <span className="text-right">Form</span>
         <span />
       </div>
       {matches.map((m) => <Row key={m.id} m={m} />)}

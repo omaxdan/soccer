@@ -120,6 +120,8 @@ export interface MatchRow {
   opportunity?: MatchOpportunity | null;
   risk?: MatchRisk | null;
   signals?: MarketSignal[];
+  home_form?: string | null;
+  away_form?: string | null;
 }
 
 export interface MatchWeather {
@@ -277,4 +279,12 @@ export interface TournamentStanding {
   scores_for: number | null;
   scores_against: number | null;
   points: number | null;
+}
+
+export interface TeamFixtureDifficulty {
+  team_id: number;
+  next_5_difficulty: number | null;
+  next_10_difficulty: number | null;
+  next_5_matches: number | null;
+  next_10_matches: number | null;
 }

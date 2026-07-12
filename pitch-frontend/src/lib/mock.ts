@@ -1,5 +1,5 @@
 import type { TeamSeasonStats } from "./performance";
-import type { TournamentStanding } from "./types";
+import type { TournamentStanding, TeamFixtureDifficulty } from "./types";
 import type {
   MatchRow,
   TeamLite,
@@ -442,4 +442,10 @@ export const MOCK_STANDINGS: Record<number, TournamentStanding[]> = {
     stand(1, T.ajax, 20, 15, 3, 2, 48, 18),
     stand(2, T.twente, 20, 13, 4, 3, 40, 22),
   ],
+};
+
+// ── Fixture difficulty (next-N opponent difficulty) ──────
+export const MOCK_FIXTURE_DIFFICULTY: Record<number, TeamFixtureDifficulty> = {
+  1: { team_id: 1, next_5_difficulty: 44, next_10_difficulty: 51, next_5_matches: 5, next_10_matches: 10 },
+  2: { team_id: 2, next_5_difficulty: 71, next_10_difficulty: 68, next_5_matches: 5, next_10_matches: 10 },
 };

@@ -173,6 +173,14 @@ export function clamp(v: number, lo = 0, hi = 100) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+export function difficultyBand(score: number | null | undefined): { label: string; color: string } {
+  if (score == null) return { label: "Unknown", color: "var(--faint)" };
+  if (score < 40) return { label: "Easy", color: "var(--edge)" };
+  if (score < 58) return { label: "Medium", color: "var(--warn)" };
+  if (score < 72) return { label: "Hard", color: "var(--coral, var(--risk))" };
+  return { label: "Very Hard", color: "var(--risk)" };
+}
+
 export function positionLabel(code: string): string {
   const c = code.toUpperCase();
   if (c.startsWith("G")) return "Goalkeepers";

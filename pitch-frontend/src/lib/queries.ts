@@ -42,7 +42,14 @@ function normTournament(t: any): import("./types").TournamentLite | null {
 // ── Board: upcoming matches with attached intelligence ───
 export async function getBoard(limit = 24): Promise<MatchRow[]> {
   const client = db();
-  if (!client) return sortBoard(M.MOCK_MATCHES);
+  if (!client)
+    return sortBoard(
+      M.MOCK_MATCHES.map((m) => ({
+        ...m,
+        home_form: M.MOCK_TEAM_INTEL[m.home.id]?.last_5_results ?? null,
+        away_form: M.MOCK_TEAM_INTEL[m.away.id]?.last_5_results ?? null,
+      }))
+    );
 
   const nowIso = new Date(Date.now() - 3 * 36e5).toISOString();
   const { data: matches, error } = await client
@@ -60,15 +67,18 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
   if (error || !matches || matches.length === 0) return sortBoard(M.MOCK_MATCHES);
 
   const ids = matches.map((m: any) => m.id);
-  const [intel, opp, risk] = await Promise.all([
+  const teamIds = Array.from(new Set(matches.flatMap((m: any) => [m.home?.id, m.away?.id]).filter(Boolean)));
+  const [intel, opp, risk, tIntel] = await Promise.all([
     client.from("match_intelligence").select("*").in("match_id", ids),
     client.from("match_opportunity").select("*").in("match_id", ids),
     client.from("match_risk_intelligence").select("*").in("match_id", ids),
+    client.from("team_intelligence").select("team_id, last_5_results").in("team_id", teamIds),
   ]);
 
   const iMap = indexBy(intel.data, "match_id");
   const oMap = indexBy(opp.data, "match_id");
   const rMap = indexBy(risk.data, "match_id");
+  const formMap = indexBy(tIntel.data, "team_id");
 
   const rows: MatchRow[] = matches.map((m: any) => ({
     id: m.id, external_match_id: m.external_match_id, date: m.date,
@@ -78,6 +88,8 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     intel: iMap[m.id] ? normIntel(iMap[m.id]) : null,
     opportunity: oMap[m.id] ? normOpp(oMap[m.id]) : null,
     risk: rMap[m.id] ? normRisk(rMap[m.id]) : null,
+    home_form: formMap[m.home?.id]?.last_5_results ?? null,
+    away_form: formMap[m.away?.id]?.last_5_results ?? null,
   }));
   return sortBoard(rows);
 }
@@ -315,6 +327,27 @@ export async function getTeamIntel(id: number): Promise<{
 export async function getTeamUpcoming(id: number, limit = 5): Promise<MatchRow[]> {
   const board = await getBoard(40);
   return board.filter((m) => m.home.id === id || m.away.id === id).slice(0, limit);
+}
+
+// Next-N fixture difficulty (precomputed in team_fixture_difficulty).
+export async function getFixtureDifficulty(teamId: number): Promise<import("./types").TeamFixtureDifficulty | null> {
+  const client = db();
+  if (!client) return M.MOCK_FIXTURE_DIFFICULTY[teamId] ?? null;
+  const { data } = await client.from("team_fixture_difficulty").select("*").eq("team_id", teamId).maybeSingle();
+  return (data as any) ?? null;
+}
+
+export async function getFixtureDifficultyMap(
+  teamIds: number[]
+): Promise<Record<number, import("./types").TeamFixtureDifficulty>> {
+  const client = db();
+  if (!client) {
+    const out: Record<number, import("./types").TeamFixtureDifficulty> = {};
+    teamIds.forEach((id) => { if (M.MOCK_FIXTURE_DIFFICULTY[id]) out[id] = M.MOCK_FIXTURE_DIFFICULTY[id]; });
+    return out;
+  }
+  const { data } = await client.from("team_fixture_difficulty").select("*").in("team_id", teamIds);
+  return indexBy(data as any[], "team_id");
 }
 
 // Raw season statistics → fed into the performance intelligence engine.
