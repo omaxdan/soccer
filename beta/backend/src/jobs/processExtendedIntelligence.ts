@@ -516,7 +516,7 @@ export async function processPlayerMatchImpact(): Promise<{ matchesProcessed: nu
 
         rows.push({
           match_id: match.id, player_id: lineup.player_id, impact_score: impactScore,
-          importance_score: importanceScore, readiness_score: readinessScore, fatigue_score: fatigueScore,
+          importance_score: Math.round(importanceScore), readiness_score: Math.round(readinessScore), fatigue_score: Math.round(fatigueScore),
           form_rating: formRating, goal_threat: goalThreat, assist_threat: assistThreat,
           defensive_contribution: defensiveContribution, creativity_score: creativityScore,
           experience_score: experienceScore, big_game_performance: bigGamePerformance,
@@ -1108,7 +1108,11 @@ export async function processSubstitutionImpact(): Promise<{ matchesProcessed: n
     }
 
     const players = await fetchAllRows(db.from('players').select('id, team_id, position, current_injury').in('team_id', teamIds));
-    const playerIntel = await fetchAllRows(db.from('player_intelligence').select('player_id, player_strength_score').in('team_id', teamIds));
+    // FIX: player_intelligence has no team_id column (only player_id) —
+    // team is only reachable via joining players. Filter by player_id from
+    // the roster already fetched above instead.
+    const rosterPlayerIds = players.map((p: any) => p.id);
+    const playerIntel = await fetchAllRows(db.from('player_intelligence').select('player_id, player_strength_score').in('player_id', rosterPlayerIds));
     const strengthMap = new Map<number, number>(playerIntel.map((r: any) => [r.player_id, r.player_strength_score ?? 30]));
     const playersByTeam = new Map<number, any[]>();
     for (const p of players) {
