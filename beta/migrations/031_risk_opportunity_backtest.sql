@@ -1,4 +1,4 @@
--- ─── MIGRATION 029 — Risk Engine, Opportunity Layer, Backtest Calibration ───
+-- ─── MIGRATION 031 — Risk Engine, Opportunity Layer, Backtest Calibration ───
 -- PitchTerminal Phase 3 schema. Three rules govern this layer:
 --
 --  1. CALIBRATION GATE. A directional market signal is only published when
