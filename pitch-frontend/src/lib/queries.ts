@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import * as M from "./mock";
 import { normProb } from "./intel";
+import { teamSlug, leagueSlug, matchSlug, isNumericId } from "./slug";
 
 export { LIVE };
 
@@ -121,14 +122,105 @@ export async function getLineups(matchId: number): Promise<PredictedLineupPlayer
   if (!client) {
     const m = M.MOCK_MATCHES.find((x) => x.id === matchId);
     if (!m) return [];
-    return [...(M.MOCK_LINEUPS[m.home.id] ?? []), ...(M.MOCK_LINEUPS[m.away.id] ?? [])];
+    return enrichLineup([...(M.MOCK_LINEUPS[m.home.id] ?? []), ...(M.MOCK_LINEUPS[m.away.id] ?? [])]);
   }
   const { data } = await client
     .from("match_predicted_lineups")
-    .select(`team_id, player_id, position_code, rank_in_position, confidence,
+    .select(`team_id, player_id, position_code, secondary_position, tertiary_position, rank_in_position, confidence, shirt_number,
              player:players(id, name, short_name, position, current_injury, injury_status, injury_reason, injury_return_days, market_value)`)
     .eq("match_id", matchId);
   return (data as any[])?.map((r) => ({ ...r, player: r.player })) ?? [];
+}
+
+// Demo lineups carry only a primary code; add plausible secondary/tertiary
+// positions and shirt numbers so the pitch view demonstrates versatility.
+// (In production these come straight from the warehouse.)
+const ALT_POS: Record<string, [string, string?]> = {
+  G: ["G"],
+  D: ["DC", "DL"],
+  M: ["DM", "AM"],
+  F: ["RW", "ST"],
+};
+function enrichLineup(players: PredictedLineupPlayer[]): PredictedLineupPlayer[] {
+  const perTeam: Record<number, number> = {};
+  return players.map((p) => {
+    const base = (p.position_code ?? "M").charAt(0).toUpperCase();
+    perTeam[p.team_id] = (perTeam[p.team_id] ?? 0) + 1;
+    const alts = ALT_POS[base] ?? [];
+    // give ~60% of outfielders a secondary, ~30% a tertiary
+    const seed = p.player_id % 10;
+    const secondary = base !== "G" && seed < 6 ? alts[0] : undefined;
+    const tertiary = base !== "G" && seed < 3 ? alts[1] : undefined;
+    return {
+      ...p,
+      position_code: base === "F" ? (seed % 2 ? "RW" : "ST") : p.position_code,
+      secondary_position: p.secondary_position ?? secondary,
+      tertiary_position: p.tertiary_position ?? tertiary,
+      shirt_number: p.shirt_number ?? perTeam[p.team_id],
+    };
+  });
+}
+
+// ── Slug resolvers (public URLs are slug-based) ──────────
+export async function getMatchBySlug(slug: string): Promise<MatchRow | null> {
+  if (isNumericId(slug)) return getMatch(Number(slug));
+  const client = db();
+  if (!client) {
+    const m = M.MOCK_MATCHES.find((x) => matchSlug(x) === slug);
+    return m ? getMatch(m.id) : null;
+  }
+  const { data } = await client.from("matches").select("id").eq("slug", slug).maybeSingle();
+  return data ? getMatch(data.id) : null;
+}
+
+export async function getTeamBySlug(slug: string): Promise<TeamLite | null> {
+  if (isNumericId(slug)) return getTeam(Number(slug));
+  const client = db();
+  if (!client) return M.MOCK_TEAMS.find((t) => teamSlug(t) === slug) ?? null;
+  const { data } = await client.from("teams").select(TEAM_COLS).eq("slug", slug).maybeSingle();
+  return data ? teamFromRow(data) : (M.MOCK_TEAMS.find((t) => teamSlug(t) === slug) ?? null);
+}
+
+export async function getLeagueBySlug(slug: string): Promise<{
+  tournament: import("./types").TournamentLite;
+  intel: LeagueIntelligence | null;
+  gap: LeagueGapSummary | null;
+} | null> {
+  const leagues = await getLeagues();
+  const gaps = await getLeagueGap();
+  let li = leagues.find((l) => {
+    const t = l.tournament;
+    if (!t) return false;
+    return isNumericId(slug) ? String(t.id) === slug || String(t.external_id) === slug : leagueSlug(t) === slug;
+  });
+  if (!li) {
+    const t = M.MOCK_TOURNAMENTS.find((x) => leagueSlug(x) === slug);
+    if (t) li = leagues.find((l) => l.tournament_id === t.id);
+  }
+  if (!li || !li.tournament) return null;
+  const gap = gaps.find((g) => g.league_name.toLowerCase() === li!.tournament!.name.toLowerCase()) ?? null;
+  return { tournament: li.tournament, intel: li, gap };
+}
+
+// Teams that belong to a league (for league Teams tab), enriched with intel.
+export async function getLeagueTeams(tournamentId: number): Promise<
+  { team: TeamLite; intel: TeamIntelligence | null }[]
+> {
+  const client = db();
+  if (!client) {
+    return M.MOCK_TEAMS.filter((t) =>
+      M.MOCK_MATCHES.some(
+        (m) => (m.home.id === t.id || m.away.id === t.id) && m.tournament?.id === tournamentId
+      )
+    ).map((team) => ({ team, intel: M.MOCK_TEAM_INTEL[team.id] ?? null }));
+  }
+  const { data } = await client
+    .from("team_intelligence")
+    .select(`*, team:teams!inner(${TEAM_COLS})`)
+    .limit(40);
+  return (
+    (data as any[])?.map((r) => ({ team: teamFromRow(r.team), intel: r })) ?? []
+  );
 }
 
 // ── Team hub bundles ─────────────────────────────────────
@@ -180,6 +272,55 @@ export async function getTeamIntel(id: number): Promise<{
 export async function getTeamUpcoming(id: number, limit = 5): Promise<MatchRow[]> {
   const board = await getBoard(40);
   return board.filter((m) => m.home.id === id || m.away.id === id).slice(0, limit);
+}
+
+// Raw season statistics → fed into the performance intelligence engine.
+export async function getTeamSeasonStats(
+  id: number
+): Promise<import("./performance").TeamSeasonStats | null> {
+  const client = db();
+  if (!client) return M.MOCK_SEASON_STATS[id] ?? null;
+  const { data } = await client
+    .from("team_season_statistics")
+    .select("*")
+    .eq("team_id", id)
+    .order("season_external_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  // Map curated warehouse columns into the engine's superset shape. Fields
+  // the table doesn't store are left undefined; the engine flags them.
+  return {
+    matches: data.matches ?? null,
+    goals_scored: data.goals_scored ?? null,
+    goals_conceded: data.goals_conceded ?? null,
+    clean_sheets: data.clean_sheets ?? null,
+    avg_possession: data.avg_possession ?? null,
+    avg_rating: data.avg_rating ?? null,
+    accurate_passes_pct: data.accurate_passes_pct ?? null,
+    duels_won_pct: data.duels_won_pct ?? null,
+    aerial_duels_won_pct: data.aerial_duels_won_pct ?? null,
+    yellow_cards: data.yellow_cards ?? null,
+    red_cards: data.red_cards ?? null,
+    big_chances_created: data.big_chances_created ?? null,
+    big_chances_missed: data.big_chances_missed ?? null,
+    // extended raw fields — present only if the table has been widened
+    shots: data.shots ?? null,
+    shots_on_target: data.shots_on_target ?? null,
+    shots_inside_box: data.shots_inside_box ?? null,
+    goals_inside_box: data.goals_inside_box ?? null,
+    goals_outside_box: data.goals_outside_box ?? null,
+    headed_goals: data.headed_goals ?? null,
+    left_foot_goals: data.left_foot_goals ?? null,
+    right_foot_goals: data.right_foot_goals ?? null,
+    long_balls_pct: data.long_balls_pct ?? null,
+    crosses_pct: data.crosses_pct ?? null,
+    big_chances: data.big_chances ?? null,
+    shots_against: data.shots_against ?? null,
+    shots_on_target_against: data.shots_on_target_against ?? null,
+    big_chances_against: data.big_chances_against ?? null,
+    errors_leading_to_goal: data.errors_leading_to_goal ?? null,
+  };
 }
 
 // ── Leagues ──────────────────────────────────────────────

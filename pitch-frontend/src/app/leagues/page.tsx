@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { getLeagues, getLeagueGap } from "@/lib/queries";
 import { Section, StatCell } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
 import { n0, n1, km, pct } from "@/lib/intel";
+import { leagueSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +33,9 @@ export default async function LeaguesPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {leagues.map((l) => {
             const name = l.tournament?.name ?? `League ${l.tournament_id}`;
+            const href = l.tournament ? `/league/${leagueSlug(l.tournament)}` : "#";
             return (
-              <div key={l.tournament_id} className="panel-raised p-4">
+              <Link key={l.tournament_id} href={href} className="panel-raised block p-4 transition-colors hover:border-faint">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold tracking-tight">{name}</h3>
                   <span className="mono text-[0.6rem] text-faint">
@@ -48,7 +51,7 @@ export default async function LeaguesPage() {
                   <span>Rest {n1(l.avg_rest_days)}d</span>
                   <span>Travel 14d {km(l.avg_travel_14d)}</span>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

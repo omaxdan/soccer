@@ -184,6 +184,9 @@ export interface TeamFormQuality {
   actual_points: number | null;
   performance_delta: number | null;
   volatility: number | null;
+  points_vs_top?: number | null;
+  points_vs_mid?: number | null;
+  points_vs_bottom?: number | null;
 }
 
 export interface TeamVenuePerformance {
@@ -208,8 +211,11 @@ export interface PredictedLineupPlayer {
   team_id: number;
   player_id: number;
   position_code: string | null;
+  secondary_position?: string | null;
+  tertiary_position?: string | null;
   rank_in_position: number | null;
   confidence: number | null;
+  shirt_number?: number | null;
   player?: PlayerLite;
 }
 

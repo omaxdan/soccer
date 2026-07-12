@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Crest } from "./Crest";
 import { OpportunityRiskMeter, RiskBadge } from "./Meters";
 import { kickoff, opportunityColor, bestLean, normProb } from "@/lib/intel";
+import { matchSlug } from "@/lib/slug";
 import type { MatchRow } from "@/lib/types";
 
 export function MatchCard({ m, rank }: { m: MatchRow; rank?: number }) {
@@ -20,7 +21,7 @@ export function MatchCard({ m, rank }: { m: MatchRow; rank?: number }) {
 
   return (
     <Link
-      href={`/matches/${m.id}`}
+      href={`/match/${matchSlug(m)}`}
       className="panel block p-4 transition-colors hover:border-faint animate-fade-up"
     >
       <div className="mb-3 flex items-center gap-2">

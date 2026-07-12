@@ -1,3 +1,4 @@
+import type { TeamSeasonStats } from "./performance";
 import type {
   MatchRow,
   TeamLite,
@@ -126,8 +127,8 @@ export const MOCK_INJURY_IMPACT: Record<number, TeamInjuryImpact> = {
 };
 
 export const MOCK_FORM_QUALITY: Record<number, TeamFormQuality> = {
-  1: { team_id: 1, opponent_adjusted_form: 76, strength_of_schedule: 58, giant_killer_score: 62, flat_track_bully_score: 40, expected_points: 10.2, actual_points: 13, performance_delta: 2.8, volatility: 18 },
-  2: { team_id: 2, opponent_adjusted_form: 52, strength_of_schedule: 61, giant_killer_score: 44, flat_track_bully_score: 66, expected_points: 8.9, actual_points: 7, performance_delta: -1.9, volatility: 34 },
+  1: { team_id: 1, opponent_adjusted_form: 76, strength_of_schedule: 58, giant_killer_score: 62, flat_track_bully_score: 40, expected_points: 10.2, actual_points: 13, performance_delta: 2.8, volatility: 18, points_vs_top: 62, points_vs_mid: 71, points_vs_bottom: 78 },
+  2: { team_id: 2, opponent_adjusted_form: 52, strength_of_schedule: 61, giant_killer_score: 44, flat_track_bully_score: 66, expected_points: 8.9, actual_points: 7, performance_delta: -1.9, volatility: 34, points_vs_top: 33, points_vs_mid: 55, points_vs_bottom: 82 },
 };
 
 export const MOCK_VENUE: Record<number, TeamVenuePerformance> = {
@@ -386,3 +387,37 @@ export const MOCK_LEAGUE_GAP: LeagueGapSummary[] = [
   { league_name: "Brasileirão Série C", total_picks: 168, hit_rate_strict: 0.54, hit_rate_lenient: 0.67, lift_over_baseline: 0.08, baseline_rate: 0.46, readiness_status: "calibrated", meets_sample_gate: true },
   { league_name: "Eredivisie", total_picks: 92, hit_rate_strict: 0.61, hit_rate_lenient: 0.73, lift_over_baseline: 0.15, baseline_rate: 0.46, readiness_status: "monitoring", meets_sample_gate: false },
 ];
+
+// ── Season statistics (raw) for the performance engine ───
+// Team 2 uses the exact SofaScore-style block from the product docs so the
+// engine visibly reproduces the worked examples (4.7% finishing, 25.7%
+// defensive conversion, 24% clean sheets, discipline risk, direct profile).
+
+export const MOCK_SEASON_STATS: Record<number, TeamSeasonStats> = {
+  2: {
+    matches: 33, goals_scored: 15, goals_conceded: 35, clean_sheets: 8,
+    avg_possession: 42.7, avg_rating: 6.69, accurate_passes_pct: 68.74,
+    duels_won_pct: 48.4, aerial_duels_won_pct: 48.33,
+    yellow_cards: 62, red_cards: 6,
+    big_chances_created: 7, big_chances_missed: 10, big_chances: 15,
+    shots: 319, shots_on_target: 94, shots_inside_box: 188,
+    goals_inside_box: 11, goals_outside_box: 4, headed_goals: 2,
+    left_foot_goals: 5, right_foot_goals: 8,
+    long_balls_pct: 43.14, crosses_pct: 22.03,
+    shots_against: 418, shots_on_target_against: 136,
+    big_chances_against: 19, errors_leading_to_goal: 1,
+  },
+  1: {
+    matches: 33, goals_scored: 41, goals_conceded: 20, clean_sheets: 15,
+    avg_possession: 55.2, avg_rating: 7.08, accurate_passes_pct: 82.1,
+    duels_won_pct: 53.1, aerial_duels_won_pct: 52.0,
+    yellow_cards: 40, red_cards: 2,
+    big_chances_created: 14, big_chances_missed: 8, big_chances: 22,
+    shots: 360, shots_on_target: 140, shots_inside_box: 210,
+    goals_inside_box: 30, goals_outside_box: 11, headed_goals: 7,
+    left_foot_goals: 15, right_foot_goals: 19,
+    long_balls_pct: 30.4, crosses_pct: 28.2,
+    shots_against: 300, shots_on_target_against: 95,
+    big_chances_against: 10, errors_leading_to_goal: 0,
+  },
+};
