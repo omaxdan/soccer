@@ -8,6 +8,8 @@ import { BarMeter } from "@/components/Meters";
 import { Tabs } from "@/components/Tabs";
 import { teamSlug } from "@/lib/slug";
 import { n0, n1, km, pct, difficultyBand } from "@/lib/intel";
+import { Explain } from "@/components/Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 import type { TeamIntelligence, TeamLite, TournamentStanding } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -133,10 +135,10 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const powerTab = powerRanking.length > 0 ? (
     <div className="space-y-4">
       <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
-      <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} />
-      <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" />
+      <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} explain="power_ranking" />
+      <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" explain="readiness" />
       {qualityRanking.length > 0 && (
-        <RankPanel title="Quality ranking (attack + defence)" rows={qualityRanking} value={(r) => r.betting?.team_quality_score} color="var(--warn)" />
+        <RankPanel title="Quality ranking (attack + defence)" rows={qualityRanking} value={(r) => r.betting?.team_quality_score} color="var(--warn)" explain="team_quality_score" />
       )}
     </div>
   ) : <Empty text="Intelligence rankings still processing for this league." />;
@@ -204,18 +206,18 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, explain }: { title: string; children: React.ReactNode; explain?: GlossaryKey }) {
   return (
     <section className="panel p-4">
-      <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}</h2>
+      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}{explain && <Explain metric={explain} />}</h2>
       {children}
     </section>
   );
 }
-function RankPanel({ title, rows, value, color = "var(--amber)" }: { title: string; rows: Row[]; value: (r: Row) => number | null | undefined; color?: string }) {
+function RankPanel({ title, rows, value, color = "var(--amber)", explain }: { title: string; rows: Row[]; value: (r: Row) => number | null | undefined; color?: string; explain?: GlossaryKey }) {
   const max = Math.max(...rows.map((r) => value(r) ?? 0), 1);
   return (
-    <Panel title={title}>
+    <Panel title={title} explain={explain}>
       <ol className="space-y-2">
         {rows.map((r, idx) => (
           <li key={r.team.id} className="flex items-center gap-2.5">

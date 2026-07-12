@@ -13,6 +13,8 @@ import { MatchCard } from "@/components/MatchCard";
 import { Tabs } from "@/components/Tabs";
 import { InsightList, SignalGrid } from "@/components/PerformanceIntel";
 import { n0, n1, pct, km, money, dependencyVerdict, positionLabel, difficultyBand } from "@/lib/intel";
+import { Explain } from "@/components/Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 
 export const dynamic = "force-dynamic";
 
@@ -44,14 +46,14 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const overview = (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <ScoreTile label="Team quality" value={profile.quality.overall} big />
-        <ScoreTile label="Readiness" value={intel?.readiness_score ?? null} />
+        <ScoreTile label="Team quality" value={profile.quality.overall} big explain="team_quality_score" />
+        <ScoreTile label="Readiness" value={intel?.readiness_score ?? null} explain="readiness" />
         <ScoreTile label="Predictability" value={profile.predictability} />
         <ScoreTile label="Volatility" value={profile.volatility} invert />
       </div>
       <Panel title="Quality breakdown">
-        <BarRow label="Attack" value={profile.quality.attack} color="var(--amber)" />
-        <BarRow label="Defence" value={profile.quality.defence} color="var(--cool)" />
+        <BarRow label="Attack" value={profile.quality.attack} color="var(--amber)" explain="attack_rating" />
+        <BarRow label="Defence" value={profile.quality.defence} color="var(--cool)" explain="defence_rating" />
         <BarRow label="Squad depth" value={profile.quality.squad} color="var(--edge)" />
       </Panel>
       {perf?.style && (
@@ -116,7 +118,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
         <Empty note="shots" />
       )}
       {goalDep && (
-        <Panel title="Goal distribution">
+        <Panel title="Goal distribution" explain="goal_dependency">
           <div className="mono grid grid-cols-3 gap-2 text-[0.7rem] text-muted">
             <span>Total <span className="text-text">{n0(goalDep.total_goals)}</span></span>
             <span>Top scorer <span className="text-text">{n0(goalDep.top_scorer_goals)}</span></span>
@@ -198,10 +200,10 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
       {formQuality && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <ScoreTile label="Adjusted form" value={formQuality.opponent_adjusted_form} />
+            <ScoreTile label="Adjusted form" value={formQuality.opponent_adjusted_form} explain="opponent_adjusted_form" />
             <ScoreTile label="Sched strength" value={formQuality.strength_of_schedule} />
-            <ScoreTile label="Giant-killer" value={formQuality.giant_killer_score} />
-            <ScoreTile label="Flat-track" value={formQuality.flat_track_bully_score} invert />
+            <ScoreTile label="Giant-killer" value={formQuality.giant_killer_score} explain="giant_killer_score" />
+            <ScoreTile label="Flat-track" value={formQuality.flat_track_bully_score} invert explain="flat_track_bully_score" />
           </div>
           {profile.tier && (
             <Panel title="Performance by opponent tier">
@@ -274,10 +276,10 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
     <div className="space-y-4">
       <Panel title="Betting profile">
         <div className="space-y-3">
-          <MarketRow label="Winner market" read={profile.betting.winner} />
-          <MarketRow label="Goals market" read={profile.betting.goals} />
-          <MarketRow label="BTTS" read={profile.betting.btts} />
-          <MarketRow label="Cards" read={profile.betting.cards} />
+          <MarketRow label="Winner market" read={profile.betting.winner} explain="winner_market_score" />
+          <MarketRow label="Goals market" read={profile.betting.goals} explain="goals_market_score" />
+          <MarketRow label="BTTS" read={profile.betting.btts} explain="btts_score" />
+          <MarketRow label="Cards" read={profile.betting.cards} explain="cards_market_score" />
         </div>
         <div className="mono mt-4 flex items-center justify-between border-t border-line pt-3 text-[0.7rem]">
           <span className="text-muted">Predictability <span className="text-text">{profile.predictability}</span></span>
@@ -356,29 +358,29 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
 }
 
 // ── local UI helpers ──
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, explain }: { title: string; children: React.ReactNode; explain?: GlossaryKey }) {
   return (
     <section className="panel p-4">
-      <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}</h2>
+      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}{explain && <Explain metric={explain} />}</h2>
       {children}
     </section>
   );
 }
-function ScoreTile({ label, value, big, invert, suffix, subtitle }: { label: string; value: number | null; big?: boolean; invert?: boolean; suffix?: string; subtitle?: string }) {
+function ScoreTile({ label, value, big, invert, suffix, subtitle, explain }: { label: string; value: number | null; big?: boolean; invert?: boolean; suffix?: string; subtitle?: string; explain?: GlossaryKey }) {
   const v = value ?? null;
   const color = v == null ? "var(--muted)" : (invert ? v <= 35 : v >= 65) ? "var(--edge)" : (invert ? v <= 60 : v >= 45) ? "var(--warn)" : "var(--risk)";
   return (
     <div className="panel-raised p-3">
-      <div className="label-cap">{label}</div>
+      <div className="label-cap flex items-center">{label}{explain && <Explain metric={explain} />}</div>
       <div className={`mono mt-1 font-bold leading-none tnum ${big ? "text-2xl" : "text-xl"}`} style={{ color }}>{v == null ? "—" : `${v}${suffix ?? ""}`}</div>
       {subtitle && <div className="mono text-[0.55rem] text-faint">{subtitle}</div>}
     </div>
   );
 }
-function BarRow({ label, value, color }: { label: string; value: number | null; color: string }) {
+function BarRow({ label, value, color, explain }: { label: string; value: number | null; color: string; explain?: GlossaryKey }) {
   return (
     <div className="mb-2.5 flex items-center gap-3 last:mb-0">
-      <span className="mono w-24 shrink-0 text-[0.65rem] uppercase tracking-wide text-muted">{label}</span>
+      <span className="mono flex w-24 shrink-0 items-center text-[0.65rem] uppercase tracking-wide text-muted">{label}{explain && <Explain metric={explain} />}</span>
       <BarMeter value={value} color={color} height={8} />
       <span className="mono w-8 text-right text-[0.7rem] text-text tnum">{n0(value)}</span>
     </div>
@@ -404,10 +406,10 @@ function TierCell({ label, ppg }: { label: string; ppg: number | null }) {
     </div>
   );
 }
-function MarketRow({ label, read }: { label: string; read: MarketRead }) {
+function MarketRow({ label, read, explain }: { label: string; read: MarketRead; explain?: GlossaryKey }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-28 shrink-0 text-[0.8rem]">{label}</span>
+      <span className="flex w-28 shrink-0 items-center text-[0.8rem]">{label}{explain && <Explain metric={explain} />}</span>
       <BarMeter value={read.score} color={read.color} height={7} />
       <span className="mono w-20 shrink-0 text-right text-[0.65rem] font-semibold" style={{ color: read.color }}>{read.label}</span>
     </div>

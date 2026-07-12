@@ -17,6 +17,8 @@ import {
   kickoff, n1, km, normProb, opportunityColor, bestLean, normScorelines,
   htFtLabel, confidenceBand, n0, positionLabel,
 } from "@/lib/intel";
+import { Explain } from "@/components/Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 import type { MatchRow, MarketSignal } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +52,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
       {(m.opportunity || m.risk) && (
         <Panel title="Executive decision">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCell label="Opportunity" value={`${m.opportunity?.opportunity_score ?? "—"}`} color={opportunityColor(m.opportunity?.opportunity_score)} sub="/100" />
+            <StatCell label="Opportunity" value={`${m.opportunity?.opportunity_score ?? "—"}`} color={opportunityColor(m.opportunity?.opportunity_score)} sub="/100" explain="opportunity_score" />
             <StatCell label="Risk" value={m.risk ? `${m.risk.risk_score}` : "—"} sub={m.risk?.risk_band ?? ""} />
             <StatCell label="Predictability" value={m.risk ? `${m.risk.predictability_score}` : "—"} sub="/100" />
             <StatCell label="Confidence" value={i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"} sub={i?.confidence_band ?? ""} />
@@ -194,7 +196,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           <span className="mono flex items-center gap-1.5 text-[0.65rem] text-edge"><Crest team={m.home} size={16} /> {m.home.short_name || m.home.name}</span>
           <span className="mono flex items-center gap-1.5 text-[0.65rem] text-cool">{m.away.short_name || m.away.name} <Crest team={m.away} size={16} /></span>
         </div>
-        <ScorecardRow label="Readiness" home={i.home_readiness} away={i.away_readiness} />
+        <ScorecardRow label="Readiness" home={i.home_readiness} away={i.away_readiness} explain="readiness" />
         <ScorecardRow label="Squad stability" home={i.home_squad_stability} away={i.away_squad_stability} />
         <ScorecardRow label="Positional depth" home={i.home_positional_depth} away={i.away_positional_depth} />
         <ScorecardRow label="Injury burden" home={i.home_injury_score} away={i.away_injury_score} invert />
@@ -205,9 +207,9 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
       {(m.teamImpact?.home || m.teamImpact?.away) && (
         <Panel title="Team match impact">
           <ScorecardRow label="Overall impact" home={m.teamImpact.home?.overall_impact_score} away={m.teamImpact.away?.overall_impact_score} />
-          <ScorecardRow label="Attack strength" home={m.teamImpact.home?.attack_strength} away={m.teamImpact.away?.attack_strength} />
+          <ScorecardRow label="Attack strength" home={m.teamImpact.home?.attack_strength} away={m.teamImpact.away?.attack_strength} explain="attack_rating" />
           <ScorecardRow label="Midfield control" home={m.teamImpact.home?.midfield_control} away={m.teamImpact.away?.midfield_control} />
-          <ScorecardRow label="Defensive strength" home={m.teamImpact.home?.defensive_strength} away={m.teamImpact.away?.defensive_strength} />
+          <ScorecardRow label="Defensive strength" home={m.teamImpact.home?.defensive_strength} away={m.teamImpact.away?.defensive_strength} explain="defence_rating" />
           <ScorecardRow label="Tactical versatility" home={m.teamImpact.home?.tactical_versatility} away={m.teamImpact.away?.tactical_versatility} />
           {m.impactAdvantage && (
             <div className="mono mt-3 border-t border-line pt-3 text-[0.68rem] text-muted">
@@ -432,10 +434,10 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 }
 
 // ── helpers ──
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, explain }: { title: string; children: React.ReactNode; explain?: GlossaryKey }) {
   return (
     <section className="panel p-4">
-      <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}</h2>
+      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}{explain && <Explain metric={explain} />}</h2>
       {children}
     </section>
   );

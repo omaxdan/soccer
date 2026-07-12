@@ -1,4 +1,6 @@
 import React from "react";
+import { Explain } from "./Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 
 // ── Recent form string (W/D/L) ───────────────────────────
 export function FormString({ results }: { results: string | null | undefined }) {
@@ -32,15 +34,17 @@ export function StatCell({
   value,
   sub,
   color,
+  explain,
 }: {
   label: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
   color?: string;
+  explain?: GlossaryKey;
 }) {
   return (
     <div>
-      <div className="label-cap">{label}</div>
+      <div className="label-cap flex items-center">{label}{explain && <Explain metric={explain} />}</div>
       <div className="mono mt-0.5 text-lg font-semibold tnum" style={{ color: color ?? "var(--text)" }}>
         {value}
       </div>

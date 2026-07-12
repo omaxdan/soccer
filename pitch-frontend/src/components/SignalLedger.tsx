@@ -1,4 +1,5 @@
 import { directionStyle } from "@/lib/intel";
+import { EvidenceDisclosure } from "./Explain";
 import type { MarketSignal } from "@/lib/types";
 
 function StrengthMeter({ strength, color }: { strength: number; color: string }) {
@@ -51,9 +52,17 @@ export function SignalRow({ signal }: { signal: MarketSignal }) {
         {signal.signal_text}
       </p>
       {signal.drivers && (
-        <p className="mono mt-1 pl-7 text-[0.6rem] tracking-wide text-faint">
-          {signal.drivers}
-        </p>
+        <div className="pl-7">
+          <EvidenceDisclosure
+            label={signal.market}
+            lines={signal.drivers.split(",").map((d) => ({ text: d.trim() }))}
+            soWhat={
+              signal.direction !== "neutral"
+                ? `${Math.min(6, signal.strength)} of 6 evidence streams point ${signal.direction}.`
+                : "Evidence streams don't converge strongly enough for a directional lean."
+            }
+          />
+        </div>
       )}
     </div>
   );

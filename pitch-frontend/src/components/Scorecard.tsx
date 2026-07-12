@@ -1,4 +1,6 @@
 import { VersusBar } from "./Meters";
+import { Explain } from "./Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 
 // A single head-to-head intelligence row: label, home value, versus bar,
 // away value, plus a plain-language "why" beneath.
@@ -12,6 +14,7 @@ export function ScorecardRow({
   homeColor = "var(--edge)",
   awayColor = "var(--cool)",
   max = 100,
+  explain,
 }: {
   label: string;
   home: number | null | undefined;
@@ -22,6 +25,7 @@ export function ScorecardRow({
   homeColor?: string;
   awayColor?: string;
   max?: number;
+  explain?: GlossaryKey;
 }) {
   // For inverted metrics, the bar should reward the lower value.
   const h = home ?? 0;
@@ -40,7 +44,7 @@ export function ScorecardRow({
           {format(home)}
         </span>
         <div className="flex-1">
-          <div className="mb-1 text-center label-cap">{label}</div>
+          <div className="mb-1 flex items-center justify-center label-cap">{label}{explain && <Explain metric={explain} />}</div>
           <VersusBar
             home={barHome}
             away={barAway}
