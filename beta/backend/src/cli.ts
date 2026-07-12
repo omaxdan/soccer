@@ -11,7 +11,7 @@ import {
   processPlayerMatchImpact, processMatchPerformanceComparison, processTeamVersatility,
   processFormationMatchup, processPositionAdaptability, processTacticalFlexibility,
   processSubstitutionImpact, processSquadDepthComparison, processTeamMotivation,
-  processMatchImpactSummary,
+  processMatchImpactSummary, processPlayerVersatility,
 } from './jobs/processExtendedIntelligence';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
@@ -946,6 +946,12 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing player match impact...');
         const r = await processPlayerMatchImpact();
         logger.info(r, 'Player match impact complete');
+        break;
+      }
+      case 'process:player-versatility': {
+        logger.info('Computing player versatility...');
+        const r = await processPlayerVersatility();
+        logger.info(r, 'Player versatility complete');
         break;
       }
       case 'process:match-performance-comparison': {
