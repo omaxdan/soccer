@@ -20,7 +20,7 @@ export async function generateMetadata(
   return { title: l ? l.tournament.name : "League" };
 }
 
-type Row = { team: TeamLite; intel: TeamIntelligence | null };
+type Row = { team: TeamLite; intel: TeamIntelligence | null; betting: import("@/lib/types").TeamBettingIntelligence | null };
 
 export default async function LeagueHub({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -38,6 +38,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
 
   const powerRanking = rankBy((r) => r.intel?.form_index);
   const readinessRanking = rankBy((r) => r.intel?.readiness_score);
+  const qualityRanking = rankBy((r) => r.betting?.team_quality_score);
 
   // ── OVERVIEW ──
   const overview = (
@@ -134,6 +135,9 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
       <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
       <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} />
       <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" />
+      {qualityRanking.length > 0 && (
+        <RankPanel title="Quality ranking (attack + defence)" rows={qualityRanking} value={(r) => r.betting?.team_quality_score} color="var(--warn)" />
+      )}
     </div>
   ) : <Empty text="Intelligence rankings still processing for this league." />;
 

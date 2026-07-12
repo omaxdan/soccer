@@ -334,18 +334,69 @@ export async function getLeagueStandings(tournamentId: number): Promise<import("
 // Teams participating in a league — scoped via standings so no cross-league
 // leakage. Enriched per-team with intelligence for the Power Rankings tab.
 export async function getLeagueTeams(tournamentId: number): Promise<
-  { team: TeamLite; intel: TeamIntelligence | null }[]
+  { team: TeamLite; intel: TeamIntelligence | null; betting: import("./types").TeamBettingIntelligence | null }[]
 > {
   const standings = await getLeagueStandings(tournamentId);
   if (standings.length === 0) return [];
   const client = db();
   if (!client) {
-    return standings.map((s) => ({ team: s.team, intel: M.MOCK_TEAM_INTEL[s.team.id] ?? null }));
+    return standings.map((s) => ({ team: s.team, intel: M.MOCK_TEAM_INTEL[s.team.id] ?? null, betting: null }));
   }
   const ids = standings.map((s) => s.team.id);
-  const { data: intels } = await client.from("team_intelligence").select("*").in("team_id", ids);
+  const [{ data: intels }, { data: bettings }] = await Promise.all([
+    client.from("team_intelligence").select("*").in("team_id", ids),
+    client.from("team_betting_intelligence").select("*").in("team_id", ids)
+      .order("season_external_id", { ascending: false }),
+  ]);
   const iMap = indexBy(intels as any[], "team_id");
-  return standings.map((s) => ({ team: s.team, intel: iMap[s.team.id] ?? null }));
+  // Multiple seasons possible per team; keep the first (most recent, per
+  // the descending order above) — same dedup pattern used elsewhere for
+  // season-scoped tables in this codebase.
+  const bMap: Record<number, any> = {};
+  for (const b of (bettings as any[]) ?? []) {
+    if (!(b.team_id in bMap)) bMap[b.team_id] = b;
+  }
+  return standings.map((s) => ({ team: s.team, intel: iMap[s.team.id] ?? null, betting: bMap[s.team.id] ?? null }));
+}
+
+// Top players by importance_score (player_intelligence — team-context-free,
+// unlike player_match_impact which is scoped to one fixture). Enriched with
+// player_versatility where a row exists.
+export async function getTeamKeyPlayers(teamId: number, limit = 6): Promise<{
+  id: number; name: string; short_name: string | null; position: string | null;
+  jersey_number: number | null; current_injury: boolean | null;
+  importance_score: number | null; readiness_score: number | null; fatigue_score: number | null;
+  goal_share_pct: number | null; assist_share_pct: number | null;
+  versatility_score: number | null;
+}[]> {
+  const client = db();
+  if (!client) return [];
+  const { data: players, error } = await client
+    .from("players")
+    .select(`id, name, short_name, position, jersey_number, current_injury,
+      player_intelligence!inner(importance_score, readiness_score, fatigue_score, goal_share_pct, assist_share_pct)`)
+    .eq("team_id", teamId)
+    .not("player_intelligence.importance_score", "is", null)
+    .order("importance_score", { referencedTable: "player_intelligence", ascending: false })
+    .limit(limit);
+  if (error || !players || players.length === 0) return [];
+
+  const ids = players.map((p: any) => p.id);
+  const { data: versatility } = await client.from("player_versatility").select("player_id, versatility_score").in("player_id", ids);
+  const vMap: Record<number, number | null> = {};
+  for (const v of (versatility as any[]) ?? []) vMap[v.player_id] = v.versatility_score;
+
+  return players.map((p: any) => {
+    const pi = Array.isArray(p.player_intelligence) ? p.player_intelligence[0] : p.player_intelligence;
+    return {
+      id: p.id, name: p.name, short_name: p.short_name, position: p.position,
+      jersey_number: p.jersey_number, current_injury: p.current_injury,
+      importance_score: pi?.importance_score ?? null, readiness_score: pi?.readiness_score ?? null,
+      fatigue_score: pi?.fatigue_score ?? null, goal_share_pct: pi?.goal_share_pct ?? null,
+      assist_share_pct: pi?.assist_share_pct ?? null,
+      versatility_score: vMap[p.id] ?? null,
+    };
+  });
 }
 
 // ── Team hub bundles ─────────────────────────────────────

@@ -173,6 +173,22 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         <BattleRow label="Home attack → Away defence" home={i.home_strength_rating} away={i.away_strength_rating} />
         <BattleRow label="Away attack → Home defence" home={i.away_strength_rating} away={i.home_strength_rating} flip />
       </Panel>
+      {m.performanceComparison && (
+        <Panel title="Zone-by-zone comparison">
+          <p className="mono mb-2 text-[0.6rem] text-faint">A separate model view — attack/defence above compares strength ratings; this breaks the match into five tactical zones.</p>
+          <ScorecardRow label="Attacking" home={m.performanceComparison.attacking_home_score} away={m.performanceComparison.attacking_away_score} />
+          <ScorecardRow label="Defensive" home={m.performanceComparison.defensive_home_score} away={m.performanceComparison.defensive_away_score} />
+          <ScorecardRow label="Midfield" home={m.performanceComparison.midfield_home_score} away={m.performanceComparison.midfield_away_score} />
+          <ScorecardRow label="Tactical" home={m.performanceComparison.tactical_home_score} away={m.performanceComparison.tactical_away_score} />
+          <ScorecardRow label="Set piece" home={m.performanceComparison.set_piece_home_score} away={m.performanceComparison.set_piece_away_score} />
+          {m.performanceComparison.most_likely_score && (
+            <div className="mono mt-3 flex items-center justify-between border-t border-line pt-3 text-[0.68rem] text-muted">
+              <span>Model score lean <span className="text-text">{m.performanceComparison.most_likely_score}</span></span>
+              {m.performanceComparison.confidence_band && <span className="text-text">{m.performanceComparison.confidence_band}</span>}
+            </div>
+          )}
+        </Panel>
+      )}
       <Panel title="Head-to-head intelligence">
         <div className="mb-3 flex items-center justify-between">
           <span className="mono flex items-center gap-1.5 text-[0.65rem] text-edge"><Crest team={m.home} size={16} /> {m.home.short_name || m.home.name}</span>

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
-  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty,
+  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty, getTeamKeyPlayers,
 } from "@/lib/queries";
 import { computePerformance } from "@/lib/performance";
 import { computeTeamProfile, type MarketRead } from "@/lib/teamProfile";
@@ -30,10 +30,11 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   if (!team) notFound();
 
   const { intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility } = await getTeamIntel(team.id);
-  const [upcoming, seasonStats, difficulty] = await Promise.all([
+  const [upcoming, seasonStats, difficulty, keyPlayers] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
     getFixtureDifficulty(team.id),
+    getTeamKeyPlayers(team.id),
   ]);
   const perf = seasonStats ? computePerformance(seasonStats) : null;
   const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf });
@@ -69,6 +70,34 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
             <StatCell label="Advantage score" value={n0(venue.venue_advantage_score)} sub="/100" color="var(--amber)" />
             {intel?.last_5_results && <div className="text-right"><div className="label-cap mb-1">Form</div><FormString results={intel.last_5_results} /></div>}
           </div>
+        </Panel>
+      )}
+      {keyPlayers.length > 0 && (
+        <Panel title="Key players">
+          <p className="mono mb-2 text-[0.6rem] text-faint">Ranked by importance to the team (goal/assist share, minutes, rating) — not tied to any single fixture.</p>
+          <ul className="space-y-2.5">
+            {keyPlayers.map((p) => (
+              <li key={p.id} className="flex items-center gap-3">
+                <span className="mono w-6 shrink-0 text-center text-[0.7rem] text-faint tnum">{p.jersey_number ?? "—"}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[0.8rem] font-medium">{p.short_name ?? p.name}</span>
+                    {p.current_injury && <span className="mono shrink-0 rounded bg-risk/15 px-1.5 py-0.5 text-[0.55rem] font-semibold text-risk">OUT</span>}
+                  </div>
+                  <span className="mono text-[0.6rem] text-faint">{p.position ? positionLabel(p.position) : ""}</span>
+                </div>
+                {(p.goal_share_pct != null || p.assist_share_pct != null) && (
+                  <span className="mono shrink-0 text-[0.62rem] text-muted">
+                    {p.goal_share_pct != null && `${Math.round(p.goal_share_pct)}% goals`}
+                    {p.goal_share_pct != null && p.assist_share_pct != null && " · "}
+                    {p.assist_share_pct != null && `${Math.round(p.assist_share_pct)}% ast`}
+                  </span>
+                )}
+                <div className="w-20 shrink-0"><BarMeter value={p.importance_score} max={100} color="var(--amber)" height={6} /></div>
+                <span className="mono w-7 shrink-0 text-right text-[0.72rem] font-semibold text-amber tnum">{n0(p.importance_score)}</span>
+              </li>
+            ))}
+          </ul>
         </Panel>
       )}
     </div>
