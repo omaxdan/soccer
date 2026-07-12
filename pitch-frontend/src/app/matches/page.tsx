@@ -1,5 +1,5 @@
 import { getBoard } from "@/lib/queries";
-import { MatchCard } from "@/components/MatchCard";
+import { BoardRows } from "@/components/BoardRows";
 import type { MatchRow } from "@/lib/types";
 import { kickoff } from "@/lib/intel";
 
@@ -56,11 +56,7 @@ export default async function FixturesPage() {
               {kickoff(dayMatches[0].date).rel}
             </span>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {dayMatches.map((m) => (
-              <MatchCard key={m.id} m={m} />
-            ))}
-          </div>
+          <BoardRows matches={dayMatches} />
         </section>
       ))}
     </div>

@@ -241,6 +241,15 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         </div>
       </section>
 
+      {!i && !m.opportunity && !m.risk && (
+        <div className="rounded-term border border-line bg-raised/50 p-4 text-center">
+          <p className="mono text-[0.7rem] font-semibold text-amber">Intelligence pending</p>
+          <p className="mono mt-1 text-[0.62rem] leading-relaxed text-muted">
+            This fixture is on the board — the model hasn&rsquo;t finished processing readiness, signals and risk yet. Check back closer to kickoff.
+          </p>
+        </div>
+      )}
+
       <Tabs
         items={[
           { id: "overview", label: "Overview", content: overview },

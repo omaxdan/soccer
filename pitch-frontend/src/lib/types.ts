@@ -266,3 +266,15 @@ export interface LeagueGapSummary {
   readiness_status: string | null;
   meets_sample_gate: boolean;
 }
+
+export interface TournamentStanding {
+  position: number | null;
+  team: TeamLite;
+  matches: number | null;
+  wins: number | null;
+  draws: number | null;
+  losses: number | null;
+  scores_for: number | null;
+  scores_against: number | null;
+  points: number | null;
+}

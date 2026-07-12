@@ -1,39 +1,38 @@
 import type { MatchRow, TeamLite, TournamentLite } from "./types";
 
-// Public URLs are slug-based; database IDs stay internal. In the live
-// warehouse these slugs should be generated at ingestion and stored in
-// teams.slug / tournaments.slug / matches.slug. Here we read the stored
-// slug when present and fall back to a deterministic derivation so the
-// app is navigable in demo mode too.
+// Public URLs are slug-*id*: the human-readable slug is for presentation/SEO,
+// the trailing numeric id is the source of truth. We always resolve by id and
+// never depend on a stored slug column (matches has none), which is what was
+// causing match pages to 404 on live.
+//   /match/home-vs-away-15502595
+//   /team/ldu-quito-42133
+//   /league/brazil-serie-b-240
 
 export function slugify(input: string): string {
   return input
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 
-export function teamSlug(t: Pick<TeamLite, "slug" | "name">): string {
-  return t.slug || slugify(t.name);
+export function teamSlug(t: Pick<TeamLite, "id" | "name">): string {
+  return `${slugify(t.name)}-${t.id}`;
 }
 
-export function leagueSlug(t: Pick<TournamentLite, "slug" | "name">): string {
-  return t.slug || slugify(t.name);
+export function leagueSlug(t: Pick<TournamentLite, "id" | "name">): string {
+  return `${slugify(t.name)}-${t.id}`;
 }
 
 export function matchSlug(m: MatchRow): string {
-  const d = new Date(m.date);
-  const iso = Number.isNaN(d.getTime())
-    ? ""
-    : `-${d.toISOString().slice(0, 10)}`;
-  return `${teamSlug(m.home)}-vs-${teamSlug(m.away)}${iso}`;
+  return `${slugify(m.home.name)}-vs-${slugify(m.away.name)}-${m.id}`;
 }
 
-// A param may be a slug or (defensively) a numeric id. This lets detail
-// resolvers accept either without exposing ids in generated links.
-export function isNumericId(param: string): boolean {
-  return /^\d+$/.test(param);
+// Extract the trailing numeric id from a slug-id param. Returns null if none,
+// so callers can fall back gracefully (e.g. demo string slugs).
+export function idFromParam(param: string): number | null {
+  const m = param.match(/-(\d+)$/) ?? param.match(/^(\d+)$/);
+  return m ? Number(m[1]) : null;
 }

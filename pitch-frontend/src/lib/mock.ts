@@ -1,4 +1,5 @@
 import type { TeamSeasonStats } from "./performance";
+import type { TournamentStanding } from "./types";
 import type {
   MatchRow,
   TeamLite,
@@ -420,4 +421,25 @@ export const MOCK_SEASON_STATS: Record<number, TeamSeasonStats> = {
     shots_against: 300, shots_on_target_against: 95,
     big_chances_against: 10, errors_leading_to_goal: 0,
   },
+};
+
+// ── League standings (real-table shape) ──────────────────
+function stand(pos: number, tm: TeamLite, p: number, w: number, d: number, l: number, gf: number, ga: number): TournamentStanding {
+  return { position: pos, team: tm, matches: p, wins: w, draws: d, losses: l, scores_for: gf, scores_against: ga, points: w * 3 + d };
+}
+export const MOCK_STANDINGS: Record<number, TournamentStanding[]> = {
+  1: [
+    stand(1, T.novorizontino, 24, 14, 6, 4, 38, 20),
+    stand(2, T.goias, 24, 13, 6, 5, 34, 22),
+    stand(3, T.chapecoense, 24, 12, 7, 5, 31, 21),
+    stand(4, T.cuiaba, 24, 11, 7, 6, 29, 23),
+    stand(5, T.operario, 24, 10, 8, 6, 27, 24),
+    stand(6, T.ferroviaria, 24, 9, 8, 7, 25, 26),
+    stand(7, T.londrina, 24, 8, 7, 9, 22, 28),
+    stand(8, T.sport, 24, 6, 6, 12, 15, 35),
+  ],
+  3: [
+    stand(1, T.ajax, 20, 15, 3, 2, 48, 18),
+    stand(2, T.twente, 20, 13, 4, 3, 40, 22),
+  ],
 };

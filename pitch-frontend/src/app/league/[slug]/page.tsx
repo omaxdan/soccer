@@ -1,14 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getLeagueBySlug, getLeagueTeams } from "@/lib/queries";
+import { getLeagueBySlug, getLeagueTeams, getLeagueStandings } from "@/lib/queries";
 import { Crest } from "@/components/Crest";
-import { StatCell, FormString } from "@/components/Primitives";
+import { StatCell } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
 import { Tabs } from "@/components/Tabs";
 import { teamSlug } from "@/lib/slug";
 import { n0, n1, km, pct } from "@/lib/intel";
-import type { TeamIntelligence, TeamLite } from "@/lib/types";
+import type { TeamIntelligence, TeamLite, TournamentStanding } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +27,10 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const league = await getLeagueBySlug(slug);
   if (!league) notFound();
   const { tournament, intel, gap } = league;
-  const teams = await getLeagueTeams(tournament.id);
+  const [teams, table] = await Promise.all([
+    getLeagueTeams(tournament.id),
+    getLeagueStandings(tournament.id),
+  ]);
 
   const rankBy = (key: (r: Row) => number | null | undefined) =>
     [...teams].filter((r) => key(r) != null).sort((a, b) => (key(b) ?? 0) - (key(a) ?? 0));
@@ -67,13 +70,65 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
     </div>
   );
 
-  // ── TEAMS (rankings) ──
-  const teamsTab = (
+  // ── STANDINGS (real league table from tournament_standings) ──
+  const standingsTab = table.length > 0 ? (
+    <div className="space-y-2">
+      <div className="panel overflow-hidden p-0">
+        <div className="mono grid grid-cols-[1.5rem_1fr_repeat(4,1.6rem)_2rem] items-center gap-1 border-b border-line px-3 py-2 text-[0.55rem] uppercase tracking-wide text-faint sm:grid-cols-[1.5rem_1fr_repeat(7,1.7rem)_2rem]">
+          <span>#</span><span>Team</span>
+          <span className="text-right">P</span>
+          <span className="hidden text-right sm:block">W</span>
+          <span className="hidden text-right sm:block">D</span>
+          <span className="hidden text-right sm:block">L</span>
+          <span className="text-right">GF</span>
+          <span className="text-right">GA</span>
+          <span className="text-right">GD</span>
+          <span className="text-right text-amber">Pts</span>
+        </div>
+        {table.map((s) => {
+          const gd = (s.scores_for ?? 0) - (s.scores_against ?? 0);
+          return (
+            <Link key={s.team.id} href={`/team/${teamSlug(s.team)}`} className="mono grid grid-cols-[1.5rem_1fr_repeat(4,1.6rem)_2rem] items-center gap-1 px-3 py-2 text-[0.72rem] transition-colors odd:bg-raised/30 hover:bg-raised sm:grid-cols-[1.5rem_1fr_repeat(7,1.7rem)_2rem]">
+              <span className="text-faint tnum">{s.position ?? "—"}</span>
+              <span className="flex min-w-0 items-center gap-1.5"><Crest team={s.team} size={18} /><span className="truncate">{s.team.short_name || s.team.name}</span></span>
+              <span className="text-right tnum">{n0(s.matches)}</span>
+              <span className="hidden text-right tnum sm:block">{n0(s.wins)}</span>
+              <span className="hidden text-right tnum sm:block">{n0(s.draws)}</span>
+              <span className="hidden text-right tnum sm:block">{n0(s.losses)}</span>
+              <span className="text-right tnum">{n0(s.scores_for)}</span>
+              <span className="text-right tnum">{n0(s.scores_against)}</span>
+              <span className="text-right tnum" style={{ color: gd > 0 ? "var(--edge)" : gd < 0 ? "var(--risk)" : "var(--muted)" }}>{gd > 0 ? "+" : ""}{gd}</span>
+              <span className="text-right font-bold text-amber tnum">{n0(s.points)}</span>
+            </Link>
+          );
+        })}
+      </div>
+      <p className="mono text-[0.55rem] text-faint">Official table from tournament_standings.</p>
+    </div>
+  ) : <Empty text="Standings unavailable for this league yet." />;
+
+  // ── TEAMS (league-scoped roster) ──
+  const teamsTab = teams.length > 0 ? (
+    <Panel title={`Clubs in ${tournament.name}`}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {teams.map((r) => (
+          <Link key={r.team.id} href={`/team/${teamSlug(r.team)}`} className="flex items-center gap-2 rounded-term border border-line p-2.5 transition-colors hover:border-faint hover:bg-raised">
+            <Crest team={r.team} size={24} />
+            <span className="truncate text-[0.78rem]">{r.team.short_name || r.team.name}</span>
+          </Link>
+        ))}
+      </div>
+    </Panel>
+  ) : <Empty text="No teams found for this league." />;
+
+  // ── POWER RANKINGS (intelligence, league-scoped) ──
+  const powerTab = powerRanking.length > 0 ? (
     <div className="space-y-4">
-      <RankPanel title="Power ranking (form)" rows={powerRanking} value={(r) => r.intel?.form_index} />
+      <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
+      <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} />
       <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" />
     </div>
-  );
+  ) : <Empty text="Intelligence rankings still processing for this league." />;
 
   // ── GOALS ──
   const bestForm = powerRanking.slice(0, 5);
@@ -88,30 +143,6 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
           </p>
         </Panel>
       )}
-    </div>
-  );
-
-  // ── STANDINGS (intelligence ranking) ──
-  const standings = (
-    <div className="space-y-3">
-      <p className="mono text-[0.62rem] leading-relaxed text-faint">
-        Intelligence ranking — ordered by form index, not official points. Enhanced standings (adjusted strength, expected position) populate from tournament_standings when available.
-      </p>
-      <Panel title="Enhanced ranking">
-        <ol className="space-y-1">
-          {powerRanking.map((r, idx) => (
-            <li key={r.team.id}>
-              <Link href={`/team/${teamSlug(r.team)}`} className="flex items-center gap-2.5 rounded px-2 py-2 transition-colors hover:bg-raised odd:bg-raised/30">
-                <span className="mono w-5 shrink-0 text-[0.7rem] text-faint tnum">{idx + 1}</span>
-                <Crest team={r.team} size={22} />
-                <span className="truncate text-[0.82rem]">{r.team.name}</span>
-                {r.intel?.last_5_results && <span className="ml-auto hidden sm:block"><FormString results={r.intel.last_5_results} /></span>}
-                <span className="mono ml-auto shrink-0 text-[0.72rem] font-semibold text-amber tnum sm:ml-3">{n0(r.intel?.form_index)}</span>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </Panel>
     </div>
   );
 
@@ -151,9 +182,10 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
       <Tabs
         items={[
           { id: "overview", label: "Overview", content: overview },
+          { id: "standings", label: "Standings", content: standingsTab },
           { id: "teams", label: "Teams", content: teamsTab },
+          { id: "power", label: "Power Rankings", content: powerTab },
           { id: "goals", label: "Goals", content: goals },
-          { id: "standings", label: "Standings", content: standings },
           { id: "markets", label: "Markets", content: markets },
         ]}
       />

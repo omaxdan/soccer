@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import * as M from "./mock";
 import { normProb } from "./intel";
-import { teamSlug, leagueSlug, matchSlug, isNumericId } from "./slug";
+import { matchSlug, idFromParam } from "./slug";
 
 export { LIVE };
 
@@ -175,66 +175,95 @@ function enrichLineup(players: PredictedLineupPlayer[]): PredictedLineupPlayer[]
   });
 }
 
-// ── Slug resolvers (public URLs are slug-based) ──────────
-export async function getMatchBySlug(slug: string): Promise<MatchRow | null> {
-  if (isNumericId(slug)) return getMatch(Number(slug));
-  const client = db();
-  if (!client) {
-    const m = M.MOCK_MATCHES.find((x) => matchSlug(x) === slug);
-    return m ? getMatch(m.id) : null;
+// ── Slug-id resolvers (id is the source of truth) ───────
+// The trailing numeric id in the URL is authoritative. We never query by a
+// slug column (matches has none). A match/team/league that EXISTS but has
+// incomplete intelligence still resolves — callers show a "processing" state
+// rather than 404.
+export async function getMatchBySlug(param: string): Promise<MatchRow | null> {
+  const id = idFromParam(param);
+  if (id != null) {
+    const byId = await getMatch(id);
+    if (byId) return byId;
+    // fall back to external_match_id if the url carried the provider id
+    const client = db();
+    if (client) {
+      const { data } = await client.from("matches").select("id").eq("external_match_id", id).maybeSingle();
+      if (data) return getMatch(data.id);
+    }
+    return null;
   }
-  const { data } = await client.from("matches").select("id").eq("slug", slug).maybeSingle();
-  return data ? getMatch(data.id) : null;
+  // demo: no id in param → match computed slug
+  const m = M.MOCK_MATCHES.find((x) => matchSlug(x) === param);
+  return m ? getMatch(m.id) : null;
 }
 
-export async function getTeamBySlug(slug: string): Promise<TeamLite | null> {
-  if (isNumericId(slug)) return getTeam(Number(slug));
-  const client = db();
-  if (!client) return M.MOCK_TEAMS.find((t) => teamSlug(t) === slug) ?? null;
-  const { data } = await client.from("teams").select(TEAM_COLS).eq("slug", slug).maybeSingle();
-  return data ? teamFromRow(data) : (M.MOCK_TEAMS.find((t) => teamSlug(t) === slug) ?? null);
+export async function getTeamBySlug(param: string): Promise<TeamLite | null> {
+  const id = idFromParam(param);
+  if (id != null) return getTeam(id);
+  return null;
 }
 
-export async function getLeagueBySlug(slug: string): Promise<{
+export async function getLeagueBySlug(param: string): Promise<{
   tournament: import("./types").TournamentLite;
   intel: LeagueIntelligence | null;
   gap: LeagueGapSummary | null;
 } | null> {
+  const id = idFromParam(param);
+  if (id == null) return null;
   const leagues = await getLeagues();
   const gaps = await getLeagueGap();
-  let li = leagues.find((l) => {
-    const t = l.tournament;
-    if (!t) return false;
-    return isNumericId(slug) ? String(t.id) === slug || String(t.external_id) === slug : leagueSlug(t) === slug;
-  });
-  if (!li) {
-    const t = M.MOCK_TOURNAMENTS.find((x) => leagueSlug(x) === slug);
-    if (t) li = leagues.find((l) => l.tournament_id === t.id);
-  }
+  const li = leagues.find((l) => l.tournament_id === id);
   if (!li || !li.tournament) return null;
-  const gap = gaps.find((g) => g.league_name.toLowerCase() === li!.tournament!.name.toLowerCase()) ?? null;
+  const gap = gaps.find((g) => g.league_name.toLowerCase() === li.tournament!.name.toLowerCase()) ?? null;
   return { tournament: li.tournament, intel: li, gap };
 }
 
-// Teams that belong to a league (for league Teams tab), enriched with intel.
+// League table from tournament_standings — the source of truth for league
+// membership. Latest season, standings_type='total', ordered by position.
+export async function getLeagueStandings(tournamentId: number): Promise<import("./types").TournamentStanding[]> {
+  const client = db();
+  if (!client) return M.MOCK_STANDINGS[tournamentId] ?? [];
+  // resolve latest season for this tournament
+  const seasonRes = await client
+    .from("tournament_standings")
+    .select("season_external_id")
+    .eq("tournament_id", tournamentId)
+    .order("season_external_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const season = seasonRes.data?.season_external_id;
+  let q = client
+    .from("tournament_standings")
+    .select(`position, matches, wins, draws, losses, scores_for, scores_against, points,
+             team:teams!inner(${TEAM_COLS})`)
+    .eq("tournament_id", tournamentId)
+    .eq("standings_type", "total")
+    .order("position", { ascending: true });
+  if (season != null) q = q.eq("season_external_id", season);
+  const { data } = await q;
+  return (data as any[])?.map((r) => ({
+    position: r.position, matches: r.matches, wins: r.wins, draws: r.draws, losses: r.losses,
+    scores_for: r.scores_for, scores_against: r.scores_against, points: r.points,
+    team: teamFromRow(r.team),
+  })) ?? (M.MOCK_STANDINGS[tournamentId] ?? []);
+}
+
+// Teams participating in a league — scoped via standings so no cross-league
+// leakage. Enriched per-team with intelligence for the Power Rankings tab.
 export async function getLeagueTeams(tournamentId: number): Promise<
   { team: TeamLite; intel: TeamIntelligence | null }[]
 > {
+  const standings = await getLeagueStandings(tournamentId);
+  if (standings.length === 0) return [];
   const client = db();
   if (!client) {
-    return M.MOCK_TEAMS.filter((t) =>
-      M.MOCK_MATCHES.some(
-        (m) => (m.home.id === t.id || m.away.id === t.id) && m.tournament?.id === tournamentId
-      )
-    ).map((team) => ({ team, intel: M.MOCK_TEAM_INTEL[team.id] ?? null }));
+    return standings.map((s) => ({ team: s.team, intel: M.MOCK_TEAM_INTEL[s.team.id] ?? null }));
   }
-  const { data } = await client
-    .from("team_intelligence")
-    .select(`*, team:teams!inner(${TEAM_COLS})`)
-    .limit(40);
-  return (
-    (data as any[])?.map((r) => ({ team: teamFromRow(r.team), intel: r })) ?? []
-  );
+  const ids = standings.map((s) => s.team.id);
+  const { data: intels } = await client.from("team_intelligence").select("*").in("team_id", ids);
+  const iMap = indexBy(intels as any[], "team_id");
+  return standings.map((s) => ({ team: s.team, intel: iMap[s.team.id] ?? null }));
 }
 
 // ── Team hub bundles ─────────────────────────────────────

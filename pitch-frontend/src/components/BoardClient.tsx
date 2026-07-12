@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MatchCard } from "./MatchCard";
+import { BoardRows } from "./BoardRows";
 import type { MatchRow } from "@/lib/types";
 
 type Lens = "all" | "opportunity" | "lowrisk" | "goals";
@@ -89,11 +89,7 @@ export function BoardClient({ matches }: { matches: MatchRow[] }) {
           </button>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((m, i) => (
-            <MatchCard key={m.id} m={m} rank={i + 1} />
-          ))}
-        </div>
+        <BoardRows matches={filtered} />
       )}
     </div>
   );
