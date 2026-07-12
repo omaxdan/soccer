@@ -40,11 +40,15 @@ export function Explain({ metric, className = "" }: { metric: GlossaryKey; class
 export function EvidenceDisclosure({
   label,
   lines,
-  soWhat,
+  facts,
 }: {
   label: string;
   lines: { text: string; positive?: boolean }[];
-  soWhat?: string;
+  // Real, individually-sourced numbers shown below the evidence list —
+  // never a derived summary sentence like "N of 6 streams agree", since
+  // that implies a countable list the user can verify against and none
+  // exists. Each fact is its own real column, labeled as what it is.
+  facts?: { label: string; value: string; explain?: GlossaryKey }[];
 }) {
   const [open, setOpen] = useState(false);
   if (lines.length === 0) return null;
@@ -69,8 +73,15 @@ export function EvidenceDisclosure({
               </li>
             ))}
           </ul>
-          {soWhat && (
-            <p className="mono mt-2 border-t border-line pt-2 text-[0.62rem] italic leading-relaxed text-faint">{soWhat}</p>
+          {facts && facts.length > 0 && (
+            <div className="mono mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-2 text-[0.62rem] text-muted">
+              {facts.map((f, i) => (
+                <span key={i} className="flex items-center">
+                  {f.label} <span className="ml-1 font-semibold text-text">{f.value}</span>
+                  {f.explain && <Explain metric={f.explain} />}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       )}

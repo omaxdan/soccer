@@ -21,7 +21,20 @@ function StrengthMeter({ strength, color }: { strength: number; color: string })
 
 // A market signal rendered as a terminal ledger line:
 // [glyph] MARKET .............................. [strength]
-export function SignalRow({ signal }: { signal: MarketSignal }) {
+//
+// matchConfidence is optional — pass the match's real confidence_score/
+// confidence_band (match_intelligence) so each signal can show the actual
+// per-match number instead of a fabricated per-signal "streams agree"
+// estimate. Every number shown below is a real column, individually
+// labeled, with its own Explain entry — nothing here is a derived count
+// the user has no way to verify.
+export function SignalRow({
+  signal,
+  matchConfidence,
+}: {
+  signal: MarketSignal;
+  matchConfidence?: { score: number | null; band: string | null };
+}) {
   const d = directionStyle(signal.direction);
   return (
     <div className="border-b border-line py-3 last:border-0">
@@ -56,11 +69,12 @@ export function SignalRow({ signal }: { signal: MarketSignal }) {
           <EvidenceDisclosure
             label={signal.market}
             lines={signal.drivers.split(",").map((d) => ({ text: d.trim() }))}
-            soWhat={
-              signal.direction !== "neutral"
-                ? `${Math.min(6, signal.strength)} of 6 evidence streams point ${signal.direction}.`
-                : "Evidence streams don't converge strongly enough for a directional lean."
-            }
+            facts={[
+              { label: "Signal strength", value: `${Math.min(6, signal.strength)}/6`, explain: "signal_strength" },
+              ...(matchConfidence?.score != null
+                ? [{ label: "Match confidence", value: `${Math.round(matchConfidence.score)}%${matchConfidence.band ? ` (${matchConfidence.band})` : ""}`, explain: "match_confidence" as const }]
+                : []),
+            ]}
           />
         </div>
       )}

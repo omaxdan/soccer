@@ -170,6 +170,18 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     why: "A big edge with high uncertainty isn't automatically worth acting on — this balances both.",
     question: "Is there enough evidence here to be worth investigating?",
   },
+  signal_strength: {
+    label: "Signal Strength",
+    what: "A 0–6 score the model assigns to how strongly the underlying data points one way for this specific market — not a count of the bullet points shown above it.",
+    why: "Two signals can list the same number of supporting facts but disagree on how decisive those facts actually are. This is the model's own confidence in this particular lean.",
+    question: "How strongly does the data support this specific market, on a 0–6 scale?",
+  },
+  match_confidence: {
+    label: "Match Confidence",
+    what: "How strongly the independent readiness components — form, opponent strength, injuries, congestion, travel, stability, venue, motivation — all agree with each other on the same side.",
+    why: "A big readiness gap where every other signal points the same way is trustworthy. The same gap contradicted by strength, injuries, or venue is much less so.",
+    question: "Do the different pieces of evidence behind this match actually agree with each other, or are they pulling in different directions?",
+  },
 };
 
 export type GlossaryKey = keyof typeof GLOSSARY;

@@ -103,7 +103,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     return (
       <Panel title={title}>
         {list.length > 0 ? (
-          <div>{list.map((s, idx) => <SignalRow key={s.id ?? idx} signal={s} />)}</div>
+          <div>{list.map((s, idx) => <SignalRow key={s.id ?? idx} signal={s} matchConfidence={{ score: i?.confidence_score ?? null, band: i?.confidence_band ?? null }} />)}</div>
         ) : (
           <p className="mono py-2 text-[0.68rem] leading-relaxed text-faint">{emptyText}</p>
         )}
