@@ -189,3 +189,37 @@ export function positionLabel(code: string): string {
   if (c.startsWith("F") || c.startsWith("A")) return "Attackers";
   return code;
 }
+
+// HT/FT combination label from the four terminal-state probabilities.
+export function htFtLabel(
+  hh: number | null, dh: number | null, dd: number | null, aa: number | null
+): string {
+  const probs = [
+    { value: hh, label: "Home/Home" },
+    { value: dh, label: "Draw/Home" },
+    { value: dd, label: "Draw/Draw" },
+    { value: aa, label: "Away/Away" },
+  ].filter((p) => p.value != null) as { value: number; label: string }[];
+  if (probs.length === 0) return "No Edge";
+  const top = probs.sort((a, b) => b.value - a.value)[0];
+  if (top.value < 20) return "No Edge";
+  return `${top.label} (${Math.round(top.value)}%)`;
+}
+
+// Generic 0-100 confidence banding for market-evidence style displays.
+export function confidenceBand(score: number | null | undefined): { label: string; color: string } {
+  if (score == null) return { label: "UNKNOWN", color: "var(--muted)" };
+  if (score >= 70) return { label: "HIGH", color: "var(--edge)" };
+  if (score >= 55) return { label: "MODERATE", color: "var(--warn)" };
+  return { label: "LOW", color: "var(--faint)" };
+}
+
+// Signal strength (1..6 in this warehouse) to a short descriptive label.
+export function signalStrengthLabel(strength: number | null | undefined): string {
+  const s = strength ?? 0;
+  if (s >= 6) return "Very strong";
+  if (s >= 5) return "Strong";
+  if (s >= 3) return "Moderate";
+  if (s >= 1) return "Weak";
+  return "Very weak";
+}

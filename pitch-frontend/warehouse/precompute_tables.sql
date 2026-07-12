@@ -361,3 +361,27 @@ END $$;
 --   2. team_playing_style         → precomputed style identity.
 --   3. formation_analysis / formation_matchup → richer lineup/formation views.
 -- ============================================================================
+
+-- ── Half-time intelligence (added: match hub Signals → Half-Time tab reads
+--    this when populated; the tab degrades gracefully to signals-only
+--    without it) ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS match_half_time_intelligence (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  match_id BIGINT NOT NULL UNIQUE REFERENCES matches(id),
+  home_ht_win_prob NUMERIC, draw_ht_prob NUMERIC, away_ht_win_prob NUMERIC,
+  predicted_ht_goals_home NUMERIC, predicted_ht_goals_away NUMERIC,
+  hh_prob NUMERIC, hd_prob NUMERIC, ha_prob NUMERIC,
+  dh_prob NUMERIC, dd_prob NUMERIC, da_prob NUMERIC,
+  ah_prob NUMERIC, ad_prob NUMERIC, aa_prob NUMERIC,
+  home_2h_goals NUMERIC, away_2h_goals NUMERIC,
+  over_0_5_2h_prob NUMERIC, over_1_5_2h_prob NUMERIC, btts_2h_prob NUMERIC,
+  confidence_score NUMERIC, confidence_band TEXT,
+  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+ALTER TABLE match_half_time_intelligence ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='match_half_time_intelligence' AND policyname='public_read') THEN
+    CREATE POLICY public_read ON match_half_time_intelligence FOR SELECT USING (true);
+  END IF;
+END $$;

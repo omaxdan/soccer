@@ -1,7 +1,9 @@
 import type {
   TeamIntelligence, TeamFormQuality, TeamVenuePerformance, TeamGoalDependency,
+  TeamBettingIntelligence,
 } from "./types";
 import type { PerformanceIntel } from "./performance";
+import { regressionRisk } from "./performance";
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 
@@ -18,6 +20,11 @@ export interface TeamProfile {
   sustainability: { label: string; regressionRisk: "LOW" | "MEDIUM" | "HIGH"; delta: number | null; reading: string };
   betting: { winner: MarketRead; goals: MarketRead; btts: MarketRead; cards: MarketRead };
   tier: { top: number | null; mid: number | null; bottom: number | null; reading: string } | null;
+  bettingIntel: {
+    finishing: number | null; shotAccuracy: number | null; conversion: number | null;
+    bigChanceConversion: number | null; goalCreation: number | null; goalPrevention: number | null;
+    cleanSheet: number | null; source: "precomputed" | "derived";
+  };
 }
 
 function marketRead(score: number): MarketRead {
@@ -32,48 +39,45 @@ const fragToScore = (f: PerformanceIntel["defenseFragility"]) =>
 
 export function computeTeamProfile(input: {
   intel: TeamIntelligence | null;
+  betting?: TeamBettingIntelligence | null;
   formQuality: TeamFormQuality | null;
   venue: TeamVenuePerformance | null;
   goalDep: TeamGoalDependency | null;
   perf: PerformanceIntel | null;
 }): TeamProfile {
-  const { intel, formQuality, venue, goalDep, perf } = input;
+  const { intel, betting, formQuality, venue, goalDep, perf } = input;
 
-  const attack = perf?.attackEfficiency ?? clamp((intel?.form_index ?? 50));
-  const defence = fragToScore(perf?.defenseFragility ?? null) ?? clamp((intel?.squad_stability_score ?? 50));
+  // Prefer precomputed team_betting_intelligence ratings; fall back to the
+  // runtime performance-engine derivation, then to team_intelligence.
+  const attack = betting?.attack_rating ?? perf?.attackEfficiency ?? clamp((intel?.form_index ?? 50));
+  const defence = betting?.defence_rating ?? fragToScore(perf?.defenseFragility ?? null) ?? clamp((intel?.squad_stability_score ?? 50));
   const squad = clamp(intel?.squad_depth_score ?? intel?.squad_stability_score ?? 50);
-  const overall = Math.round((attack * 0.4 + defence * 0.35 + squad * 0.25));
+  const overall = betting?.team_quality_score ?? Math.round((attack * 0.4 + defence * 0.35 + squad * 0.25));
 
   const volatility = clamp(formQuality?.volatility ?? 30);
   const predictability = clamp(100 - volatility);
 
   // Sustainability from expected vs actual points
   const delta = formQuality?.performance_delta ?? null;
-  let sustainability: TeamProfile["sustainability"];
-  if (delta == null) {
-    sustainability = { label: "Unknown", regressionRisk: "MEDIUM", delta: null, reading: "Not enough underlying data to judge sustainability." };
-  } else if (delta >= 2) {
-    sustainability = { label: "Over-performing", regressionRisk: "HIGH", delta, reading: "Results run ahead of the underlying numbers — a regression (and fade) candidate." };
-  } else if (delta <= -2) {
-    sustainability = { label: "Under-performing", regressionRisk: "LOW", delta, reading: "Underlying play beats the results — better outcomes look due." };
-  } else {
-    sustainability = { label: "Sustainable", regressionRisk: "LOW", delta, reading: "Results are earned — output tracks the underlying process." };
-  }
+  const rr = regressionRisk(delta);
+  const sustainability: TeamProfile["sustainability"] = {
+    label: rr.label, regressionRisk: rr.risk, delta, reading: rr.reading,
+  };
 
-  // Betting profile
+  // Betting profile — prefer precomputed market scores when available
   const venueAdv = venue?.venue_advantage_score ?? 50;
-  const winner = marketRead(overall * 0.6 + venueAdv * 0.4);
+  const winner = marketRead(betting?.winner_market_score ?? (overall * 0.6 + venueAdv * 0.4));
 
   const goalsSignal = perf?.signals.find((s) => s.group === "goals");
-  const goals = marketRead(goalsSignal ? goalsSignal.confidence : attack);
+  const goals = marketRead(betting?.goals_market_score ?? (goalsSignal ? goalsSignal.confidence : attack));
 
   const bttsSignal = perf?.signals.find((s) => s.group === "btts");
-  const btts = marketRead(bttsSignal ? bttsSignal.confidence : 50);
+  const btts = marketRead(betting?.btts_score ?? (bttsSignal ? bttsSignal.confidence : 50));
 
   const cardsScore = perf?.discipline
     ? clamp((4 - (perf.discipline.score ?? 50) / 25) * 25)
     : 30;
-  const cards = marketRead(perf?.discipline && perf.discipline.tier.includes("risk") ? 70 : cardsScore < 40 ? 30 : cardsScore);
+  const cards = marketRead(betting?.cards_market_score ?? (perf?.discipline && perf.discipline.tier.includes("risk") ? 70 : cardsScore < 40 ? 30 : cardsScore));
 
   // Opponent tier (points-per-game vs each tier, 0..3 scale)
   let tier: TeamProfile["tier"] = null;
@@ -90,5 +94,23 @@ export function computeTeamProfile(input: {
     tier = { top, mid, bottom, reading };
   }
 
-  return { quality: { overall, attack, defence, squad }, predictability, volatility, sustainability, betting: { winner, goals, btts, cards }, tier };
+  // Goal-profile breakdown — precomputed team_betting_intelligence when
+  // present, otherwise the performance engine's derived reads.
+  const findAttackInsight = (key: string) => perf?.attack.find((a) => a.key === key)?.score ?? null;
+  const findDefenseInsight = (key: string) => perf?.defense.find((d) => d.key === key)?.score ?? null;
+  const bettingIntel: TeamProfile["bettingIntel"] = betting
+    ? {
+        finishing: betting.finishing_efficiency, shotAccuracy: betting.shot_accuracy,
+        conversion: betting.shot_conversion_rate, bigChanceConversion: betting.big_chance_conversion,
+        goalCreation: betting.goal_creation_score, goalPrevention: betting.goal_prevention_score,
+        cleanSheet: betting.clean_sheet_reliability, source: "precomputed",
+      }
+    : {
+        finishing: findAttackInsight("finishing"), shotAccuracy: null,
+        conversion: findAttackInsight("finishing"), bigChanceConversion: findAttackInsight("big_chance"),
+        goalCreation: null, goalPrevention: findDefenseInsight("def_conversion"),
+        cleanSheet: findDefenseInsight("clean_sheet"), source: "derived",
+      };
+
+  return { quality: { overall, attack, defence, squad }, predictability, volatility, sustainability, betting: { winner, goals, btts, cards }, tier, bettingIntel };
 }

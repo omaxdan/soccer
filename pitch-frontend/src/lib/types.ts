@@ -122,6 +122,7 @@ export interface MatchRow {
   signals?: MarketSignal[];
   home_form?: string | null;
   away_form?: string | null;
+  halfTime?: MatchHalfTimeIntelligence | null;
 }
 
 export interface MatchWeather {
@@ -287,4 +288,61 @@ export interface TeamFixtureDifficulty {
   next_10_difficulty: number | null;
   next_5_matches: number | null;
   next_10_matches: number | null;
+}
+
+export interface TeamBettingIntelligence {
+  team_id: number;
+  season_external_id: number | null;
+  attack_rating: number | null;
+  defence_rating: number | null;
+  team_quality_score: number | null;
+  finishing_efficiency: number | null;
+  shot_accuracy: number | null;
+  shot_conversion_rate: number | null;
+  big_chance_conversion: number | null;
+  goal_creation_score: number | null;
+  goal_prevention_score: number | null;
+  defensive_fragility_score: number | null;
+  clean_sheet_reliability: number | null;
+  attack_sustainability_score: number | null;
+  consistency_score: number | null;
+  volatility_score: number | null;
+  predictability_score: number | null;
+  sustainability_score: number | null;
+  overperformance_score: number | null;
+  underperformance_score: number | null;
+  home_attack_rating: number | null;
+  home_defence_rating: number | null;
+  away_attack_rating: number | null;
+  away_defence_rating: number | null;
+  winner_market_score: number | null;
+  goals_market_score: number | null;
+  btts_score: number | null;
+  cards_market_score: number | null;
+  updated_at: string | null;
+}
+
+export interface MatchHalfTimeIntelligence {
+  match_id: number;
+  home_ht_win_prob: number | null;
+  draw_ht_prob: number | null;
+  away_ht_win_prob: number | null;
+  predicted_ht_goals_home: number | null;
+  predicted_ht_goals_away: number | null;
+  hh_prob: number | null;
+  hd_prob: number | null;
+  ha_prob: number | null;
+  dh_prob: number | null;
+  dd_prob: number | null;
+  da_prob: number | null;
+  ah_prob: number | null;
+  ad_prob: number | null;
+  aa_prob: number | null;
+  home_2h_goals: number | null;
+  away_2h_goals: number | null;
+  over_0_5_2h_prob: number | null;
+  over_1_5_2h_prob: number | null;
+  btts_2h_prob: number | null;
+  confidence_score: number | null;
+  confidence_band: string | null;
 }
