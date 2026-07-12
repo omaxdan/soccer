@@ -75,16 +75,16 @@ export function computeTeamProfile(input: {
     : 30;
   const cards = marketRead(perf?.discipline && perf.discipline.tier.includes("risk") ? 70 : cardsScore < 40 ? 30 : cardsScore);
 
-  // Opponent tier
+  // Opponent tier (points-per-game vs each tier, 0..3 scale)
   let tier: TeamProfile["tier"] = null;
-  if (formQuality && (formQuality.points_vs_top != null || formQuality.points_vs_bottom != null)) {
-    const top = formQuality.points_vs_top ?? null;
-    const mid = formQuality.points_vs_mid ?? null;
-    const bottom = formQuality.points_vs_bottom ?? null;
+  if (formQuality && (formQuality.ppg_vs_top != null || formQuality.ppg_vs_bottom != null)) {
+    const top = formQuality.ppg_vs_top ?? null;
+    const mid = formQuality.ppg_vs_middle ?? null;
+    const bottom = formQuality.ppg_vs_bottom ?? null;
     let reading = "";
     if (top != null && bottom != null) {
-      if (bottom - top >= 25) reading = "Beats up weaker sides but struggles against the top — a flat-track profile.";
-      else if (top - bottom >= 15) reading = "Raises its level against strong opposition — a genuine giant-killer.";
+      if (bottom - top >= 0.8) reading = "Beats up weaker sides but struggles against the top — a flat-track profile.";
+      else if (top - bottom >= 0.4) reading = "Raises its level against strong opposition — a genuine giant-killer.";
       else reading = "Performs consistently across opponent quality.";
     }
     tier = { top, mid, bottom, reading };

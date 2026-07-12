@@ -127,8 +127,8 @@ export const MOCK_INJURY_IMPACT: Record<number, TeamInjuryImpact> = {
 };
 
 export const MOCK_FORM_QUALITY: Record<number, TeamFormQuality> = {
-  1: { team_id: 1, opponent_adjusted_form: 76, strength_of_schedule: 58, giant_killer_score: 62, flat_track_bully_score: 40, expected_points: 10.2, actual_points: 13, performance_delta: 2.8, volatility: 18, points_vs_top: 62, points_vs_mid: 71, points_vs_bottom: 78 },
-  2: { team_id: 2, opponent_adjusted_form: 52, strength_of_schedule: 61, giant_killer_score: 44, flat_track_bully_score: 66, expected_points: 8.9, actual_points: 7, performance_delta: -1.9, volatility: 34, points_vs_top: 33, points_vs_mid: 55, points_vs_bottom: 82 },
+  1: { team_id: 1, opponent_adjusted_form: 76, strength_of_schedule: 58, giant_killer_score: 62, flat_track_bully_score: 40, expected_points: 10.2, actual_points: 13, performance_delta: 2.8, volatility: 18, ppg_vs_top: 1.9, ppg_vs_middle: 2.1, ppg_vs_bottom: 2.4 },
+  2: { team_id: 2, opponent_adjusted_form: 52, strength_of_schedule: 61, giant_killer_score: 44, flat_track_bully_score: 66, expected_points: 8.9, actual_points: 7, performance_delta: -1.9, volatility: 34, ppg_vs_top: 0.6, ppg_vs_middle: 1.3, ppg_vs_bottom: 2.2 },
 };
 
 export const MOCK_VENUE: Record<number, TeamVenuePerformance> = {

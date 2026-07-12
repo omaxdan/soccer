@@ -184,9 +184,9 @@ export interface TeamFormQuality {
   actual_points: number | null;
   performance_delta: number | null;
   volatility: number | null;
-  points_vs_top?: number | null;
-  points_vs_mid?: number | null;
-  points_vs_bottom?: number | null;
+  ppg_vs_top?: number | null;
+  ppg_vs_middle?: number | null;
+  ppg_vs_bottom?: number | null;
 }
 
 export interface TeamVenuePerformance {

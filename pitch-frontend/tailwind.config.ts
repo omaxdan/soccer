@@ -21,18 +21,18 @@ const config: Config = {
       },
       fontFamily: {
         mono: [
-          "ui-monospace",
           "JetBrains Mono",
+          "ui-monospace",
           "SF Mono",
           "Menlo",
           "Consolas",
           "monospace",
         ],
         sans: [
+          "Inter",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
-          "Inter",
           "Roboto",
           "Helvetica Neue",
           "Arial",

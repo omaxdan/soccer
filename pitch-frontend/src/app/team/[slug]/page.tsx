@@ -176,11 +176,12 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
           {profile.tier && (
             <Panel title="Performance by opponent tier">
               <div className="grid grid-cols-3 gap-3">
-                <TierCell label="vs Top" value={profile.tier.top} />
-                <TierCell label="vs Mid" value={profile.tier.mid} />
-                <TierCell label="vs Bottom" value={profile.tier.bottom} />
+                <TierCell label="vs Top" ppg={profile.tier.top} />
+                <TierCell label="vs Mid" ppg={profile.tier.mid} />
+                <TierCell label="vs Bottom" ppg={profile.tier.bottom} />
               </div>
-              {profile.tier.reading && <p className="mt-3 text-[0.8rem] leading-relaxed text-muted">{profile.tier.reading}</p>}
+              <p className="mono mt-2 text-[0.55rem] text-faint">points per game vs each tier</p>
+              {profile.tier.reading && <p className="mt-2 text-[0.8rem] leading-relaxed text-muted">{profile.tier.reading}</p>}
             </Panel>
           )}
           <Panel title="Sustainability">
@@ -313,11 +314,13 @@ function BarRow({ label, value, color }: { label: string; value: number | null; 
     </div>
   );
 }
-function TierCell({ label, value }: { label: string; value: number | null }) {
+function TierCell({ label, ppg }: { label: string; ppg: number | null }) {
+  const v = ppg ?? null;
+  const color = v == null ? "var(--muted)" : v >= 1.8 ? "var(--edge)" : v >= 1.2 ? "var(--warn)" : "var(--risk)";
   return (
     <div className="rounded-term border border-line p-3 text-center">
       <div className="label-cap">{label}</div>
-      <div className="mono mt-1 text-xl font-bold tnum" style={{ color: (value ?? 0) >= 65 ? "var(--edge)" : (value ?? 0) >= 45 ? "var(--warn)" : "var(--risk)" }}>{n0(value)}</div>
+      <div className="mono mt-1 text-xl font-bold tnum" style={{ color }}>{v == null ? "—" : n1(v)}</div>
     </div>
   );
 }

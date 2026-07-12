@@ -321,7 +321,7 @@ export async function getTeamSeasonStats(
     // extended raw fields — present only if the table has been widened
     shots: data.shots ?? null,
     shots_on_target: data.shots_on_target ?? null,
-    shots_inside_box: data.shots_inside_box ?? null,
+    shots_inside_box: data.shots_from_inside_the_box ?? null,
     goals_inside_box: data.goals_inside_box ?? null,
     goals_outside_box: data.goals_outside_box ?? null,
     headed_goals: data.headed_goals ?? null,
