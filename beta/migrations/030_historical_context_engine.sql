@@ -1,4 +1,4 @@
--- ─── MIGRATION 028 — Historical Context Engine (PitchTerminal Phase 1) ──────
+-- ─── MIGRATION 030 — Historical Context Engine (PitchTerminal Phase 1) ──────
 -- Foundational principle: opponent quality must be captured AT THE TIME of
 -- the match, never inferred from final season standings. "Manchester United
 -- finished 8th" is useless; "Manchester United were 2nd when we played them"
