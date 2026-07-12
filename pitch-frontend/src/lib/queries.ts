@@ -25,6 +25,20 @@ function teamFromRow(r: any): TeamLite {
   };
 }
 
+// tournaments.country_id → countries; the nested join returns a country
+// object, so flatten it to the country name string TournamentLite expects.
+function normTournament(t: any): import("./types").TournamentLite | null {
+  if (!t) return null;
+  const country =
+    typeof t.country === "string"
+      ? t.country
+      : t.country?.name ?? t.countries?.name ?? null;
+  return {
+    id: t.id, external_id: t.external_id, name: t.name, slug: t.slug ?? null,
+    country, logo_storage_path: t.logo_storage_path ?? null,
+  };
+}
+
 // ── Board: upcoming matches with attached intelligence ───
 export async function getBoard(limit = 24): Promise<MatchRow[]> {
   const client = db();
@@ -35,7 +49,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     .from("matches")
     .select(
       `id, external_match_id, date, status, competition,
-       tournament:tournaments(id, external_id, name, slug, country),
+       tournament:tournaments(id, external_id, name, slug, country:countries(id, name, alpha2)),
        home:teams!matches_home_team_id_fkey(${TEAM_COLS}),
        away:teams!matches_away_team_id_fkey(${TEAM_COLS})`
     )
@@ -59,7 +73,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
   const rows: MatchRow[] = matches.map((m: any) => ({
     id: m.id, external_match_id: m.external_match_id, date: m.date,
     status: m.status, competition: m.competition,
-    tournament: m.tournament ?? null,
+    tournament: normTournament(m.tournament),
     home: teamFromRow(m.home), away: teamFromRow(m.away),
     intel: iMap[m.id] ? normIntel(iMap[m.id]) : null,
     opportunity: oMap[m.id] ? normOpp(oMap[m.id]) : null,
@@ -85,7 +99,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     .from("matches")
     .select(
       `id, external_match_id, date, status, competition, venue_id,
-       tournament:tournaments(id, external_id, name, slug, country),
+       tournament:tournaments(id, external_id, name, slug, country:countries(id, name, alpha2)),
        home:teams!matches_home_team_id_fkey(${TEAM_COLS}),
        away:teams!matches_away_team_id_fkey(${TEAM_COLS})`
     )
@@ -105,7 +119,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
   return {
     id: m.id, external_match_id: m.external_match_id, date: m.date,
     status: m.status, competition: m.competition,
-    tournament: (m.tournament as any) ?? null,
+    tournament: normTournament(m.tournament),
     home: teamFromRow(m.home), away: teamFromRow(m.away),
     home_score: result.data?.home_score ?? null,
     away_score: result.data?.away_score ?? null,
@@ -329,9 +343,10 @@ export async function getLeagues(): Promise<LeagueIntelligence[]> {
   if (!client) return M.MOCK_LEAGUE_INTEL;
   const { data } = await client
     .from("league_intelligence")
-    .select(`*, tournament:tournaments(id, external_id, name, slug, country, logo_storage_path)`)
+    .select(`*, tournament:tournaments(id, external_id, name, slug, country:countries(id, name, alpha2), logo_storage_path)`)
     .order("avg_readiness", { ascending: false });
-  return (data as LeagueIntelligence[]) ?? M.MOCK_LEAGUE_INTEL;
+  if (!data) return M.MOCK_LEAGUE_INTEL;
+  return (data as any[]).map((r) => ({ ...r, tournament: normTournament(r.tournament) })) as LeagueIntelligence[];
 }
 
 export async function getLeagueGap(): Promise<LeagueGapSummary[]> {
