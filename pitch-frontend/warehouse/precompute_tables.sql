@@ -1,18 +1,34 @@
 -- ============================================================================
--- PitchTerminal — precompute scaffolding
+-- PitchTerminal — precompute scaffolding (frontend-proposed tables)
 -- Run in the Supabase SQL editor.
 --
--- WHAT THIS DOES: creates the empty precomputed tables the newer frontend
--- queries are shaped to read (versatility, player-impact, formation, depth,
--- comparison, strength-dashboard, betting-intelligence, playing-style,
--- motivation). All CREATE ... IF NOT EXISTS, so it is safe to re-run and will
--- not touch tables you already have.
+-- STATUS UPDATE: the backend team independently built and shipped a real,
+-- authoritative migration suite covering most of what this file originally
+-- proposed:
+--   beta/migrations/028_extended_intelligence_suite.sql
+--     → team_betting_intelligence, team_motivation, player_match_impact,
+--       match_performance_comparison, match_impact_summary, team_versatility,
+--       tactical_flexibility, position_adaptability, substitution_impact,
+--       match_squad_depth_comparison, formation_matchup
+--       (all populated by beta/backend/src/jobs/processExtendedIntelligence.ts)
+--   beta/migrations/029_half_time_intelligence.sql
+--     → match_half_time_intelligence
+-- Those 12 tables have been REMOVED from this file to avoid two competing
+-- schema sources — migrations 028/029 are the source of truth for them. This
+-- frontend's types.ts (TeamBettingIntelligence, MatchHalfTimeIntelligence)
+-- and queries.ts were checked column-for-column against 028/029 and match.
 --
--- WHAT THIS DOES NOT DO: it does NOT populate them. Empty tables render as
--- empty states in the UI until a warehouse/ETL job fills them. Creating the
--- table is step 1; the pipeline that computes the rows is the real work.
+-- WHAT REMAINS BELOW: ~19 tables from the original proposal that migrations
+-- 028/029 do NOT cover (player/team-impact detail, formation/versatility
+-- detail, strengths/weaknesses, key battles). These are still proposals, not
+-- migrations — if the backend team wants to build any of them, they should
+-- get proper sequential migration numbers (032+) rather than being run
+-- ad hoc from here. Safe to re-run (CREATE ... IF NOT EXISTS).
 --
--- Tables that ALREADY EXIST live (do not recreate) and already power the app:
+-- WHAT THIS DOES NOT DO: creating a table does not populate it. Empty tables
+-- render as empty states in the UI until an ETL job fills them.
+--
+-- Tables that ALREADY EXIST live and already power the app (do not recreate):
 --   match_intelligence, match_opportunity, match_risk_intelligence,
 --   match_signals, match_weather, match_results, match_predicted_lineups,
 --   match_opponent_context, team_intelligence, team_form_quality,
@@ -20,7 +36,9 @@
 --   team_goal_dependency, team_injury_impact, team_momentum,
 --   team_position_depth, team_fixture_difficulty, team_form_history,
 --   tournament_standings, league_intelligence, league_gap_summary,
---   player_intelligence, player_season_statistics.
+--   player_intelligence, player_season_statistics,
+--   + everything in migrations 028-031 (extended intelligence, half-time,
+--   historical-context, risk-opportunity-backtest).
 -- ============================================================================
 
 -- ── Column additions to existing tables ───────────────────────────────────
@@ -32,40 +50,13 @@ ALTER TABLE team_position_depth ADD COLUMN IF NOT EXISTS strength_score INTEGER;
 ALTER TABLE team_position_depth ADD COLUMN IF NOT EXISTS quality_rating TEXT;
 ALTER TABLE team_position_depth ADD COLUMN IF NOT EXISTS depth_rating TEXT;
 
--- ── Highest-value: team betting intelligence (makes the performance engine
---    a pure read instead of a runtime derivation) ──────────────────────────
-CREATE TABLE IF NOT EXISTS team_betting_intelligence (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  team_id BIGINT NOT NULL REFERENCES teams(id),
-  season_external_id BIGINT,
-  attack_rating INTEGER, defence_rating INTEGER, team_quality_score INTEGER,
-  finishing_efficiency NUMERIC, shot_accuracy NUMERIC, shot_conversion_rate NUMERIC,
-  big_chance_conversion NUMERIC, goal_creation_score INTEGER, goal_prevention_score INTEGER,
-  defensive_fragility_score INTEGER, clean_sheet_reliability NUMERIC,
-  attack_sustainability_score INTEGER, consistency_score INTEGER, volatility_score INTEGER,
-  predictability_score INTEGER, sustainability_score INTEGER,
-  overperformance_score NUMERIC, underperformance_score NUMERIC,
-  home_attack_rating INTEGER, home_defence_rating INTEGER,
-  away_attack_rating INTEGER, away_defence_rating INTEGER,
-  winner_market_score INTEGER, goals_market_score INTEGER, btts_score INTEGER, cards_market_score INTEGER,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-  UNIQUE(team_id, season_external_id)
-);
-
--- ── Team identity / motivation ────────────────────────────────────────────
+-- ── Team identity / motivation (motivation itself now covered by 028;
+--    playing_style is not, kept here) ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS team_playing_style (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   team_id BIGINT NOT NULL UNIQUE REFERENCES teams(id),
   playing_style TEXT, possession_score INTEGER, passing_style TEXT,
   attacking_style TEXT, defensive_style TEXT, style_confidence INTEGER,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);
-CREATE TABLE IF NOT EXISTS team_motivation (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  team_id BIGINT NOT NULL UNIQUE REFERENCES teams(id),
-  overall_motivation_score INTEGER, motivation_band TEXT,
-  momentum_factor INTEGER, quality_factor INTEGER, venue_factor INTEGER,
-  fatigue_factor INTEGER, external_motivation INTEGER,
   calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
@@ -92,17 +83,6 @@ CREATE TABLE IF NOT EXISTS team_weaknesses (
 );
 
 -- ── Player impact + matchups (match-scoped) ───────────────────────────────
-CREATE TABLE IF NOT EXISTS player_match_impact (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  player_id BIGINT NOT NULL REFERENCES players(id),
-  impact_score INTEGER, importance_score INTEGER, readiness_score INTEGER,
-  fatigue_score INTEGER, form_rating INTEGER, goal_threat INTEGER, assist_threat INTEGER,
-  defensive_contribution INTEGER, creativity_score INTEGER, experience_score INTEGER,
-  big_game_performance INTEGER, matchup_advantage INTEGER, matchup_disadvantage INTEGER,
-  impact_band TEXT, expected_contribution TEXT,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id, player_id)
-);
 CREATE TABLE IF NOT EXISTS player_matchup (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   match_id BIGINT NOT NULL REFERENCES matches(id),
@@ -158,68 +138,13 @@ CREATE TABLE IF NOT EXISTS match_impact_advantage (
   key_advantages TEXT[], key_disadvantages TEXT[], confidence_score INTEGER,
   calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
 );
-CREATE TABLE IF NOT EXISTS match_performance_comparison (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  home_team_id BIGINT NOT NULL REFERENCES teams(id),
-  away_team_id BIGINT NOT NULL REFERENCES teams(id),
-  overall_home_score INTEGER, overall_away_score INTEGER, overall_advantage INTEGER,
-  overall_advantage_team_id BIGINT REFERENCES teams(id),
-  attacking_home_score INTEGER, attacking_away_score INTEGER, attacking_advantage INTEGER,
-  defensive_home_score INTEGER, defensive_away_score INTEGER, defensive_advantage INTEGER,
-  midfield_home_score INTEGER, midfield_away_score INTEGER, midfield_advantage INTEGER,
-  tactical_home_score INTEGER, tactical_away_score INTEGER, tactical_advantage INTEGER,
-  set_piece_home_score INTEGER, set_piece_away_score INTEGER, set_piece_advantage INTEGER,
-  form_home_score INTEGER, form_away_score INTEGER, form_advantage INTEGER,
-  home_win_probability NUMERIC, draw_probability NUMERIC, away_win_probability NUMERIC,
-  predicted_winner_id BIGINT REFERENCES teams(id), prediction_confidence INTEGER,
-  expected_goal_difference NUMERIC, most_likely_score TEXT, match_significance INTEGER,
-  confidence_band TEXT, home_goals INTEGER, away_goals INTEGER,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
-CREATE TABLE IF NOT EXISTS match_impact_summary (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  significance_score INTEGER, importance_band TEXT, rivalry_score INTEGER, momentum_at_stake INTEGER,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
 
 -- ── Versatility / formation / depth suite ─────────────────────────────────
-CREATE TABLE IF NOT EXISTS team_versatility (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id), team_id BIGINT NOT NULL REFERENCES teams(id),
-  overall_versatility_score INTEGER, tactical_versatility_score INTEGER,
-  positional_versatility_score INTEGER, formation_flexibility_score INTEGER,
-  player_adaptability_score INTEGER, system_compatibility_score INTEGER,
-  versatility_band TEXT, strengths TEXT[], weaknesses TEXT[],
-  preferred_formations TEXT[], alternative_formations TEXT[], formation_changes_per_match NUMERIC,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id, team_id)
-);
 CREATE TABLE IF NOT EXISTS versatility_advantage (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   match_id BIGINT NOT NULL REFERENCES matches(id),
   advantage_score INTEGER, advantage_team_id BIGINT REFERENCES teams(id), advantage_margin INTEGER,
   advantage_band TEXT, key_advantages TEXT[], key_disadvantages TEXT[], confidence_score INTEGER,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
-CREATE TABLE IF NOT EXISTS tactical_flexibility (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  home_flexibility_score INTEGER, away_flexibility_score INTEGER,
-  home_system_count INTEGER, away_system_count INTEGER,
-  home_formation_adaptability INTEGER, away_formation_adaptability INTEGER,
-  home_in_game_adaptability INTEGER, away_in_game_adaptability INTEGER,
-  flexibility_advantage INTEGER, flexibility_notes TEXT,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
-CREATE TABLE IF NOT EXISTS position_adaptability (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  home_position_versatility INTEGER, away_position_versatility INTEGER,
-  home_multi_position_players INTEGER, away_multi_position_players INTEGER,
-  home_utility_players INTEGER, away_utility_players INTEGER,
-  home_specialist_players INTEGER, away_specialist_players INTEGER,
-  adaptability_advantage INTEGER, position_coverage_score INTEGER,
   calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
 );
 CREATE TABLE IF NOT EXISTS formation_options (
@@ -231,16 +156,6 @@ CREATE TABLE IF NOT EXISTS formation_options (
   home_tertiary_formation TEXT, away_tertiary_formation TEXT,
   home_formation_confidence INTEGER, away_formation_confidence INTEGER,
   formation_advantage INTEGER, formation_notes TEXT,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
-CREATE TABLE IF NOT EXISTS substitution_impact (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  home_bench_strength INTEGER, away_bench_strength INTEGER,
-  home_substitution_quality INTEGER, away_substitution_quality INTEGER,
-  home_tactical_sub_options INTEGER, away_tactical_sub_options INTEGER,
-  home_game_changers INTEGER, away_game_changers INTEGER,
-  home_depth_score INTEGER, away_depth_score INTEGER, substitution_advantage INTEGER, impact_notes TEXT,
   calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
 );
 CREATE TABLE IF NOT EXISTS injury_adaptability (
@@ -279,19 +194,6 @@ CREATE TABLE IF NOT EXISTS squad_depth (
   experience_distribution JSONB, age_profile JSONB,
   calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id, team_id)
 );
-CREATE TABLE IF NOT EXISTS match_squad_depth_comparison (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  home_team_id BIGINT NOT NULL REFERENCES teams(id), away_team_id BIGINT NOT NULL REFERENCES teams(id),
-  home_overall_depth_score INTEGER, away_overall_depth_score INTEGER,
-  home_depth_rating TEXT, away_depth_rating TEXT,
-  home_quality_drop_off INTEGER, away_quality_drop_off INTEGER,
-  depth_advantage_score INTEGER, depth_advantage_team_id BIGINT REFERENCES teams(id),
-  depth_advantage_margin INTEGER, depth_advantage_band TEXT,
-  home_rotation_capability INTEGER, away_rotation_capability INTEGER,
-  home_substitution_impact INTEGER, away_substitution_impact INTEGER, rotation_advantage INTEGER,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
 CREATE TABLE IF NOT EXISTS position_depth_comparison (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   match_id BIGINT NOT NULL REFERENCES matches(id), position_code TEXT NOT NULL, position_name TEXT,
@@ -315,13 +217,6 @@ CREATE TABLE IF NOT EXISTS formation_analysis (
   alternative_styles TEXT[], formation_strengths TEXT[], formation_weaknesses TEXT[],
   calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id, team_id)
 );
-CREATE TABLE IF NOT EXISTS formation_matchup (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  match_id BIGINT NOT NULL REFERENCES matches(id),
-  home_formation_vs_away TEXT, away_formation_vs_home TEXT, matchup_effectiveness INTEGER,
-  home_advantages TEXT[], away_advantages TEXT[], neutral_areas TEXT[], key_matchups JSONB[], tactical_notes TEXT,
-  calculated_at TIMESTAMP WITH TIME ZONE DEFAULT now(), UNIQUE(match_id)
-);
 
 -- ── Read policies for the anon key ────────────────────────────────────────
 -- The frontend reads with the public anon key. Enable RLS and add a
@@ -330,16 +225,12 @@ CREATE TABLE IF NOT EXISTS formation_matchup (
 DO $$
 DECLARE t TEXT;
 DECLARE tbls TEXT[] := ARRAY[
-  'team_betting_intelligence','team_playing_style','team_motivation',
-  'team_strength_dashboard','team_strengths','team_weaknesses',
-  'player_match_impact','player_matchup','match_positional_matchups',
-  'match_key_battles','match_tactical_advantages','team_match_impact',
-  'match_impact_advantage','match_performance_comparison','match_impact_summary',
-  'team_versatility','versatility_advantage','tactical_flexibility',
-  'position_adaptability','formation_options','substitution_impact',
-  'injury_adaptability','player_versatility','position_coverage','squad_depth',
-  'match_squad_depth_comparison','position_depth_comparison',
-  'team_tactical_variations','formation_analysis','formation_matchup'
+  'team_playing_style','team_strength_dashboard','team_strengths','team_weaknesses',
+  'player_matchup','match_positional_matchups','match_key_battles',
+  'match_tactical_advantages','team_match_impact','match_impact_advantage',
+  'versatility_advantage','formation_options','injury_adaptability',
+  'player_versatility','position_coverage','squad_depth',
+  'position_depth_comparison','team_tactical_variations','formation_analysis'
 ];
 BEGIN
   FOREACH t IN ARRAY tbls LOOP
@@ -354,10 +245,15 @@ END $$;
 
 -- ============================================================================
 -- NEXT STEP (not done by this file): write the ETL/pipeline jobs that POPULATE
--- these tables. Until they contain rows, the matching UI sections show their
--- empty state. Priority order for maximum UI payoff:
---   1. team_betting_intelligence  → flips the team Attack/Defence/Betting tabs
---      from runtime-derived to pure reads.
---   2. team_playing_style         → precomputed style identity.
---   3. formation_analysis / formation_matchup → richer lineup/formation views.
+-- these ~19 remaining tables. Until they contain rows, the matching UI
+-- sections show their empty state.
+--
+-- Note: team_betting_intelligence, match_half_time_intelligence, and the
+-- other 10 tables from migrations 028/029 are ALREADY populated by
+-- beta/backend/src/jobs/processExtendedIntelligence.ts — run that job
+-- (already wired into process:all-db) rather than anything in this file.
+-- Once it has run, the frontend's Attack/Defence/Betting tabs and the match
+-- Half-Time signals sub-tab switch from derived reads to precomputed reads
+-- automatically — no frontend code change needed.
 -- ============================================================================
+

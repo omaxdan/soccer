@@ -11,7 +11,7 @@ import {
   processPlayerMatchImpact, processMatchPerformanceComparison, processTeamVersatility,
   processFormationMatchup, processPositionAdaptability, processTacticalFlexibility,
   processSubstitutionImpact, processSquadDepthComparison, processTeamMotivation,
-  processMatchImpactSummary,
+  processMatchImpactSummary, processPlayerVersatility,
 } from './jobs/processExtendedIntelligence';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
@@ -24,6 +24,13 @@ import { syncStandings } from './jobs/syncStandings';
 import { syncTournamentEvents, syncTournamentEventsByCountries, TournamentEventType } from './jobs/syncTournamentEvents';
 import { TRACKED_LEAGUES, getTrackedLeaguesSummary, TRACKED_LEAGUE_COUNT } from './config/trackedLeagues';
 import { sportsApiClient } from './services/sportsApiClient';
+
+
+
+import { processHistoricalContextBackfill, processHistoricalContextRecent } from './jobs/processHistoricalContext';
+import { processFormQuality } from './jobs/processFormQuality';
+import { backtestSignals } from './jobs/backtestSignals';
+import { processRiskOpportunity } from './jobs/processRiskOpportunity';
 
 /**
  * CLI Interface for Manual Job Execution
@@ -941,6 +948,12 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info(r, 'Player match impact complete');
         break;
       }
+      case 'process:player-versatility': {
+        logger.info('Computing player versatility...');
+        const r = await processPlayerVersatility();
+        logger.info(r, 'Player versatility complete');
+        break;
+      }
       case 'process:match-performance-comparison': {
         logger.info('Computing match performance comparison...');
         const r = await processMatchPerformanceComparison();
@@ -1114,6 +1127,59 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Rebuilding league gap analytics aggregates...');
         const r = await refreshLeagueGapAnalytics();
         logger.info(r, 'League gap analytics refresh complete');
+        break;
+      }
+
+      case 'process:historical-context:backfill': {
+        // One-time (or repair) full replay: reconstructs the league table as
+        // it stood before EVERY finished match, per (tournament, season), and
+        // writes pre-kickoff snapshots + opponent context. No future leakage
+        // by construction. Idempotent — safe to re-run after data repairs.
+        logger.info('Backfilling historical context (full replay)...');
+        const r = await processHistoricalContextBackfill();
+        logger.info(r, 'Historical context backfill complete');
+        break;
+      }
+
+      case 'process:historical-context': {
+        // Incremental: replays only tournament groups touched in the window
+        // (default 3 days), writes window + upcoming rows. Also captures live
+        // strength_rating_before for matches near kickoff — the only moment
+        // that value can honestly be recorded.
+        const days = args[0] ? parseInt(args[0], 10) : 3;
+        logger.info({ days }, 'Processing recent historical context...');
+        const r = await processHistoricalContextRecent(days);
+        logger.info(r, 'Historical context complete');
+        break;
+      }
+
+      case 'process:form-quality': {
+        // Opponent-adjusted form, strength of schedule, tier splits,
+        // giant-killer/flat-track, expected-vs-actual points, volatility.
+        // Depends on historical context. DB-only.
+        logger.info('Processing form quality...');
+        const r = await processFormQuality();
+        logger.info(r, 'Form quality complete');
+        break;
+      }
+
+      case 'backtest:signals': {
+        // Replays the shared rule registry over all finished matches using
+        // ONLY pre-kickoff features; stores hit rate vs base rate per rule.
+        // The signal writer refuses to publish uncalibrated rules.
+        logger.info('Backtesting signal rules...');
+        const r = await backtestSignals();
+        logger.info(r, 'Signal backtest complete');
+        break;
+      }
+
+      case 'process:risk-opportunity': {
+        // Risk engine + opportunity score + executive brief + calibrated
+        // market signals for upcoming matches (PT_HORIZON_DAYS, default 7).
+        // Writes only its own signal_group ('pitchterminal').
+        logger.info('Processing risk/opportunity layer...');
+        const r = await processRiskOpportunity();
+        logger.info(r, 'Risk/opportunity complete');
         break;
       }
 

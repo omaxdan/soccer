@@ -352,6 +352,26 @@ export function computePerformance(s: TeamSeasonStats): PerformanceIntel {
   };
 }
 
+// Standalone regression-risk read from a performance delta (actual minus
+// expected points). Shared by team_form_quality performance_delta and any
+// future team_betting_intelligence sustainability fields.
+export function regressionRisk(performanceDelta: number | null): {
+  risk: "HIGH" | "MEDIUM" | "LOW";
+  label: string;
+  reading: string;
+} {
+  if (performanceDelta == null) {
+    return { risk: "MEDIUM", label: "Unknown", reading: "Not enough data to assess sustainability." };
+  }
+  if (performanceDelta >= 2) {
+    return { risk: "HIGH", label: "Over-performing", reading: "Results outpace the underlying numbers — regression is likely." };
+  }
+  if (performanceDelta <= -2) {
+    return { risk: "LOW", label: "Under-performing", reading: "Underlying play is better than the results — improvement looks likely." };
+  }
+  return { risk: "LOW", label: "Sustainable", reading: "Results track the underlying performance." };
+}
+
 function deriveSignals(
   s: TeamSeasonStats,
   d: {

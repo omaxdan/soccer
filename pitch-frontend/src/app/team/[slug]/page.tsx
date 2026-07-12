@@ -29,14 +29,14 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const team = await getTeamBySlug(slug);
   if (!team) notFound();
 
-  const { intel, goalDep, injury, formQuality, venue, momentum, depth } = await getTeamIntel(team.id);
+  const { intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth } = await getTeamIntel(team.id);
   const [upcoming, seasonStats, difficulty] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
     getFixtureDifficulty(team.id),
   ]);
   const perf = seasonStats ? computePerformance(seasonStats) : null;
-  const profile = computeTeamProfile({ intel, formQuality, venue, goalDep, perf });
+  const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf });
   const dep = dependencyVerdict(goalDep);
 
   // ── OVERVIEW ──

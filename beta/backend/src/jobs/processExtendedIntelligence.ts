@@ -473,6 +473,7 @@ export async function processPlayerMatchImpact(): Promise<{ matchesProcessed: nu
         const isHomePlayer = lineup.team_id === match.home_team_id;
         const formQuality = formQualityMap.get(lineup.team_id);
 
+        // ─── Calculate values ────────────────────────────────────────────────
         const importanceScore = intel.importance_score ?? 50;
         const readinessScore = intel.readiness_score ?? 50;
         const fatigueScore = intel.fatigue_score ?? 0;
@@ -514,17 +515,34 @@ export async function processPlayerMatchImpact(): Promise<{ matchesProcessed: nu
         ));
         const impactBand = impactScore >= 80 ? 'HIGH' : impactScore >= 65 ? 'GOOD' : impactScore >= 45 ? 'NEUTRAL' : impactScore >= 30 ? 'LOW' : 'VERY_LOW';
 
+        // ─── INSERT ROUNDED VALUES ──────────────────────────────────────────
         rows.push({
-          match_id: match.id, player_id: lineup.player_id, impact_score: impactScore,
-          importance_score: Math.round(importanceScore), readiness_score: Math.round(readinessScore), fatigue_score: Math.round(fatigueScore),
-          form_rating: formRating, goal_threat: goalThreat, assist_threat: assistThreat,
-          defensive_contribution: defensiveContribution, creativity_score: creativityScore,
-          experience_score: experienceScore, big_game_performance: bigGamePerformance,
-          matchup_advantage: matchupAdvantage, matchup_disadvantage: -matchupAdvantage,
-          impact_band: impactBand, expected_contribution: expectedContribution(impactBand, lineup.position_code),
+          match_id: match.id,
+          player_id: lineup.player_id,
+          impact_score: Math.round(impactScore),
+          importance_score: Math.round(importanceScore),
+          readiness_score: Math.round(readinessScore),
+          fatigue_score: Math.round(fatigueScore),
+          form_rating: Math.round(formRating),
+          goal_threat: Math.round(goalThreat),
+          assist_threat: Math.round(assistThreat),
+          defensive_contribution: Math.round(defensiveContribution),
+          creativity_score: Math.round(creativityScore),
+          experience_score: Math.round(experienceScore),
+          big_game_performance: Math.round(bigGamePerformance),
+          matchup_advantage: Math.round(matchupAdvantage),
+          matchup_disadvantage: Math.round(-matchupAdvantage),
+          impact_band: impactBand,
+          expected_contribution: expectedContribution(impactBand, lineup.position_code),
           calculated_at: new Date().toISOString(),
         });
       }
+    }
+
+    // ─── Only upsert if we have rows ────────────────────────────────────────
+    if (rows.length === 0) {
+      logger.info({ matchesProcessed: matches.length, rowsWritten: 0 }, 'processPlayerMatchImpact completed - no rows generated');
+      return { matchesProcessed: matches.length, rowsWritten: 0 };
     }
 
     const written = await upsertChunked('player_match_impact', rows, 'match_id,player_id');
@@ -1395,4 +1413,161 @@ export async function processMatchImpactSummary(): Promise<{ matchesProcessed: n
     logger.error({ error: error.message }, 'processMatchImpactSummary failed');
     return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 14. PLAYER VERSATILITY — individual player positional flexibility
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processPlayerVersatility(): Promise<{ playersProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPlayerVersatility started — DB only, zero API calls');
+  try {
+    // ─── 1. Get all players with position data ──────────────────────────────
+    const players = await fetchAllRows(
+      db.from('players')
+        .select('id, primary_position, secondary_position, tertiary_position, position_detailed')
+    );
+    if (!players || players.length === 0) {
+      logger.warn('No players found — run sync:squads:v2 first');
+      return { playersProcessed: 0, rowsWritten: 0 };
+    }
+
+    // ─── 2. Get player season stats for games at position ──────────────────
+    const seasonStats = await fetchAllRows(
+      db.from('player_season_statistics')
+        .select('player_id, appearances, matches_started, minutes_played')
+        .order('season_external_id', { ascending: false })
+    );
+
+    // Keep most recent season per player
+    const statsMap = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsMap.get(s.player_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsMap.set(s.player_id, s);
+    }
+
+    // ─── 3. Get player intelligence for context ─────────────────────────────
+    const playerIntel = await fetchAllRows(
+      db.from('player_intelligence')
+        .select('player_id, importance_score, readiness_score, fatigue_score')
+    );
+    const intelMap = new Map<number, any>(playerIntel.map((r: any) => [r.player_id, r]));
+
+    // ─── 4. Compute versatility per player ──────────────────────────────────
+    const rows: any[] = [];
+
+    for (const player of players) {
+      const primary = player.primary_position;
+      const secondary = player.secondary_position;
+      const tertiary = player.tertiary_position;
+      const positionDetailed = player.position_detailed;
+
+      // ─── Collect all positions ─────────────────────────────────────────────
+      let allPositions: string[] = [];
+      
+      // Parse position_detailed (comma-separated like "DR,DC" or "MC,DM,AM")
+      if (positionDetailed && positionDetailed.trim()) {
+        const parsed = positionDetailed.split(',').map((p: string) => p.trim()).filter(Boolean);
+        allPositions = [...allPositions, ...parsed];
+      }
+      
+      // Add primary/secondary/tertiary if not already in the list
+      if (primary && !allPositions.includes(primary)) allPositions.push(primary);
+      if (secondary && !allPositions.includes(secondary)) allPositions.push(secondary);
+      if (tertiary && !allPositions.includes(tertiary)) allPositions.push(tertiary);
+
+      // Fallback: if no positions found, use a default
+      if (allPositions.length === 0) {
+        allPositions = ['MID'];
+      }
+
+      // ─── Count unique positions ────────────────────────────────────────────
+      const uniquePositions = [...new Set(allPositions)];
+      const positionsCount = uniquePositions.length;
+
+      // ─── Calculate versatility score ──────────────────────────────────────
+      // 1 position = 0, 2 positions = 50, 3+ positions = 100
+      const versatilityScore = Math.min(100, Math.round(((positionsCount - 1) / 3) * 100));
+
+      // ─── Zone coverage ─────────────────────────────────────────────────────
+      const zones = new Set();
+      for (const pos of uniquePositions) {
+        const zone = codeToZone(pos);
+        if (zone) zones.add(zone);
+      }
+      const zonesCovered = zones.size;
+      const adaptabilityScore = Math.min(100, Math.round((zonesCovered / 3) * 100));
+
+      // ─── Utility rating ────────────────────────────────────────────────────
+      // A player who can play in multiple zones is more useful
+      const utilityRating = Math.min(100, Math.round(
+        (positionsCount / 5) * 50 +
+        (zonesCovered / 3) * 50
+      ));
+
+      // ─── Primary position rating ──────────────────────────────────────────
+      const stats = statsMap.get(player.id);
+      const appearances = stats?.appearances || 0;
+      const matchesStarted = stats?.matches_started || 0;
+      const minutesPlayed = stats?.minutes_played || 0;
+
+      // Rating based on playing time
+      const gamesAtPosition = Math.max(1, appearances || 1);
+      const positionRating = Math.min(100, Math.round(
+        (matchesStarted / Math.max(1, appearances)) * 50 +
+        Math.min(1, minutesPlayed / 1000) * 50
+      ));
+
+      // ─── Overall versatility ──────────────────────────────────────────────
+      const intel = intelMap.get(player.id);
+      const importance = intel?.importance_score || 50;
+      
+      const overallVersatility = Math.min(100, Math.round(
+        versatilityScore * 0.30 +
+        adaptabilityScore * 0.25 +
+        utilityRating * 0.20 +
+        positionRating * 0.15 +
+        importance * 0.10
+      ));
+
+      // ─── Determine if player is a specialist or utility ──────────────────
+      const specialistThreshold = 70;
+      const isSpecialist = overallVersatility < specialistThreshold && positionsCount <= 2;
+
+      rows.push({
+        player_id: player.id,
+        positions_played: uniquePositions,
+        primary_position_rating: positionRating,
+        secondary_position_rating: positionsCount >= 2 ? Math.round(positionRating * 0.8) : null,
+        tertiary_position_rating: positionsCount >= 3 ? Math.round(positionRating * 0.6) : null,
+        versatility_score: versatilityScore,
+        adaptability_score: adaptabilityScore,
+        utility_rating: utilityRating,
+        games_at_position: appearances || 0,
+        position_rating: positionRating,
+        overall_versatility: overallVersatility,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    // ─── 5. Upsert ─────────────────────────────────────────────────────────────
+    const written = await upsertChunked('player_versatility', rows, 'player_id');
+    logger.info({ playersProcessed: players.length, rowsWritten: written }, 'processPlayerVersatility completed');
+    return { playersProcessed: players.length, rowsWritten: written };
+
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPlayerVersatility failed');
+    return { playersProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ─── Helper: Convert position code to zone ──────────────────────────────────
+function codeToZone(code: string): string | null {
+  if (!code) return null;
+  const c = code.toUpperCase();
+  if (['G', 'GK'].includes(c)) return 'GK';
+  if (['D', 'DC', 'DR', 'DL', 'CB', 'LB', 'RB', 'SW', 'LWB', 'RWB'].includes(c)) return 'DEF';
+  if (['M', 'MC', 'CM', 'DM', 'AM', 'LM', 'RM', 'CDM', 'CAM'].includes(c)) return 'MID';
+  if (['F', 'ST', 'CF', 'LW', 'RW', 'SS', 'WF'].includes(c)) return 'ATT';
+  return null;
 }

@@ -11,9 +11,11 @@ import { AvailabilityList } from "@/components/Lineups";
 import { PitchLineup } from "@/components/Pitch";
 import { PitchCoverage } from "@/components/PitchCoverage";
 import { Tabs } from "@/components/Tabs";
+import { SubTabs } from "@/components/SubTabs";
 import { teamSlug } from "@/lib/slug";
 import {
   kickoff, n1, km, normProb, opportunityColor, bestLean, normScorelines,
+  htFtLabel, confidenceBand,
 } from "@/lib/intel";
 import type { MatchRow, MarketSignal } from "@/lib/types";
 
@@ -41,14 +43,6 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const lean = bestLean(m);
   const scorelines = normScorelines(i?.predicted_scorelines ?? null);
   const totalGoals = (i?.predicted_home_goals ?? 0) + (i?.predicted_away_goals ?? 0);
-
-  // group signals by market group
-  const groups = new Map<string, MarketSignal[]>();
-  (m.signals ?? []).forEach((s) => {
-    const g = s.signal_group || "other";
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g)!.push(s);
-  });
 
   // ── OVERVIEW ──
   const overview = (
@@ -96,17 +90,81 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     </div>
   );
 
-  // ── SIGNALS ──
-  const GROUP_LABELS: Record<string, string> = { "1x2": "Match result", goals: "Goals", btts: "Both teams to score", cards: "Cards", competition: "Competition", halftime: "Half-time" };
-  const signalsTab = (m.signals && m.signals.length > 0) ? (
-    <div className="space-y-4">
-      {[...groups.entries()].map(([g, list]) => (
-        <Panel key={g} title={GROUP_LABELS[g] ?? g}>
+  // ── SIGNALS (4 categories: Match Result, Half-Time, Goals & Cards, Competition) ──
+  const byGroup = (keys: string[]) => (m.signals ?? []).filter((s) => keys.includes(s.signal_group));
+  const resultSignals = byGroup(["1x2"]);
+  const halftimeSignals = byGroup(["halftime"]);
+  const goalsCardsSignals = byGroup(["goals", "cards"]);
+  const competitionSignals = byGroup(["competition"]);
+
+  function SignalGroupPanel({ title, list, emptyText }: { title: string; list: MarketSignal[]; emptyText: string }) {
+    return (
+      <Panel title={title}>
+        {list.length > 0 ? (
           <div>{list.map((s, idx) => <SignalRow key={s.id ?? idx} signal={s} />)}</div>
-        </Panel>
-      ))}
-    </div>
-  ) : <Empty text="No market signals published for this fixture yet." />;
+        ) : (
+          <p className="mono py-2 text-[0.68rem] leading-relaxed text-faint">{emptyText}</p>
+        )}
+      </Panel>
+    );
+  }
+
+  const ht = m.halfTime;
+  const signalsTab = (
+    <SubTabs
+      items={[
+        {
+          id: "result",
+          label: "Match Result",
+          count: resultSignals.length || undefined,
+          content: <SignalGroupPanel title="Match result" list={resultSignals} emptyText="No 1X2 signals published for this fixture yet." />,
+        },
+        {
+          id: "halftime",
+          label: "Half-Time",
+          count: halftimeSignals.length || undefined,
+          content: (
+            <div className="space-y-4">
+              {ht && (
+                <Panel title="Half-time intelligence">
+                  <div className="grid grid-cols-3 gap-3">
+                    <StatCell label="Home HT win" value={ht.home_ht_win_prob != null ? `${Math.round(ht.home_ht_win_prob)}%` : "—"} />
+                    <StatCell label="Draw HT" value={ht.draw_ht_prob != null ? `${Math.round(ht.draw_ht_prob)}%` : "—"} />
+                    <StatCell label="Away HT win" value={ht.away_ht_win_prob != null ? `${Math.round(ht.away_ht_win_prob)}%` : "—"} />
+                  </div>
+                  <div className="mono mt-3 flex items-center justify-between border-t border-line pt-3 text-[0.68rem] text-muted">
+                    <span>HT/FT lean <span className="text-text">{htFtLabel(ht.hh_prob, ht.dh_prob, ht.dd_prob, ht.aa_prob)}</span></span>
+                    {ht.confidence_score != null && (
+                      <span style={{ color: confidenceBand(ht.confidence_score).color }}>{confidenceBand(ht.confidence_score).label}</span>
+                    )}
+                  </div>
+                  {(ht.home_2h_goals != null || ht.away_2h_goals != null) && (
+                    <div className="mono mt-2 flex gap-4 text-[0.68rem] text-muted">
+                      <span>2H goals <span className="text-text">{n1(ht.home_2h_goals)}–{n1(ht.away_2h_goals)}</span></span>
+                      {ht.btts_2h_prob != null && <span>2H BTTS <span className="text-text">{Math.round(ht.btts_2h_prob)}%</span></span>}
+                    </div>
+                  )}
+                </Panel>
+              )}
+              <SignalGroupPanel title="Half-time signals" list={halftimeSignals} emptyText="No half-time signals published for this fixture yet." />
+            </div>
+          ),
+        },
+        {
+          id: "goalscards",
+          label: "Goals / Cards",
+          count: goalsCardsSignals.length || undefined,
+          content: <SignalGroupPanel title="Goals & cards" list={goalsCardsSignals} emptyText="No goals or cards signals published for this fixture yet." />,
+        },
+        {
+          id: "competition",
+          label: "Competition",
+          count: competitionSignals.length || undefined,
+          content: <SignalGroupPanel title="Competition" list={competitionSignals} emptyText="No competition-context signals published for this fixture yet." />,
+        },
+      ]}
+    />
+  );
 
   // ── TEAMS ──
   const teams = i ? (

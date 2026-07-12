@@ -15,7 +15,7 @@ export interface PlacedPlayer {
   line: "GK" | "DEF" | "MID" | "FWD";
 }
 
-const FWD_CODES = new Set(["F", "A", "S", "W"]); // forwards / attackers / strikers / wingers
+const FWD_CODES = new Set(["F", "A", "S", "W", "CF", "SS"]); // forwards / attackers / strikers / wingers / second striker
 
 function lineOf(code: string | null): "GK" | "DEF" | "MID" | "FWD" {
   const c = (code ?? "").charAt(0).toUpperCase();
@@ -43,6 +43,32 @@ function spread(n: number): number[] {
   return Array.from({ length: n }, (_, i) => inset + (span * i) / (n - 1));
 }
 
+// Named formation detection from line counts — recognizes common shapes,
+// falls back to the raw D-M-F string for anything else.
+export function getFormationName(counts: { def: number; mid: number; fwd: number }): string {
+  const { def, mid, fwd } = counts;
+  const known: Record<string, string> = {
+    "4-4-2": "4-4-2", "4-3-3": "4-3-3", "3-5-2": "3-5-2", "4-5-1": "4-5-1",
+    "5-3-2": "5-3-2", "4-2-4": "4-2-4", "3-4-3": "3-4-3", "5-4-1": "5-4-1",
+    "4-2-3-1": "4-2-3-1",
+  };
+  const key = `${def}-${mid}-${fwd}`;
+  return known[key] ?? key;
+}
+
+// Position flexibility for a single lineup player: primary + alternates and
+// a simple 50-90 score that rewards having secondary/tertiary cover.
+export function getPositionFlexibility(player: PredictedLineupPlayer): {
+  primary: string;
+  alternatives: string[];
+  flexibilityScore: number;
+} {
+  const primary = player.position_code || "M";
+  const alternatives = [player.secondary_position, player.tertiary_position].filter(Boolean) as string[];
+  const flexibilityScore = Math.min(100, 50 + alternatives.length * 20);
+  return { primary, alternatives, flexibilityScore };
+}
+
 export function placeLineup(players: PredictedLineupPlayer[]): {
   placed: PlacedPlayer[];
   formation: string;
@@ -65,9 +91,7 @@ export function placeLineup(players: PredictedLineupPlayer[]): {
     });
   });
 
-  const formation = [byLine.DEF.length, byLine.MID.length, byLine.FWD.length]
-    .filter((n) => n > 0)
-    .join("-");
+  const formation = getFormationName({ def: byLine.DEF.length, mid: byLine.MID.length, fwd: byLine.FWD.length });
 
   return { placed, formation };
 }
@@ -102,12 +126,14 @@ export function versatilityBadge(p: PredictedLineupPlayer): string {
 const ZONE_FROM_CODE: Record<string, PitchZone> = {
   G: "GK", GK: "GK",
   DC: "CB", CB: "CB", D: "CB",
-  DL: "LB", LB: "LB", DR: "RB", RB: "RB",
-  DM: "DM", MD: "DM",
+  DL: "LB", LB: "LB", LWB: "LB",
+  DR: "RB", RB: "RB", RWB: "RB",
+  DM: "DM", MD: "DM", CDM: "DM",
   MC: "CM", M: "CM", CM: "CM",
-  AM: "AM", MA: "AM",
-  ML: "LW", LW: "LW", MR: "RW", RW: "RW",
-  ST: "ST", F: "ST", A: "ST", S: "ST", CF: "ST",
+  AM: "AM", MA: "AM", CAM: "AM",
+  ML: "LW", LW: "LW", LM: "LW",
+  MR: "RW", RW: "RW", RM: "RW",
+  ST: "ST", F: "ST", A: "ST", S: "ST", CF: "ST", SS: "ST",
 };
 
 function zoneOf(code: string | null | undefined): PitchZone | null {

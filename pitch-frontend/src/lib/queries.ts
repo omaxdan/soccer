@@ -119,13 +119,14 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     .single();
   if (error || !m) return M.MOCK_MATCHES.find((x) => x.id === id) ?? null;
 
-  const [intel, opp, risk, signals, weather, result] = await Promise.all([
+  const [intel, opp, risk, signals, weather, result, halfTime] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_signals").select("*").eq("match_id", id).order("strength", { ascending: false }),
     client.from("match_weather").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_results").select("home_score, away_score").eq("match_id", id).maybeSingle(),
+    client.from("match_half_time_intelligence").select("*").eq("match_id", id).maybeSingle(),
   ]);
 
   return {
@@ -140,7 +141,18 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     risk: risk.data ? normRisk(risk.data) : null,
     signals: (signals.data as MarketSignal[]) ?? [],
     weather: weather.data ?? null,
+    halfTime: (halfTime.data as import("./types").MatchHalfTimeIntelligence) ?? null,
   };
+}
+
+// Standalone half-time intelligence fetch (e.g. for a lighter widget).
+export async function getMatchHalfTimeIntelligence(
+  matchId: number
+): Promise<import("./types").MatchHalfTimeIntelligence | null> {
+  const client = db();
+  if (!client) return null;
+  const { data } = await client.from("match_half_time_intelligence").select("*").eq("match_id", matchId).maybeSingle();
+  return (data as any) ?? null;
 }
 
 export async function getLineups(matchId: number): Promise<PredictedLineupPlayer[]> {
@@ -288,6 +300,7 @@ export async function getTeam(id: number): Promise<TeamLite | null> {
 
 export async function getTeamIntel(id: number): Promise<{
   intel: TeamIntelligence | null;
+  betting: import("./types").TeamBettingIntelligence | null;
   goalDep: TeamGoalDependency | null;
   injury: TeamInjuryImpact | null;
   formQuality: TeamFormQuality | null;
@@ -299,6 +312,7 @@ export async function getTeamIntel(id: number): Promise<{
   if (!client) {
     return {
       intel: M.MOCK_TEAM_INTEL[id] ?? null,
+      betting: null,
       goalDep: M.MOCK_GOAL_DEP[id] ?? null,
       injury: M.MOCK_INJURY_IMPACT[id] ?? null,
       formQuality: M.MOCK_FORM_QUALITY[id] ?? null,
@@ -307,8 +321,10 @@ export async function getTeamIntel(id: number): Promise<{
       depth: M.MOCK_DEPTH[id] ?? [],
     };
   }
-  const [intel, goalDep, injury, formQuality, venue, momentum, depth] = await Promise.all([
+  const [intel, betting, goalDep, injury, formQuality, venue, momentum, depth] = await Promise.all([
     client.from("team_intelligence").select("*").eq("team_id", id).maybeSingle(),
+    client.from("team_betting_intelligence").select("*").eq("team_id", id)
+      .order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
     client.from("team_goal_dependency").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_injury_impact").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_form_quality").select("*").eq("team_id", id).maybeSingle(),
@@ -317,7 +333,9 @@ export async function getTeamIntel(id: number): Promise<{
     client.from("team_position_depth").select("*").eq("team_id", id),
   ]);
   return {
-    intel: intel.data ?? null, goalDep: goalDep.data ?? null,
+    intel: intel.data ?? null,
+    betting: (betting.data as any) ?? null,
+    goalDep: goalDep.data ?? null,
     injury: injury.data ?? null, formQuality: formQuality.data ?? null,
     venue: venue.data ?? null, momentum: momentum.data ?? null,
     depth: (depth.data as PositionDepth[]) ?? [],
