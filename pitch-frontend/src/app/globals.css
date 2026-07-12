@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Phosphor-terminal palette */
+  --ink: #0b0f14;
+  --panel: #121821;
+  --raised: #1a222e;
+  --line: #232e3c;
+  --text: #e6edf5;
+  --muted: #7d8ca0;
+  --faint: #4b5769;
+  --amber: #ffb020;
+  --amber-dim: rgba(255, 176, 32, 0.22);
+  --edge: #2fbf87;
+  --risk: #f0544f;
+  --warn: #f5b301;
+  --cool: #4c8dff;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--ink);
+  color: var(--text);
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* faint terminal grid, kept very subtle */
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.014) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Typographic utilities ─────────────────────────────── */
+.mono {
+  font-family: theme("fontFamily.mono");
+  font-variant-numeric: tabular-nums;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow {
+  font-family: theme("fontFamily.mono");
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.label-cap {
+  font-family: theme("fontFamily.mono");
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Panels ────────────────────────────────────────────── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.panel-raised {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.hairline {
+  border-color: var(--line);
+}
+
+/* ── Scanline texture used on the dashboard hero only ──── */
+.scanlines {
+  position: relative;
+}
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 176, 32, 0.035) 0px,
+    rgba(255, 176, 32, 0.035) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  border-radius: inherit;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+/* ── Scrollbars ────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Focus visibility (a11y floor) ─────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
