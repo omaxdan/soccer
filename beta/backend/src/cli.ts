@@ -12,6 +12,8 @@ import {
   processFormationMatchup, processPositionAdaptability, processTacticalFlexibility,
   processSubstitutionImpact, processSquadDepthComparison, processTeamMotivation,
   processMatchImpactSummary, processPlayerVersatility,
+  processTeamMatchImpact, processMatchImpactAdvantage, processMatchKeyBattles,
+  processMatchPositionalMatchups, processMatchTacticalAdvantages, processPlayerMatchup,
 } from './jobs/processExtendedIntelligence';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
@@ -774,7 +776,7 @@ async function handleCommand(command: string, ...args: string[]) {
         //     -> match-performance-comparison (needs betting-intelligence +
         //        form-quality + momentum, all above)
         //     -> match-impact-summary (needs team-motivation, above)
-        logger.info('[L5.8/3] Extended intelligence suite (13 processors)...');
+        logger.info('[L5.8/3] Extended intelligence suite (14 processors)...');
         const formQuality = await processTeamFormQuality();
         logger.info({ ...formQuality }, '[L5.8] ✓ team form quality');
         const bettingIntel = await processTeamBettingIntelligence();
@@ -783,6 +785,8 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info({ ...htft }, '[L5.8] ✓ HT/FT probabilities');
         const teamMotivation = await processTeamMotivation();
         logger.info({ ...teamMotivation }, '[L5.8] ✓ team motivation');
+        const playerVersatility = await processPlayerVersatility();
+        logger.info({ ...playerVersatility }, '[L5.8] ✓ player versatility');
         const playerMatchImpact = await processPlayerMatchImpact();
         logger.info({ ...playerMatchImpact }, '[L5.8] ✓ player match impact');
         const teamVersatilityMatch = await processTeamVersatility();
@@ -802,6 +806,27 @@ async function handleCommand(command: string, ...args: string[]) {
         const matchImpactSummary = await processMatchImpactSummary();
         logger.info({ ...matchImpactSummary }, '[L5.8] ✓ match impact summary');
 
+        // ── LAYER 5.9 ── MATCH PAGE SUITE (needs betting-intelligence,
+        // match_intelligence, player_match_impact, match_predicted_lineups —
+        // all computed above). Dependency order within the layer:
+        // team-match-impact -> match-impact-advantage (needs team-match-impact)
+        // -> match-key-battles / match-positional-matchups / player-matchup
+        //    (need player_match_impact + predicted lineups)
+        // -> match-tactical-advantages (independent within this layer).
+        logger.info('[L5.9/3] Match page suite (6 processors)...');
+        const teamMatchImpact = await processTeamMatchImpact();
+        logger.info({ ...teamMatchImpact }, '[L5.9] ✓ team match impact');
+        const matchImpactAdvantage = await processMatchImpactAdvantage();
+        logger.info({ ...matchImpactAdvantage }, '[L5.9] ✓ match impact advantage');
+        const matchKeyBattles = await processMatchKeyBattles();
+        logger.info({ ...matchKeyBattles }, '[L5.9] ✓ match key battles');
+        const matchPositionalMatchups = await processMatchPositionalMatchups();
+        logger.info({ ...matchPositionalMatchups }, '[L5.9] ✓ match positional matchups');
+        const matchTacticalAdvantages = await processMatchTacticalAdvantages();
+        logger.info({ ...matchTacticalAdvantages }, '[L5.9] ✓ match tactical advantages');
+        const playerMatchup = await processPlayerMatchup();
+        logger.info({ ...playerMatchup }, '[L5.9] ✓ player matchup');
+
         // ── LAYER 6 ── Needs everything above — dashboard aggregate stats ───
         logger.info('[L6/3] Dashboard summary (needs all prior layers)...');
         const dashboardSummary = await processDashboardSummary();
@@ -812,8 +837,9 @@ async function handleCommand(command: string, ...args: string[]) {
           durationSeconds: elapsed,
           form, fixture, locs, travel, matchTravel, momentum, fixtureDiff,
           strength, venue, teamIntel, playerIntel, leagueIntel, matchIntel, matchSignals, predictedLineups, xiStrength, scorelines, nbsi,
-          formQuality, bettingIntel, htft, teamMotivation, playerMatchImpact, teamVersatilityMatch, formationMatchup,
+          formQuality, bettingIntel, htft, teamMotivation, playerVersatility, playerMatchImpact, teamVersatilityMatch, formationMatchup,
           positionAdaptability, tacticalFlexibility, substitutionImpact, squadDepthComparison, matchPerformanceComparison, matchImpactSummary,
+          teamMatchImpact, matchImpactAdvantage, matchKeyBattles, matchPositionalMatchups, matchTacticalAdvantages, playerMatchup,
           dashboardSummary,
         }, '━━━ process:all-db complete in ' + elapsed + 's ━━━');
         break;
@@ -952,6 +978,42 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing player versatility...');
         const r = await processPlayerVersatility();
         logger.info(r, 'Player versatility complete');
+        break;
+      }
+      case 'process:team-match-impact': {
+        logger.info('Computing team match impact...');
+        const r = await processTeamMatchImpact();
+        logger.info(r, 'Team match impact complete');
+        break;
+      }
+      case 'process:match-impact-advantage': {
+        logger.info('Computing match impact advantage...');
+        const r = await processMatchImpactAdvantage();
+        logger.info(r, 'Match impact advantage complete');
+        break;
+      }
+      case 'process:match-key-battles': {
+        logger.info('Computing match key battles...');
+        const r = await processMatchKeyBattles();
+        logger.info(r, 'Match key battles complete');
+        break;
+      }
+      case 'process:match-positional-matchups': {
+        logger.info('Computing match positional matchups...');
+        const r = await processMatchPositionalMatchups();
+        logger.info(r, 'Match positional matchups complete');
+        break;
+      }
+      case 'process:match-tactical-advantages': {
+        logger.info('Computing match tactical advantages...');
+        const r = await processMatchTacticalAdvantages();
+        logger.info(r, 'Match tactical advantages complete');
+        break;
+      }
+      case 'process:player-matchup': {
+        logger.info('Computing player matchup...');
+        const r = await processPlayerMatchup();
+        logger.info(r, 'Player matchup complete');
         break;
       }
       case 'process:match-performance-comparison': {

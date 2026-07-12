@@ -1571,3 +1571,437 @@ function codeToZone(code: string): string | null {
   if (['F', 'ST', 'CF', 'LW', 'RW', 'SS', 'WF'].includes(c)) return 'ATT';
   return null;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MATCH PAGE SUITE — 6 processors, priority order per spec. All depend on
+// tables already computed above (team_betting_intelligence, match_intelligence,
+// player_match_impact, match_predicted_lineups, formation_matchup). Requires
+// migration 032 (unique constraints — the 6 target tables already existed in
+// the live schema, only the upsert constraints needed adding).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── 15. TEAM MATCH IMPACT ────────────────────────────────────────────────────
+export async function processTeamMatchImpact(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamMatchImpact started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+    const matchIds = matches.map((m: any) => m.id);
+
+    const bettingIntel = await fetchAllRows(
+      db.from('team_betting_intelligence').select('team_id, attack_rating, defence_rating, team_quality_score, sustainability_score').in('team_id', teamIds)
+    );
+    const bettingMap = new Map<number, any>(bettingIntel.map((r: any) => [r.team_id, r]));
+    const matchIntel = await fetchAllRows(
+      db.from('match_intelligence').select('match_id, home_readiness, away_readiness, confidence_score, home_xi_strength, away_xi_strength').in('match_id', matchIds)
+    );
+    const matchIntelMap = new Map<number, any>(matchIntel.map((r: any) => [r.match_id, r]));
+    const teamIntel = await fetchAllRows(
+      db.from('team_intelligence').select('team_id, lineup_versatility_score, injury_burden_score').in('team_id', teamIds)
+    );
+    const teamIntelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+    const formQuality = await fetchAllRows(db.from('team_form_quality').select('team_id, performance_delta').in('team_id', teamIds));
+    const formMap = new Map<number, any>(formQuality.map((r: any) => [r.team_id, r]));
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const intel = matchIntelMap.get(match.id);
+      for (const [side, teamId, oppId] of [
+        ['home', match.home_team_id, match.away_team_id],
+        ['away', match.away_team_id, match.home_team_id],
+      ] as const) {
+        const betting = bettingMap.get(teamId);
+        const oppBetting = bettingMap.get(oppId);
+        const tIntel = teamIntelMap.get(teamId);
+        const form = formMap.get(teamId);
+        if (!betting) continue;
+
+        const attackStrength = betting.attack_rating ?? 50;
+        const defensiveStrength = betting.defence_rating ?? 50;
+        const midfieldControl = Math.round((attackStrength + defensiveStrength) / 2);
+        // Set-piece threat: no dedicated data source exists yet — approximated
+        // from attack/defence blend, same documented-heuristic pattern as
+        // processMatchPerformanceComparison's set-piece score. Revisit if a
+        // real corners/set-piece-goals signal gets captured later.
+        const setPieceThreat = Math.min(100, Math.round((attackStrength * 0.4 + defensiveStrength * 0.6) * 0.8 + 20));
+        const experienceLevel = betting.sustainability_score ?? 50;
+        const formTrend = form?.performance_delta != null ? Math.max(-100, Math.min(100, Math.round(form.performance_delta * 10))) : 0;
+        const injuryImpact = tIntel?.injury_burden_score != null ? Math.round(tIntel.injury_burden_score) : 0;
+        const tacticalVersatility = tIntel?.lineup_versatility_score != null ? Math.round(tIntel.lineup_versatility_score) : 50;
+        const xiStrength = side === 'home' ? intel?.home_xi_strength : intel?.away_xi_strength;
+        const matchSpecificBoost = xiStrength ?? 70; // 70 = neutral-ish default when no predicted lineup exists yet
+        const confidenceLevel = intel?.confidence_score != null ? Math.round(intel.confidence_score) : 50;
+
+        const overallImpactScore = Math.round(
+          attackStrength * 0.25 + midfieldControl * 0.25 + defensiveStrength * 0.25 + setPieceThreat * 0.15 + experienceLevel * 0.10
+        );
+
+        const oppOverall = oppBetting
+          ? Math.round((oppBetting.attack_rating ?? 50) * 0.25 + ((oppBetting.attack_rating ?? 50) + (oppBetting.defence_rating ?? 50)) / 2 * 0.25 + (oppBetting.defence_rating ?? 50) * 0.25 + 50 * 0.15 + (oppBetting.sustainability_score ?? 50) * 0.10)
+          : 50;
+        const diff = overallImpactScore - oppOverall;
+        const advantageBand = diff >= 20 ? 'STRONG' : diff >= 8 ? 'GOOD' : diff >= -8 ? 'NEUTRAL' : diff >= -20 ? 'WEAK' : 'POOR';
+
+        rows.push({
+          match_id: match.id, team_id: teamId,
+          overall_impact_score: overallImpactScore, attack_strength: Math.round(attackStrength),
+          midfield_control: midfieldControl, defensive_strength: Math.round(defensiveStrength),
+          set_piece_threat: setPieceThreat, experience_level: Math.round(experienceLevel),
+          form_trend: formTrend, injury_impact: injuryImpact, tactical_versatility: tacticalVersatility,
+          match_specific_boost: Math.round(matchSpecificBoost), confidence_level: confidenceLevel,
+          advantage_band: advantageBand,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('team_match_impact', rows, 'match_id,team_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processTeamMatchImpact completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamMatchImpact failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 16. MATCH IMPACT ADVANTAGE ───────────────────────────────────────────────
+export async function processMatchImpactAdvantage(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchImpactAdvantage started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const impacts = await fetchAllRows(
+      db.from('team_match_impact')
+        .select('match_id, team_id, overall_impact_score, attack_strength, midfield_control, defensive_strength, confidence_level')
+        .in('match_id', matchIds)
+    );
+    const byMatchTeam = new Map<string, any>();
+    for (const r of impacts) byMatchTeam.set(`${r.match_id}:${r.team_id}`, r);
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const home = byMatchTeam.get(`${match.id}:${match.home_team_id}`);
+      const away = byMatchTeam.get(`${match.id}:${match.away_team_id}`);
+      if (!home || !away) continue; // needs processTeamMatchImpact to have run first
+
+      const homeScore = home.overall_impact_score ?? 50;
+      const awayScore = away.overall_impact_score ?? 50;
+      const advantageTeamId = homeScore >= awayScore ? match.home_team_id : match.away_team_id;
+
+      const keyAdvantages: string[] = [];
+      const keyDisadvantages: string[] = [];
+      const compare = (label: string, h: number, a: number) => {
+        if (h - a >= 10) keyAdvantages.push(`${label} advantage`);
+        else if (a - h >= 10) keyDisadvantages.push(`${label} disadvantage`);
+      };
+      compare('Attack', home.attack_strength ?? 50, away.attack_strength ?? 50);
+      compare('Midfield', home.midfield_control ?? 50, away.midfield_control ?? 50);
+      compare('Defensive', home.defensive_strength ?? 50, away.defensive_strength ?? 50);
+
+      rows.push({
+        match_id: match.id,
+        home_advantage_score: Math.round(homeScore), away_advantage_score: Math.round(awayScore),
+        advantage_margin: Math.round(Math.abs(homeScore - awayScore)), advantage_team_id: advantageTeamId,
+        key_advantages: keyAdvantages.length ? keyAdvantages : ['No clear advantages'],
+        key_disadvantages: keyDisadvantages.length ? keyDisadvantages : ['No clear disadvantages'],
+        confidence_score: Math.round(((home.confidence_level ?? 50) + (away.confidence_level ?? 50)) / 2),
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('match_impact_advantage', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchImpactAdvantage completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchImpactAdvantage failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 17. MATCH KEY BATTLES ────────────────────────────────────────────────────
+// Uses broad-position groups (D/M/F) rather than exact sub-positions like
+// "Striker vs Centre Back" from the spec — this codebase's predicted-lineup
+// position_code values are broad groups (see processPredictedLineups), not
+// granular roles, so battle titles describe zones, not literal player roles.
+export async function processMatchKeyBattles(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchKeyBattles started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, players:player_id(id, name)').in('match_id', matchIds)
+    );
+    const impacts = await fetchAllRows(
+      db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds)
+    );
+    const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
+
+    const lineupsByMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!lineupsByMatchTeam.has(key)) lineupsByMatchTeam.set(key, []);
+      lineupsByMatchTeam.get(key)!.push(l);
+    }
+
+    // The 5 cross-zone battle pairings from the spec, mapped to broad groups.
+    const PAIRINGS: Array<{ id: string; title: string; homeGroup: string; awayGroup: string }> = [
+      { id: 'ATT_VS_DEF', title: 'Attack vs Defence', homeGroup: 'F', awayGroup: 'D' },
+      { id: 'WIDE_VS_WIDE', title: 'Wide Play Battle', homeGroup: 'M', awayGroup: 'D' },
+      { id: 'MID_VS_MID', title: 'Midfield Battle', homeGroup: 'M', awayGroup: 'M' },
+      { id: 'DEF_VS_ATT', title: 'Defence vs Attack', homeGroup: 'D', awayGroup: 'F' },
+      { id: 'GK_VS_ATT', title: 'Goalkeeper vs Attack', homeGroup: 'G', awayGroup: 'F' },
+    ];
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = lineupsByMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = lineupsByMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      const best = (lineup: any[], group: string) =>
+        lineup.filter((p: any) => p.position_code === group)
+          .sort((a: any, b: any) => (impactMap.get(`${match.id}:${b.player_id}`) ?? 0) - (impactMap.get(`${match.id}:${a.player_id}`) ?? 0))[0];
+
+      for (const pairing of PAIRINGS) {
+        const hp = best(homeLineup, pairing.homeGroup);
+        const ap = best(awayLineup, pairing.awayGroup);
+        if (!hp || !ap) continue;
+
+        const hScore = impactMap.get(`${match.id}:${hp.player_id}`) ?? 50;
+        const aScore = impactMap.get(`${match.id}:${ap.player_id}`) ?? 50;
+        const importance = Math.round((hScore + aScore) / 2);
+        const diff = hScore - aScore;
+        const outcome = Math.abs(diff) < 8 ? 'Evenly matched' : diff > 0
+          ? `${hp.players?.name ?? 'Home player'} favoured` : `${ap.players?.name ?? 'Away player'} favoured`;
+
+        rows.push({
+          match_id: match.id, battle_id: pairing.id, title: pairing.title,
+          description: `${hp.players?.name ?? 'Home player'} vs ${ap.players?.name ?? 'Away player'}`,
+          home_player_id: hp.player_id, away_player_id: ap.player_id,
+          home_advantage_score: Math.round(hScore), away_advantage_score: Math.round(aScore),
+          importance_score: importance,
+          expected_impact: importance >= 70 ? 'High' : importance >= 50 ? 'Moderate' : 'Low',
+          battle_outcome_prediction: outcome,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('match_key_battles', rows, 'match_id,battle_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchKeyBattles completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchKeyBattles failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 18. MATCH POSITIONAL MATCHUPS ────────────────────────────────────────────
+export async function processMatchPositionalMatchups(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchPositionalMatchups started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, rank_in_position').in('match_id', matchIds)
+    );
+    const impacts = await fetchAllRows(db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds));
+    const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = byMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      // Broad position groups (see processPredictedLineups) — G/D/M/F, rank
+      // 1 within each group is the primary starter for that grid row.
+      for (const group of ['G', 'D', 'M', 'F']) {
+        const hp = homeLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
+        const ap = awayLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
+        if (!hp && !ap) continue;
+
+        const hScore = hp ? (impactMap.get(`${match.id}:${hp.player_id}`) ?? 50) : null;
+        const aScore = ap ? (impactMap.get(`${match.id}:${ap.player_id}`) ?? 50) : null;
+        const advantageScore = hScore != null && aScore != null ? Math.round(hScore - aScore) : null;
+        const advantageTeamId = advantageScore != null ? (advantageScore >= 0 ? match.home_team_id : match.away_team_id) : null;
+        const advantageType = !hp ? 'AWAY_ONLY' : !ap ? 'HOME_ONLY' : Math.abs(advantageScore ?? 0) < 8 ? 'EVEN' : 'CLEAR';
+
+        rows.push({
+          match_id: match.id, position_code: group,
+          home_player_id: hp?.player_id ?? null, away_player_id: ap?.player_id ?? null,
+          home_impact_score: hScore != null ? Math.round(hScore) : null, away_impact_score: aScore != null ? Math.round(aScore) : null,
+          advantage_score: advantageScore, advantage_team_id: advantageTeamId, advantage_type: advantageType,
+          matchup_description: `${group} zone: ${hp ? 'home starter' : 'no home starter'} vs ${ap ? 'away starter' : 'no away starter'}`,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('match_positional_matchups', rows, 'match_id,position_code');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchPositionalMatchups completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchPositionalMatchups failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 19. MATCH TACTICAL ADVANTAGES ────────────────────────────────────────────
+export async function processMatchTacticalAdvantages(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchTacticalAdvantages started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, position_code').in('match_id', matchIds)
+    );
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, readiness_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = byMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      const count = (lineup: any[], group: string) => lineup.filter((p: any) => p.position_code === group).length;
+
+      // WIDTH: broad-position data can't distinguish wide vs central mids
+      // (see processPredictedLineups' documented sub-slot limitation), so
+      // this uses M-group headcount as a coarse proxy, not true wing counts.
+      const homeWidth = count(homeLineup, 'M');
+      const awayWidth = count(awayLineup, 'M');
+      const homeCentral = count(homeLineup, 'D') + count(homeLineup, 'M');
+      const awayCentral = count(awayLineup, 'D') + count(awayLineup, 'M');
+      const homeReadiness = intelMap.get(match.home_team_id)?.readiness_score ?? 50;
+      const awayReadiness = intelMap.get(match.away_team_id)?.readiness_score ?? 50;
+
+      const advantages: Array<{ type: string; desc: string; h: number; a: number; notes: string }> = [
+        {
+          type: 'WIDTH', desc: 'Wide-position headcount (coarse proxy — see file note)',
+          h: Math.min(100, homeWidth * 20), a: Math.min(100, awayWidth * 20),
+          notes: 'Approximated from broad midfield headcount; this pipeline does not yet distinguish wide from central mids.',
+        },
+        {
+          type: 'CENTRAL_CONTROL', desc: 'Central zone (defence + midfield) headcount',
+          h: Math.min(100, homeCentral * 12.5), a: Math.min(100, awayCentral * 12.5),
+          notes: 'Larger central presence generally supports build-up control.',
+        },
+        {
+          type: 'PRESSING', desc: 'Readiness-based pressing capacity',
+          h: Math.round(homeReadiness), a: Math.round(awayReadiness),
+          notes: 'Higher team readiness supports sustained high-intensity pressing.',
+        },
+      ];
+
+      for (const adv of advantages) {
+        const net = Math.round(adv.h - adv.a);
+        rows.push({
+          match_id: match.id, advantage_type: adv.type, description: adv.desc,
+          home_advantage_score: Math.round(adv.h), away_advantage_score: Math.round(adv.a),
+          net_advantage: net, advantage_team_id: net >= 0 ? match.home_team_id : match.away_team_id,
+          confidence_score: Math.abs(net) >= 20 ? 70 : Math.abs(net) >= 10 ? 55 : 40,
+          tactical_notes: adv.notes,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('match_tactical_advantages', rows, 'match_id,advantage_type');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchTacticalAdvantages completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchTacticalAdvantages failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 20. PLAYER MATCHUP ───────────────────────────────────────────────────────
+export async function processPlayerMatchup(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPlayerMatchup started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, rank_in_position').in('match_id', matchIds)
+    );
+    const impacts = await fetchAllRows(db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds));
+    const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = byMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      // Same-group players ranked by rank_in_position, paired 1st-vs-1st,
+      // 2nd-vs-2nd, etc. within each broad group.
+      for (const group of ['G', 'D', 'M', 'F']) {
+        const hGroup = homeLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
+        const aGroup = awayLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
+        for (let i = 0; i < Math.min(hGroup.length, aGroup.length); i++) {
+          const hp = hGroup[i], ap = aGroup[i];
+          const hScore = impactMap.get(`${match.id}:${hp.player_id}`) ?? 50;
+          const aScore = impactMap.get(`${match.id}:${ap.player_id}`) ?? 50;
+          const advantageScore = Math.round(Math.max(-100, Math.min(100, hScore - aScore)));
+          const advantageType = Math.abs(advantageScore) < 8 ? 'EVEN' : advantageScore > 0 ? 'HOME_FAVOURED' : 'AWAY_FAVOURED';
+
+          rows.push({
+            match_id: match.id, player_id: hp.player_id, opponent_player_id: ap.player_id,
+            advantage_score: advantageScore, advantage_type: advantageType,
+            matchup_notes: `${group} zone pairing (rank ${i + 1})`,
+            calculated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    const written = await upsertChunked('player_matchup', rows, 'match_id,player_id,opponent_player_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processPlayerMatchup completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPlayerMatchup failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
