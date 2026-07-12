@@ -6,6 +6,13 @@ import { syncAllTeamsPlayers, syncTeamPlayers, syncTeamsByCountries, syncSquadsF
 import { syncSquadsForTrackedLeagues, syncSquadsByCountries, syncSingleTeamSquad, syncSquadsForMatches, resolveTeamsFromMatches } from './jobs/syncSquadSofaScore';
 import { processFormForRecentMatches, processFormBackfill } from './jobs/processForm';
 import { processTeamFixtureLoad, processTeamLocations, processTeamTravelLoad, processMatchTravelIntelligence, processTeamIntelligencePartial, processMatchIntelligencePartial, processTeamStrengthRatings, processTeamVenuePerformance, processPlayerIntelligence, processPredictedLineups, processStartingXIStrength, processMatchSignals, processLeagueIntelligence, processFixtureDifficulty, processTeamMomentum, processDashboardSummary, processScorelinePredictions, processPlayerMatchLoad, processNetBattleIndex } from './jobs/processDbOnly';
+import {
+  processTeamFormQuality, processTeamBettingIntelligence, processHTFTProbabilities,
+  processPlayerMatchImpact, processMatchPerformanceComparison, processTeamVersatility,
+  processFormationMatchup, processPositionAdaptability, processTacticalFlexibility,
+  processSubstitutionImpact, processSquadDepthComparison, processTeamMotivation,
+  processMatchImpactSummary,
+} from './jobs/processExtendedIntelligence';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
 import { syncPlayerSeasonStatistics, syncTeamSeasonStatistics } from './jobs/syncSeasonStatistics';
@@ -747,6 +754,47 @@ async function handleCommand(command: string, ...args: string[]) {
         const nbsi = await processNetBattleIndex();
         logger.info({ ...nbsi }, '[L5.6] ✓ net battle index');
 
+        // ── LAYER 5.8 ── EXTENDED INTELLIGENCE SUITE. Dependency order:
+        //   form-quality (needs match_results + team_strength_ratings only)
+        //     -> betting-intelligence (needs team_season_statistics + form_index)
+        //     -> ht-ft (independent — match_results half-time columns only)
+        //     -> team-motivation (needs form-quality + momentum + venue)
+        //     -> the match-scoped group, all needing match_predicted_lineups
+        //        (L5, already run above): player-match-impact, team-versatility,
+        //        formation-matchup, position-adaptability, tactical-flexibility,
+        //        substitution-impact (also needs L5.7 xiStrength's
+        //        player_strength_score), squad-depth-comparison
+        //     -> match-performance-comparison (needs betting-intelligence +
+        //        form-quality + momentum, all above)
+        //     -> match-impact-summary (needs team-motivation, above)
+        logger.info('[L5.8/3] Extended intelligence suite (13 processors)...');
+        const formQuality = await processTeamFormQuality();
+        logger.info({ ...formQuality }, '[L5.8] ✓ team form quality');
+        const bettingIntel = await processTeamBettingIntelligence();
+        logger.info({ ...bettingIntel }, '[L5.8] ✓ team betting intelligence');
+        const htft = await processHTFTProbabilities();
+        logger.info({ ...htft }, '[L5.8] ✓ HT/FT probabilities');
+        const teamMotivation = await processTeamMotivation();
+        logger.info({ ...teamMotivation }, '[L5.8] ✓ team motivation');
+        const playerMatchImpact = await processPlayerMatchImpact();
+        logger.info({ ...playerMatchImpact }, '[L5.8] ✓ player match impact');
+        const teamVersatilityMatch = await processTeamVersatility();
+        logger.info({ ...teamVersatilityMatch }, '[L5.8] ✓ team versatility (per-match)');
+        const formationMatchup = await processFormationMatchup();
+        logger.info({ ...formationMatchup }, '[L5.8] ✓ formation matchup');
+        const positionAdaptability = await processPositionAdaptability();
+        logger.info({ ...positionAdaptability }, '[L5.8] ✓ position adaptability');
+        const tacticalFlexibility = await processTacticalFlexibility();
+        logger.info({ ...tacticalFlexibility }, '[L5.8] ✓ tactical flexibility');
+        const substitutionImpact = await processSubstitutionImpact();
+        logger.info({ ...substitutionImpact }, '[L5.8] ✓ substitution impact');
+        const squadDepthComparison = await processSquadDepthComparison();
+        logger.info({ ...squadDepthComparison }, '[L5.8] ✓ squad depth comparison');
+        const matchPerformanceComparison = await processMatchPerformanceComparison();
+        logger.info({ ...matchPerformanceComparison }, '[L5.8] ✓ match performance comparison');
+        const matchImpactSummary = await processMatchImpactSummary();
+        logger.info({ ...matchImpactSummary }, '[L5.8] ✓ match impact summary');
+
         // ── LAYER 6 ── Needs everything above — dashboard aggregate stats ───
         logger.info('[L6/3] Dashboard summary (needs all prior layers)...');
         const dashboardSummary = await processDashboardSummary();
@@ -756,7 +804,10 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info({
           durationSeconds: elapsed,
           form, fixture, locs, travel, matchTravel, momentum, fixtureDiff,
-          strength, venue, teamIntel, playerIntel, leagueIntel, matchIntel, matchSignals, predictedLineups, xiStrength, scorelines, dashboardSummary,
+          strength, venue, teamIntel, playerIntel, leagueIntel, matchIntel, matchSignals, predictedLineups, xiStrength, scorelines, nbsi,
+          formQuality, bettingIntel, htft, teamMotivation, playerMatchImpact, teamVersatilityMatch, formationMatchup,
+          positionAdaptability, tacticalFlexibility, substitutionImpact, squadDepthComparison, matchPerformanceComparison, matchImpactSummary,
+          dashboardSummary,
         }, '━━━ process:all-db complete in ' + elapsed + 's ━━━');
         break;
       }
@@ -862,6 +913,86 @@ async function handleCommand(command: string, ...args: string[]) {
           strength, venue, teamIntel, playerIntel, matchIntel,
           predictedLineups, scorelines, nbsi, dashboardSummary,
         }, `━━━ process:all-db:* complete in ${elapsed}s (scope: ${modeLabel}) ━━━`);
+        break;
+      }
+
+      // ── EXTENDED INTELLIGENCE SUITE (see processExtendedIntelligence.ts) ──
+      case 'process:form-quality': {
+        logger.info('Computing team form quality (opponent-adjusted)...');
+        const r = await processTeamFormQuality();
+        logger.info(r, 'Team form quality complete');
+        break;
+      }
+      case 'process:betting-intelligence': {
+        logger.info('Computing team betting intelligence from season statistics...');
+        const r = await processTeamBettingIntelligence();
+        logger.info(r, 'Team betting intelligence complete');
+        break;
+      }
+      case 'process:ht-ft': {
+        logger.info('Computing half-time/full-time probabilities...');
+        const r = await processHTFTProbabilities();
+        logger.info(r, 'HT/FT probabilities complete');
+        break;
+      }
+      case 'process:player-match-impact': {
+        logger.info('Computing player match impact...');
+        const r = await processPlayerMatchImpact();
+        logger.info(r, 'Player match impact complete');
+        break;
+      }
+      case 'process:match-performance-comparison': {
+        logger.info('Computing match performance comparison...');
+        const r = await processMatchPerformanceComparison();
+        logger.info(r, 'Match performance comparison complete');
+        break;
+      }
+      case 'process:team-versatility': {
+        logger.info('Computing team versatility (per-match)...');
+        const r = await processTeamVersatility();
+        logger.info(r, 'Team versatility complete');
+        break;
+      }
+      case 'process:formation-matchup': {
+        logger.info('Computing formation matchup...');
+        const r = await processFormationMatchup();
+        logger.info(r, 'Formation matchup complete');
+        break;
+      }
+      case 'process:position-adaptability': {
+        logger.info('Computing position adaptability...');
+        const r = await processPositionAdaptability();
+        logger.info(r, 'Position adaptability complete');
+        break;
+      }
+      case 'process:tactical-flexibility': {
+        logger.info('Computing tactical flexibility...');
+        const r = await processTacticalFlexibility();
+        logger.info(r, 'Tactical flexibility complete');
+        break;
+      }
+      case 'process:substitution-impact': {
+        logger.info('Computing substitution impact...');
+        const r = await processSubstitutionImpact();
+        logger.info(r, 'Substitution impact complete');
+        break;
+      }
+      case 'process:squad-depth-comparison': {
+        logger.info('Computing squad depth comparison...');
+        const r = await processSquadDepthComparison();
+        logger.info(r, 'Squad depth comparison complete');
+        break;
+      }
+      case 'process:team-motivation': {
+        logger.info('Computing team motivation (league-table context)...');
+        const r = await processTeamMotivation();
+        logger.info(r, 'Team motivation complete');
+        break;
+      }
+      case 'process:match-impact-summary': {
+        logger.info('Computing match impact summary...');
+        const r = await processMatchImpactSummary();
+        logger.info(r, 'Match impact summary complete');
         break;
       }
 
