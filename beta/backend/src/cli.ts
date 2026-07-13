@@ -14,6 +14,11 @@ import {
   processMatchImpactSummary, processPlayerVersatility,
   processTeamMatchImpact, processMatchImpactAdvantage, processMatchKeyBattles,
   processMatchPositionalMatchups, processMatchTacticalAdvantages, processPlayerMatchup,
+  processMatchWeather, processTeamPlayingStyle, processTeamStrengthDashboard,
+  processTeamStrengths, processTeamWeaknesses, processTeamTacticalVariations,
+  processFormationAnalysis, processFormationOptions, processSquadDepth,
+  processPositionDepthComparison, processVersatilityAdvantage, processInjuryAdaptability,
+  processPositionCoverage,
 } from './jobs/processExtendedIntelligence';
 import { archiveReadinessSnapshot, linkReadinessResults, refreshLeagueGapAnalytics, archiveReadinessSnapshotForDate } from './jobs/archiveReadinessHistory';
 import { syncDateMasterFeed, syncDateRange } from './jobs/syncDateMasterFeed';
@@ -827,6 +832,44 @@ async function handleCommand(command: string, ...args: string[]) {
         const playerMatchup = await processPlayerMatchup();
         logger.info({ ...playerMatchup }, '[L5.9] ✓ player matchup');
 
+        // ── LAYER 5.10 ── 13 processors for tables that existed (scaffold
+        // SQL + migration 032 constraints) but had no writer. Dependency
+        // order: weather/playing-style/strengths/weaknesses are independent
+        // of each other but need betting-intelligence + form-quality +
+        // season-stats (L5.8, above); tactical-variations and
+        // versatility-advantage need team-versatility (L5.8, above);
+        // formation-analysis must run before formation-options (reads it);
+        // squad-depth needs predicted lineups + player-intelligence (L3);
+        // position-depth-comparison / injury-adaptability / position-coverage
+        // need team_position_depth (squad-sync, upstream of process:all-db).
+        logger.info('[L5.10/3] Previously-empty table processors (13)...');
+        const matchWeather = await processMatchWeather();
+        logger.info({ ...matchWeather }, '[L5.10] ✓ match weather (synthetic climate-zone estimation)');
+        const teamPlayingStyle = await processTeamPlayingStyle();
+        logger.info({ ...teamPlayingStyle }, '[L5.10] ✓ team playing style');
+        const teamStrengthDashboard = await processTeamStrengthDashboard();
+        logger.info({ ...teamStrengthDashboard }, '[L5.10] ✓ team strength dashboard');
+        const teamStrengths = await processTeamStrengths();
+        logger.info({ ...teamStrengths }, '[L5.10] ✓ team strengths');
+        const teamWeaknesses = await processTeamWeaknesses();
+        logger.info({ ...teamWeaknesses }, '[L5.10] ✓ team weaknesses');
+        const teamTacticalVariations = await processTeamTacticalVariations();
+        logger.info({ ...teamTacticalVariations }, '[L5.10] ✓ team tactical variations');
+        const formationAnalysis = await processFormationAnalysis();
+        logger.info({ ...formationAnalysis }, '[L5.10] ✓ formation analysis');
+        const formationOptions = await processFormationOptions();
+        logger.info({ ...formationOptions }, '[L5.10] ✓ formation options');
+        const squadDepth = await processSquadDepth();
+        logger.info({ ...squadDepth }, '[L5.10] ✓ squad depth');
+        const positionDepthComparison = await processPositionDepthComparison();
+        logger.info({ ...positionDepthComparison }, '[L5.10] ✓ position depth comparison');
+        const versatilityAdvantage = await processVersatilityAdvantage();
+        logger.info({ ...versatilityAdvantage }, '[L5.10] ✓ versatility advantage');
+        const injuryAdaptability = await processInjuryAdaptability();
+        logger.info({ ...injuryAdaptability }, '[L5.10] ✓ injury adaptability');
+        const positionCoverage = await processPositionCoverage();
+        logger.info({ ...positionCoverage }, '[L5.10] ✓ position coverage');
+
         // ── LAYER 6 ── Needs everything above — dashboard aggregate stats ───
         logger.info('[L6/3] Dashboard summary (needs all prior layers)...');
         const dashboardSummary = await processDashboardSummary();
@@ -840,6 +883,8 @@ async function handleCommand(command: string, ...args: string[]) {
           formQuality, bettingIntel, htft, teamMotivation, playerVersatility, playerMatchImpact, teamVersatilityMatch, formationMatchup,
           positionAdaptability, tacticalFlexibility, substitutionImpact, squadDepthComparison, matchPerformanceComparison, matchImpactSummary,
           teamMatchImpact, matchImpactAdvantage, matchKeyBattles, matchPositionalMatchups, matchTacticalAdvantages, playerMatchup,
+          matchWeather, teamPlayingStyle, teamStrengthDashboard, teamStrengths, teamWeaknesses, teamTacticalVariations,
+          formationAnalysis, formationOptions, squadDepth, positionDepthComparison, versatilityAdvantage, injuryAdaptability, positionCoverage,
           dashboardSummary,
         }, '━━━ process:all-db complete in ' + elapsed + 's ━━━');
         break;
@@ -1128,6 +1173,85 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing match impact summary...');
         const r = await processMatchImpactSummary();
         logger.info(r, 'Match impact summary complete');
+        break;
+      }
+
+      case 'process:match-weather': {
+        logger.info('Computing match weather (SYNTHETIC — no live API)...');
+        const r = await processMatchWeather();
+        logger.info(r, 'Match weather complete');
+        break;
+      }
+      case 'process:team-playing-style': {
+        logger.info('Computing team playing style...');
+        const r = await processTeamPlayingStyle();
+        logger.info(r, 'Team playing style complete');
+        break;
+      }
+      case 'process:team-strength-dashboard': {
+        logger.info('Computing team strength dashboard...');
+        const r = await processTeamStrengthDashboard();
+        logger.info(r, 'Team strength dashboard complete');
+        break;
+      }
+      case 'process:team-strengths': {
+        logger.info('Computing team strengths...');
+        const r = await processTeamStrengths();
+        logger.info(r, 'Team strengths complete');
+        break;
+      }
+      case 'process:team-weaknesses': {
+        logger.info('Computing team weaknesses...');
+        const r = await processTeamWeaknesses();
+        logger.info(r, 'Team weaknesses complete');
+        break;
+      }
+      case 'process:team-tactical-variations': {
+        logger.info('Computing team tactical variations...');
+        const r = await processTeamTacticalVariations();
+        logger.info(r, 'Team tactical variations complete');
+        break;
+      }
+      case 'process:formation-analysis': {
+        logger.info('Computing formation analysis (per match/team)...');
+        const r = await processFormationAnalysis();
+        logger.info(r, 'Formation analysis complete');
+        break;
+      }
+      case 'process:formation-options': {
+        logger.info('Computing formation options (needs formation-analysis first)...');
+        const r = await processFormationOptions();
+        logger.info(r, 'Formation options complete');
+        break;
+      }
+      case 'process:squad-depth': {
+        logger.info('Computing squad depth (per match/team)...');
+        const r = await processSquadDepth();
+        logger.info(r, 'Squad depth complete');
+        break;
+      }
+      case 'process:position-depth-comparison': {
+        logger.info('Computing position depth comparison...');
+        const r = await processPositionDepthComparison();
+        logger.info(r, 'Position depth comparison complete');
+        break;
+      }
+      case 'process:versatility-advantage': {
+        logger.info('Computing versatility advantage (needs team-versatility first)...');
+        const r = await processVersatilityAdvantage();
+        logger.info(r, 'Versatility advantage complete');
+        break;
+      }
+      case 'process:injury-adaptability': {
+        logger.info('Computing injury adaptability...');
+        const r = await processInjuryAdaptability();
+        logger.info(r, 'Injury adaptability complete');
+        break;
+      }
+      case 'process:position-coverage': {
+        logger.info('Computing position coverage...');
+        const r = await processPositionCoverage();
+        logger.info(r, 'Position coverage complete');
         break;
       }
 
@@ -1515,6 +1639,19 @@ Commands:
     archive:link-results             Fill result columns on snapshots whose match has finished
     analytics:refresh-league-gap     Rebuild per-league gap-accuracy aggregates for the analytics page
     process:net-battle-index         Net Battle Index — z-score normalized category comparison, no hand-picked weights, no verdict
+    process:match-weather            SYNTHETIC weather (climate-zone estimate, no live API) — for UI readiness
+    process:team-playing-style       Possession/passing/attacking/defensive identity per team
+    process:team-strength-dashboard  Single-row rating rollup per team
+    process:team-strengths           2-4 rows/team of standout strengths (delete+insert, no unique key)
+    process:team-weaknesses          2-4 rows/team of standout weaknesses (delete+insert, no unique key)
+    process:team-tactical-variations Formation history + patterns from this window's predicted lineups
+    process:formation-analysis       Per match/team formation detection — run BEFORE formation-options
+    process:formation-options        Match-level formation comparison — needs formation-analysis
+    process:squad-depth              Per match/team bench quality, age profile, experience distribution
+    process:position-depth-comparison  Per match/position home vs away depth comparison
+    process:versatility-advantage    Per match versatility comparison — needs team-versatility (L5.8) first
+    process:injury-adaptability      Per match injury-resilience comparison
+    process:position-coverage        Per team/position primary+secondary player coverage
     process:player-match-load        Derive per-match player minutes from season stats (proxy, run before process:player-intelligence)
     process:player-intelligence      Player fatigue/load/importance + goal dependency + injury impact
     process:injury-risk              REMOVED - fatigue now blends real load, see process:player-intelligence
