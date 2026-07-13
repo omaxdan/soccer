@@ -2,8 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
-  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty,
-  getKeyPlayers, getRecentForm,
+  getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty, getTeamKeyPlayers, getTeamRecentForm,
 } from "@/lib/queries";
 import { computePerformance } from "@/lib/performance";
 import { computeTeamProfile, type MarketRead } from "@/lib/teamProfile";
@@ -13,7 +12,9 @@ import { BarMeter } from "@/components/Meters";
 import { MatchCard } from "@/components/MatchCard";
 import { Tabs } from "@/components/Tabs";
 import { InsightList, SignalGrid } from "@/components/PerformanceIntel";
-import { n0, n1, pct, km, money, dependencyVerdict, positionLabel, difficultyBand, confidenceBand } from "@/lib/intel";
+import { n0, n1, pct, km, money, dependencyVerdict, positionLabel, difficultyBand } from "@/lib/intel";
+import { Explain } from "@/components/Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 
 export const dynamic = "force-dynamic";
 
@@ -30,13 +31,13 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const team = await getTeamBySlug(slug);
   if (!team) notFound();
 
-  const { intel, betting: bettingIntelRow, motivation, goalDep, injury, formQuality, venue, momentum, depth } = await getTeamIntel(team.id);
+  const { intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility } = await getTeamIntel(team.id);
   const [upcoming, seasonStats, difficulty, keyPlayers, recentForm] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
     getFixtureDifficulty(team.id),
-    getKeyPlayers(team.id, 10),
-    getRecentForm(team.id, 6),
+    getTeamKeyPlayers(team.id),
+    getTeamRecentForm(team.id),
   ]);
   const perf = seasonStats ? computePerformance(seasonStats) : null;
   const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf });
@@ -46,14 +47,14 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const overview = (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <ScoreTile label="Team quality" value={profile.quality.overall} big />
-        <ScoreTile label="Readiness" value={intel?.readiness_score ?? null} />
+        <ScoreTile label="Team quality" value={profile.quality.overall} big explain="team_quality_score" />
+        <ScoreTile label="Readiness" value={intel?.readiness_score ?? null} explain="readiness" />
         <ScoreTile label="Predictability" value={profile.predictability} />
         <ScoreTile label="Volatility" value={profile.volatility} invert />
       </div>
       <Panel title="Quality breakdown">
-        <BarRow label="Attack" value={profile.quality.attack} color="var(--amber)" />
-        <BarRow label="Defence" value={profile.quality.defence} color="var(--cool)" />
+        <BarRow label="Attack" value={profile.quality.attack} color="var(--amber)" explain="attack_rating" />
+        <BarRow label="Defence" value={profile.quality.defence} color="var(--cool)" explain="defence_rating" />
         <BarRow label="Squad depth" value={profile.quality.squad} color="var(--edge)" />
       </Panel>
       {perf?.style && (
@@ -74,26 +75,32 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
           </div>
         </Panel>
       )}
-      {motivation && motivation.overall_motivation_score != null && (
-        <Panel title="Motivation">
-          <div className="flex items-center justify-between">
-            <StatCell label="Overall" value={n0(motivation.overall_motivation_score)} sub="/100" color={confidenceBand(motivation.overall_motivation_score).color} />
-            <StatCell label="Band" value={motivation.motivation_band ?? "—"} color={confidenceBand(motivation.overall_motivation_score).color} />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-5">
-            {[
-              ["Momentum", motivation.momentum_factor],
-              ["Quality", motivation.quality_factor],
-              ["Venue", motivation.venue_factor],
-              ["Freshness", motivation.fatigue_factor],
-              ["External", motivation.external_motivation],
-            ].map(([lbl, v]) => (
-              <div key={lbl as string} className="rounded border border-line bg-raised/40 p-2 text-center">
-                <div className="mono text-[0.5rem] tracking-wide text-faint">{lbl}</div>
-                <div className="mono text-[0.75rem] font-bold tnum">{n0(v as number | null)}</div>
-              </div>
+      {keyPlayers.length > 0 && (
+        <Panel title="Key players">
+          <p className="mono mb-2 text-[0.6rem] text-faint">Ranked by importance to the team (goal/assist share, minutes, rating) — not tied to any single fixture.</p>
+          <ul className="space-y-2.5">
+            {keyPlayers.map((p) => (
+              <li key={p.id} className="flex items-center gap-3">
+                <span className="mono w-6 shrink-0 text-center text-[0.7rem] text-faint tnum">{p.jersey_number ?? "—"}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[0.8rem] font-medium">{p.short_name ?? p.name}</span>
+                    {p.current_injury && <span className="mono shrink-0 rounded bg-risk/15 px-1.5 py-0.5 text-[0.55rem] font-semibold text-risk">OUT</span>}
+                  </div>
+                  <span className="mono text-[0.6rem] text-faint">{p.position ? positionLabel(p.position) : ""}</span>
+                </div>
+                {(p.goal_share_pct != null || p.assist_share_pct != null) && (
+                  <span className="mono shrink-0 text-[0.62rem] text-muted">
+                    {p.goal_share_pct != null && `${Math.round(p.goal_share_pct)}% goals`}
+                    {p.goal_share_pct != null && p.assist_share_pct != null && " · "}
+                    {p.assist_share_pct != null && `${Math.round(p.assist_share_pct)}% ast`}
+                  </span>
+                )}
+                <div className="w-20 shrink-0"><BarMeter value={p.importance_score} max={100} color="var(--amber)" height={6} /></div>
+                <span className="mono w-7 shrink-0 text-right text-[0.72rem] font-semibold text-amber tnum">{n0(p.importance_score)}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         </Panel>
       )}
     </div>
@@ -112,7 +119,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
         <Empty note="shots" />
       )}
       {goalDep && (
-        <Panel title="Goal distribution">
+        <Panel title="Goal distribution" explain="goal_dependency">
           <div className="mono grid grid-cols-3 gap-2 text-[0.7rem] text-muted">
             <span>Total <span className="text-text">{n0(goalDep.total_goals)}</span></span>
             <span>Top scorer <span className="text-text">{n0(goalDep.top_scorer_goals)}</span></span>
@@ -152,33 +159,6 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   // ── SQUAD ──
   const squad = (
     <div className="space-y-4">
-      {keyPlayers.length > 0 && (
-        <Panel title="Key players">
-          <div>
-            {keyPlayers.map((p) => {
-              const pi = p.intelligence;
-              return (
-                <div key={p.id} className="flex items-center gap-2.5 border-b border-line py-2 last:border-0">
-                  <span className={`mono grid h-7 w-7 shrink-0 place-items-center rounded text-[0.62rem] font-bold ${p.current_injury ? "text-risk" : "text-muted"}`} style={{ background: "var(--raised)" }}>
-                    {(p.position ?? "?").charAt(0)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[0.8rem]">{p.short_name || p.name}</span>
-                      {p.current_injury && <span className="mono shrink-0 text-[0.55rem] text-risk">{p.injury_status ?? "OUT"}</span>}
-                    </div>
-                    <div className="mono flex gap-3 text-[0.6rem] text-faint">
-                      {pi?.importance_score != null && <span>Importance <span className="text-text">{n1(pi.importance_score)}</span></span>}
-                      {pi?.readiness_score != null && <span>Readiness <span className="text-text">{n0(pi.readiness_score)}</span></span>}
-                      {pi?.goal_share_pct != null && pi.goal_share_pct > 0 && <span>Goals <span className="text-text">{n0(pi.goal_share_pct)}%</span></span>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
       {injury && (injury.injured_count ?? 0) > 0 && (
         <Panel title="Availability impact">
           <div className="grid grid-cols-3 gap-3">
@@ -221,10 +201,10 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
       {formQuality && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <ScoreTile label="Adjusted form" value={formQuality.opponent_adjusted_form} />
+            <ScoreTile label="Adjusted form" value={formQuality.opponent_adjusted_form} explain="opponent_adjusted_form" />
             <ScoreTile label="Sched strength" value={formQuality.strength_of_schedule} />
-            <ScoreTile label="Giant-killer" value={formQuality.giant_killer_score} />
-            <ScoreTile label="Flat-track" value={formQuality.flat_track_bully_score} invert />
+            <ScoreTile label="Giant-killer" value={formQuality.giant_killer_score} explain="giant_killer_score" />
+            <ScoreTile label="Flat-track" value={formQuality.flat_track_bully_score} invert explain="flat_track_bully_score" />
           </div>
           {profile.tier && (
             <Panel title="Performance by opponent tier">
@@ -257,30 +237,36 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
           <div className="mt-2"><BarMeter value={momentum.momentum_score} color="var(--edge)" height={8} /></div>
         </Panel>
       )}
-      {recentForm.length > 0 && (
-        <Panel title="Recent form">
-          <div>
-            {recentForm.map((m, idx) => {
-              const dt = m.match_date ? new Date(m.match_date) : null;
-              const resultColor = m.result === "W" ? "var(--edge)" : m.result === "L" ? "var(--risk)" : "var(--warn)";
-              return (
-                <div key={idx} className="flex items-center gap-3 border-b border-line py-2 text-[0.72rem] last:border-0">
-                  <span
-                    className="mono grid h-6 w-6 shrink-0 place-items-center rounded-full text-[0.65rem] font-bold text-ink"
-                    style={{ background: resultColor }}
-                  >
-                    {m.result ?? "—"}
-                  </span>
-                  <span className="mono w-16 shrink-0 text-faint">{dt ? dt.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}</span>
-                  <span className="mono flex-1 text-muted">{m.is_home === true ? "Home" : m.is_home === false ? "Away" : "—"}</span>
-                  <span className="mono shrink-0 font-semibold tnum">{m.goals_for ?? "–"}–{m.goals_against ?? "–"}</span>
-                  {m.half_time_score_for != null && (
-                    <span className="mono hidden w-14 shrink-0 text-right text-[0.6rem] text-faint sm:block">HT {m.half_time_score_for}-{m.half_time_score_against}</span>
-                  )}
-                </div>
-              );
-            })}
+      {motivation && (
+        <Panel title="Motivation">
+          <div className="mb-2 flex items-center justify-between">
+            <StatCell label="Overall" value={n0(motivation.overall_motivation_score)} sub="/100" />
+            <span className="mono text-[0.65rem] font-semibold uppercase tracking-wide" style={{ color: motivation.motivation_band === "HIGH" ? "var(--edge)" : motivation.motivation_band === "VERY_LOW" || motivation.motivation_band === "LOW" ? "var(--risk)" : "var(--warn)" }}>
+              {motivation.motivation_band ?? "—"}
+            </span>
           </div>
+          <p className="mono mb-2 text-[0.6rem] text-faint">League-table context (title race / relegation battle) — distinct from per-fixture motivation shown on the match page.</p>
+          <div className="grid grid-cols-3 gap-3">
+            <ScoreTile label="Momentum" value={motivation.momentum_factor} />
+            <ScoreTile label="Quality" value={motivation.quality_factor} />
+            <ScoreTile label="External" value={motivation.external_motivation} />
+          </div>
+        </Panel>
+      )}
+      {versatility && (
+        <Panel title="Tactical versatility">
+          <p className="mono mb-2 text-[0.6rem] text-faint">From the most recently computed predicted lineup — a per-match snapshot, not a rolling average.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreTile label="Overall" value={versatility.overall_versatility_score} />
+            <ScoreTile label="Formation flex" value={versatility.formation_flexibility_score} />
+          </div>
+          {versatility.preferred_formations && versatility.preferred_formations.length > 0 && (
+            <div className="mono mt-3 flex flex-wrap gap-2 text-[0.65rem] text-muted">
+              {versatility.preferred_formations.map((f) => (
+                <span key={f} className="rounded-term border border-line bg-raised px-2 py-0.5">{f}</span>
+              ))}
+            </div>
+          )}
         </Panel>
       )}
     </div>
@@ -291,10 +277,10 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
     <div className="space-y-4">
       <Panel title="Betting profile">
         <div className="space-y-3">
-          <MarketRow label="Winner market" read={profile.betting.winner} />
-          <MarketRow label="Goals market" read={profile.betting.goals} />
-          <MarketRow label="BTTS" read={profile.betting.btts} />
-          <MarketRow label="Cards" read={profile.betting.cards} />
+          <MarketRow label="Winner market" read={profile.betting.winner} explain="winner_market_score" />
+          <MarketRow label="Goals market" read={profile.betting.goals} explain="goals_market_score" />
+          <MarketRow label="BTTS" read={profile.betting.btts} explain="btts_score" />
+          <MarketRow label="Cards" read={profile.betting.cards} explain="cards_market_score" />
         </div>
         <div className="mono mt-4 flex items-center justify-between border-t border-line pt-3 text-[0.7rem]">
           <span className="text-muted">Predictability <span className="text-text">{profile.predictability}</span></span>
@@ -313,6 +299,37 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   // ── FIXTURES ──
   const fixtures = (
     <div className="space-y-4">
+      {recentForm.length > 0 && (
+        <Panel title="Recent form">
+          <ul className="space-y-2">
+            {recentForm.map((m, idx) => {
+              const resultColor = m.result === "W" ? "var(--edge)" : m.result === "L" ? "var(--risk)" : "var(--warn)";
+              return (
+                <li key={idx} className="flex items-center gap-3 border-b border-line py-1.5 last:border-0">
+                  <span className="mono grid h-5 w-5 shrink-0 place-items-center rounded-[3px] text-[0.65rem] font-bold" style={{ color: resultColor, background: `color-mix(in srgb, ${resultColor} 16%, transparent)` }}>{m.result}</span>
+                  <span className="mono w-16 shrink-0 text-[0.62rem] text-faint">{new Date(m.match_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                  <span className="mono text-[0.55rem] uppercase text-faint">{m.is_home == null ? "" : m.is_home ? "H" : "A"}</span>
+                  <span className="mono ml-auto text-[0.8rem] font-semibold tnum">{m.goals_for ?? "—"}–{m.goals_against ?? "—"}</span>
+                  {m.half_time_score_for != null && m.half_time_score_against != null && (
+                    <span className="mono text-[0.6rem] text-faint">(HT {m.half_time_score_for}-{m.half_time_score_against})</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mono mt-3 border-t border-line pt-2.5 text-[0.68rem] leading-relaxed text-muted">
+            {(() => {
+              const bttsCount = recentForm.filter((m) => m.btts === true).length;
+              const bttsKnown = recentForm.filter((m) => m.btts != null).length;
+              const cleanSheets = recentForm.filter((m) => (m.goals_against ?? 1) === 0).length;
+              const parts: string[] = [];
+              if (bttsKnown > 0) parts.push(`Both teams scored in ${bttsCount} of the last ${bttsKnown}`);
+              parts.push(`${cleanSheets} clean sheet${cleanSheets === 1 ? "" : "s"} in the last ${recentForm.length}`);
+              return parts.join(" · ");
+            })()}
+          </p>
+        </Panel>
+      )}
       {difficulty && (difficulty.next_5_difficulty != null || difficulty.next_10_difficulty != null) && (
         <Panel title="Fixture difficulty">
           <div className="grid grid-cols-2 gap-3">
@@ -373,29 +390,29 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
 }
 
 // ── local UI helpers ──
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, explain }: { title: string; children: React.ReactNode; explain?: GlossaryKey }) {
   return (
     <section className="panel p-4">
-      <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}</h2>
+      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}{explain && <Explain metric={explain} />}</h2>
       {children}
     </section>
   );
 }
-function ScoreTile({ label, value, big, invert, suffix, subtitle }: { label: string; value: number | null; big?: boolean; invert?: boolean; suffix?: string; subtitle?: string }) {
+function ScoreTile({ label, value, big, invert, suffix, subtitle, explain }: { label: string; value: number | null; big?: boolean; invert?: boolean; suffix?: string; subtitle?: string; explain?: GlossaryKey }) {
   const v = value ?? null;
   const color = v == null ? "var(--muted)" : (invert ? v <= 35 : v >= 65) ? "var(--edge)" : (invert ? v <= 60 : v >= 45) ? "var(--warn)" : "var(--risk)";
   return (
     <div className="panel-raised p-3">
-      <div className="label-cap">{label}</div>
+      <div className="label-cap flex items-center">{label}{explain && <Explain metric={explain} />}</div>
       <div className={`mono mt-1 font-bold leading-none tnum ${big ? "text-2xl" : "text-xl"}`} style={{ color }}>{v == null ? "—" : `${v}${suffix ?? ""}`}</div>
       {subtitle && <div className="mono text-[0.55rem] text-faint">{subtitle}</div>}
     </div>
   );
 }
-function BarRow({ label, value, color }: { label: string; value: number | null; color: string }) {
+function BarRow({ label, value, color, explain }: { label: string; value: number | null; color: string; explain?: GlossaryKey }) {
   return (
     <div className="mb-2.5 flex items-center gap-3 last:mb-0">
-      <span className="mono w-24 shrink-0 text-[0.65rem] uppercase tracking-wide text-muted">{label}</span>
+      <span className="mono flex w-24 shrink-0 items-center text-[0.65rem] uppercase tracking-wide text-muted">{label}{explain && <Explain metric={explain} />}</span>
       <BarMeter value={value} color={color} height={8} />
       <span className="mono w-8 text-right text-[0.7rem] text-text tnum">{n0(value)}</span>
     </div>
@@ -421,10 +438,10 @@ function TierCell({ label, ppg }: { label: string; ppg: number | null }) {
     </div>
   );
 }
-function MarketRow({ label, read }: { label: string; read: MarketRead }) {
+function MarketRow({ label, read, explain }: { label: string; read: MarketRead; explain?: GlossaryKey }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-28 shrink-0 text-[0.8rem]">{label}</span>
+      <span className="flex w-28 shrink-0 items-center text-[0.8rem]">{label}{explain && <Explain metric={explain} />}</span>
       <BarMeter value={read.score} color={read.color} height={7} />
       <span className="mono w-20 shrink-0 text-right text-[0.65rem] font-semibold" style={{ color: read.color }}>{read.label}</span>
     </div>

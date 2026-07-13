@@ -8,6 +8,8 @@ import { BarMeter } from "@/components/Meters";
 import { Tabs } from "@/components/Tabs";
 import { teamSlug } from "@/lib/slug";
 import { n0, n1, km, pct, difficultyBand } from "@/lib/intel";
+import { Explain } from "@/components/Explain";
+import type { GlossaryKey } from "@/lib/glossary";
 import type { TeamIntelligence, TeamLite, TournamentStanding } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +22,7 @@ export async function generateMetadata(
   return { title: l ? l.tournament.name : "League" };
 }
 
-type Row = { team: TeamLite; intel: TeamIntelligence | null; qualityScore: number | null };
+type Row = { team: TeamLite; intel: TeamIntelligence | null; betting: import("@/lib/types").TeamBettingIntelligence | null };
 
 export default async function LeagueHub({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -38,11 +40,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
 
   const powerRanking = rankBy((r) => r.intel?.form_index);
   const readinessRanking = rankBy((r) => r.intel?.readiness_score);
-  const qualityRanking = rankBy((r) => r.qualityScore);
-
-  const withDiff = teams.filter((r) => diffMap[r.team.id]?.next_5_difficulty != null);
-  const hardestFixtures = [...withDiff].sort((a, b) => (diffMap[b.team.id].next_5_difficulty ?? 0) - (diffMap[a.team.id].next_5_difficulty ?? 0)).slice(0, 5);
-  const easiestFixtures = [...withDiff].sort((a, b) => (diffMap[a.team.id].next_5_difficulty ?? 0) - (diffMap[b.team.id].next_5_difficulty ?? 0)).slice(0, 5);
+  const qualityRanking = rankBy((r) => r.betting?.team_quality_score);
 
   // ── OVERVIEW ──
   const overview = (
@@ -134,19 +132,24 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   ) : <Empty text="No teams found for this league." />;
 
   // ── POWER RANKINGS (intelligence, league-scoped) ──
-  const powerTab = (powerRanking.length > 0 || qualityRanking.length > 0) ? (
+  const powerTab = powerRanking.length > 0 ? (
     <div className="space-y-4">
       <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
-      {qualityRanking.length > 0 && <RankPanel title="Top teams by quality" rows={qualityRanking} value={(r) => r.qualityScore} color="var(--amber)" />}
-      <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} />
-      <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" />
+      <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} explain="power_ranking" />
+      <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" explain="readiness" />
+      {qualityRanking.length > 0 && (
+        <RankPanel title="Quality ranking (attack + defence)" rows={qualityRanking} value={(r) => r.betting?.team_quality_score} color="var(--warn)" explain="team_quality_score" />
+      )}
     </div>
   ) : <Empty text="Intelligence rankings still processing for this league." />;
 
-  // ── FIXTURES (difficulty) ──
-  const fixturesTab = (hardestFixtures.length > 0 || easiestFixtures.length > 0) ? (
+  // ── FIXTURES (next-5 difficulty, league-wide) ──
+  const withDifficulty = teams.filter((r) => diffMap[r.team.id]?.next_5_difficulty != null);
+  const hardestFixtures = [...withDifficulty].sort((a, b) => (diffMap[b.team.id].next_5_difficulty ?? 0) - (diffMap[a.team.id].next_5_difficulty ?? 0)).slice(0, 5);
+  const easiestFixtures = [...withDifficulty].sort((a, b) => (diffMap[a.team.id].next_5_difficulty ?? 0) - (diffMap[b.team.id].next_5_difficulty ?? 0)).slice(0, 5);
+  const fixturesTab = withDifficulty.length > 0 ? (
     <div className="space-y-4">
-      <Panel title="Hardest run of fixtures (next 5)">
+      <Panel title="Hardest run of fixtures (next 5)" explain="fixture_difficulty">
         <ol className="space-y-2">
           {hardestFixtures.map((r, idx) => {
             const band = difficultyBand(diffMap[r.team.id]?.next_5_difficulty);
@@ -249,18 +252,18 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, explain }: { title: string; children: React.ReactNode; explain?: GlossaryKey }) {
   return (
     <section className="panel p-4">
-      <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}</h2>
+      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}{explain && <Explain metric={explain} />}</h2>
       {children}
     </section>
   );
 }
-function RankPanel({ title, rows, value, color = "var(--amber)" }: { title: string; rows: Row[]; value: (r: Row) => number | null | undefined; color?: string }) {
+function RankPanel({ title, rows, value, color = "var(--amber)", explain }: { title: string; rows: Row[]; value: (r: Row) => number | null | undefined; color?: string; explain?: GlossaryKey }) {
   const max = Math.max(...rows.map((r) => value(r) ?? 0), 1);
   return (
-    <Panel title={title}>
+    <Panel title={title} explain={explain}>
       <ol className="space-y-2">
         {rows.map((r, idx) => (
           <li key={r.team.id} className="flex items-center gap-2.5">

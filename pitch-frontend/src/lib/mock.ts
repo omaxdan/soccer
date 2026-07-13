@@ -450,30 +450,44 @@ export const MOCK_FIXTURE_DIFFICULTY: Record<number, TeamFixtureDifficulty> = {
   2: { team_id: 2, next_5_difficulty: 71, next_10_difficulty: 68, next_5_matches: 5, next_10_matches: 10 },
 };
 
-// ── Key players (demo) ────────────────────────────────────
-export const MOCK_KEY_PLAYERS: Record<number, PlayerLite[]> = {
+// ── Key players (demo) — shape matches getTeamKeyPlayers' return type ────
+export const MOCK_KEY_PLAYERS: Record<number, {
+  id: number; name: string; short_name: string | null; position: string | null;
+  jersey_number: number | null; current_injury: boolean | null;
+  importance_score: number | null; readiness_score: number | null; fatigue_score: number | null;
+  goal_share_pct: number | null; assist_share_pct: number | null; versatility_score: number | null;
+}[]> = {
   2: [
-    { id: 901, name: "Rickson Alves", short_name: "R. Alves", position: "F", current_injury: false, market_value: 620000,
-      intelligence: { player_id: 901, readiness_score: 68, fatigue_score: 42, importance_score: 27.3, load_index: 60, minutes_last_30_days: 720, matches_last_30_days: 8, goal_share_pct: 35, assist_share_pct: 12, player_strength_score: 71 } },
-    { id: 902, name: "Wagner Balotelli", short_name: "W. Balotelli", position: "M", current_injury: false, market_value: 410000,
-      intelligence: { player_id: 902, readiness_score: 74, fatigue_score: 38, importance_score: 21.1, load_index: 55, minutes_last_30_days: 690, matches_last_30_days: 8, goal_share_pct: 10, assist_share_pct: 24, player_strength_score: 64 } },
-    { id: 903, name: "Diego Torres", short_name: "D. Torres", position: "D", current_injury: true, market_value: 280000,
-      intelligence: { player_id: 903, readiness_score: 40, fatigue_score: 61, importance_score: 15.4, load_index: 48, minutes_last_30_days: 340, matches_last_30_days: 4, goal_share_pct: 0, assist_share_pct: 3, player_strength_score: 58 } },
+    { id: 901, name: "Rickson Alves", short_name: "R. Alves", position: "F", jersey_number: 9, current_injury: false,
+      importance_score: 27.3, readiness_score: 68, fatigue_score: 42, goal_share_pct: 35, assist_share_pct: 12, versatility_score: 38 },
+    { id: 902, name: "Wagner Balotelli", short_name: "W. Balotelli", position: "M", jersey_number: 8, current_injury: false,
+      importance_score: 21.1, readiness_score: 74, fatigue_score: 38, goal_share_pct: 10, assist_share_pct: 24, versatility_score: 55 },
+    { id: 903, name: "Diego Torres", short_name: "D. Torres", position: "D", jersey_number: 4, current_injury: true,
+      importance_score: 15.4, readiness_score: 40, fatigue_score: 61, goal_share_pct: 0, assist_share_pct: 3, versatility_score: 22 },
   ],
 };
 
-// ── Recent form (demo) ────────────────────────────────────
-export const MOCK_RECENT_FORM: Record<number, import("./types").TeamFormMatch[]> = {
+// ── Recent form (demo) — shape matches TeamRecentFormRow ─────────────────
+export const MOCK_RECENT_FORM: Record<number, {
+  match_date: string; result: string; goals_for: number | null; goals_against: number | null;
+  points: number | null; is_home: boolean | null; btts: boolean | null;
+  half_time_score_for: number | null; half_time_score_against: number | null;
+}[]> = {
   2: [
-    { result: "L", goals_for: 0, goals_against: 1, points: 0, match_date: "2026-07-06T19:00:00Z", is_home: true, btts: false, half_time_score_for: 0, half_time_score_against: 1 },
-    { result: "L", goals_for: 0, goals_against: 1, points: 0, match_date: "2026-06-29T19:00:00Z", is_home: false, btts: false, half_time_score_for: null, half_time_score_against: null },
-    { result: "W", goals_for: 4, goals_against: 0, points: 3, match_date: "2026-06-22T19:00:00Z", is_home: true, btts: false, half_time_score_for: 2, half_time_score_against: 0 },
-    { result: "L", goals_for: 0, goals_against: 1, points: 0, match_date: "2026-06-15T19:00:00Z", is_home: true, btts: false, half_time_score_for: 0, half_time_score_against: 1 },
-    { result: "W", goals_for: 3, goals_against: 0, points: 3, match_date: "2026-06-08T19:00:00Z", is_home: false, btts: false, half_time_score_for: 2, half_time_score_against: 0 },
+    { match_date: "2026-07-06T19:00:00Z", result: "L", goals_for: 0, goals_against: 1, points: 0, is_home: true, btts: false, half_time_score_for: 0, half_time_score_against: 1 },
+    { match_date: "2026-06-29T19:00:00Z", result: "L", goals_for: 0, goals_against: 1, points: 0, is_home: false, btts: false, half_time_score_for: null, half_time_score_against: null },
+    { match_date: "2026-06-22T19:00:00Z", result: "W", goals_for: 4, goals_against: 0, points: 3, is_home: true, btts: false, half_time_score_for: 2, half_time_score_against: 0 },
+    { match_date: "2026-06-15T19:00:00Z", result: "L", goals_for: 0, goals_against: 1, points: 0, is_home: true, btts: false, half_time_score_for: 0, half_time_score_against: 1 },
+    { match_date: "2026-06-08T19:00:00Z", result: "W", goals_for: 3, goals_against: 0, points: 3, is_home: false, btts: false, half_time_score_for: 2, half_time_score_against: 0 },
   ],
 };
 
-export const MOCK_MOTIVATION: Record<number, import("./types").TeamMotivation> = {
-  2: { team_id: 2, overall_motivation_score: 64, motivation_band: "GOOD", momentum_factor: 50, quality_factor: 55, venue_factor: 44, fatigue_factor: 86, external_motivation: 85 },
-  1: { team_id: 1, overall_motivation_score: 78, motivation_band: "HIGH", momentum_factor: 74, quality_factor: 80, venue_factor: 66, fatigue_factor: 70, external_motivation: 60 },
+// ── Motivation (demo) — shape matches TeamMotivationData ──────────────────
+export const MOCK_MOTIVATION: Record<number, {
+  team_id: number; overall_motivation_score: number | null; motivation_band: string | null;
+  momentum_factor: number | null; quality_factor: number | null;
+  venue_factor: number | null; external_motivation: number | null;
+}> = {
+  2: { team_id: 2, overall_motivation_score: 64, motivation_band: "GOOD", momentum_factor: 50, quality_factor: 55, venue_factor: 44, external_motivation: 85 },
+  1: { team_id: 1, overall_motivation_score: 78, motivation_band: "HIGH", momentum_factor: 74, quality_factor: 80, venue_factor: 66, external_motivation: 60 },
 };
