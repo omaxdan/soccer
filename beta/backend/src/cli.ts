@@ -974,6 +974,17 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info(r, 'Player match impact complete');
         break;
       }
+      case 'process:player-match-impact:ids': {
+        const matchIds = args.filter((a: string) => /^\d+$/.test(a)).map((a: string) => Number(a));
+        if (matchIds.length === 0) {
+          logger.error('Usage: process:player-match-impact:ids <id1> <id2> ...');
+          break;
+        }
+        logger.info({ matchIds }, 'Computing player match impact for specific matches...');
+        const r = await processPlayerMatchImpact({ matchIds });
+        logger.info(r, 'Player match impact (specific IDs) complete');
+        break;
+      }
       case 'process:player-versatility': {
         logger.info('Computing player versatility...');
         const r = await processPlayerVersatility();
@@ -998,6 +1009,17 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info(r, 'Match key battles complete');
         break;
       }
+      case 'process:match-key-battles:ids': {
+        const matchIds = args.filter((a: string) => /^\d+$/.test(a)).map((a: string) => Number(a));
+        if (matchIds.length === 0) {
+          logger.error('Usage: process:match-key-battles:ids <id1> <id2> ...');
+          break;
+        }
+        logger.info({ matchIds }, 'Computing match key battles for specific matches...');
+        const r = await processMatchKeyBattles({ matchIds });
+        logger.info(r, 'Match key battles (specific IDs) complete');
+        break;
+      }
       case 'process:match-positional-matchups': {
         logger.info('Computing match positional matchups...');
         const r = await processMatchPositionalMatchups();
@@ -1020,6 +1042,33 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing match performance comparison...');
         const r = await processMatchPerformanceComparison();
         logger.info(r, 'Match performance comparison complete');
+        break;
+      }
+
+      case 'process:match-performance:ids': {
+        const matchIds = args.filter((a: string) => /^\d+$/.test(a)).map((a: string) => Number(a));
+        if (matchIds.length === 0) {
+          logger.error('Usage: process:match-performance:ids <id1> <id2> ...');
+          break;
+        }
+        logger.info({ matchIds }, 'Computing match performance comparison for specific matches...');
+        const r = await processMatchPerformanceComparison({ matchIds });
+        logger.info(r, 'Match performance comparison (specific IDs) complete');
+        break;
+      }
+
+      case 'process:match-performance:range': {
+        const from = args[0];
+        const to = args[1];
+        if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+          logger.error('Usage: process:match-performance:range YYYY-MM-DD [YYYY-MM-DD]');
+          break;
+        }
+        const opts: any = { dateFrom: from };
+        if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) opts.dateTo = to;
+        logger.info({ from, to: to || 'today' }, 'Computing match performance comparison for date range...');
+        const r = await processMatchPerformanceComparison(opts);
+        logger.info(r, 'Match performance comparison (range) complete');
         break;
       }
       case 'process:team-versatility': {
@@ -1050,6 +1099,17 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing substitution impact...');
         const r = await processSubstitutionImpact();
         logger.info(r, 'Substitution impact complete');
+        break;
+      }
+      case 'process:substitution-impact:ids': {
+        const matchIds = args.filter((a: string) => /^\d+$/.test(a)).map((a: string) => Number(a));
+        if (matchIds.length === 0) {
+          logger.error('Usage: process:substitution-impact:ids <id1> <id2> ...');
+          break;
+        }
+        logger.info({ matchIds }, 'Computing substitution impact for specific matches...');
+        const r = await processSubstitutionImpact({ matchIds });
+        logger.info(r, 'Substitution impact (specific IDs) complete');
         break;
       }
       case 'process:squad-depth-comparison': {
