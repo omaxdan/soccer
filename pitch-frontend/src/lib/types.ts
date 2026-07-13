@@ -131,6 +131,14 @@ export interface MatchRow {
   performanceComparison?: MatchPerformanceComparison | null;
   substitutionImpact?: SubstitutionImpact | null;
   squadDepthComparison?: MatchSquadDepthComparison | null;
+  // Team context for per-signal "why" evidence — real numbers already
+  // fetched for the two teams, not a match-specific derivation.
+  homeBetting?: TeamBettingIntelligence | null;
+  awayBetting?: TeamBettingIntelligence | null;
+  homeIntel?: TeamIntelligence | null;
+  awayIntel?: TeamIntelligence | null;
+  homeSeasonStats?: import("./performance").TeamSeasonStats | null;
+  awaySeasonStats?: import("./performance").TeamSeasonStats | null;
 }
 
 export interface TeamMatchImpact {

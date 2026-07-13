@@ -125,7 +125,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
   const [intel, opp, risk, signals, weather, result, halfTime,
     teamImpactHome, teamImpactAway, impactAdvantage, keyBattlesRaw,
     positionalMatchupsRaw, tacticalAdvantages, performanceComparison,
-    substitutionImpact, squadDepthComparison] = await Promise.all([
+    substitutionImpact, squadDepthComparison,
+    homeBetting, awayBetting, homeIntel, awayIntel, homeSeasonStats, awaySeasonStats] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
@@ -142,6 +143,13 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     client.from("match_performance_comparison").select("*").eq("match_id", id).maybeSingle(),
     client.from("substitution_impact").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_squad_depth_comparison").select("*").eq("match_id", id).maybeSingle(),
+    // Team context for per-signal "why" evidence.
+    client.from("team_betting_intelligence").select("*").eq("team_id", homeTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
+    client.from("team_betting_intelligence").select("*").eq("team_id", awayTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
+    client.from("team_intelligence").select("*").eq("team_id", homeTeam.id).maybeSingle(),
+    client.from("team_intelligence").select("*").eq("team_id", awayTeam.id).maybeSingle(),
+    client.from("team_season_statistics").select("*").eq("team_id", homeTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
+    client.from("team_season_statistics").select("*").eq("team_id", awayTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   const keyBattles = ((keyBattlesRaw.data as any[]) ?? []).map((b) => ({
@@ -171,6 +179,12 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     performanceComparison: (performanceComparison.data as any) ?? null,
     substitutionImpact: (substitutionImpact.data as any) ?? null,
     squadDepthComparison: (squadDepthComparison.data as any) ?? null,
+    homeBetting: (homeBetting.data as any) ?? null,
+    awayBetting: (awayBetting.data as any) ?? null,
+    homeIntel: (homeIntel.data as any) ?? null,
+    awayIntel: (awayIntel.data as any) ?? null,
+    homeSeasonStats: (homeSeasonStats.data as any) ?? null,
+    awaySeasonStats: (awaySeasonStats.data as any) ?? null,
   };
 }
 

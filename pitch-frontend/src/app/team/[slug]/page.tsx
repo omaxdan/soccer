@@ -5,7 +5,10 @@ import {
   getTeamBySlug, getTeamIntel, getTeamUpcoming, getTeamSeasonStats, getFixtureDifficulty, getTeamKeyPlayers, getTeamRecentForm,
 } from "@/lib/queries";
 import { computePerformance } from "@/lib/performance";
-import { computeTeamProfile, type MarketRead } from "@/lib/teamProfile";
+import {
+  computeTeamProfile, type MarketRead,
+  motivationBandColor, motivationBandLabel, versatilityBandColor, versatilityBandLabel,
+} from "@/lib/teamProfile";
 import { Crest } from "@/components/Crest";
 import { StatCell, FormString } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
@@ -40,7 +43,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
     getTeamRecentForm(team.id),
   ]);
   const perf = seasonStats ? computePerformance(seasonStats) : null;
-  const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf });
+  const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf, motivation, versatility });
   const dep = dependencyVerdict(goalDep);
 
   // ── OVERVIEW ──
@@ -237,32 +240,39 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
           <div className="mt-2"><BarMeter value={momentum.momentum_score} color="var(--edge)" height={8} /></div>
         </Panel>
       )}
-      {motivation && (
+      {profile.motivation && (
         <Panel title="Motivation">
           <div className="mb-2 flex items-center justify-between">
-            <StatCell label="Overall" value={n0(motivation.overall_motivation_score)} sub="/100" />
-            <span className="mono text-[0.65rem] font-semibold uppercase tracking-wide" style={{ color: motivation.motivation_band === "HIGH" ? "var(--edge)" : motivation.motivation_band === "VERY_LOW" || motivation.motivation_band === "LOW" ? "var(--risk)" : "var(--warn)" }}>
-              {motivation.motivation_band ?? "—"}
+            <StatCell label="Overall" value={n0(profile.motivation.overall)} sub="/100" />
+            <span className="mono text-[0.65rem] font-semibold uppercase tracking-wide" style={{ color: motivationBandColor(profile.motivation.band) }}>
+              {motivationBandLabel(profile.motivation.band)}
             </span>
           </div>
           <p className="mono mb-2 text-[0.6rem] text-faint">League-table context (title race / relegation battle) — distinct from per-fixture motivation shown on the match page.</p>
           <div className="grid grid-cols-3 gap-3">
-            <ScoreTile label="Momentum" value={motivation.momentum_factor} />
-            <ScoreTile label="Quality" value={motivation.quality_factor} />
-            <ScoreTile label="External" value={motivation.external_motivation} />
+            <ScoreTile label="Momentum" value={profile.motivation.factors.momentum} />
+            <ScoreTile label="Quality" value={profile.motivation.factors.quality} />
+            <ScoreTile label="External" value={profile.motivation.factors.external} />
           </div>
         </Panel>
       )}
-      {versatility && (
+      {profile.versatility && (
         <Panel title="Tactical versatility">
-          <p className="mono mb-2 text-[0.6rem] text-faint">From the most recently computed predicted lineup — a per-match snapshot, not a rolling average.</p>
-          <div className="grid grid-cols-2 gap-3">
-            <ScoreTile label="Overall" value={versatility.overall_versatility_score} />
-            <ScoreTile label="Formation flex" value={versatility.formation_flexibility_score} />
+          <div className="mb-2 flex items-center justify-between">
+            <p className="mono text-[0.6rem] text-faint">From the most recently computed predicted lineup — a per-match snapshot, not a rolling average.</p>
+            {profile.versatility.band && (
+              <span className="mono shrink-0 text-[0.65rem] font-semibold uppercase tracking-wide" style={{ color: versatilityBandColor(profile.versatility.band) }}>
+                {versatilityBandLabel(profile.versatility.band)}
+              </span>
+            )}
           </div>
-          {versatility.preferred_formations && versatility.preferred_formations.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            <ScoreTile label="Overall" value={profile.versatility.overall} />
+            <ScoreTile label="Formation flex" value={profile.versatility.formationFlex} />
+          </div>
+          {profile.versatility.preferredFormations && profile.versatility.preferredFormations.length > 0 && (
             <div className="mono mt-3 flex flex-wrap gap-2 text-[0.65rem] text-muted">
-              {versatility.preferred_formations.map((f) => (
+              {profile.versatility.preferredFormations.map((f) => (
                 <span key={f} className="rounded-term border border-line bg-raised px-2 py-0.5">{f}</span>
               ))}
             </div>

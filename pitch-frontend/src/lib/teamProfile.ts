@@ -1,6 +1,6 @@
 import type {
   TeamIntelligence, TeamFormQuality, TeamVenuePerformance, TeamGoalDependency,
-  TeamBettingIntelligence,
+  TeamBettingIntelligence, TeamMotivationData, TeamVersatilityLatest,
 } from "./types";
 import type { PerformanceIntel } from "./performance";
 import { regressionRisk } from "./performance";
@@ -25,6 +25,21 @@ export interface TeamProfile {
     bigChanceConversion: number | null; goalCreation: number | null; goalPrevention: number | null;
     cleanSheet: number | null; source: "precomputed" | "derived";
   };
+  motivation?: {
+    overall: number | null;
+    band: string | null;
+    factors: {
+      momentum: number | null; quality: number | null; venue: number | null;
+      external: number | null;
+    };
+  };
+  versatility?: {
+    overall: number | null;
+    tactical: number | null;
+    formationFlex: number | null;
+    band: string | null;
+    preferredFormations: string[] | null;
+  };
 }
 
 function marketRead(score: number): MarketRead {
@@ -44,8 +59,10 @@ export function computeTeamProfile(input: {
   venue: TeamVenuePerformance | null;
   goalDep: TeamGoalDependency | null;
   perf: PerformanceIntel | null;
+  motivation?: TeamMotivationData | null;
+  versatility?: TeamVersatilityLatest | null;
 }): TeamProfile {
-  const { intel, betting, formQuality, venue, goalDep, perf } = input;
+  const { intel, betting, formQuality, venue, goalDep, perf, motivation, versatility } = input;
 
   // Prefer precomputed team_betting_intelligence ratings; fall back to the
   // runtime performance-engine derivation, then to team_intelligence.
@@ -112,5 +129,84 @@ export function computeTeamProfile(input: {
         cleanSheet: findDefenseInsight("clean_sheet"), source: "derived",
       };
 
-  return { quality: { overall, attack, defence, squad }, predictability, volatility, sustainability, betting: { winner, goals, btts, cards }, tier, bettingIntel };
+  const motivationProfile: TeamProfile["motivation"] = motivation
+    ? {
+        overall: motivation.overall_motivation_score,
+        band: motivation.motivation_band,
+        factors: {
+          momentum: motivation.momentum_factor,
+          quality: motivation.quality_factor,
+          venue: motivation.venue_factor,
+          external: motivation.external_motivation,
+        },
+      }
+    : undefined;
+
+  const versatilityProfile: TeamProfile["versatility"] = versatility
+    ? {
+        overall: versatility.overall_versatility_score,
+        tactical: versatility.tactical_versatility_score,
+        formationFlex: versatility.formation_flexibility_score,
+        band: versatility.versatility_band,
+        preferredFormations: versatility.preferred_formations,
+      }
+    : undefined;
+
+  return { quality: { overall, attack, defence, squad }, predictability, volatility, sustainability, betting: { winner, goals, btts, cards }, tier, bettingIntel, motivation: motivationProfile, versatility: versatilityProfile };
+}
+
+// ── Band color/label helpers ──────────────────────────────
+// Plain, terminal-style labels — no emoji, matching the rest of the
+// product's badge conventions (difficultyBand, confidenceBand, etc).
+
+export function motivationBandColor(band: string | null): string {
+  switch (band) {
+    case "HIGH":
+    case "GOOD":
+      return "var(--edge)";
+    case "LOW":
+    case "VERY_LOW":
+      return "var(--risk)";
+    case "NEUTRAL":
+      return "var(--warn)";
+    default:
+      return "var(--muted)";
+  }
+}
+
+export function motivationBandLabel(band: string | null): string {
+  switch (band) {
+    case "HIGH": return "High";
+    case "GOOD": return "Good";
+    case "NEUTRAL": return "Neutral";
+    case "LOW": return "Low";
+    case "VERY_LOW": return "Very low";
+    default: return "Unknown";
+  }
+}
+
+export function versatilityBandColor(band: string | null): string {
+  switch (band) {
+    case "EXCELLENT":
+    case "GOOD":
+      return "var(--edge)";
+    case "POOR":
+    case "RIGID":
+      return "var(--risk)";
+    case "AVERAGE":
+      return "var(--warn)";
+    default:
+      return "var(--muted)";
+  }
+}
+
+export function versatilityBandLabel(band: string | null): string {
+  switch (band) {
+    case "EXCELLENT": return "Excellent";
+    case "GOOD": return "Good";
+    case "AVERAGE": return "Average";
+    case "POOR": return "Poor";
+    case "RIGID": return "Rigid";
+    default: return "Unknown";
+  }
 }

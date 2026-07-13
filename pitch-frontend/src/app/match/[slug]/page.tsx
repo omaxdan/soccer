@@ -6,7 +6,7 @@ import { Crest } from "@/components/Crest";
 import { StatCell } from "@/components/Primitives";
 import { OpportunityRiskMeter, RiskBadge, BarMeter, VersusBar } from "@/components/Meters";
 import { ScorecardRow } from "@/components/Scorecard";
-import { SignalRow } from "@/components/SignalLedger";
+import { SignalRow, type SignalMatchContext } from "@/components/SignalLedger";
 import { AvailabilityList } from "@/components/Lineups";
 import { PitchLineup } from "@/components/Pitch";
 import { PitchCoverage } from "@/components/PitchCoverage";
@@ -43,6 +43,38 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const k = kickoff(m.date);
   const i = m.intel;
   const lean = bestLean(m);
+
+  // Real per-team numbers already fetched for this match — used only as a
+  // fallback source of evidence when a signal's own `drivers` text is
+  // empty. Nothing here is computed for this purpose; it's a reshuffle of
+  // values already on the page.
+  const matchContext: SignalMatchContext = {
+    homeReadiness: i?.home_readiness ?? null,
+    awayReadiness: i?.away_readiness ?? null,
+    readinessGap: i?.readiness_gap ?? null,
+    homeSquadStability: i?.home_squad_stability ?? null,
+    awaySquadStability: i?.away_squad_stability ?? null,
+    homeForm: m.homeIntel?.form_index ?? null,
+    awayForm: m.awayIntel?.form_index ?? null,
+    homeAttack: m.homeBetting?.attack_rating ?? null,
+    awayAttack: m.awayBetting?.attack_rating ?? null,
+    homeDefence: m.homeBetting?.defence_rating ?? null,
+    awayDefence: m.awayBetting?.defence_rating ?? null,
+    homeTravel: i?.home_travel_distance_km ?? null,
+    awayTravel: i?.away_travel_distance_km ?? null,
+    homeRest: i?.home_rest_days ?? null,
+    awayRest: i?.away_rest_days ?? null,
+    homeFatigue: m.homeIntel?.fatigue_index ?? null,
+    awayFatigue: m.awayIntel?.fatigue_index ?? null,
+    homeQuality: m.homeBetting?.team_quality_score ?? null,
+    awayQuality: m.awayBetting?.team_quality_score ?? null,
+    homeGoalsPerGame: m.homeSeasonStats?.goals_scored && m.homeSeasonStats?.matches
+      ? m.homeSeasonStats.goals_scored / m.homeSeasonStats.matches : null,
+    awayGoalsPerGame: m.awaySeasonStats?.goals_scored && m.awaySeasonStats?.matches
+      ? m.awaySeasonStats.goals_scored / m.awaySeasonStats.matches : null,
+    predictedHomeGoals: i?.predicted_home_goals ?? null,
+    predictedAwayGoals: i?.predicted_away_goals ?? null,
+  };
   const scorelines = normScorelines(i?.predicted_scorelines ?? null);
   const totalGoals = (i?.predicted_home_goals ?? 0) + (i?.predicted_away_goals ?? 0);
 
@@ -103,7 +135,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     return (
       <Panel title={title}>
         {list.length > 0 ? (
-          <div>{list.map((s, idx) => <SignalRow key={s.id ?? idx} signal={s} matchConfidence={{ score: i?.confidence_score ?? null, band: i?.confidence_band ?? null }} />)}</div>
+          <div>{list.map((s, idx) => <SignalRow key={s.id ?? idx} signal={s} matchConfidence={{ score: i?.confidence_score ?? null, band: i?.confidence_band ?? null }} matchContext={matchContext} />)}</div>
         ) : (
           <p className="mono py-2 text-[0.68rem] leading-relaxed text-faint">{emptyText}</p>
         )}
