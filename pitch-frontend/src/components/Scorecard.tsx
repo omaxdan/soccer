@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { VersusBar } from "./Meters";
 import { Explain } from "./Explain";
 import type { GlossaryKey } from "@/lib/glossary";
@@ -20,7 +21,7 @@ export function ScorecardRow({
   home: number | null | undefined;
   away: number | null | undefined;
   format?: (v: number | null | undefined) => string;
-  why?: string;
+  why?: ReactNode;
   invert?: boolean; // when lower is better (fatigue, injury, travel)
   homeColor?: string;
   awayColor?: string;

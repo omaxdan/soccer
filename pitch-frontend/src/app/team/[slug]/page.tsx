@@ -45,6 +45,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const perf = seasonStats ? computePerformance(seasonStats) : null;
   const profile = computeTeamProfile({ intel, betting: bettingIntelRow, formQuality, venue, goalDep, perf, motivation, versatility });
   const dep = dependencyVerdict(goalDep);
+  const marketValue = depth.length > 0 ? depth.reduce((sum, d) => sum + (d.total_market_value ?? 0), 0) : null;
 
   // ── OVERVIEW ──
   const overview = (
@@ -76,6 +77,12 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
             <StatCell label="Advantage score" value={n0(venue.venue_advantage_score)} sub="/100" color="var(--amber)" />
             {intel?.last_5_results && <div className="text-right"><div className="label-cap mb-1">Form</div><FormString results={intel.last_5_results} /></div>}
           </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 sm:grid-cols-4">
+            <StatCell label="Home win%" value={pct(venue.home_win_pct)} color="var(--edge)" />
+            <StatCell label="Away win%" value={pct(venue.away_win_pct)} color="var(--cool)" />
+            <StatCell label="Home PPG" value={n1(venue.home_points_per_game)} />
+            <StatCell label="Away PPG" value={n1(venue.away_points_per_game)} />
+          </div>
         </Panel>
       )}
       {keyPlayers.length > 0 && (
@@ -99,6 +106,9 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
                     {p.assist_share_pct != null && `${Math.round(p.assist_share_pct)}% ast`}
                   </span>
                 )}
+                {p.readiness_score != null && (
+                  <span className="mono shrink-0 text-[0.6rem] text-faint">RDY {n0(p.readiness_score)}</span>
+                )}
                 <div className="w-20 shrink-0"><BarMeter value={p.importance_score} max={100} color="var(--amber)" height={6} /></div>
                 <span className="mono w-7 shrink-0 text-right text-[0.72rem] font-semibold text-amber tnum">{n0(p.importance_score)}</span>
               </li>
@@ -120,6 +130,17 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
         <Panel title="Attacking intelligence"><InsightList insights={perf.attack} /></Panel>
       ) : (
         <Empty note="shots" />
+      )}
+      {(profile.bettingIntel.finishing != null || profile.bettingIntel.shotAccuracy != null ||
+        profile.bettingIntel.conversion != null || profile.bettingIntel.bigChanceConversion != null ||
+        profile.bettingIntel.goalCreation != null) && (
+        <Panel title="Shot & finishing intelligence">
+          {profile.bettingIntel.finishing != null && <BarRow label="Finishing" value={profile.bettingIntel.finishing} color="var(--amber)" explain="finishing_efficiency" />}
+          {profile.bettingIntel.shotAccuracy != null && <BarRow label="Shot accuracy" value={profile.bettingIntel.shotAccuracy} color="var(--edge)" explain="shot_accuracy" />}
+          {profile.bettingIntel.conversion != null && <BarRow label="Conversion" value={profile.bettingIntel.conversion} color="var(--amber)" explain="shot_conversion_rate" />}
+          {profile.bettingIntel.bigChanceConversion != null && <BarRow label="Big chances" value={profile.bettingIntel.bigChanceConversion} color="var(--warn)" explain="big_chance_conversion" />}
+          {profile.bettingIntel.goalCreation != null && <BarRow label="Goal creation" value={profile.bettingIntel.goalCreation} color="var(--edge)" explain="goal_creation_score" />}
+        </Panel>
       )}
       {goalDep && (
         <Panel title="Goal distribution" explain="goal_dependency">
@@ -156,6 +177,12 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
       ) : (
         <Empty note="shots against" />
       )}
+      {(profile.bettingIntel.goalPrevention != null || profile.bettingIntel.cleanSheet != null) && (
+        <Panel title="Goal prevention">
+          {profile.bettingIntel.goalPrevention != null && <BarRow label="Goal prevention" value={profile.bettingIntel.goalPrevention} color="var(--edge)" explain="goal_prevention_score" />}
+          {profile.bettingIntel.cleanSheet != null && <BarRow label="Clean sheet" value={profile.bettingIntel.cleanSheet} color="var(--edge)" explain="clean_sheet_reliability" />}
+        </Panel>
+      )}
     </div>
   );
 
@@ -179,6 +206,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
                 <span className="mono w-24 shrink-0 text-[0.65rem] uppercase tracking-wide text-muted">{positionLabel(d.position_code)}</span>
                 <BarMeter value={d.available_count} max={d.player_count || 1} color={d.injured_count > 0 ? "var(--warn)" : "var(--edge)"} height={8} />
                 <span className="mono w-14 shrink-0 text-right text-[0.65rem] text-muted tnum">{d.available_count}/{d.player_count}</span>
+                <span className="mono w-10 shrink-0 text-right text-[0.6rem] text-faint tnum">{d.player_count > 0 ? `${Math.round((d.available_count / d.player_count) * 100)}%` : "—"}</span>
                 <span className="mono hidden w-14 shrink-0 text-right text-[0.6rem] text-faint sm:block">{money(d.total_market_value)}</span>
               </li>
             ))}
@@ -382,6 +410,13 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
             <div className="text-2xl font-bold tnum" style={{ color: profile.quality.overall >= 65 ? "var(--edge)" : "var(--warn)" }}>{profile.quality.overall}</div>
           </div>
         </div>
+        <div className="mono mt-4 grid grid-cols-2 gap-3 border-t border-line pt-3 sm:grid-cols-5 sm:gap-2">
+          <StatCell label="Quality" value={profile.quality.overall} sub="/100" />
+          <StatCell label="Market value" value={marketValue != null ? money(marketValue) : "—"} />
+          <StatCell label="Readiness" value={n0(intel?.readiness_score)} sub="/100" explain="readiness" />
+          <StatCell label="Form" value={n0(intel?.form_index)} sub="/100" />
+          <StatCell label="Home win%" value={pct(venue?.home_win_pct)} />
+        </div>
       </section>
 
       <Tabs
@@ -453,6 +488,7 @@ function MarketRow({ label, read, explain }: { label: string; read: MarketRead; 
     <div className="flex items-center gap-3">
       <span className="flex w-28 shrink-0 items-center text-[0.8rem]">{label}{explain && <Explain metric={explain} />}</span>
       <BarMeter value={read.score} color={read.color} height={7} />
+      <span className="mono w-8 shrink-0 text-right text-[0.72rem] font-semibold tnum" style={{ color: read.color }}>{n0(read.score)}</span>
       <span className="mono w-20 shrink-0 text-right text-[0.65rem] font-semibold" style={{ color: read.color }}>{read.label}</span>
     </div>
   );

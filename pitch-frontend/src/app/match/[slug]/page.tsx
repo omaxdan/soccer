@@ -49,80 +49,133 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   // empty. Nothing here is computed for this purpose; it's a reshuffle of
   // values already on the page.
   const matchContext: SignalMatchContext = {
-    homeReadiness: i?.home_readiness ?? null,
-    awayReadiness: i?.away_readiness ?? null,
-    readinessGap: i?.readiness_gap ?? null,
-    homeSquadStability: i?.home_squad_stability ?? null,
-    awaySquadStability: i?.away_squad_stability ?? null,
-    homeForm: m.homeIntel?.form_index ?? null,
-    awayForm: m.awayIntel?.form_index ?? null,
-    homeAttack: m.homeBetting?.attack_rating ?? null,
-    awayAttack: m.awayBetting?.attack_rating ?? null,
-    homeDefence: m.homeBetting?.defence_rating ?? null,
-    awayDefence: m.awayBetting?.defence_rating ?? null,
-    homeTravel: i?.home_travel_distance_km ?? null,
-    awayTravel: i?.away_travel_distance_km ?? null,
-    homeRest: i?.home_rest_days ?? null,
-    awayRest: i?.away_rest_days ?? null,
-    homeFatigue: m.homeIntel?.fatigue_index ?? null,
-    awayFatigue: m.awayIntel?.fatigue_index ?? null,
-    homeQuality: m.homeBetting?.team_quality_score ?? null,
-    awayQuality: m.awayBetting?.team_quality_score ?? null,
-    homeGoalsPerGame: m.homeSeasonStats?.goals_scored && m.homeSeasonStats?.matches
-      ? m.homeSeasonStats.goals_scored / m.homeSeasonStats.matches : null,
-    awayGoalsPerGame: m.awaySeasonStats?.goals_scored && m.awaySeasonStats?.matches
-      ? m.awaySeasonStats.goals_scored / m.awaySeasonStats.matches : null,
-    predictedHomeGoals: i?.predicted_home_goals ?? null,
-    predictedAwayGoals: i?.predicted_away_goals ?? null,
-  };
+  homeReadiness: i?.home_readiness ?? null,
+  awayReadiness: i?.away_readiness ?? null,
+  readinessGap: i?.readiness_gap ?? null,
+  homeSquadStability: i?.home_squad_stability ?? null,
+  awaySquadStability: i?.away_squad_stability ?? null,
+  homeForm: m.homeIntel?.form_index ?? null,
+  awayForm: m.awayIntel?.form_index ?? null,
+  homeAttack: m.homeBetting?.attack_rating ?? null,
+  awayAttack: m.awayBetting?.attack_rating ?? null,
+  homeDefence: m.homeBetting?.defence_rating ?? null,
+  awayDefence: m.awayBetting?.defence_rating ?? null,
+  homeTravel: i?.home_travel_distance_km ?? null,
+  awayTravel: i?.away_travel_distance_km ?? null,
+  homeRest: i?.home_rest_days ?? null,
+  awayRest: i?.away_rest_days ?? null,
+  homeFatigue: m.homeIntel?.fatigue_index ?? null,
+  awayFatigue: m.awayIntel?.fatigue_index ?? null,
+  homeQuality: m.homeBetting?.team_quality_score ?? null,
+  awayQuality: m.awayBetting?.team_quality_score ?? null,
+  homeGoalsPerGame: m.homeSeasonStats?.goals_scored && m.homeSeasonStats?.matches
+    ? m.homeSeasonStats.goals_scored / m.homeSeasonStats.matches : null,
+  awayGoalsPerGame: m.awaySeasonStats?.goals_scored && m.awaySeasonStats?.matches
+    ? m.awaySeasonStats.goals_scored / m.awaySeasonStats.matches : null,
+  predictedHomeGoals: i?.predicted_home_goals ?? null,
+  predictedAwayGoals: i?.predicted_away_goals ?? null,
+  // ⬇️ THESE ARE THE CRITICAL FIELDS THAT WERE MISSING ⬇️
+  overallHomeScore: m.performanceComparison?.overall_home_score ?? null,
+  overallAwayScore: m.performanceComparison?.overall_away_score ?? null,
+  homeWinProb: i?.win_probability_home != null ? normProb(i.win_probability_home) : null,
+  awayWinProb: i?.win_probability_away != null ? normProb(i.win_probability_away) : null,
+  mostLikelyScore: m.performanceComparison?.most_likely_score ?? null,
+  homeXIStrength: i?.home_xi_strength ?? null,
+  awayXIStrength: i?.away_xi_strength ?? null,
+  homeBenchStrength: m.substitutionImpact?.home_bench_strength ?? null,
+  awayBenchStrength: m.substitutionImpact?.away_bench_strength ?? null,
+};
   const scorelines = normScorelines(i?.predicted_scorelines ?? null);
   const totalGoals = (i?.predicted_home_goals ?? 0) + (i?.predicted_away_goals ?? 0);
 
-  // ── OVERVIEW ──
-  const overview = (
-    <div className="space-y-4">
-      {(m.opportunity || m.risk) && (
-        <Panel title="Executive decision">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCell label="Opportunity" value={`${m.opportunity?.opportunity_score ?? "—"}`} color={opportunityColor(m.opportunity?.opportunity_score)} sub="/100" explain="opportunity_score" />
-            <StatCell label="Risk" value={m.risk ? `${m.risk.risk_score}` : "—"} sub={m.risk?.risk_band ?? ""} />
-            <StatCell label="Predictability" value={m.risk ? `${m.risk.predictability_score}` : "—"} sub="/100" />
-            <StatCell label="Confidence" value={i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"} sub={i?.confidence_band ?? ""} />
+  // ── OVERVIEW ── 
+const overview = (
+  <div className="space-y-4">
+    {(m.opportunity || m.risk) && (
+      <Panel title="Executive decision">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCell 
+            label="Opportunity" 
+            value={m.opportunity?.opportunity_score != null ? `${m.opportunity.opportunity_score}` : "—"} 
+            color={opportunityColor(m.opportunity?.opportunity_score)} 
+            sub="/100" 
+            explain="opportunity_score" 
+          />
+          <StatCell 
+            label="Risk" 
+            value={m.risk ? `${m.risk.risk_score}` : "—"} 
+            sub={m.risk?.risk_band ?? ""} 
+          />
+          <StatCell 
+            label="Predictability" 
+            value={m.risk ? `${m.risk.predictability_score}` : "—"} 
+            sub="/100" 
+          />
+          <StatCell 
+            label="Confidence" 
+            value={i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"} 
+            sub={i?.confidence_band ?? ""} 
+          />
+        </div>
+        {m.opportunity?.opportunity_score != null && m.risk?.risk_score != null && (
+          <div className="mt-3">
+            <OpportunityRiskMeter 
+              opportunity={m.opportunity?.opportunity_score} 
+              risk={m.risk?.risk_score} 
+            />
           </div>
-          <div className="mt-3"><OpportunityRiskMeter opportunity={m.opportunity?.opportunity_score} risk={m.risk?.risk_score} /></div>
-          {lean && (
-            <div className="mt-3 flex items-center gap-2 rounded-term border border-line bg-raised p-3">
-              <span className="label-cap">Best lean</span>
-              <span className="mono text-sm font-semibold text-amber">{lean.pick}</span>
-            </div>
-          )}
-          {m.opportunity?.executive_brief && <p className="mt-3 text-[0.85rem] leading-relaxed text-text">{m.opportunity.executive_brief}</p>}
-        </Panel>
-      )}
-      {m.opportunity && m.opportunity.signals.length > 0 && (
-        <Panel title="Top signals">
-          <ul className="space-y-2">
-            {m.opportunity.signals.slice(0, 3).map((s) => (
-              <li key={s.key} className="flex items-start gap-2 text-[0.8rem] leading-snug"><span className="text-edge">+</span><span className="text-muted">{s.text}</span></li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-      {m.opportunity && Object.keys(m.opportunity.score_components).length > 0 && (
-        <Panel title="Where the edge comes from">
-          <ul className="space-y-2.5">
-            {Object.entries(m.opportunity.score_components).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([key, v]) => (
+        )}
+        {lean && (
+          <div className="mt-3 flex items-center gap-2 rounded-term border border-line bg-raised p-3">
+            <span className="label-cap">Best lean</span>
+            <span className="mono text-sm font-semibold text-amber">{lean.pick}</span>
+          </div>
+        )}
+        {m.opportunity?.executive_brief && (
+          <p className="mt-3 text-[0.85rem] leading-relaxed text-text">{m.opportunity.executive_brief}</p>
+        )}
+      </Panel>
+    )}
+    
+    {m.opportunity && m.opportunity.signals && m.opportunity.signals.length > 0 && (
+      <Panel title="Top signals">
+        <ul className="space-y-2">
+          {m.opportunity.signals.slice(0, 3).map((s) => (
+            <li key={s.key} className="flex items-start gap-2 text-[0.8rem] leading-snug">
+              <span className="text-edge">+</span>
+              <span className="text-muted">{s.text}</span>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+    )}
+    
+    {m.opportunity?.score_components && Object.keys(m.opportunity.score_components).length > 0 && (
+      <Panel title="Where the edge comes from">
+        <ul className="space-y-2.5">
+          {Object.entries(m.opportunity.score_components)
+            .filter(([, v]) => v > 0)
+            .sort((a, b) => b[1] - a[1])
+            .map(([key, v]) => (
               <li key={key} className="flex items-center gap-3">
-                <span className="mono w-36 shrink-0 text-[0.65rem] uppercase tracking-wide text-muted">{key.replace(/_/g, " ")}</span>
+                <span className="mono w-36 shrink-0 text-[0.65rem] uppercase tracking-wide text-muted">
+                  {key.replace(/_/g, " ")}
+                </span>
                 <BarMeter value={v} max={30} color="var(--amber)" height={6} />
                 <span className="mono w-6 text-right text-[0.7rem] text-text tnum">{v}</span>
               </li>
             ))}
-          </ul>
-        </Panel>
-      )}
-    </div>
-  );
+        </ul>
+      </Panel>
+    )}
+    
+    {!m.opportunity && !m.risk && !i && (
+      <div className="panel p-4 text-center">
+        <p className="mono text-[0.7rem] text-muted">No intelligence available for this match yet.</p>
+      </div>
+    )}
+  </div>
+);
 
   // ── SIGNALS (4 categories: Match Result, Half-Time, Goals & Cards, Competition) ──
   const byGroup = (keys: string[]) => (m.signals ?? []).filter((s) => keys.includes(s.signal_group));
@@ -210,11 +263,42 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
       {m.performanceComparison && (
         <Panel title="Zone-by-zone comparison">
           <p className="mono mb-2 text-[0.6rem] text-faint">A separate model view — attack/defence above compares strength ratings; this breaks the match into five tactical zones.</p>
-          <ScorecardRow label="Attacking" home={m.performanceComparison.attacking_home_score} away={m.performanceComparison.attacking_away_score} />
-          <ScorecardRow label="Defensive" home={m.performanceComparison.defensive_home_score} away={m.performanceComparison.defensive_away_score} />
-          <ScorecardRow label="Midfield" home={m.performanceComparison.midfield_home_score} away={m.performanceComparison.midfield_away_score} />
-          <ScorecardRow label="Tactical" home={m.performanceComparison.tactical_home_score} away={m.performanceComparison.tactical_away_score} />
-          <ScorecardRow label="Set piece" home={m.performanceComparison.set_piece_home_score} away={m.performanceComparison.set_piece_away_score} />
+          <ScorecardRow label="Attacking" home={m.performanceComparison.attacking_home_score} away={m.performanceComparison.attacking_away_score}
+            why={<AdvChip value={m.performanceComparison.attacking_advantage} />} />
+          <ScorecardRow label="Defensive" home={m.performanceComparison.defensive_home_score} away={m.performanceComparison.defensive_away_score}
+            why={<AdvChip value={m.performanceComparison.defensive_advantage} />} />
+          <ScorecardRow label="Midfield" home={m.performanceComparison.midfield_home_score} away={m.performanceComparison.midfield_away_score}
+            why={<AdvChip value={m.performanceComparison.midfield_advantage} />} />
+          <ScorecardRow label="Tactical" home={m.performanceComparison.tactical_home_score} away={m.performanceComparison.tactical_away_score}
+            why={<AdvChip value={m.performanceComparison.tactical_advantage} />} />
+          <ScorecardRow label="Set piece" home={m.performanceComparison.set_piece_home_score} away={m.performanceComparison.set_piece_away_score}
+            why={<AdvChip value={m.performanceComparison.set_piece_advantage} />} />
+          <div className="mono mt-3 space-y-1.5 border-t border-line pt-3 text-[0.68rem] text-muted">
+            <div className="flex items-center justify-between">
+              <span>Overall advantage <span className="text-text">{n0(m.performanceComparison.overall_advantage)}</span></span>
+              {m.performanceComparison.predicted_winner_id != null && (
+                <span>
+                  Model favours{" "}
+                  <span className="text-text">
+                    {m.performanceComparison.predicted_winner_id === m.home.id ? m.home.short_name || m.home.name
+                      : m.performanceComparison.predicted_winner_id === m.away.id ? m.away.short_name || m.away.name
+                      : "—"}
+                  </span>
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              {m.performanceComparison.prediction_confidence != null && (
+                <span>Prediction confidence <span className="text-text">{Math.round(m.performanceComparison.prediction_confidence)}%</span></span>
+              )}
+              {m.performanceComparison.match_significance != null && (
+                <span>Match significance <span className="text-text">{n0(m.performanceComparison.match_significance)}</span></span>
+              )}
+              {m.performanceComparison.expected_goal_difference != null && (
+                <span>Expected goal diff <span className="text-text">{n1(m.performanceComparison.expected_goal_difference)}</span></span>
+              )}
+            </div>
+          </div>
           {m.performanceComparison.most_likely_score && (
             <div className="mono mt-3 flex items-center justify-between border-t border-line pt-3 text-[0.68rem] text-muted">
               <span>Model score lean <span className="text-text">{m.performanceComparison.most_likely_score}</span></span>
@@ -233,9 +317,53 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         <ScorecardRow label="Positional depth" home={i.home_positional_depth} away={i.away_positional_depth} />
         <ScorecardRow label="Injury burden" home={i.home_injury_score} away={i.away_injury_score} invert />
         <ScorecardRow label="Travel load" home={i.home_travel_distance_km} away={i.away_travel_distance_km} format={(v) => km(v)} invert max={2000} />
-        <ScorecardRow label="XI strength" home={i.home_xi_strength} away={i.away_xi_strength} />
+        <ScorecardRow label="XI strength" home={i.home_xi_strength} away={i.away_xi_strength} explain="xi_strength" />
         <ScorecardRow label="Strength rating" home={i.home_strength_rating} away={i.away_strength_rating} />
+        <ScorecardRow label="Venue advantage" home={i.home_venue_advantage} away={i.away_venue_advantage} />
+        {(i.motivation_gap != null || i.congestion_factor != null || i.travel_advantage_score != null) && (
+          <div className="mono mt-3 flex items-center justify-between border-t border-line pt-3 text-[0.68rem] text-muted">
+            {i.motivation_gap != null && <span>Motivation gap <span className="text-text">{n0(i.motivation_gap)}</span></span>}
+            {i.congestion_factor != null && <span>Congestion factor <span className="text-text">{n0(i.congestion_factor)}</span></span>}
+            {i.travel_advantage_score != null && <span>Travel advantage <span className="text-text">{n0(i.travel_advantage_score)}</span></span>}
+          </div>
+        )}
       </Panel>
+
+      {(m.homeBetting || m.awayBetting) && (
+        <Panel title="Betting profile comparison">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="mono flex items-center gap-1.5 text-[0.65rem] text-edge"><Crest team={m.home} size={16} /> {m.home.short_name || m.home.name}</span>
+            <span className="mono flex items-center gap-1.5 text-[0.65rem] text-cool">{m.away.short_name || m.away.name} <Crest team={m.away} size={16} /></span>
+          </div>
+          {([
+            ["Attack rating", "attack_rating", "attack_rating"],
+            ["Defence rating", "defence_rating", "defence_rating"],
+            ["Team quality", "team_quality_score", "team_quality_score"],
+            ["Finishing efficiency", "finishing_efficiency", "finishing_efficiency"],
+            ["Shot accuracy", "shot_accuracy", "shot_accuracy"],
+            ["Shot conversion", "shot_conversion_rate", "shot_conversion_rate"],
+            ["Big-chance conversion", "big_chance_conversion", "big_chance_conversion"],
+            ["Goal creation", "goal_creation_score", "goal_creation_score"],
+            ["Goal prevention", "goal_prevention_score", "goal_prevention_score"],
+            ["Clean sheet reliability", "clean_sheet_reliability", "clean_sheet_reliability"],
+            ["Consistency", "consistency_score", "consistency_score"],
+            ["Winner market", "winner_market_score", "winner_market_score"],
+            ["Goals market", "goals_market_score", "goals_market_score"],
+            ["BTTS", "btts_score", "btts_score"],
+            ["Cards market", "cards_market_score", "cards_market_score"],
+          ] as [string, keyof NonNullable<MatchRow["homeBetting"]>, GlossaryKey][])
+            .filter(([, key]) => m.homeBetting?.[key] != null || m.awayBetting?.[key] != null)
+            .map(([label, key, explain]) => (
+              <ScorecardRow
+                key={key}
+                label={label}
+                home={m.homeBetting?.[key] as number | null}
+                away={m.awayBetting?.[key] as number | null}
+                explain={explain}
+              />
+            ))}
+        </Panel>
+      )}
       {(m.teamImpact?.home || m.teamImpact?.away) && (
         <Panel title="Team match impact">
           <ScorecardRow label="Overall impact" home={m.teamImpact.home?.overall_impact_score} away={m.teamImpact.away?.overall_impact_score} />
@@ -266,6 +394,8 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
             <>
               <ScorecardRow label="Bench strength" home={m.substitutionImpact.home_bench_strength} away={m.substitutionImpact.away_bench_strength} />
               <ScorecardRow label="Substitution quality" home={m.substitutionImpact.home_substitution_quality} away={m.substitutionImpact.away_substitution_quality} />
+              <ScorecardRow label="Bench depth score" home={m.substitutionImpact.home_depth_score} away={m.substitutionImpact.away_depth_score} />
+              <ScorecardRow label="Tactical sub options" home={m.substitutionImpact.home_tactical_sub_options} away={m.substitutionImpact.away_tactical_sub_options} />
             </>
           )}
           {m.squadDepthComparison && (
@@ -434,6 +564,22 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         {(m.opportunity || m.risk) && (
           <div className="mt-4 border-t border-line pt-3"><OpportunityRiskMeter opportunity={m.opportunity?.opportunity_score} risk={m.risk?.risk_score} /></div>
         )}
+        {i && (
+          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-3 sm:grid-cols-4">
+            <StatCell
+              label="Readiness gap"
+              value={i.readiness_gap != null ? `${i.readiness_gap > 0 ? "+" : ""}${n0(i.readiness_gap)}` : "—"}
+              color={(i.readiness_gap ?? 0) !== 0 ? "var(--amber)" : undefined}
+            />
+            <StatCell
+              label="Confidence"
+              value={i.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
+              sub={i.confidence_band ?? ""}
+            />
+            <StatCell label="Net battle index" value={n1(i.net_battle_index)} />
+            <StatCell label="XI strength" value={`${n0(i.home_xi_strength)} vs ${n0(i.away_xi_strength)}`} explain="xi_strength" />
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
           <Meta label="Venue" value={m.venue ?? "—"} />
           {m.weather?.temperature_c != null && <Meta label="Weather" value={`${Math.round(m.weather.temperature_c)}°C`} />}
@@ -469,8 +615,11 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 function Panel({ title, children, explain }: { title: string; children: React.ReactNode; explain?: GlossaryKey }) {
   return (
     <section className="panel p-4">
-      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">{title}{explain && <Explain metric={explain} />}</h2>
-      {children}
+      <h2 className="mono mb-3 flex items-center text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">
+        {title}
+        {explain && <Explain metric={explain} />}
+      </h2>
+      {children || <p className="mono text-[0.6rem] text-muted">No data available</p>}
     </section>
   );
 }
@@ -495,6 +644,15 @@ function ProbRow({ label, v, color }: { label: string; v: number; color: string 
       <BarMeter value={v} color={color} height={8} />
       <span className="mono w-9 text-right text-sm font-semibold tnum" style={{ color }}>{Math.round(v)}%</span>
     </div>
+  );
+}
+function AdvChip({ value }: { value: number | null | undefined }) {
+  if (value == null || value === 0) return null;
+  const home = value >= 0;
+  return (
+    <span className="mono text-[0.65rem] font-semibold" style={{ color: home ? "var(--edge)" : "var(--cool)" }}>
+      {home ? "+" : "−"}{Math.abs(value)} {home ? "Home" : "Away"}
+    </span>
   );
 }
 function BattleRow({ label, home, away, flip }: { label: string; home: number | null; away: number | null; flip?: boolean }) {

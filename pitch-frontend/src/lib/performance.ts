@@ -145,12 +145,16 @@ export function computePerformance(s: TeamSeasonStats): PerformanceIntel {
   }
 
   // 3 · Big-chance reliability
-  const bcTotal =
-    s.big_chances ??
-    (has(s.big_chances_created) && has(s.big_chances_missed)
-      ? (s.big_chances_created ?? 0) + (s.big_chances_missed ?? 0)
-      : null);
-  if (has(bcTotal) && has(s.big_chances_missed) && bcTotal > 0) {
+  // big_chances_created is the TOTAL big chances a team had (converted +
+  // missed) — big_chances_missed is a subset of it, not an addend. Adding
+  // them would double-count missed chances and overstate the conversion
+  // rate.
+  const bcTotal = s.big_chances ?? s.big_chances_created ?? null;
+  const bcDataInconsistent =
+    has(bcTotal) && has(s.goals_scored) && (s.goals_scored as number) > bcTotal;
+  if (bcDataInconsistent) {
+    missing.push("big_chances (data inconsistent: goals exceed recorded big chances for this team)");
+  } else if (has(bcTotal) && has(s.big_chances_missed) && bcTotal > 0) {
     const converted = Math.max(0, bcTotal - (s.big_chances_missed ?? 0));
     const rate = (converted / bcTotal) * 100;
     const g = grade(rate, [55, 42, 30]);
@@ -173,7 +177,7 @@ export function computePerformance(s: TeamSeasonStats): PerformanceIntel {
   {
     const parts: number[] = [];
     if (conv != null) parts.push(clamp(conv * 100 * 6));
-    if (bcTotal && has(s.big_chances_missed)) {
+    if (bcTotal && has(s.big_chances_missed) && !bcDataInconsistent) {
       const converted = Math.max(0, bcTotal - (s.big_chances_missed ?? 0));
       parts.push(clamp((converted / bcTotal) * 100));
     }

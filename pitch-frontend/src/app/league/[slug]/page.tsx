@@ -42,16 +42,28 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const readinessRanking = rankBy((r) => r.intel?.readiness_score);
   const qualityRanking = rankBy((r) => r.betting?.team_quality_score);
 
+  const avgQuality = qualityRanking.length > 0
+    ? Math.round(qualityRanking.reduce((sum, r) => sum + (r.betting?.team_quality_score ?? 0), 0) / qualityRanking.length)
+    : null;
+  const teamsWithGoalsPerGame = table.filter((s) => (s.matches ?? 0) > 0);
+  const avgGoalsPerGame = teamsWithGoalsPerGame.length > 0
+    ? teamsWithGoalsPerGame.reduce((sum, s) => sum + (s.scores_for ?? 0) / (s.matches ?? 1), 0) / teamsWithGoalsPerGame.length
+    : null;
+  const ppgByTeam: Record<number, number | null> = {};
+  table.forEach((s) => { ppgByTeam[s.team.id] = (s.matches ?? 0) > 0 ? (s.points ?? 0) / (s.matches ?? 1) : null; });
+
   // ── OVERVIEW ──
   const overview = (
     <div className="space-y-4">
       {intel && (
         <Panel title="League conditions">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCell label="Teams" value={n0(intel.team_count)} />
             <StatCell label="Avg readiness" value={n0(intel.avg_readiness)} color="var(--edge)" />
             <StatCell label="Avg form" value={n0(intel.avg_form)} />
             <StatCell label="Avg congestion" value={n0(intel.avg_congestion)} color="var(--warn)" />
+            <StatCell label="Avg quality" value={avgQuality != null ? n0(avgQuality) : "—"} explain="team_quality_score" />
+            <StatCell label="Avg goals/game" value={avgGoalsPerGame != null ? n1(avgGoalsPerGame) : "—"} color="var(--amber)" />
           </div>
           <div className="mono mt-4 flex items-center justify-between border-t border-line pt-3 text-[0.7rem] text-muted">
             <span>Avg rest <span className="text-text">{n1(intel.avg_rest_days)}d</span></span>
@@ -138,7 +150,30 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
       <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} explain="power_ranking" />
       <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" explain="readiness" />
       {qualityRanking.length > 0 && (
-        <RankPanel title="Quality ranking (attack + defence)" rows={qualityRanking} value={(r) => r.betting?.team_quality_score} color="var(--warn)" explain="team_quality_score" />
+        <Panel title="Top teams by quality" explain="team_quality_score">
+          <div className="mono grid grid-cols-[1.5rem_1fr_repeat(4,2.75rem)] items-center gap-1 border-b border-line pb-2 text-[0.55rem] uppercase tracking-wide text-faint">
+            <span>#</span><span>Team</span>
+            <span className="text-right">Qual</span>
+            <span className="text-right">Atk</span>
+            <span className="text-right">Def</span>
+            <span className="text-right">PPG</span>
+          </div>
+          <ol>
+            {qualityRanking.map((r, idx) => (
+              <li key={r.team.id} className="mono grid grid-cols-[1.5rem_1fr_repeat(4,2.75rem)] items-center gap-1 border-b border-line py-2 text-[0.72rem] last:border-0">
+                <span className="text-faint tnum">{idx + 1}</span>
+                <Link href={`/team/${teamSlug(r.team)}`} className="flex min-w-0 items-center gap-1.5 hover:text-amber">
+                  <Crest team={r.team} size={18} />
+                  <span className="truncate">{r.team.short_name || r.team.name}</span>
+                </Link>
+                <span className="text-right font-semibold text-amber tnum">{n0(r.betting?.team_quality_score)}</span>
+                <span className="text-right tnum text-muted">{n0(r.betting?.attack_rating)}</span>
+                <span className="text-right tnum text-muted">{n0(r.betting?.defence_rating)}</span>
+                <span className="text-right tnum text-muted">{ppgByTeam[r.team.id] != null ? n1(ppgByTeam[r.team.id]) : "—"}</span>
+              </li>
+            ))}
+          </ol>
+        </Panel>
       )}
     </div>
   ) : <Empty text="Intelligence rankings still processing for this league." />;

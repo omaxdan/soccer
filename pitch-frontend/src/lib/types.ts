@@ -52,6 +52,17 @@ export interface MatchIntelligence {
   net_battle_index: number | null;
   home_xi_strength: number | null;
   away_xi_strength: number | null;
+  motivation_gap?: number | null;
+  congestion_factor?: number | null;
+  home_venue_advantage?: number | null;
+  away_venue_advantage?: number | null;
+  travel_advantage_score?: number | null;
+  home_active_competitions?: number | null;
+  away_active_competitions?: number | null;
+  home_injured_market_value?: number | null;
+  away_injured_market_value?: number | null;
+  home_available_market_value?: number | null;
+  away_available_market_value?: number | null;
 }
 
 export interface ScorelineProb {
@@ -99,6 +110,8 @@ export interface MarketSignal {
   strength: number; // typically 1..6
   drivers: string | null;
   rule_key?: string | null;
+  data_source?: string | null;
+  locked?: boolean | null;
 }
 
 export interface MatchRow {
@@ -191,6 +204,12 @@ export interface MatchPerformanceComparison {
   form_home_score: number | null; form_away_score: number | null;
   home_win_probability: number | null; draw_probability: number | null; away_win_probability: number | null;
   most_likely_score: string | null; confidence_band: string | null;
+  match_significance: number | null; prediction_confidence: number | null;
+  expected_goal_difference: number | null; predicted_winner_id: number | null;
+  overall_advantage: number | null; overall_advantage_team_id: number | null;
+  form_advantage: number | null; attacking_advantage: number | null;
+  defensive_advantage: number | null; midfield_advantage: number | null;
+  tactical_advantage: number | null; set_piece_advantage: number | null;
 }
 
 export interface SubstitutionImpact {
@@ -198,6 +217,8 @@ export interface SubstitutionImpact {
   home_substitution_quality: number | null; away_substitution_quality: number | null;
   home_game_changers: number | null; away_game_changers: number | null;
   substitution_advantage: number | null; impact_notes: string | null;
+  home_depth_score: number | null; away_depth_score: number | null;
+  home_tactical_sub_options: number | null; away_tactical_sub_options: number | null;
 }
 
 export interface MatchSquadDepthComparison {
