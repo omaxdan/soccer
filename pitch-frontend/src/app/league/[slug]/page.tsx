@@ -20,7 +20,7 @@ export async function generateMetadata(
   return { title: l ? l.tournament.name : "League" };
 }
 
-type Row = { team: TeamLite; intel: TeamIntelligence | null };
+type Row = { team: TeamLite; intel: TeamIntelligence | null; qualityScore: number | null };
 
 export default async function LeagueHub({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -38,6 +38,11 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
 
   const powerRanking = rankBy((r) => r.intel?.form_index);
   const readinessRanking = rankBy((r) => r.intel?.readiness_score);
+  const qualityRanking = rankBy((r) => r.qualityScore);
+
+  const withDiff = teams.filter((r) => diffMap[r.team.id]?.next_5_difficulty != null);
+  const hardestFixtures = [...withDiff].sort((a, b) => (diffMap[b.team.id].next_5_difficulty ?? 0) - (diffMap[a.team.id].next_5_difficulty ?? 0)).slice(0, 5);
+  const easiestFixtures = [...withDiff].sort((a, b) => (diffMap[a.team.id].next_5_difficulty ?? 0) - (diffMap[b.team.id].next_5_difficulty ?? 0)).slice(0, 5);
 
   // ── OVERVIEW ──
   const overview = (
@@ -129,13 +134,56 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   ) : <Empty text="No teams found for this league." />;
 
   // ── POWER RANKINGS (intelligence, league-scoped) ──
-  const powerTab = powerRanking.length > 0 ? (
+  const powerTab = (powerRanking.length > 0 || qualityRanking.length > 0) ? (
     <div className="space-y-4">
       <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
+      {qualityRanking.length > 0 && <RankPanel title="Top teams by quality" rows={qualityRanking} value={(r) => r.qualityScore} color="var(--amber)" />}
       <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} />
       <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" />
     </div>
   ) : <Empty text="Intelligence rankings still processing for this league." />;
+
+  // ── FIXTURES (difficulty) ──
+  const fixturesTab = (hardestFixtures.length > 0 || easiestFixtures.length > 0) ? (
+    <div className="space-y-4">
+      <Panel title="Hardest run of fixtures (next 5)">
+        <ol className="space-y-2">
+          {hardestFixtures.map((r, idx) => {
+            const band = difficultyBand(diffMap[r.team.id]?.next_5_difficulty);
+            return (
+              <li key={r.team.id} className="flex items-center gap-2.5">
+                <span className="mono w-5 shrink-0 text-[0.7rem] text-faint tnum">{idx + 1}</span>
+                <Link href={`/team/${teamSlug(r.team)}`} className="flex min-w-0 flex-1 items-center gap-2 hover:text-amber">
+                  <Crest team={r.team} size={20} />
+                  <span className="truncate text-[0.8rem]">{r.team.name}</span>
+                </Link>
+                <span className="mono shrink-0 text-[0.65rem] font-semibold" style={{ color: band.color }}>{band.label}</span>
+                <span className="mono w-10 shrink-0 text-right text-[0.65rem] text-faint tnum">{n1(diffMap[r.team.id]?.next_5_difficulty)}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </Panel>
+      <Panel title="Easiest run of fixtures (next 5)">
+        <ol className="space-y-2">
+          {easiestFixtures.map((r, idx) => {
+            const band = difficultyBand(diffMap[r.team.id]?.next_5_difficulty);
+            return (
+              <li key={r.team.id} className="flex items-center gap-2.5">
+                <span className="mono w-5 shrink-0 text-[0.7rem] text-faint tnum">{idx + 1}</span>
+                <Link href={`/team/${teamSlug(r.team)}`} className="flex min-w-0 flex-1 items-center gap-2 hover:text-amber">
+                  <Crest team={r.team} size={20} />
+                  <span className="truncate text-[0.8rem]">{r.team.name}</span>
+                </Link>
+                <span className="mono shrink-0 text-[0.65rem] font-semibold" style={{ color: band.color }}>{band.label}</span>
+                <span className="mono w-10 shrink-0 text-right text-[0.65rem] text-faint tnum">{n1(diffMap[r.team.id]?.next_5_difficulty)}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </Panel>
+    </div>
+  ) : <Empty text="Fixture difficulty not yet computed for this league's teams." />;
 
   // ── GOALS ──
   const bestForm = powerRanking.slice(0, 5);
@@ -192,6 +240,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
           { id: "standings", label: "Standings", content: standingsTab },
           { id: "teams", label: "Teams", content: teamsTab },
           { id: "power", label: "Power Rankings", content: powerTab },
+          { id: "fixtures", label: "Fixtures", content: fixturesTab },
           { id: "goals", label: "Goals", content: goals },
           { id: "markets", label: "Markets", content: markets },
         ]}

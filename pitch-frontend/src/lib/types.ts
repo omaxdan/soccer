@@ -157,6 +157,29 @@ export interface TeamMomentum {
   trend: string | null;
 }
 
+export interface TeamMotivation {
+  team_id: number;
+  overall_motivation_score: number | null;
+  motivation_band: string | null;
+  momentum_factor: number | null;
+  quality_factor: number | null;
+  venue_factor: number | null;
+  fatigue_factor: number | null;
+  external_motivation: number | null;
+}
+
+export interface TeamFormMatch {
+  result: "W" | "D" | "L" | null;
+  goals_for: number | null;
+  goals_against: number | null;
+  points: number | null;
+  match_date: string | null;
+  is_home: boolean | null;
+  btts: boolean | null;
+  half_time_score_for: number | null;
+  half_time_score_against: number | null;
+}
+
 export interface TeamGoalDependency {
   team_id: number;
   total_goals: number | null;

@@ -3,7 +3,7 @@ import type {
   MatchRow, TeamLite, MatchIntelligence, MatchOpportunity, MatchRisk,
   MarketSignal, TeamIntelligence, TeamGoalDependency, TeamInjuryImpact,
   TeamFormQuality, TeamVenuePerformance, TeamMomentum, PositionDepth,
-  PredictedLineupPlayer, LeagueIntelligence, LeagueGapSummary,
+  PredictedLineupPlayer, LeagueIntelligence, LeagueGapSummary, PlayerLite,
 } from "./types";
 import * as M from "./mock";
 import { normProb } from "./intel";
@@ -276,18 +276,25 @@ export async function getLeagueStandings(tournamentId: number): Promise<import("
 // Teams participating in a league — scoped via standings so no cross-league
 // leakage. Enriched per-team with intelligence for the Power Rankings tab.
 export async function getLeagueTeams(tournamentId: number): Promise<
-  { team: TeamLite; intel: TeamIntelligence | null }[]
+  { team: TeamLite; intel: TeamIntelligence | null; qualityScore: number | null }[]
 > {
   const standings = await getLeagueStandings(tournamentId);
   if (standings.length === 0) return [];
   const client = db();
   if (!client) {
-    return standings.map((s) => ({ team: s.team, intel: M.MOCK_TEAM_INTEL[s.team.id] ?? null }));
+    return standings.map((s) => ({ team: s.team, intel: M.MOCK_TEAM_INTEL[s.team.id] ?? null, qualityScore: null }));
   }
   const ids = standings.map((s) => s.team.id);
-  const { data: intels } = await client.from("team_intelligence").select("*").in("team_id", ids);
-  const iMap = indexBy(intels as any[], "team_id");
-  return standings.map((s) => ({ team: s.team, intel: iMap[s.team.id] ?? null }));
+  const [intels, betting] = await Promise.all([
+    client.from("team_intelligence").select("*").in("team_id", ids),
+    client.from("team_betting_intelligence").select("team_id, team_quality_score").in("team_id", ids),
+  ]);
+  const iMap = indexBy(intels.data as any[], "team_id");
+  const bMap = indexBy(betting.data as any[], "team_id");
+  return standings.map((s) => ({
+    team: s.team, intel: iMap[s.team.id] ?? null,
+    qualityScore: bMap[s.team.id]?.team_quality_score ?? null,
+  }));
 }
 
 // ── Team hub bundles ─────────────────────────────────────
@@ -301,6 +308,7 @@ export async function getTeam(id: number): Promise<TeamLite | null> {
 export async function getTeamIntel(id: number): Promise<{
   intel: TeamIntelligence | null;
   betting: import("./types").TeamBettingIntelligence | null;
+  motivation: import("./types").TeamMotivation | null;
   goalDep: TeamGoalDependency | null;
   injury: TeamInjuryImpact | null;
   formQuality: TeamFormQuality | null;
@@ -313,6 +321,7 @@ export async function getTeamIntel(id: number): Promise<{
     return {
       intel: M.MOCK_TEAM_INTEL[id] ?? null,
       betting: null,
+      motivation: M.MOCK_MOTIVATION[id] ?? null,
       goalDep: M.MOCK_GOAL_DEP[id] ?? null,
       injury: M.MOCK_INJURY_IMPACT[id] ?? null,
       formQuality: M.MOCK_FORM_QUALITY[id] ?? null,
@@ -321,10 +330,11 @@ export async function getTeamIntel(id: number): Promise<{
       depth: M.MOCK_DEPTH[id] ?? [],
     };
   }
-  const [intel, betting, goalDep, injury, formQuality, venue, momentum, depth] = await Promise.all([
+  const [intel, betting, motivation, goalDep, injury, formQuality, venue, momentum, depth] = await Promise.all([
     client.from("team_intelligence").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_betting_intelligence").select("*").eq("team_id", id)
       .order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
+    client.from("team_motivation").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_goal_dependency").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_injury_impact").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_form_quality").select("*").eq("team_id", id).maybeSingle(),
@@ -335,11 +345,43 @@ export async function getTeamIntel(id: number): Promise<{
   return {
     intel: intel.data ?? null,
     betting: (betting.data as any) ?? null,
+    motivation: (motivation.data as any) ?? null,
     goalDep: goalDep.data ?? null,
     injury: injury.data ?? null, formQuality: formQuality.data ?? null,
     venue: venue.data ?? null, momentum: momentum.data ?? null,
     depth: (depth.data as PositionDepth[]) ?? [],
   };
+}
+
+// Top players by importance (player_intelligence.importance_score). Used for
+// the team Squad tab's Key Players list.
+export async function getKeyPlayers(teamId: number, limit = 10): Promise<PlayerLite[]> {
+  const client = db();
+  if (!client) return (M.MOCK_KEY_PLAYERS[teamId] ?? []).slice(0, limit);
+  const { data } = await client
+    .from("players")
+    .select(`id, name, short_name, position, current_injury, injury_status, market_value,
+             intelligence:player_intelligence!inner(player_id, readiness_score, fatigue_score,
+               importance_score, load_index, minutes_last_30_days, matches_last_30_days,
+               goal_share_pct, assist_share_pct, player_strength_score)`)
+    .eq("team_id", teamId)
+    .order("importance_score", { referencedTable: "player_intelligence", ascending: false })
+    .limit(limit);
+  return (data as any[])?.map((r) => ({ ...r, intelligence: Array.isArray(r.intelligence) ? r.intelligence[0] : r.intelligence })) ?? [];
+}
+
+// Last-N match results for a team from team_form_history — real per-match
+// results (not just the last_5_results letter string).
+export async function getRecentForm(teamId: number, limit = 6): Promise<import("./types").TeamFormMatch[]> {
+  const client = db();
+  if (!client) return (M.MOCK_RECENT_FORM[teamId] ?? []).slice(0, limit);
+  const { data } = await client
+    .from("team_form_history")
+    .select("result, goals_for, goals_against, points, match_date, is_home, btts, half_time_score_for, half_time_score_against")
+    .eq("team_id", teamId)
+    .order("match_date", { ascending: false })
+    .limit(limit);
+  return (data as any[]) ?? [];
 }
 
 export async function getTeamUpcoming(id: number, limit = 5): Promise<MatchRow[]> {
