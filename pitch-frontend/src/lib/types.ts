@@ -315,6 +315,69 @@ export interface TeamFormQuality {
   ppg_vs_bottom?: number | null;
 }
 
+// Betting Card types
+export interface BankerSingle {
+  match_id: number;
+  bet_label: string;
+  match_date: string;
+  day_name: string;
+  competition: string;
+  home_short: string;
+  away_short: string;
+  home_crest: string | null;
+  away_crest: string | null;
+  home_form: number;
+  away_form: number;
+  form_gap: number;
+  confidence: "BANKER" | "STRONG" | "MODERATE" | "WEAK";
+  predicted_winner: string;
+  historical_win_pct: number;
+  betting_tier: "TIER_1_BANKER" | "TIER_2_STRONG" | "TIER_3_MODERATE" | "AVOID";  
+  home_form_string?: string;   // "WWDLW"
+  away_form_string?: string;   // "LLDWL"
+}
+
+export interface AccumulatorMatch {
+  match_id: number;
+  match_up: string;
+  competition: string;
+  form_gap: number;
+  confidence: string;
+  win_pct: number;
+  day?: string;
+  date?: string;
+}
+
+export interface Accumulator {
+  name: string;
+  bet_type: "DOUBLE" | "TREBLE" | "DAILY_ACC" | "MEGA_ACC";
+  leg_count: number;
+  acc_probability: number;
+  fair_odds: number;
+  matches: AccumulatorMatch[];
+}
+
+
+export interface BettingSummary {
+  singles: number;
+  bankers: number;      // ✅ Add this
+  strongs: number;      // ✅ Add this
+  days: number;         // ✅ Add this
+  doubles: number;
+  trebles: number;
+  daily_accs: number;
+  mega_accs: number;
+}
+export interface DailyBettingCard {
+  date: string;
+  day: string;
+  description: string;  // ✅ Add this
+  summary: BettingSummary;
+  singles: BankerSingle[];
+  accumulators: Accumulator[];
+}
+
+
 export interface TeamVenuePerformance {
   team_id: number;
   home_win_pct: number | null;

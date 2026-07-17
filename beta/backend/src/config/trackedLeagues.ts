@@ -137,6 +137,44 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
   // Austria
   { name: 'Austrian Bundesliga',    apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            country: 'Austria',      tier: 1, band: 'B',         region: 'Europe' },
 
+  // Romania
+  { name: 'Liga I',                  apiNameMatch: 'Liga I',            slug: 'liga-i',                country: 'Romania',           tier: 1, band: 'B', region: 'Europe' },
+
+  // Slovenia — confirmed from DB
+  { name: 'PrvaLiga',                apiNameMatch: 'PrvaLiga',          slug: 'prvaliga',              country: 'Slovenia',          tier: 1, band: 'C', region: 'Europe' },
+
+  // Denmark
+  { name: 'Danish Superliga',        apiNameMatch: 'Superliga',         slug: 'superliga',             country: 'Denmark',           tier: 1, band: 'B', region: 'Europe' },
+
+  // Greece
+  { name: 'Greek Super League',      apiNameMatch: 'Super League',      slug: 'super-league',          country: 'Greece',            tier: 1, band: 'B', region: 'Europe' },
+
+  // Czech Republic
+  { name: 'Czech First League',      apiNameMatch: 'Czech First',       slug: '1-liga',    country: 'Czech Republic',    tier: 1, band: 'B', region: 'Europe' },
+
+  // Croatia
+  { name: 'HNL',                     apiNameMatch: 'HNL',               slug: 'hnl',                   country: 'Croatia',           tier: 1, band: 'B', region: 'Europe' },
+
+  // Serbia
+  { name: 'Serbian SuperLiga',       apiNameMatch: 'SuperLiga',         slug: 'super-liga',            country: 'Serbia',            tier: 1, band: 'B', region: 'Europe' },
+
+  // Poland
+  { name: 'Ekstraklasa',             apiNameMatch: 'Ekstraklasa',       slug: 'ekstraklasa',           country: 'Poland',            tier: 1, band: 'B', region: 'Europe' },
+
+  // Ukraine
+  { name: 'Ukrainian Premier League',apiNameMatch: 'Ukrainian Premier', slug: 'ukrainian-premier-league', country: 'Ukraine',         tier: 1, band: 'B', region: 'Europe' },
+
+  // Hungary
+  { name: 'NB I',                    apiNameMatch: 'NB I',              slug: 'nb-i',                  country: 'Hungary',           tier: 1, band: 'C', region: 'Europe' },
+
+  // Slovakia
+  { name: 'Slovak Super Liga',       apiNameMatch: 'Super Liga',        slug: 'super-liga',            country: 'Slovakia',          tier: 1, band: 'C', region: 'Europe' },
+
+  // Bulgaria
+  { name: 'Bulgarian First League',  apiNameMatch: 'First League',      slug: 'first-league',          country: 'Bulgaria',          tier: 1, band: 'C', region: 'Europe' },
+
+  // Cyprus
+  { name: 'Cypriot First Division',  apiNameMatch: 'First Division',    slug: 'first-division',        country: 'Cyprus',            tier: 1, band: 'C', region: 'Europe' },
   // Ireland
   { name: 'League of Ireland',      apiNameMatch: 'League of Ireland',slug: 'premier-division',      country: 'Ireland',      dbNames: ['Premier Division', ' Premier Division'], tier: 1, band: 'Discovery', region: 'Europe' },
 
@@ -155,7 +193,7 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
   { name: 'Categoría Primera A',    apiNameMatch: 'Primera A',        slug: 'primera-a-apertura',    country: 'Colombia',     dbNames: ['Primera A, Apertura'], tier: 1, band: 'C',         region: 'South America' },
   { name: 'Primera División',       apiNameMatch: 'Primera División', slug: 'primera-division',      country: 'Uruguay',      dbNames: ['Liga AUF Uruguaya'], tier: 1, band: 'C',         region: 'South America' },
   { name: 'LigaPro',                apiNameMatch: 'LigaPro Serie A',  slug: 'ligapro-serie-a',       country: 'Ecuador',      tier: 1, band: 'B',         region: 'South America' },
-
+  { name: 'Liga MX Apertura',       apiNameMatch: 'Liga MX',          slug: 'liga-mx-apertura',      country: 'Mexico',       tier: 1, band: 'B',         region: 'North America' },
   // ── NORTH AMERICA ─────────────────────────────────────────────────────────
 
   { name: 'MLS',                    apiNameMatch: 'MLS',              slug: 'mls',                   country: ['USA', 'Canada'],          tier: 1, band: 'A',         region: 'North America' },

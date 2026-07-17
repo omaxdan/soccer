@@ -4,6 +4,7 @@ import type {
   MarketSignal, TeamIntelligence, TeamGoalDependency, TeamInjuryImpact,
   TeamFormQuality, TeamVenuePerformance, TeamMomentum, PositionDepth,
   PredictedLineupPlayer, LeagueIntelligence, LeagueGapSummary,
+  DailyBettingCard,  // ✅ Add this
 } from "./types";
 import * as M from "./mock";
 import { normProb } from "./intel";
@@ -630,5 +631,42 @@ function normRisk(r: any): MatchRisk {
     risk_band: r.risk_band ?? "MEDIUM",
     predictability_score: r.predictability_score ?? 0,
     risk_factors: Array.isArray(r.risk_factors) ? r.risk_factors : [],
+  };
+}
+
+// Add this alongside your existing getBoard function
+// In @/lib/queries.ts
+export async function getBettingCard(): Promise<DailyBettingCard> {
+  const client = db();
+  if (!client) {
+    return fallbackCard();
+  }
+
+  try {
+    const { data, error } = await client.rpc("get_todays_betting_card");
+
+    if (error) {
+      console.error("Failed to fetch betting card:", error);
+      return fallbackCard();
+    }
+
+    if (!data) {
+      return fallbackCard();
+    }
+
+    return data as unknown as DailyBettingCard;
+  } catch (err) {
+    console.error("Betting card fetch error:", err);
+    return fallbackCard();
+  }
+}
+
+function fallbackCard(): DailyBettingCard {
+  return {
+    date: new Date().toISOString().split("T")[0],
+    day: "Loading",
+    summary: { singles: 0, doubles: 0, trebles: 0, daily_accs: 0, mega_accs: 0 },
+    singles: [],
+    accumulators: [],
   };
 }

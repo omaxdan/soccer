@@ -1,5 +1,5 @@
 import { sportsApiClient } from '../services/sportsApiClient';
-import { isTrackedLeague, isTrackedBySlug, TRACKED_LEAGUES, findTrackedLeague } from '../config/trackedLeagues';
+import { isTrackedLeague, isTrackedBySlug, TRACKED_LEAGUES, TrackedLeague, findTrackedLeague } from '../config/trackedLeagues';
 import { resolveEndpoint } from '../constants/endpoints';
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
@@ -343,9 +343,116 @@ export async function syncDateMasterFeed(date: string): Promise<MasterFeedResult
     logger.info({ date, eventCount: events.length }, 'Events fetched — extracting all entities');
 
     // ── 2. SINGLE PASS: extract everything ──────────────────────────────
-    const { countries, tournaments, seasons, teams, stadiums, matches, matchResults, rejectedDueToMissingCategory }
-      = extractEntities(events);
+const { countries, tournaments, seasons, teams, stadiums, matches, matchResults, rejectedDueToMissingCategory }
+  = extractEntities(events);
 
+// ── CHECK FOR TOURNAMENTS NOT IN TRACKED LEAGUES ──────────────────
+const tournamentSlugs = Array.from(tournaments.values()).map(t => t.slug);
+const tournamentDetails = Array.from(tournaments.values()).map(t => ({
+  name: t.name,
+  slug: t.slug,
+  external_id: t.external_id,
+  category: t.category
+}));
+
+logger.info({
+  date,
+  tournamentCount: tournaments.size,
+  tournamentSlugs: tournamentSlugs
+}, 'Tournament slugs for date');
+
+if (date === '2026-08-21') {
+  // Create sets for quick lookup
+  const trackedSlugsSet = new Set(TRACKED_LEAGUES.map((l: TrackedLeague) => l.slug));
+  const trackedNamesSet = new Set(TRACKED_LEAGUES.map((l: TrackedLeague) => l.apiNameMatch.toLowerCase()));
+  const trackedDbNamesSet = new Set(
+    TRACKED_LEAGUES
+      .filter((l: TrackedLeague) => l.dbNames)
+      .flatMap((l: TrackedLeague) => l.dbNames?.map((n: string) => n.toLowerCase()) || [])
+  );
+  
+  console.log('\n📊 TOURNAMENT FEED ANALYSIS FOR 2026-07-18:');
+  console.log('═'.repeat(80));
+  
+  // Separate tracked and untracked
+  const tracked: any[] = [];
+  const untracked: any[] = [];
+  
+  tournamentDetails.forEach(t => {
+    const slug = t.slug || '';
+    const isTracked = trackedSlugsSet.has(slug) || 
+                      trackedNamesSet.has(t.name.toLowerCase()) ||
+                      trackedDbNamesSet.has(t.name.toLowerCase());
+    
+    if (isTracked) {
+      tracked.push(t);
+    } else {
+      untracked.push(t);
+    }
+  });
+  
+  // Show tracked tournaments
+  console.log(`\n✅ TRACKED TOURNAMENTS (${tracked.length}/${tournamentDetails.length}):`);
+  console.log('─'.repeat(80));
+  tracked.forEach(t => {
+    const slug = t.slug || 'NO_SLUG';
+    console.log(`  ✓ ${slug} (${t.name})`);
+  });
+  
+  // Show untracked tournaments (these are the problem)
+  console.log(`\n❌ UNTRACKED TOURNAMENTS (${untracked.length}/${tournamentDetails.length}):`);
+  console.log('─'.repeat(80));
+  console.log('These tournaments are in the feed but NOT in your TRACKED_LEAGUES config\n');
+  
+  untracked.forEach((t, index) => {
+    const slug = t.slug || 'NO_SLUG';
+    console.log(`  ${index + 1}. ${slug} (${t.name})`);
+    console.log(`     Category: ${t.category || 'N/A'}`);
+    console.log(`     External ID: ${t.external_id}`);
+    
+    // Check if this might be a Romanian league or other known league
+    const possibleMatches = TRACKED_LEAGUES.filter((l: TrackedLeague) => 
+      l.name.toLowerCase().includes(t.name.toLowerCase()) ||
+      t.name.toLowerCase().includes(l.name.toLowerCase()) ||
+      l.apiNameMatch.toLowerCase().includes(t.name.toLowerCase()) ||
+      t.name.toLowerCase().includes(l.apiNameMatch.toLowerCase())
+    );
+    
+    if (possibleMatches.length > 0) {
+      console.log(`     ⚠️  Possible match in config:`);
+      possibleMatches.forEach((pm: TrackedLeague) => {
+        console.log(`        → ${pm.name} (slug: ${pm.slug})`);
+        console.log(`           apiNameMatch: "${pm.apiNameMatch}"`);
+        console.log(`           country: ${pm.country}`);
+      });
+    }
+    
+    // Check for Romanian league specifically
+    if (t.name.toLowerCase().includes('liga') || t.slug?.toLowerCase().includes('liga')) {
+      console.log(`     🇷🇴 This might be a Romanian league!`);
+      console.log(`        Check if it should be tracked as: liga-i`);
+    }
+    
+    console.log('');
+  });
+  
+  // Summary
+  console.log('═'.repeat(80));
+  console.log(`\n📈 SUMMARY:`);
+  console.log(`  Total tournaments in feed: ${tournamentDetails.length}`);
+  console.log(`  Tracked: ${tracked.length}`);
+  console.log(`  Untracked: ${untracked.length}`);
+  
+  if (untracked.length > 0) {
+    console.log(`\n💡 RECOMMENDATIONS:`);
+    console.log(`  Add these slugs to TRACKED_LEAGUES if they should be tracked:`);
+    untracked.forEach(t => {
+      const slug = t.slug || `"${t.name.toLowerCase().replace(/\s+/g, '-')}"`;
+      console.log(`    - slug: "${slug}"`);
+    });
+  }
+  console.log('');
+}
     logger.info({
       countries: countries.size,
       tournaments: tournaments.size,
