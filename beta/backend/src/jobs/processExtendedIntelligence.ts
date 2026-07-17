@@ -77,100 +77,225 @@ export async function processTeamFormQuality(): Promise<{ teamsProcessed: number
   try {
     const twoYearsAgo = new Date(Date.now() - 2 * 365 * 86400000).toISOString();
 
-    const matches = await fetchAllRows(
-      db.from('matches')
-        .select('id, home_team_id, away_team_id, date, match_results!inner(home_score, away_score)')
-        .eq('status', 'finished')
-        .gte('date', twoYearsAgo)
-        .order('date', { ascending: false })
+    // Get context rows with rank bands
+    const contexts = await fetchAllRows(
+      db.from('match_opponent_context')
+        .select('match_id, team_id, opponent_rank_band, opponent_quality_score')
+        .not('opponent_rank_band', 'is', null)
     );
-    if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
 
-    const strengthRows = await fetchAllRows(db.from('team_strength_ratings').select('team_id, strength_score'));
-    const strengthMap = new Map<number, number>(strengthRows.map((r: any) => [r.team_id, r.strength_score ?? 50]));
+    if (!contexts || contexts.length === 0) {
+      logger.warn('No context rows with opponent_rank_band found');
+      return { teamsProcessed: 0, rowsWritten: 0 };
+    }
 
-    type Tier = { matches: number; points: number };
-    type TeamStat = {
-      matches: number; points: number;
-      byTier: { top: Tier; middle: Tier; bottom: Tier };
-      opponentStrengths: number[];
-      results: Array<{ points: number; expectedPoints: number }>;
-    };
-    const teamStats = new Map<number, TeamStat>();
+    // Get form history
+    const formRows = await fetchAllRows(
+      db.from('team_form_history')
+        .select('match_id, team_id, points, goals_for, goals_against, match_date')
+    );
+    
+    const formByKey = new Map<string, any>(
+      formRows.map((f: any) => [`${f.match_id}:${f.team_id}`, f])
+    );
 
-    const record = (teamId: number, gf: number, ga: number, oppStrength: number, isHome: boolean) => {
-      if (!teamStats.has(teamId)) {
-        teamStats.set(teamId, {
-          matches: 0, points: 0,
-          byTier: { top: { matches: 0, points: 0 }, middle: { matches: 0, points: 0 }, bottom: { matches: 0, points: 0 } },
-          opponentStrengths: [], results: [],
-        });
+    // Get tournament info
+    const matchIds = [...new Set(contexts.map((c: any) => c.match_id))];
+    const matchRows = await fetchAllRows(
+      db.from('matches').select('id, tournament_id, competition, season').in('id', matchIds)
+    );
+    
+    const tournamentByMatch = new Map<number, string>(
+      matchRows.map((m: any) => [
+        m.id,
+        m.tournament_id != null ? `t${m.tournament_id}` : `c${m.competition ?? '?'}::${m.season ?? '?'}`,
+      ])
+    );
+
+    // ── Join context ↔ form ──
+    const joined: any[] = [];
+    let skippedNoForm = 0;
+    let skippedNoPoints = 0;
+    
+    for (const c of contexts) {
+      const f = formByKey.get(`${c.match_id}:${c.team_id}`);
+      if (!f) {
+        skippedNoForm++;
+        continue;
       }
-      const s = teamStats.get(teamId)!;
-      const points = gf > ga ? 3 : gf === ga ? 1 : 0;
-      s.matches++; s.points += points; s.opponentStrengths.push(oppStrength);
-      const tier: 'top' | 'middle' | 'bottom' = oppStrength >= 70 ? 'top' : oppStrength >= 45 ? 'middle' : 'bottom';
-      s.byTier[tier].matches++; s.byTier[tier].points += points;
-      const strengthDiff = isHome ? 10 : -10;
-      const expectedPoints = 3 / (1 + Math.exp(-(strengthDiff + (50 - oppStrength)) / 20));
-      s.results.push({ points, expectedPoints });
+      if (f.points == null) {
+        skippedNoPoints++;
+        continue;
+      }
+      
+      // Handle match_date carefully
+      let matchTs = 0;
+      if (f.match_date) {
+        const d = new Date(f.match_date);
+        matchTs = d.getTime();
+        if (isNaN(matchTs)) {
+          matchTs = c.match_id;
+        }
+      } else {
+        matchTs = c.match_id;
+      }
+      
+      joined.push({
+        team_id: c.team_id,
+        match_id: c.match_id,
+        match_ts: matchTs,
+        tournament_key: tournamentByMatch.get(c.match_id) ?? '?',
+        band: c.opponent_rank_band,
+        quality: Number(c.opponent_quality_score ?? 50),
+        points: Number(f.points),
+        goal_margin: Number(f.goals_for ?? 0) - Number(f.goals_against ?? 0),
+      });
+    }
+
+    // ── League baselines ──
+    const baselineAgg = new Map<string, { sum: number; n: number }>();
+    for (const r of joined) {
+      const key = `${r.tournament_key}|${r.band}`;
+      const b = baselineAgg.get(key) ?? { sum: 0, n: 0 };
+      b.sum += r.points; b.n += 1;
+      baselineAgg.set(key, b);
+    }
+
+    const baseline = (tournamentKey: string, band: string): number | null => {
+      const b = baselineAgg.get(`${tournamentKey}|${band}`);
+      return b && b.n >= 10 ? b.sum / b.n : null;
     };
 
-    for (const m of matches as any[]) {
-      const hs = m.match_results?.[0]?.home_score ?? m.match_results?.home_score;
-      const as_ = m.match_results?.[0]?.away_score ?? m.match_results?.away_score;
-      if (hs == null || as_ == null) continue;
-      const homeStrength = strengthMap.get(m.home_team_id) ?? 50;
-      const awayStrength = strengthMap.get(m.away_team_id) ?? 50;
-      record(m.home_team_id, hs, as_, awayStrength, true);
-      record(m.away_team_id, as_, hs, homeStrength, false);
+    // ── Per-team windows ──
+    const byTeam = new Map<number, any[]>();
+    for (const r of joined) {
+      const list = byTeam.get(r.team_id) ?? [];
+      list.push(r);
+      byTeam.set(r.team_id, list);
     }
 
     const rows: any[] = [];
-    for (const [teamId, s] of teamStats) {
-      if (s.matches < 10) continue;
-      const { top, middle, bottom } = s.byTier;
-      const ppg = (t: Tier) => (t.matches > 0 ? t.points / t.matches : null);
-      const ppgTop = ppg(top), ppgMiddle = ppg(middle), ppgBottom = ppg(bottom);
+    const MIN_TIER_SAMPLE = 3;
+    const MIN_XPTS_SAMPLE = 5;
 
-      const expectedPoints = s.results.reduce((sum, r) => sum + r.expectedPoints, 0);
-      const performanceDelta = expectedPoints > 0 ? s.points - expectedPoints : 0;
-      const avgOpponentStrength = s.opponentStrengths.length > 0
-        ? s.opponentStrengths.reduce((a, b) => a + b, 0) / s.opponentStrengths.length : 50;
-      const adjustedForm = (s.points / s.matches) * (50 / (avgOpponentStrength || 50));
+    for (const [teamId, teamRows] of byTeam) {
+      // Sort by match_ts descending (newest first)
+      teamRows.sort((a, b) => b.match_ts - a.match_ts || b.match_id - a.match_id);
+      
+      // Use ALL matches with context (no window limit)
+      const win = teamRows;
+      
+      if (win.length === 0) continue;
 
-      const pts = s.results.map(r => r.points);
-      const mean = s.points / s.matches;
-      const volatility = pts.length > 1
-        ? Math.sqrt(pts.reduce((sum, v) => sum + (v - mean) ** 2, 0) / pts.length) : 0;
+      // OAF + SoS
+      let wSum = 0, wpSum = 0, qSum = 0;
+      for (const r of win) {
+        const w = 0.5 + r.quality / 100;
+        wSum += w; wpSum += r.points * w; qSum += r.quality;
+      }
+      const oaf = wSum > 0 ? round2(100 * wpSum / (3 * wSum)) : null;
+      const sos = round2(qSum / win.length);
 
-      const giantKillerScore = ppgTop !== null && ppgMiddle ? (ppgTop / (ppgMiddle || 1)) * 100 : null;
-      const flatTrackBullyScore = ppgBottom !== null && ppgMiddle ? (ppgBottom / (ppgMiddle || 1)) * 100 : null;
+      // Tier splits
+      const tier = (band: string) => win.filter((r: any) => r.band === band);
+      const tierPpg = (rows2: any[]) =>
+        rows2.length >= MIN_TIER_SAMPLE
+          ? round2(rows2.reduce((s: number, r: any) => s + r.points, 0) / rows2.length)
+          : null;
+      const top = tier('top'), mid = tier('middle'), bot = tier('bottom');
+      const ppgTop = tierPpg(top), ppgMid = tierPpg(mid), ppgBot = tierPpg(bot);
+
+      const giantKiller = ppgTop != null ? round2(100 * ppgTop / 3) : null;
+      const flatTrack = (ppgTop != null && ppgBot != null)
+        ? round2(100 * Math.max(0, ppgBot - ppgTop) / 3)
+        : null;
+
+      // Expected vs actual
+      let expected = 0, actual = 0, xptsN = 0;
+      for (const r of win) {
+        const b = baseline(r.tournament_key, r.band);
+        if (b == null) continue;
+        expected += b; actual += r.points; xptsN += 1;
+      }
+      const hasXpts = xptsN >= MIN_XPTS_SAMPLE;
+
+      // Volatility: population std-dev of goal margin
+      const margins = win.map((r: any) => r.goal_margin);
+      const mean = margins.reduce((s: number, v: number) => s + v, 0) / margins.length;
+      const variance = margins.reduce((s: number, v: number) => s + (v - mean) ** 2, 0) / margins.length;
+      const volatility = round2(Math.sqrt(variance));
 
       rows.push({
-        team_id: teamId, window_matches: s.matches,
-        opponent_adjusted_form: Math.round(adjustedForm * 100) / 100,
-        strength_of_schedule: Math.round(avgOpponentStrength * 10) / 10,
-        ppg_vs_top: ppgTop !== null ? Math.round(ppgTop * 100) / 100 : null, matches_vs_top: top.matches,
-        ppg_vs_middle: ppgMiddle !== null ? Math.round(ppgMiddle * 100) / 100 : null, matches_vs_middle: middle.matches,
-        ppg_vs_bottom: ppgBottom !== null ? Math.round(ppgBottom * 100) / 100 : null, matches_vs_bottom: bottom.matches,
-        giant_killer_score: giantKillerScore !== null ? Math.round(giantKillerScore * 10) / 10 : null,
-        flat_track_bully_score: flatTrackBullyScore !== null ? Math.round(flatTrackBullyScore * 10) / 10 : null,
-        expected_points: Math.round(expectedPoints * 100) / 100,
-        actual_points: s.points,
-        performance_delta: Math.round(performanceDelta * 100) / 100,
-        volatility: Math.round(volatility * 100) / 100,
+        team_id: teamId,
+        window_matches: win.length,
+        opponent_adjusted_form: oaf,
+        strength_of_schedule: sos,
+        ppg_vs_top: ppgTop,       matches_vs_top: top.length,
+        ppg_vs_middle: ppgMid,    matches_vs_middle: mid.length,
+        ppg_vs_bottom: ppgBot,    matches_vs_bottom: bot.length,
+        giant_killer_score: giantKiller,
+        flat_track_bully_score: flatTrack,
+        expected_points: hasXpts ? round2(expected) : null,
+        actual_points: hasXpts ? actual : null,
+        performance_delta: hasXpts ? round2(actual - expected) : null,
+        volatility,
         calculated_at: new Date().toISOString(),
       });
     }
 
-    const written = await upsertChunked('team_form_quality', rows, 'team_id');
-    logger.info({ teamsProcessed: teamStats.size, rowsWritten: written }, 'processTeamFormQuality completed');
-    return { teamsProcessed: teamStats.size, rowsWritten: written };
+    // Delete existing rows for teams we're about to update
+    const teamIds = rows.map(row => row.team_id);
+    if (teamIds.length > 0) {
+      const { error } = await db.from('team_form_quality').delete().in('team_id', teamIds);
+      if (error) {
+        logger.warn({ error: error.message }, 'Failed to delete existing rows, continuing with upsert');
+      }
+    }
+
+    // Upsert with batching
+    const written = await upsertChunkedWithRetry('team_form_quality', rows, 'team_id');
+    
+    logger.info({ teamsProcessed: byTeam.size, rowsWritten: written }, 'processTeamFormQuality completed');
+    return { teamsProcessed: byTeam.size, rowsWritten: written };
+    
   } catch (error: any) {
     logger.error({ error: error.message }, 'processTeamFormQuality failed');
     return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
   }
+}
+
+// Helper function
+function round2(n: number): number { return Math.round(n * 100) / 100; }
+
+// Add this helper if it doesn't exist
+async function upsertChunkedWithRetry(table: string, rows: any[], onConflict: string): Promise<number> {
+  if (rows.length === 0) return 0;
+  
+  const BATCH_SIZE = 200;
+  const MAX_RETRIES = 3;
+  let written = 0;
+  
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const chunk = rows.slice(i, i + BATCH_SIZE);
+    let attempt = 0;
+    
+    while (attempt < MAX_RETRIES) {
+      try {
+        const { error } = await db.from(table).upsert(chunk, { onConflict });
+        if (error) throw error;
+        written += chunk.length;
+        break;
+      } catch (err) {
+        attempt++;
+        if (attempt === MAX_RETRIES) {
+          logger.error({ table, error: String(err) }, 'Upsert failed after retries');
+          throw err;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+      }
+    }
+  }
+  return written;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

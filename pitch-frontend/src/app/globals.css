@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 :root {
-  /* Phosphor-terminal palette */
+  /* Phosphor-terminal palette e6edf5*/
   --ink: #0b0f14;
   --panel: #121821;
   --raised: #1a222e;
   --line: #232e3c;
-  --text: #e6edf5;
+  --text: #fdfdfd98;
   --muted: #7d8ca0;
-  --faint: #4b5769;
+  --faint: #aaaaaa90;
   --amber: #ffb020;
   --amber-dim: rgba(255, 176, 32, 0.22);
   --edge: #2fbf87;
