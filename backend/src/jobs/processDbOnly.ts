@@ -28,34 +28,88 @@ import { computeMatchSignals, MatchSignalInput } from '../lib/signalLogic';
  *     db.from('team_form_history').select('team_id, points').in('team_id', ids)
  *   );
  */
+// Node's `fetch` (undici) wraps every low-level network failure — DNS
+// blips, a stale keep-alive socket getting reused after the peer already
+// closed it, a connection reset by a shared-hosting proxy — in the same
+// generic `TypeError: fetch failed`. postgrest-js's own fetch wrapper
+// (dist/index.cjs — see PostgrestBuilder's `.catch`) already unwraps
+// `err.cause` into `error.details` ("Caused by: <Name>: <message>
+// (<code>)" + stack) and even sets `error.hint` for known patterns (e.g.
+// an oversized `.in()` array blowing past header/URL limits) — we were
+// only ever reading `error.message`, which is just the generic top-level
+// string, and silently discarding the useful part. This pulls all three
+// fields in so the retry log — and the final thrown error — carries the
+// real reason instead of a bare "fetch failed".
+function describePostgrestError(error: any): string {
+  const parts: string[] = [error?.message ?? String(error)];
+  if (error?.details) parts.push(error.details);
+  if (error?.hint) parts.push(`hint: ${error.hint}`);
+  return parts.join(' | ');
+}
+
+// Belt-and-suspenders for the rarer case where the query builder throws
+// instead of resolving with `{ error }` (e.g. an abort). Unwraps
+// `err.cause` the same way, in case postgrest-js's own unwrapping didn't
+// apply (it only populates `details` in the `.catch` branch above).
+function describeFetchError(err: any): string {
+  const parts: string[] = [err?.message ?? String(err)];
+  let cause = err?.cause;
+  let depth = 0;
+  while (cause && depth < 5) {
+    parts.push(cause.code ? `${cause.code}: ${cause.message ?? cause}` : String(cause.message ?? cause));
+    cause = cause.cause;
+    depth++;
+  }
+  return parts.join(' <- ');
+}
+
 async function fetchAllRows<T = any>(
   queryBuilder: any,
-  pageSize = 1000
+  pageSize = 1000,
+  label = 'query'
 ): Promise<T[]> {
+  const isTransient = (msg: string) =>
+    /fetch failed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|EPIPE|socket|network|terminat/i.test(msg);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   let all: T[] = [];
   let page = 0;
-  let hasMore = true;
-  
-  while (hasMore) {
+
+  for (;;) {
     const from = page * pageSize;
     const to = from + pageSize - 1;
-    const { data, error } = await queryBuilder.range(from, to);
-    
-    if (error) throw new Error(`Paginated query failed at page ${page}: ${error.message}`);
-    if (!data || data.length === 0) { 
-      hasMore = false; 
-      break; 
+
+    let data: T[] | null = null;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await queryBuilder.range(from, to);
+        if (!res.error) { data = res.data; break; }
+        lastErr = describePostgrestError(res.error);
+      } catch (err: any) {
+        lastErr = describeFetchError(err);
+      }
+
+      logger.warn({ label, page, attempt, error: lastErr }, 'fetchAllRows attempt failed');
+
+      if (!isTransient(lastErr) || attempt === 3) {
+        throw new Error(`Paginated query failed [${label}] at page ${page}: ${lastErr}`);
+      }
+      await sleep(attempt === 1 ? 2000 : 5000);
     }
-    
+
+    if (!data || data.length === 0) break;
+
     all = all.concat(data);
-    
+    logger.info({ label, page, pageRows: data.length, totalSoFar: all.length }, 'fetchAllRows page fetched');
+
     // ✅ Key: Stop when page comes back SHORTER than pageSize
     // This is the only reliable end-of-data signal
-    if (data.length < pageSize) hasMore = false;
-    
+    if (data.length < pageSize) break;
+
     page++;
   }
-  
+
   return all;
 }
 
@@ -1554,76 +1608,55 @@ export async function processTeamIntelligencePartial(): Promise<{
  *   Readiness = Form×0.30 + OppStrength×0.20 + Congestion×0.15 + Travel×0.15
  *             + HomeAdvantage×0.10 + Stability×0.05 + Motivation×0.05
  *
- * Component sourcing (all DB-only, zero API calls):
- *   Form           → team_intelligence.form_index (own team)
- *   OppStrength    → team_strength_ratings.strength_score (OPPONENT, cross-wise)
- *   Congestion     → 100 - team_intelligence.congestion_score (own team, inverted)
- *   Travel         → 100 - team_intelligence.travel_fatigue_score (own team, inverted)
- *   HomeAdvantage  → team_venue_performance.venue_advantage_score (home side only;
- *                    away side gets 100-that, see inline comment)
- *   Stability      → team_intelligence.squad_stability_score (own team)
- *   Motivation     → competition-tier base value + active_competitions modifier
- *                    (own team's active_competitions count)
- *
- * If a component is unavailable for a given match, it is excluded and the
- * remaining components are renormalized over their relative weights — this
- * means readiness is always computable from day one and silently improves
- * in precision as more data (squad sync, strength ratings) becomes available.
- *
- * Also computable independent of the formula:
- *   home_rest_days / away_rest_days     → days since each team's last match
- *   congestion_factor                    → avg of home + away congestion scores
- *   home/away_travel_distance_km         → from match_travel_intelligence
- *   travel_advantage_score               → normalized travel gap
+ * Processes matches in batches of 200 to avoid Supabase connection timeouts
+ * on shared hosting. Reference data (team_intelligence, strength ratings,
+ * venue performance, last-match dates) is loaded ONCE and shared across all
+ * batches. Only match details and travel intelligence are fetched per batch.
  */
 export async function processMatchIntelligencePartial(opts?: {
-  dateFilter?: 'today' | 'tomorrow' | string; // 'today'|'tomorrow' or a YYYY-MM-DD date string
-  dateFrom?: string;   // YYYY-MM-DD — start of range (inclusive, UTC)
-  dateTo?: string;     // YYYY-MM-DD — end of range (inclusive, UTC); defaults to today if omitted
-  matchIds?: number[]; // specific match IDs — bypasses all date filters
+  dateFilter?: 'today' | 'tomorrow' | string;
+  dateFrom?: string;
+  dateTo?: string;
+  matchIds?: number[];
 }): Promise<{
   matchesProcessed: number;
   rowsWritten: number;
   error?: string;
 }> {
   const modeLabel = opts?.matchIds
-    ? `match IDs: ${opts.matchIds.join(', ')}`
+    ? `match IDs: ${opts.matchIds.length} matches`
     : opts?.dateFrom
       ? `range: ${opts.dateFrom} → ${opts.dateTo ?? 'today'}`
       : opts?.dateFilter
         ? `date: ${opts.dateFilter}`
         : 'ALL matches';
-  logger.info({ mode: modeLabel }, 'processMatchIntelligencePartial started — DB only, full spec readiness formula');
+  logger.info({ mode: modeLabel }, 'processMatchIntelligencePartial started');
 
   try {
-    let matchQuery = db
+    // ═════════════════════════════════════════════════════════════════════
+    // STEP 1: Get match IDs (lightweight — no joins, no large payload)
+    // ═════════════════════════════════════════════════════════════════════
+    let idQuery = db
       .from('matches')
-      .select('id, home_team_id, away_team_id, date, competition')
+      .select('id')
       .order('date', { ascending: false });
 
-    // Apply scope filter when requested — dramatically cheaper for daily
-    // targeted runs vs always re-processing all 480+ matches
     if (opts?.matchIds && opts.matchIds.length > 0) {
-      matchQuery = matchQuery.in('id', opts.matchIds);
-
+      idQuery = idQuery.in('id', opts.matchIds);
     } else if (opts?.dateFrom) {
-      // Date range — start must be provided; end defaults to today (UTC).
-      // Intended for catch-up runs on local machines without crons, where
-      // one or more days were missed: process:match-intelligence:range
-      // 2026-06-29 2026-07-01 covers all three days in one command.
       const parseUTCDate = (s: string) => {
         const [y, mo, d] = s.split('-').map(Number);
         return new Date(Date.UTC(y, mo - 1, d));
       };
       const from = parseUTCDate(opts.dateFrom);
-      const now  = new Date();
-      const toDate = opts.dateTo ? parseUTCDate(opts.dateTo) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const now = new Date();
+      const toDate = opts.dateTo
+        ? parseUTCDate(opts.dateTo)
+        : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       const rangeStart = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate(), 0, 0, 0, 0));
-      const rangeEnd   = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate(), 23, 59, 59, 999));
-      matchQuery = matchQuery.gte('date', rangeStart.toISOString()).lte('date', rangeEnd.toISOString());
-
+      const rangeEnd = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate(), 23, 59, 59, 999));
+      idQuery = idQuery.gte('date', rangeStart.toISOString()).lte('date', rangeEnd.toISOString());
     } else if (opts?.dateFilter) {
-      // Single named date or YYYY-MM-DD string
       const d = new Date();
       if (opts.dateFilter === 'tomorrow') d.setUTCDate(d.getUTCDate() + 1);
       else if (opts.dateFilter !== 'today' && /^\d{4}-\d{2}-\d{2}$/.test(opts.dateFilter)) {
@@ -1631,113 +1664,104 @@ export async function processMatchIntelligencePartial(opts?: {
         d.setUTCFullYear(y, mo - 1, day);
       }
       const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
-      const end   = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
-      matchQuery = matchQuery.gte('date', start.toISOString()).lte('date', end.toISOString());
+      const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+      idQuery = idQuery.gte('date', start.toISOString()).lte('date', end.toISOString());
     }
-    // No filter = existing behaviour: processes all matches (full pipeline)
 
-    const { data: matches, error: mErr } = await matchQuery;
-
-    if (mErr) throw new Error(`matches query: ${mErr.message}`);
-    if (!matches || matches.length === 0) {
+    // Was a plain `await idQuery` — silently capped at 1000 by PostgREST in
+    // ALL-matches mode (matches is at 3,154+ rows). fetchAllRows restores
+    // the pagination this whole file's docstring exists to guarantee, and
+    // labels the call so a fetch failure tells us exactly which step died.
+    const matchIdRows = await fetchAllRows(idQuery, 1000, 'match-intelligence:matchIds');
+    if (!matchIdRows || matchIdRows.length === 0) {
+      logger.info('No matches found');
       return { matchesProcessed: 0, rowsWritten: 0 };
     }
 
-    // ── Load team_intelligence: form, congestion, travel, stability, comps ──
-    const { data: teamIntel, error: tiErr } = await db
-      .from('team_intelligence')
-      .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score');
-    if (tiErr) throw new Error(`team_intelligence query: ${tiErr.message}`);
+    const allMatchIds = matchIdRows.map((m: any) => m.id);
+    logger.info({ totalMatches: allMatchIds.length }, 'Match IDs loaded');
 
-    const intelMap = new Map<number, any>(
-      (teamIntel || []).map((t: any) => [t.team_id, t])
-    );
+    // ═════════════════════════════════════════════════════════════════════
+    // STEP 2: Load reference data ONCE (shared across all batches)
+    // ═════════════════════════════════════════════════════════════════════
+    logger.info('Loading reference data...');
 
-    // ── Load team_strength_ratings: for Opponent Strength (cross-wise) ──────
-    const { data: strengthRows } = await db
-      .from('team_strength_ratings')
-      .select('team_id, strength_score');
-    const strengthMap = new Map<number, number>(
-      (strengthRows ?? []).map((s: any) => [s.team_id, s.strength_score ?? 50])
-    );
+    // Same fix as above — team_intelligence (1,389+ rows) and the finished
+    // `matches` subset both exceed the 1000-row cap; a plain await here
+    // silently dropped every team/match past row 1000 from the readiness
+    // calc, with no error anywhere.
+    const [teamIntel, strengthRows, venueRows, allMatchesData] = await Promise.all([
+      fetchAllRows(
+        db.from('team_intelligence').select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score'),
+        1000, 'match-intelligence:teamIntel'
+      ),
+      fetchAllRows(
+        db.from('team_strength_ratings').select('team_id, strength_score'),
+        1000, 'match-intelligence:strengthRows'
+      ),
+      fetchAllRows(
+        db.from('team_venue_performance').select('team_id, venue_advantage_score'),
+        1000, 'match-intelligence:venueRows'
+      ),
+      fetchAllRows(
+        db.from('matches').select('id, home_team_id, away_team_id, date').eq('status', 'finished').order('date', { ascending: false }),
+        1000, 'match-intelligence:finishedMatches'
+      ),
+    ]);
 
-    // ── Load team_venue_performance: for Home Advantage ──────────────────────
-    const { data: venueRows } = await db
-      .from('team_venue_performance')
-      .select('team_id, venue_advantage_score');
-    const venueMap = new Map<number, number>(
-      (venueRows ?? []).map((v: any) => [v.team_id, v.venue_advantage_score ?? 50])
-    );
+    logger.info('Reference data loaded — building lookup maps');
 
-    // Build last-match-date map for each team (for rest days)
-    const { data: allMatches, error: amErr } = await db
-      .from('matches')
-      .select('id, home_team_id, away_team_id, date')
-      .eq('status', 'finished')
-      .order('date', { ascending: false });
+    const intelMap = new Map<number, any>((teamIntel || []).map((t: any) => [t.team_id, t]));
+    const strengthMap = new Map<number, number>((strengthRows || []).map((s: any) => [s.team_id, s.strength_score ?? 50]));
+    const venueMap = new Map<number, number>((venueRows || []).map((v: any) => [v.team_id, v.venue_advantage_score ?? 50]));
 
-    if (amErr) throw new Error(`all matches query: ${amErr.message}`);
-
+    // Build last-match-date map for rest days
     const teamMatchDates = new Map<number, Date[]>();
-    for (const m of allMatches || []) {
+    for (const m of allMatchesData || []) {
       const d = new Date(m.date);
       for (const tid of [m.home_team_id, m.away_team_id]) {
+        if (!tid) continue;
         if (!teamMatchDates.has(tid)) teamMatchDates.set(tid, []);
         teamMatchDates.get(tid)!.push(d);
       }
     }
 
-    // Get travel intelligence per match
-    const matchIds = matches.map((m: any) => m.id);
-    const { data: travelRows, error: trErr } = await db
-      .from('match_travel_intelligence')
-      .select('match_id, home_team_distance_km, away_team_distance_km, travel_advantage_km')
-      .in('match_id', matchIds);
-
-    if (trErr) throw new Error(`match_travel_intelligence query: ${trErr.message}`);
-    const travelMap = new Map<number, any>(
-      (travelRows || []).map((t: any) => [t.match_id, t])
-    );
-
-    // ── Competition Motivation helpers (spec section 7) ──────────────────────
+    // ═════════════════════════════════════════════════════════════════════
+    // STEP 3: Helper functions (unchanged from original)
+    // ═════════════════════════════════════════════════════════════════════
     function competitionMotivationBase(competitionName: string | null): number {
       const c = (competitionName ?? '').toLowerCase();
-      // Heuristic tiering — we don't have round/fixture-importance metadata,
-      // so this pattern-matches on competition name. Documented simplification.
       if (c.includes('champions league') && c.includes('final')) return 100;
       if (c.includes('cup') && c.includes('final')) return 95;
       if (c.includes('champions league') || c.includes('europa') || c.includes('libertadores')) return 90;
       if (c.includes('friendly')) return 20;
-      return 70; // default: standard league match
+      return 70;
     }
+
     function motivationModifier(activeComps: number): number {
       if (activeComps <= 1) return 0;
       if (activeComps === 2) return 5;
       if (activeComps === 3) return 10;
-      return 15; // 4+
+      return 15;
     }
 
-    /**
-     * Computes the full spec-weighted readiness for one side of a match.
-     * Renormalizes over whichever components have data available.
-     */
-    function computeReadiness(opts: {
+    function computeReadiness(opts2: {
       form: number | null;
       oppStrength: number | null;
-      congestion: number | null; // already inverted (good-high)
-      travel: number | null;     // already inverted (good-high)
+      congestion: number | null;
+      travel: number | null;
       homeAdvantage: number | null;
       stability: number | null;
       motivation: number | null;
     }): number | null {
       const weighted = [
-        opts.form          !== null ? { v: opts.form,          w: 30 } : null,
-        opts.oppStrength    !== null ? { v: opts.oppStrength,    w: 20 } : null,
-        opts.congestion     !== null ? { v: opts.congestion,     w: 15 } : null,
-        opts.travel         !== null ? { v: opts.travel,         w: 15 } : null,
-        opts.homeAdvantage  !== null ? { v: opts.homeAdvantage,  w: 10 } : null,
-        opts.stability      !== null ? { v: opts.stability,      w: 5  } : null,
-        opts.motivation     !== null ? { v: opts.motivation,     w: 5  } : null,
+        opts2.form          !== null ? { v: opts2.form,          w: 30 } : null,
+        opts2.oppStrength    !== null ? { v: opts2.oppStrength,    w: 20 } : null,
+        opts2.congestion     !== null ? { v: opts2.congestion,     w: 15 } : null,
+        opts2.travel         !== null ? { v: opts2.travel,         w: 15 } : null,
+        opts2.homeAdvantage  !== null ? { v: opts2.homeAdvantage,  w: 10 } : null,
+        opts2.stability      !== null ? { v: opts2.stability,      w: 5  } : null,
+        opts2.motivation     !== null ? { v: opts2.motivation,     w: 5  } : null,
       ].filter((c): c is { v: number; w: number } => c !== null);
 
       if (weighted.length === 0) return null;
@@ -1745,237 +1769,214 @@ export async function processMatchIntelligencePartial(opts?: {
       return Math.round(weighted.reduce((s, c) => s + c.v * c.w, 0) / totalWeight);
     }
 
-    const rows: any[] = [];
+    // ═════════════════════════════════════════════════════════════════════
+    // STEP 4: Process matches in batches of 200
+    // ═════════════════════════════════════════════════════════════════════
+    const BATCH_SIZE = 200;
+    const totalBatches = Math.ceil(allMatchIds.length / BATCH_SIZE);
+    let totalWritten = 0;
 
-    for (const m of matches) {
-      const matchDate = new Date(m.date);
+    for (let batchNum = 0; batchNum < totalBatches; batchNum++) {
+      const start = batchNum * BATCH_SIZE;
+      const batchIds = allMatchIds.slice(start, start + BATCH_SIZE);
 
-      const calcRestDays = (teamId: number): number | null => {
-        const dates = teamMatchDates.get(teamId) || [];
-        const prev  = dates.find(d => d < matchDate);
-        if (!prev) return null;
-        return Math.round((matchDate.getTime() - prev.getTime()) / 86400000);
-      };
+      // Fetch match details for this batch
+      const { data: matches, error: mErr } = await db
+        .from('matches')
+        .select('id, home_team_id, away_team_id, date, competition')
+        .in('id', batchIds)
+        .order('date', { ascending: false });
 
-      const homeRest = calcRestDays(m.home_team_id);
-      const awayRest = calcRestDays(m.away_team_id);
+      if (mErr) throw new Error(`matches batch ${batchNum + 1} query: ${mErr.message}`);
+      if (!matches || matches.length === 0) continue;
 
-      const homeIntel = intelMap.get(m.home_team_id);
-      const awayIntel = intelMap.get(m.away_team_id);
+      // Fetch travel data for this batch
+      const { data: travelRows } = await db
+        .from('match_travel_intelligence')
+        .select('match_id, home_team_distance_km, away_team_distance_km, travel_advantage_km')
+        .in('match_id', batchIds);
 
-      const homeCongestionRaw = homeIntel?.congestion_score ?? null;
-      const awayCongestionRaw = awayIntel?.congestion_score ?? null;
-      const congestionFactor = (homeCongestionRaw !== null && awayCongestionRaw !== null)
-        ? Math.round((homeCongestionRaw + awayCongestionRaw) / 2 * 100) / 100
-        : (homeCongestionRaw ?? awayCongestionRaw ?? null);
+      const travelMap = new Map<number, any>((travelRows || []).map((t: any) => [t.match_id, t]));
 
-      const travel = travelMap.get(m.id);
-      const travelAdvantageScore = travel?.travel_advantage_km !== null && travel?.travel_advantage_km !== undefined
-        ? Math.min(100, Math.round(Math.abs(travel.travel_advantage_km) / 30))
-        : null;
+      // Process each match in the batch
+      const rows: any[] = [];
 
-      // ── Per-side component assembly ─────────────────────────────────────
-      const homeForm  = homeIntel?.form_index ?? null;
-      const awayForm  = awayIntel?.form_index ?? null;
+      for (const m of matches) {
+        const matchDate = new Date(m.date);
 
-      // Opponent Strength: CROSS-WISE — home team faces away team's strength
-      const homeOppStrength = strengthMap.has(m.away_team_id) ? strengthMap.get(m.away_team_id)! : null;
-      const awayOppStrength = strengthMap.has(m.home_team_id) ? strengthMap.get(m.home_team_id)! : null;
+        const calcRestDays = (teamId: number): number | null => {
+          const dates = teamMatchDates.get(teamId) || [];
+          const prev = dates.find(d => d < matchDate);
+          if (!prev) return null;
+          return Math.round((matchDate.getTime() - prev.getTime()) / 86400000);
+        };
 
-      // Congestion / Travel: own team, inverted to good-high
-      const homeCongestionGood = homeCongestionRaw !== null ? 100 - homeCongestionRaw : null;
-      const awayCongestionGood = awayCongestionRaw !== null ? 100 - awayCongestionRaw : null;
-      const homeTravelGood = homeIntel?.travel_fatigue_score != null ? 100 - homeIntel.travel_fatigue_score : null;
-      const awayTravelGood = awayIntel?.travel_fatigue_score != null ? 100 - awayIntel.travel_fatigue_score : null;
+        const homeRest = calcRestDays(m.home_team_id);
+        const awayRest = calcRestDays(m.away_team_id);
 
-      // Home Advantage: home team gets their own venue advantage; away team
-      // gets the structural inverse (playing away = no home boost). This
-      // keeps the component meaningful for both sides of the formula without
-      // conflating it with the away team's own separate away-form record.
-      const homeVenueAdv = venueMap.has(m.home_team_id) ? venueMap.get(m.home_team_id)! : null;
-      const awayVenueAdv = homeVenueAdv !== null ? 100 - homeVenueAdv : null;
+        const homeIntel = intelMap.get(m.home_team_id);
+        const awayIntel = intelMap.get(m.away_team_id);
 
-      // Stability: own team
-      const homeStability = homeIntel?.squad_stability_score ?? null;
-      const awayStability = awayIntel?.squad_stability_score ?? null;
+        const homeCongestionRaw = homeIntel?.congestion_score ?? null;
+        const awayCongestionRaw = awayIntel?.congestion_score ?? null;
+        const congestionFactor =
+          homeCongestionRaw !== null && awayCongestionRaw !== null
+            ? Math.round(((homeCongestionRaw + awayCongestionRaw) / 2) * 100) / 100
+            : (homeCongestionRaw ?? awayCongestionRaw ?? null);
 
-      // Motivation: shared competition base, own team's competition-count modifier
-      const motivationBase = competitionMotivationBase(m.competition);
-      const homeActiveComps = homeIntel?.active_competitions ?? 1;
-      const awayActiveComps = awayIntel?.active_competitions ?? 1;
-      const homeMotivation = Math.min(100, motivationBase + motivationModifier(homeActiveComps));
-      const awayMotivation = Math.min(100, motivationBase + motivationModifier(awayActiveComps));
+        const travel = travelMap.get(m.id);
+        const travelAdvantageScore =
+          travel?.travel_advantage_km != null
+            ? Math.min(100, Math.round(Math.abs(travel.travel_advantage_km) / 30))
+            : null;
 
-      const homeReadiness = computeReadiness({
-        // BUG FIX (found from a real reported discrepancy: page showed
-        // Sligo/Shamrock readiness as 52/56, Δ4, while team_intelligence's
-        // baseline — which deliberately excludes opponent strength — showed
-        // 41/74, Δ33; a 58-point strength gap should WIDEN the match-context
-        // gap versus baseline, not compress it to almost nothing).
-        // homeOppStrength/awayOppStrength store the RAW opponent strength
-        // (kept that way deliberately — the confidence-score formula further
-        // below reuses them unaveraged: homeOwnStrength = awayOppStrength).
-        // Every OTHER component in this formula uses "higher input = better
-        // for the team owning this calc" polarity (congestion/travel are
-        // pre-inverted before being passed in here) — opponent strength
-        // was the one component passed RAW, so a team facing a genuinely
-        // strong opponent had that opponent's high strength score added as
-        // a POSITIVE contribution to their OWN readiness. Inverted only at
-        // this call site (100 - raw) so a weak opponent correctly raises
-        // readiness and a strong opponent correctly lowers it, without
-        // touching what homeOppStrength/awayOppStrength themselves store.
-        // Verified by simulation against the real reported numbers before
-        // this fix: buggy formula reproduced 52 almost exactly; corrected
-        // formula lands at 40, right on the team_intelligence baseline of
-        // 41 — exactly the small, sensible adjustment match context should
-        // make, not a near-total wipeout of a real 58-point strength gap.
-        form: homeForm, oppStrength: homeOppStrength !== null ? 100 - homeOppStrength : null,
-        congestion: homeCongestionGood, travel: homeTravelGood,
-        homeAdvantage: homeVenueAdv, stability: homeStability, motivation: homeMotivation,
-      });
-      const awayReadiness = computeReadiness({
-        form: awayForm, oppStrength: awayOppStrength !== null ? 100 - awayOppStrength : null,
-        congestion: awayCongestionGood, travel: awayTravelGood,
-        homeAdvantage: awayVenueAdv, stability: awayStability, motivation: awayMotivation,
-      });
+        const homeForm = homeIntel?.form_index ?? null;
+        const awayForm = awayIntel?.form_index ?? null;
+        const homeOppStrength = strengthMap.has(m.away_team_id) ? strengthMap.get(m.away_team_id)! : null;
+        const awayOppStrength = strengthMap.has(m.home_team_id) ? strengthMap.get(m.home_team_id)! : null;
+        const homeCongestionGood = homeCongestionRaw !== null ? 100 - homeCongestionRaw : null;
+        const awayCongestionGood = awayCongestionRaw !== null ? 100 - awayCongestionRaw : null;
+        const homeTravelGood = homeIntel?.travel_fatigue_score != null ? 100 - homeIntel.travel_fatigue_score : null;
+        const awayTravelGood = awayIntel?.travel_fatigue_score != null ? 100 - awayIntel.travel_fatigue_score : null;
+        const homeVenueAdv = venueMap.has(m.home_team_id) ? venueMap.get(m.home_team_id)! : null;
+        const awayVenueAdv = homeVenueAdv !== null ? 100 - homeVenueAdv : null;
+        const homeStability = homeIntel?.squad_stability_score ?? null;
+        const awayStability = awayIntel?.squad_stability_score ?? null;
 
-      // ── CONFIDENCE SCORE — evidence agreement on the pick side ──────────
-      // The Pick is whichever side the readiness gap favors. Confidence
-      // measures how strongly the OTHER independent evidence streams agree
-      // with that side. Each edge is signed toward the pick (+1 = fully
-      // supports, -1 = fully contradicts), normalized by a saturation
-      // constant (the gap size at which that signal counts as "maximal"),
-      // then weight-blended. Missing components renormalize rather than
-      // dragging the score down — same discipline as computeReadiness and
-      // the team-strength formula (missing data must never masquerade as
-      // negative evidence).
-      //
-      // Uses ONLY fields verified as actually computed (audit 2026-07-03):
-      // readiness_gap, own-team strength (note: homeOppStrength = AWAY
-      // team's strength, so home's own strength is awayOppStrength),
-      // injury_burden_score, congestion_score (post-polarity-fix: higher =
-      // more congested), travel distance, squad stability, venue advantage,
-      // and the motivation proxy (deliberately lowest weight — it's a
-      // shallow active-competitions modifier, not the points-gap-to-boundary
-      // formula still flagged as a follow-up).
-      //
-      // Bands per spec: >=95 Elite | 85-94 Strong | 70-84 Moderate |
-      // 55-69 Risky | <55 Avoid.
-      let confidenceScore: number | null = null;
-      let confidenceBand: string | null = null;
-      {
-        const rGap = (homeReadiness !== null && awayReadiness !== null)
-          ? homeReadiness - awayReadiness : null;
+        const motivationBase = competitionMotivationBase(m.competition);
+        const homeActiveComps = homeIntel?.active_competitions ?? 1;
+        const awayActiveComps = awayIntel?.active_competitions ?? 1;
+        const homeMotivation = Math.min(100, motivationBase + motivationModifier(homeActiveComps));
+        const awayMotivation = Math.min(100, motivationBase + motivationModifier(awayActiveComps));
 
-        if (rGap !== null) {
-          const pickSign = rGap >= 0 ? 1 : -1; // +1 = home pick, -1 = away pick
+        const homeReadiness = computeReadiness({
+          form: homeForm,
+          oppStrength: homeOppStrength !== null ? 100 - homeOppStrength : null,
+          congestion: homeCongestionGood,
+          travel: homeTravelGood,
+          homeAdvantage: homeVenueAdv,
+          stability: homeStability,
+          motivation: homeMotivation,
+        });
 
-          // Each entry: [signed-toward-home raw gap | null, saturation, weight]
-          const homeOwnStrength = awayOppStrength; // what away faces = home's own
-          const awayOwnStrength = homeOppStrength;
-          const homeInjury = homeIntel?.injury_burden_score ?? null;
-          const awayInjury = awayIntel?.injury_burden_score ?? null;
-          const homeCongRaw = homeIntel?.congestion_score ?? null;
-          const awayCongRaw = awayIntel?.congestion_score ?? null;
-          const homeKm = travel?.home_team_distance_km ?? null;
-          const awayKm = travel?.away_team_distance_km ?? null;
+        const awayReadiness = computeReadiness({
+          form: awayForm,
+          oppStrength: awayOppStrength !== null ? 100 - awayOppStrength : null,
+          congestion: awayCongestionGood,
+          travel: awayTravelGood,
+          homeAdvantage: awayVenueAdv,
+          stability: awayStability,
+          motivation: awayMotivation,
+        });
 
-          const components: Array<[number | null, number, number]> = [
-            [rGap, 30, 30],                                                                          // readiness gap
-            [(homeOwnStrength !== null && awayOwnStrength !== null) ? homeOwnStrength - awayOwnStrength : null, 30, 20], // strength gap
-            [(homeInjury !== null && awayInjury !== null) ? awayInjury - homeInjury : null, 40, 15], // injury gap (opponent's burden helps)
-            [(homeCongRaw !== null && awayCongRaw !== null) ? awayCongRaw - homeCongRaw : null, 50, 10], // congestion gap
-            [(homeKm !== null && awayKm !== null) ? awayKm - homeKm : null, 1500, 10],               // travel gap (km)
-            [(homeStability !== null && awayStability !== null) ? homeStability - awayStability : null, 40, 5], // stability gap
-            [(homeVenueAdv !== null && awayVenueAdv !== null) ? homeVenueAdv - awayVenueAdv : null, 40, 7],     // venue gap
-            [homeMotivation - awayMotivation, 20, 3],                                                // motivation proxy
-          ];
+        // ── Confidence score ─────────────────────────────────────────────
+        let confidenceScore: number | null = null;
+        let confidenceBand: string | null = null;
+        {
+          const rGap =
+            homeReadiness !== null && awayReadiness !== null
+              ? homeReadiness - awayReadiness
+              : null;
 
-          let weightedSum = 0;
-          let weightUsed = 0;
-          let componentsWithData = 0;
-          for (const [gapTowardHome, saturation, weight] of components) {
-            if (gapTowardHome === null) continue;
-            // Sign toward the PICK side, clamp to [-1, 1] at saturation.
-            const edge = Math.max(-1, Math.min(1, (gapTowardHome * pickSign) / saturation));
-            weightedSum += edge * weight;
-            weightUsed += weight;
-            componentsWithData++;
-          }
+          if (rGap !== null) {
+            const pickSign = rGap >= 0 ? 1 : -1;
+            const homeOwnStrength = awayOppStrength;
+            const awayOwnStrength = homeOppStrength;
+            const homeInjury = homeIntel?.injury_burden_score ?? null;
+            const awayInjury = awayIntel?.injury_burden_score ?? null;
+            const homeCongRaw = homeIntel?.congestion_score ?? null;
+            const awayCongRaw = awayIntel?.congestion_score ?? null;
+            const homeKm = travel?.home_team_distance_km ?? null;
+            const awayKm = travel?.away_team_distance_km ?? null;
 
-          // Gate: readiness gap + motivation are ALWAYS present (motivation
-          // is a computed proxy, never null), so >= 4 means at least TWO
-          // genuinely independent corroborating streams beyond those —
-          // a "confidence" built from the gap alone would just restate it
-          // with false precision.
-          if (componentsWithData >= 4 && weightUsed > 0) {
-            confidenceScore = Math.round(
-              Math.max(0, Math.min(100, 50 + 50 * (weightedSum / weightUsed))) * 10
-            ) / 10;
-            confidenceBand =
-              confidenceScore >= 95 ? 'Elite'
-              : confidenceScore >= 85 ? 'Strong'
-              : confidenceScore >= 70 ? 'Moderate'
-              : confidenceScore >= 55 ? 'Risky'
-              : 'Avoid';
+            const components: Array<[number | null, number, number]> = [
+              [rGap, 30, 30],
+              [homeOwnStrength !== null && awayOwnStrength !== null ? homeOwnStrength - awayOwnStrength : null, 30, 20],
+              [homeInjury !== null && awayInjury !== null ? awayInjury - homeInjury : null, 40, 15],
+              [homeCongRaw !== null && awayCongRaw !== null ? awayCongRaw - homeCongRaw : null, 50, 10],
+              [homeKm !== null && awayKm !== null ? awayKm - homeKm : null, 1500, 10],
+              [homeStability !== null && awayStability !== null ? homeStability - awayStability : null, 40, 5],
+              [homeVenueAdv !== null && awayVenueAdv !== null ? homeVenueAdv - awayVenueAdv : null, 40, 7],
+              [homeMotivation - awayMotivation, 20, 3],
+            ];
+
+            let weightedSum = 0;
+            let weightUsed = 0;
+            let componentsWithData = 0;
+            for (const [gapTowardHome, saturation, weight] of components) {
+              if (gapTowardHome === null) continue;
+              const edge = Math.max(-1, Math.min(1, (gapTowardHome * pickSign) / saturation));
+              weightedSum += edge * weight;
+              weightUsed += weight;
+              componentsWithData++;
+            }
+
+            if (componentsWithData >= 4 && weightUsed > 0) {
+              confidenceScore = Math.round(
+                Math.max(0, Math.min(100, 50 + 50 * (weightedSum / weightUsed))) * 10
+              ) / 10;
+              confidenceBand =
+                confidenceScore >= 95 ? 'Elite'
+                : confidenceScore >= 85 ? 'Strong'
+                : confidenceScore >= 70 ? 'Moderate'
+                : confidenceScore >= 55 ? 'Risky'
+                : 'Avoid';
+            }
           }
         }
+
+        rows.push({
+          match_id: m.id,
+          match_date: m.date,
+          home_rest_days: homeRest,
+          away_rest_days: awayRest,
+          congestion_factor: congestionFactor,
+          home_travel_distance_km: travel?.home_team_distance_km ?? null,
+          away_travel_distance_km: travel?.away_team_distance_km ?? null,
+          travel_advantage_score: travelAdvantageScore,
+          home_readiness: homeReadiness,
+          away_readiness: awayReadiness,
+          readiness_gap:
+            homeReadiness !== null && awayReadiness !== null
+              ? Math.round((homeReadiness - awayReadiness) * 100) / 100
+              : null,
+          home_strength_rating: homeOppStrength,
+          away_strength_rating: awayOppStrength,
+          home_venue_advantage: homeVenueAdv,
+          away_venue_advantage: awayVenueAdv,
+          home_squad_stability: homeStability,
+          away_squad_stability: awayStability,
+          motivation_gap: Math.round((homeMotivation - awayMotivation) * 100) / 100,
+          confidence_score: confidenceScore,
+          confidence_band: confidenceBand,
+          home_active_competitions: homeActiveComps,
+          away_active_competitions: awayActiveComps,
+          calculated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
       }
 
-      rows.push({
-        match_id:                 m.id,
-        match_date:               m.date,  // denormalized — see migration 007
-        home_rest_days:           homeRest,
-        away_rest_days:           awayRest,
-        congestion_factor:        congestionFactor,
-        home_travel_distance_km:  travel?.home_team_distance_km ?? null,
-        away_travel_distance_km:  travel?.away_team_distance_km ?? null,
-        travel_advantage_score:   travelAdvantageScore,
-        // ── Spec-authoritative readiness (full 7-component formula) ────────
-        home_readiness:           homeReadiness,
-        away_readiness:           awayReadiness,
-        readiness_gap:            (homeReadiness !== null && awayReadiness !== null)
-                                     ? Math.round((homeReadiness - awayReadiness) * 100) / 100
-                                     : null,
-        // Supporting fields — exposes each spec component for transparency
-        home_strength_rating:      homeOppStrength,   // = away team's strength (what home team faces)
-        away_strength_rating:      awayOppStrength,   // = home team's strength (what away team faces)
-        home_venue_advantage:      homeVenueAdv,
-        away_venue_advantage:      awayVenueAdv,
-        home_squad_stability:      homeStability,
-        away_squad_stability:      awayStability,
-        motivation_gap:            Math.round((homeMotivation - awayMotivation) * 100) / 100,
-        confidence_score:          confidenceScore,
-        confidence_band:           confidenceBand,
-        home_active_competitions:  homeActiveComps,
-        away_active_competitions:  awayActiveComps,
-        calculated_at:             new Date().toISOString(),
-        updated_at:                new Date().toISOString(),
-      });
-    }
-
-    // Batch upsert
-    const chunkSize = 500;
-    let written = 0;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      const { error } = await db
+      // Upsert this batch
+      const { error: upsertErr } = await db
         .from('match_intelligence')
-        .upsert(chunk, { onConflict: 'match_id' });
-      if (error) throw new Error(`match_intelligence upsert: ${error.message}`);
-      written += chunk.length;
+        .upsert(rows, { onConflict: 'match_id' });
+
+      if (upsertErr) {
+        throw new Error(`match_intelligence upsert batch ${batchNum + 1}: ${upsertErr.message}`);
+      }
+
+      totalWritten += rows.length;
+      logger.info(
+        { batch: `${batchNum + 1}/${totalBatches}`, matches: matches.length, totalWritten },
+        'Batch written'
+      );
     }
 
     logger.info(
-      {
-        matchesProcessed: matches.length,
-        rowsWritten: written,
-        withFullReadiness: rows.filter(r => r.home_readiness !== null && r.away_readiness !== null).length,
-      },
+      { matchesProcessed: allMatchIds.length, rowsWritten: totalWritten },
       'processMatchIntelligencePartial completed'
     );
-    return { matchesProcessed: matches.length, rowsWritten: written };
-
+    return { matchesProcessed: allMatchIds.length, rowsWritten: totalWritten };
   } catch (error: any) {
     logger.error({ error: error.message }, 'processMatchIntelligencePartial failed');
     return { matchesProcessed: 0, rowsWritten: 0, error: error.message };

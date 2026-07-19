@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-NetIPConfiguration)",
+      "Bash(ipconfig /all)",
+      "PowerShell(node -e \"const dns=require\\('dns'\\); console.log\\('servers:', dns.getServers\\(\\)\\);\")"
+    ]
+  }
+}

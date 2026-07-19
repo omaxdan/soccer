@@ -24,11 +24,46 @@
  *   const players = await fetchAllRows(
  *     db.from('players').select('team_id, market_value, current_injury')
  *   );
+ *
+ *   // Optional label — shows up in retry/page logs, so a failure tells you
+ *   // WHICH call died instead of just "page 0":
+ *   const players = await fetchAllRows(db.from('players').select('id'), 1000, 'id', 'players');
  */
+import { logger } from '../utils/logger';
+
+// postgrest-js's own fetch wrapper (see @supabase/postgrest-js dist/index.cjs,
+// PostgrestBuilder's `.catch`) already unwraps `err.cause` into
+// `error.details` ("Caused by: <Name>: <message> (<code>)" + stack) and sets
+// `error.hint` for known patterns (e.g. an oversized `.in()` array blowing
+// past header/URL limits). We were only ever reading `error.message` — the
+// generic top-level string like "TypeError: fetch failed" — and silently
+// discarding the useful part. This pulls all three fields in.
+function describePostgrestError(error: any): string {
+  const parts: string[] = [error?.message ?? String(error)];
+  if (error?.details) parts.push(error.details);
+  if (error?.hint) parts.push(`hint: ${error.hint}`);
+  return parts.join(' | ');
+}
+
+// Belt-and-suspenders for the rarer case where the query builder throws
+// instead of resolving with `{ error }`. Unwraps `err.cause` the same way.
+function describeFetchError(err: any): string {
+  const parts: string[] = [err?.message ?? String(err)];
+  let cause = err?.cause;
+  let depth = 0;
+  while (cause && depth < 5) {
+    parts.push(cause.code ? `${cause.code}: ${cause.message ?? cause}` : String(cause.message ?? cause));
+    cause = cause.cause;
+    depth++;
+  }
+  return parts.join(' <- ');
+}
+
 export async function fetchAllRows<T = any>(
   queryBuilder: any,
   pageSize = 1000,
-  orderColumn = 'id'
+  orderColumn = 'id',
+  label = 'query'
 ): Promise<T[]> {
   queryBuilder.order(orderColumn, { ascending: true });
 
@@ -51,22 +86,26 @@ export async function fetchAllRows<T = any>(
     let data: T[] | null = null;
     let lastErr = '';
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const res = await queryBuilder.range(from, from + pageSize - 1);
-      if (!res.error) { data = res.data; break; }
-      lastErr = res.error.message ?? String(res.error);
-      if (!isTransient(lastErr) || attempt === 3) {
-        throw new Error(`Paginated query failed at page ${page}: ${lastErr}`);
+      try {
+        const res = await queryBuilder.range(from, from + pageSize - 1);
+        if (!res.error) { data = res.data; break; }
+        lastErr = describePostgrestError(res.error);
+      } catch (err: any) {
+        lastErr = describeFetchError(err);
       }
-      await sleep(attempt === 1 ? 1000 : 3000);
+
+      logger.warn({ label, page, attempt, error: lastErr }, 'fetchAllRows attempt failed');
+
+      if (!isTransient(lastErr) || attempt === 3) {
+        throw new Error(`Paginated query failed [${label}] at page ${page}: ${lastErr}`);
+      }
+      // ✅ Increased backoff: 2s → 5s → 10s
+      await sleep(attempt === 1 ? 2000 : attempt === 2 ? 5000 : 10000);
     }
 
     if (!data || data.length === 0) break;
-
     all = all.concat(data);
-
-    // A short page is the only reliable end-of-data signal — a "requested
-    // range satisfied" check breaks when the server cap is lower than the
-    // requested page size (see v1 comment history).
+    logger.info({ label, page, pageRows: data.length, totalSoFar: all.length }, 'fetchAllRows page fetched');
     if (data.length < pageSize) break;
     page++;
   }

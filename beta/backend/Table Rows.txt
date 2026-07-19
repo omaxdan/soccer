@@ -1,0 +1,981 @@
+Name	Columns	Rows (Estimated)	Size (Estimated)	Realtime	
+countries
+
+5
+
+40
+
+112 kB
+
+Disabled
+
+View columns
+
+formation_analysis
+
+13
+
+393
+
+264 kB
+
+Disabled
+
+View columns
+
+formation_matchup
+
+CAVEAT: "detected formation" is derived from OUR OWN predicted-lineup sub-slot template (fixed 1-4-4-2 shape, see processPredictedLineups), not the club's real historical tactical shape — so home_formation_vs_away will cluster near 4-4-2 by construction on most matches. The zone-by-zone quality comparison (advantages/key_matchups) is the meaningful part of this table; the formation label is approximate.
+11
+
+208
+
+520 kB
+
+Disabled
+
+View columns
+
+formation_options
+
+15
+
+191
+
+144 kB
+
+Disabled
+
+View columns
+
+injury_adaptability
+
+15
+
+272
+
+136 kB
+
+Disabled
+
+View columns
+
+injury_risk
+
+7
+
+–
+
+–
+
+Disabled
+
+View columns
+
+league_gap_analytics
+
+Nightly precomputed per (league × gap tier) accuracy aggregates over result-linked readiness_history rows.
+12
+
+44
+
+80 kB
+
+Disabled
+
+View columns
+
+league_gap_summary
+
+Nightly precomputed per-league roll-up powering the League Analytics matrix and summary cards.
+11
+
+15
+
+80 kB
+
+Disabled
+
+View columns
+
+league_intelligence
+
+10
+
+46
+
+88 kB
+
+Disabled
+
+View columns
+
+match_half_time_intelligence
+
+HH/HD/HA/DH/DD/DA/AH/AD/AA transition probabilities, blended from each side's own HT/FT history (min. 5 finished matches with half-time data, else league average fallback), weighted by home_readiness/away_readiness. Second-half goal estimates are a simple average-based heuristic, not Poisson-modeled — flagged provisional pending backtest, same as other heuristic scores in this suite.
+25
+
+1,862
+
+784 kB
+
+Disabled
+
+View columns
+
+match_impact_advantage
+
+10
+
+190
+
+120 kB
+
+Disabled
+
+View columns
+
+match_impact_summary
+
+7
+
+433
+
+176 kB
+
+Disabled
+
+View columns
+
+match_intelligence
+
+42
+
+1,882
+
+1232 kB
+
+Disabled
+
+View columns
+
+match_key_battles
+
+13
+
+667
+
+416 kB
+
+Disabled
+
+View columns
+
+match_opponent_context
+
+11
+
+3,774
+
+1352 kB
+
+Disabled
+
+View columns
+
+match_opportunity
+
+8
+
+113
+
+168 kB
+
+Disabled
+
+View columns
+
+match_performance_comparison
+
+Head-to-head zone-by-zone comparison (attack/defence/midfield/tactical/set-piece), distinct from match_intelligence.net_battle_index (z-score-normalized) and readiness_history (the accuracy-tracked pick). This is a separate, UI-facing comparison view — its win probabilities are a simplified heuristic, NOT the Poisson-model win_probability_home/draw/away on match_intelligence, which remains the statistically grounded figure.
+38
+
+1,317
+
+736 kB
+
+Disabled
+
+View columns
+
+match_positional_matchups
+
+12
+
+783
+
+392 kB
+
+Disabled
+
+View columns
+
+match_predicted_lineups
+
+9
+
+7,754
+
+2312 kB
+
+Disabled
+
+View columns
+
+match_results
+
+10
+
+3,154
+
+992 kB
+
+Disabled
+
+View columns
+
+match_risk_intelligence
+
+7
+
+113
+
+96 kB
+
+Disabled
+
+View columns
+
+match_signals
+
+12
+
+8,904
+
+4536 kB
+
+Disabled
+
+View columns
+
+match_squad_depth_comparison
+
+20
+
+226
+
+120 kB
+
+Disabled
+
+View columns
+
+match_tactical_advantages
+
+11
+
+588
+
+328 kB
+
+Disabled
+
+View columns
+
+match_travel_intelligence
+
+8
+
+1,653
+
+544 kB
+
+Disabled
+
+View columns
+
+match_weather
+
+7
+
+189
+
+96 kB
+
+Disabled
+
+View columns
+
+matches
+
+13
+
+3,154
+
+2200 kB
+
+Disabled
+
+View columns
+
+M
+mv_daily_banker_bets
+
+22
+
+–
+
+–
+
+Disabled
+
+View columns
+
+platform_daily_summary
+
+10
+
+20
+
+48 kB
+
+Disabled
+
+View columns
+
+player_injuries
+
+Active and historical player injuries — V2 SofaScore squad intelligence
+14
+
+259
+
+152 kB
+
+Disabled
+
+View columns
+
+player_intelligence
+
+18
+
+10,874
+
+4984 kB
+
+Disabled
+
+View columns
+
+player_match_impact
+
+19
+
+3,368
+
+1080 kB
+
+Disabled
+
+View columns
+
+player_match_load
+
+8
+
+35,587
+
+10208 kB
+
+Disabled
+
+View columns
+
+player_matchup
+
+8
+
+2,214
+
+808 kB
+
+Disabled
+
+View columns
+
+player_season_statistics
+
+118
+
+5,479
+
+3904 kB
+
+Disabled
+
+View columns
+
+player_transfers
+
+10
+
+135
+
+184 kB
+
+Disabled
+
+View columns
+
+player_versatility
+
+13
+
+10,874
+
+3680 kB
+
+Disabled
+
+View columns
+
+players
+
+29
+
+10,874
+
+3320 kB
+
+Disabled
+
+View columns
+
+position_adaptability
+
+13
+
+221
+
+96 kB
+
+Disabled
+
+View columns
+
+position_coverage
+
+11
+
+2,378
+
+1112 kB
+
+Disabled
+
+View columns
+
+position_depth_comparison
+
+14
+
+2,541
+
+792 kB
+
+Disabled
+
+View columns
+
+readiness_history
+
+Append-only pre-match snapshot archive. One immutable row per match, written pre-kickoff; result columns filled in once, later. Basis of the League Gap Analytics accuracy layer.
+27
+
+1,133
+
+424 kB
+
+Disabled
+
+View columns
+
+seasons
+
+6
+
+63
+
+136 kB
+
+Disabled
+
+View columns
+
+signal_backtests
+
+Measured historical performance per signal rule. Rules are evaluated ONLY on pre-kickoff features (team_match_snapshots, match_opponent_context, readiness_history) — never on information from after kickoff. The signal writer refuses to publish rules that are not calibrated here.
+12
+
+11
+
+48 kB
+
+Disabled
+
+View columns
+
+squad_depth
+
+14
+
+397
+
+240 kB
+
+Disabled
+
+View columns
+
+stadiums
+
+13
+
+569
+
+272 kB
+
+Disabled
+
+View columns
+
+substitution_impact
+
+Bench = team roster minus THIS MATCH's real match_predicted_lineups XI (not an arbitrary DB-order slice), bench quality from player_strength_score (migration 027). Requires processStartingXIStrength to have run first for the match.
+15
+
+50
+
+96 kB
+
+Disabled
+
+View columns
+
+tactical_flexibility
+
+13
+
+221
+
+120 kB
+
+Disabled
+
+View columns
+
+team_betting_intelligence
+
+Attack/defence ratings and market-confidence scores derived from team_season_statistics (requires migration 026 fields: shots, shots_against, big_chances_against). Formula weights are heuristic/provisional, not backtested — see file header.
+30
+
+0
+
+96 kB
+
+Disabled
+
+View columns
+
+team_fixture_difficulty
+
+7
+
+704
+
+264 kB
+
+Disabled
+
+View columns
+
+team_fixture_load
+
+12
+
+5,831
+
+1704 kB
+
+Disabled
+
+View columns
+
+team_form_history
+
+13
+
+3,641
+
+1360 kB
+
+Disabled
+
+View columns
+
+team_form_quality
+
+Rolling opponent-quality-adjusted form intelligence. Window = last 10 matches with valid opponent context. All formulas defined in processFormQuality.ts and mirrored in column comments here.
+18
+
+480
+
+208 kB
+
+Disabled
+
+View columns
+
+team_goal_dependency
+
+11
+
+226
+
+120 kB
+
+Disabled
+
+View columns
+
+team_ht_profile
+
+32
+
+–
+
+–
+
+Disabled
+
+View columns
+
+team_injury_impact
+
+10
+
+93
+
+96 kB
+
+Disabled
+
+View columns
+
+team_intelligence
+
+26
+
+1,389
+
+880 kB
+
+Disabled
+
+View columns
+
+team_intelligence_history
+
+11
+
+15,723
+
+3864 kB
+
+Disabled
+
+View columns
+
+team_locations
+
+7
+
+571
+
+184 kB
+
+Disabled
+
+View columns
+
+team_match_impact
+
+16
+
+432
+
+208 kB
+
+Disabled
+
+View columns
+
+team_match_snapshots
+
+Pre-kickoff league-table and form state per team per match, reconstructed by date-ordered result replay per tournament season. Never overwritten by later-season knowledge.
+14
+
+3,774
+
+1432 kB
+
+Disabled
+
+View columns
+
+team_momentum
+
+7
+
+1,371
+
+392 kB
+
+Disabled
+
+View columns
+
+team_motivation
+
+Team-level table-context motivation (title race / relegation battle / mid-table apathy), distinct from match_intelligence.motivation_gap (migration 005), which is a per-FIXTURE heuristic from competition tier + active-competition count. Complementary, not redundant.
+10
+
+1,389
+
+448 kB
+
+Disabled
+
+View columns
+
+team_playing_style
+
+9
+
+223
+
+120 kB
+
+Disabled
+
+View columns
+
+team_position_depth
+
+Per-position availability counts derived from squad sync
+11
+
+3,572
+
+792 kB
+
+Disabled
+
+View columns
+
+team_season_statistics
+
+34
+
+261
+
+144 kB
+
+Disabled
+
+View columns
+
+team_squads_snapshot
+
+12
+
+718
+
+328 kB
+
+Disabled
+
+View columns
+
+team_strength_dashboard
+
+12
+
+223
+
+112 kB
+
+Disabled
+
+View columns
+
+team_strength_ratings
+
+Precomputed team strength from form history and market value
+9
+
+1,371
+
+560 kB
+
+Disabled
+
+View columns
+
+team_strengths
+
+6
+
+330
+
+168 kB
+
+Disabled
+
+View columns
+
+team_tactical_variations
+
+8
+
+198
+
+296 kB
+
+Disabled
+
+View columns
+
+team_transfer_intelligence
+
+Transfer activity and retention metrics derived from squad sync
+8
+
+330
+
+96 kB
+
+Disabled
+
+View columns
+
+team_travel_load
+
+12
+
+1,612
+
+448 kB
+
+Disabled
+
+View columns
+
+team_venue_performance
+
+Home vs away performance splits from match results
+12
+
+1,371
+
+488 kB
+
+Disabled
+
+View columns
+
+team_versatility
+
+Per-MATCH versatility snapshot from that match's own predicted_lineups row. Distinct from team_intelligence.lineup_versatility_score (migration 020), which is a team-level rolling scalar from the latest predicted-XI occurrence per player across ALL matches, not scoped to one fixture. Both are legitimate, answering different questions (this match specifically vs. general team character).
+16
+
+432
+
+288 kB
+
+Disabled
+
+View columns
+
+team_weaknesses
+
+6
+
+316
+
+152 kB
+
+Disabled
+
+View columns
+
+teams
+
+10
+
+1,428
+
+616 kB
+
+Disabled
+
+View columns
+
+tournament_standings
+
+15
+
+681
+
+304 kB
+
+Disabled
+
+View columns
+
+tournaments
+
+8
+
+46
+
+136 kB
+
+Disabled
+
+View columns
+
+versatility_advantage
+
+10
+
+194
+
+128 kB
+
+Disabled
+
+View columns
+
+80 tables

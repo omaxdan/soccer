@@ -1712,7 +1712,7 @@ export async function processMatchIntelligencePartial(opts?: {
     // PostgREST in ALL-matches mode (builder assembled conditionally, so the
     // read sweep's pattern missed it). Match intelligence — the core product
     // table — only ever covered the 1000 newest matches.
-    const matches = await fetchAllRows(matchQuery);
+    const matches = await fetchAllRows(matchQuery, 1000, 'id', 'match-intelligence:matches');
 
     if (!matches || matches.length === 0) {
       return { matchesProcessed: 0, rowsWritten: 0 };
@@ -1722,7 +1722,8 @@ export async function processMatchIntelligencePartial(opts?: {
     const teamIntel = await fetchAllRows(
       db
         .from('team_intelligence')
-        .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score')
+        .select('team_id, readiness_score, form_index, congestion_score, travel_fatigue_score, squad_stability_score, active_competitions, injury_burden_score'),
+      1000, 'id', 'match-intelligence:teamIntel'
     );
     const intelMap = new Map<number, any>(
       (teamIntel || []).map((t: any) => [t.team_id, t])
@@ -1732,7 +1733,8 @@ export async function processMatchIntelligencePartial(opts?: {
     const strengthRows = await fetchAllRows(
       db
         .from('team_strength_ratings')
-        .select('team_id, strength_score')
+        .select('team_id, strength_score'),
+      1000, 'id', 'match-intelligence:strengthRows'
     );
     const strengthMap = new Map<number, number>(
       (strengthRows ?? []).map((s: any) => [s.team_id, s.strength_score ?? 50])
@@ -1742,7 +1744,8 @@ export async function processMatchIntelligencePartial(opts?: {
     const venueRows = await fetchAllRows(
       db
         .from('team_venue_performance')
-        .select('team_id, venue_advantage_score')
+        .select('team_id, venue_advantage_score'),
+      1000, 'id', 'match-intelligence:venueRows'
     );
     const venueMap = new Map<number, number>(
       (venueRows ?? []).map((v: any) => [v.team_id, v.venue_advantage_score ?? 50])
@@ -1754,7 +1757,8 @@ export async function processMatchIntelligencePartial(opts?: {
         .from('matches')
         .select('id, home_team_id, away_team_id, date')
         .eq('status', 'finished')
-        .order('date', { ascending: false })
+        .order('date', { ascending: false }),
+      1000, 'id', 'match-intelligence:finishedMatches'
     );
 
     const teamMatchDates = new Map<number, Date[]>();
@@ -1766,13 +1770,18 @@ export async function processMatchIntelligencePartial(opts?: {
       }
     }
 
-    // Get travel intelligence per match
-    const matchIds = matches.map((m: any) => m.id);
+    // Get travel intelligence — load the WHOLE table rather than filtering
+    // by `.in('match_id', matchIds)`. In ALL-matches mode matchIds is
+    // 3,000+ entries, which serialized to a 21,757-character URL and blew
+    // past undici's ~16KB header limit (UND_ERR_HEADERS_OVERFLOW, observed
+    // 2026-07-19). match_travel_intelligence is only ~1,653 rows total —
+    // far cheaper to fetch unfiltered (2 pages) and look up in-memory,
+    // same pattern already used for teamIntel/strengthRows/venueRows above.
     const travelRows = await fetchAllRows(
       db
         .from('match_travel_intelligence')
-        .select('match_id, home_team_distance_km, away_team_distance_km, travel_advantage_km')
-        .in('match_id', matchIds)
+        .select('match_id, home_team_distance_km, away_team_distance_km, travel_advantage_km'),
+      1000, 'id', 'match-intelligence:travelRows'
     );
 
     const travelMap = new Map<number, any>(
@@ -2978,6 +2987,16 @@ export async function processPredictedLineups(): Promise<{
 
     // ── 4. Get active injuries from player_injuries table ──────────────────
     // This gives us more detailed injury info than the current_injury boolean
+    //
+    // Was `.in('player_id', [...statsMap.keys()])` — statsMap can hold
+    // thousands of player IDs (one per season_external_id row across every
+    // team in scope), which serialized into a URL long enough that the
+    // gateway rejected it outright with a bare "Bad Request" (no
+    // details/hint — this is a gateway-level rejection before it reaches
+    // PostgREST, unlike the match_travel_intelligence case which surfaced
+    // as UND_ERR_HEADERS_OVERFLOW). player_injuries is only ~259 rows
+    // total (see Table Rows.txt) — cheaper to fetch unfiltered and look up
+    // in-memory, same fix as match-intelligence:travelRows.
     let injuries: any[] = [];
     try {
       injuries = await fetchAllRows(
@@ -2985,7 +3004,6 @@ export async function processPredictedLineups(): Promise<{
         .from('player_injuries')
         .select('player_id, injury_reason, injury_status, expected_return_days, days_out, injury_severity_score')
         .eq('active', true)
-        .in('player_id', [...statsMap.keys()])
       );
     } catch (e: any) {
       logger.warn({ error: e.message }, 'Failed to fetch player_injuries — continuing degraded');

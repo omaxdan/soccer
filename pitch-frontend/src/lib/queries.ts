@@ -665,7 +665,17 @@ function fallbackCard(): DailyBettingCard {
   return {
     date: new Date().toISOString().split("T")[0],
     day: "Loading",
-    summary: { singles: 0, doubles: 0, trebles: 0, daily_accs: 0, mega_accs: 0 },
+    description: "No picks available yet. Check back after the next data refresh.",
+    summary: { 
+      singles: 0, 
+      bankers: 0,    // ✅ Added
+      strongs: 0,    // ✅ Added
+      days: 0,       // ✅ Added
+      doubles: 0, 
+      trebles: 0, 
+      daily_accs: 0, 
+      mega_accs: 0 
+    },
     singles: [],
     accumulators: [],
   };
