@@ -6,7 +6,9 @@ import { SIGNAL_RULES, PreMatchFeatures, Market } from './backtestSignals';
 /**
  * RISK ENGINE + OPPORTUNITY LAYER + SIGNAL WRITER  (migration 029)
  *
- * For every upcoming match (next HORIZON_DAYS) with match_intelligence:
+ * For every upcoming match (next HORIZON_DAYS), plus a GRACE_HOURS lookback
+ * for matches that kicked off/finished before ever being processed, with
+ * match_intelligence:
  *
  *   match_risk_intelligence — 0–100 risk score from named, weighted factors.
  *     Every factor ships with the sentence explaining it. Bands:
@@ -23,15 +25,27 @@ import { SIGNAL_RULES, PreMatchFeatures, Market } from './backtestSignals';
  *     tags the row's drivers with '[UNCALIBRATED]'. Legacy signal groups
  *     are never touched — the writer deletes and rewrites ONLY its group.
  *
+ * GRACE_HOURS: without this, a match whose status flips to `finished`
+ * before this job ever ran (late sync, missed cron tick, short-notice
+ * fixture) was permanently excluded by the status filter below — its
+ * match_opportunity/match_risk_intelligence rows stayed null forever, which
+ * showed up as a blank "Overview" tab on the frontend. Matches inside the
+ * grace window are still processed once regardless of status so they get a
+ * value; matches older than that stay excluded so we don't keep recomputing
+ * off team-state tables (team_intelligence, team_form_quality, etc.) that
+ * have since drifted away from their pre-match state.
+ *
  * Reads (never writes): match_intelligence, team_intelligence,
  * team_goal_dependency, team_injury_impact, team_form_quality,
  * team_strength_ratings, team_match_snapshots, signal_backtests.
  * The legacy engine stays untouched.
  *
- * DB-only. Idempotent.
+ * DB-only. Idempotent (upsert on match_id) — safe to rerun over the same
+ * match repeatedly, including matches still inside the grace window.
  */
 
 const HORIZON_DAYS = Number(process.env.PT_HORIZON_DAYS ?? 7);
+const GRACE_HOURS = Number(process.env.PT_GRACE_HOURS ?? 48);
 const PUBLISH_UNCALIBRATED = process.env.PT_PUBLISH_UNCALIBRATED === '1';
 
 interface RiskFactor { key: string; label: string; points: number; }
@@ -48,17 +62,23 @@ function riskBand(score: number): 'LOW' | 'MEDIUM' | 'HIGH' {
 export async function processRiskOpportunity() {
   const now = new Date();
   const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000);
-  logger.info({ horizonDays: HORIZON_DAYS }, 'Risk/opportunity: loading inputs');
+  const graceStart = new Date(now.getTime() - GRACE_HOURS * 3_600_000);
+  logger.info({ horizonDays: HORIZON_DAYS, graceHours: GRACE_HOURS }, 'Risk/opportunity: loading inputs');
 
+  // Two groups in one window: matches still upcoming (any non-terminal
+  // status) get recomputed every run, and matches inside the grace lookback
+  // that already finished/were postponed etc. get a one-time catch-up pass
+  // — regardless of status — so they don't stay permanently unprocessed.
+  const nowIso = now.toISOString();
   const matches = await fetchAllRows<any>(
     db.from('matches')
       .select('id, home_team_id, away_team_id, date, status, home:teams!matches_home_team_id_fkey(name), away:teams!matches_away_team_id_fkey(name)')
-      .gte('date', now.toISOString())
+      .gte('date', graceStart.toISOString())
       .lte('date', horizon.toISOString())
-      .not('status', 'in', '(postponed,cancelled,canceled,abandoned,finished)')
+      .or(`and(date.gte.${nowIso},status.not.in.(postponed,cancelled,canceled,abandoned,finished)),date.lt.${nowIso}`)
   );
   if (matches.length === 0) {
-    logger.info('Risk/opportunity: no upcoming matches in horizon');
+    logger.info('Risk/opportunity: no matches in horizon/grace window');
     return { matches: 0 };
   }
   const matchIds = matches.map((m: any) => m.id);
@@ -89,7 +109,6 @@ export async function processRiskOpportunity() {
   const riskRows: any[] = [];
   const oppRows: any[] = [];
   const signalRows: any[] = [];
-  const nowIso = now.toISOString();
 
   for (const m of matches) {
     const mi = intelByMatch.get(m.id) ?? {};
