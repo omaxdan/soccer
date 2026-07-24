@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { getLeagues, getLeagueGap } from "@/lib/queries";
-import { Section, StatCell } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
-import { n0, n1, km, pct } from "@/lib/intel";
+import { Collapsible } from "@/components/Collapsible";
+import { LeaguesByRegion, type LeagueCard } from "@/components/LeaguesByRegion";
 import { leagueSlug } from "@/lib/slug";
+import { regionOf, REGIONS } from "@/lib/region";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,20 @@ export default async function LeaguesPage() {
 
   const gapByName = new Map(gaps.map((g) => [g.league_name.toLowerCase(), g]));
 
+  const cards: LeagueCard[] = leagues.map((l) => {
+    const name = l.tournament?.name ?? `League ${l.tournament_id}`;
+    const gap = gapByName.get(name.toLowerCase());
+    return {
+      id: l.tournament_id,
+      name,
+      href: l.tournament ? `/league/${leagueSlug(l.tournament)}` : "#",
+      teamCount: l.team_count ?? null,
+      region: regionOf(l.tournament?.country),
+      calibrated: gap ? gap.meets_sample_gate : null,
+    };
+  });
+  const regionsPresent = REGIONS.filter((r) => cards.some((c) => c.region === r));
+
   return (
     <div className="space-y-4">
       <header className="panel p-5">
@@ -22,44 +36,17 @@ export default async function LeaguesPage() {
           Where the engine is calibrated — and where it isn&rsquo;t.
         </h1>
         <p className="mt-2 max-w-lg text-[0.85rem] leading-relaxed text-muted">
-          Coverage quality varies by competition. These are the league-level
-          conditions and the model&rsquo;s measured hit rate against baseline,
-          so you know which reads to trust.
+          Coverage quality varies by competition. Pick a region to narrow the
+          list — full conditions and calibration detail live on each league&rsquo;s
+          own page.
         </p>
       </header>
 
-      {/* League conditions */}
-      <Section index="01" title="League conditions">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {leagues.map((l) => {
-            const name = l.tournament?.name ?? `League ${l.tournament_id}`;
-            const href = l.tournament ? `/league/${leagueSlug(l.tournament)}` : "#";
-            return (
-              <Link key={l.tournament_id} href={href} className="panel-raised block p-4 transition-colors hover:border-faint">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold tracking-tight">{name}</h3>
-                  <span className="mono text-[0.6rem] text-faint">
-                    {l.team_count} teams
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  <CondBar label="Avg readiness" value={l.avg_readiness} color="var(--edge)" />
-                  <CondBar label="Avg form" value={l.avg_form} color="var(--cool)" />
-                  <CondBar label="Congestion" value={l.avg_congestion} color="var(--warn)" />
-                </div>
-                <div className="mono mt-3 flex items-center justify-between border-t border-line pt-2 text-[0.6rem] text-muted">
-                  <span>Rest {n1(l.avg_rest_days)}d</span>
-                  <span>Travel 14d {km(l.avg_travel_14d)}</span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </Section>
+      <LeaguesByRegion leagues={cards} regions={regionsPresent} />
 
-      {/* Model performance */}
+      {/* Model performance — detail power users want, collapsed by default */}
       {gaps.length > 0 && (
-        <Section index="02" title="Model performance by league">
+        <Collapsible title="Model performance by league">
           <p className="mb-3 text-[0.75rem] leading-relaxed text-muted">
             Hit rate is the share of strong picks that landed; lift is the edge
             over a naive baseline. Leagues below the sample gate are still
@@ -101,18 +88,8 @@ export default async function LeaguesPage() {
               );
             })}
           </div>
-        </Section>
+        </Collapsible>
       )}
-    </div>
-  );
-}
-
-function CondBar({ label, value, color }: { label: string; value: number | null | undefined; color: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="mono w-24 shrink-0 text-[0.6rem] uppercase tracking-wide text-muted">{label}</span>
-      <BarMeter value={value} color={color} height={6} />
-      <span className="mono w-7 text-right text-[0.65rem] text-text tnum">{n0(value)}</span>
     </div>
   );
 }

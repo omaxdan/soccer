@@ -1,11 +1,21 @@
 import Link from "next/link";
 import { Crest } from "./Crest";
 import { OpportunityRiskMeter, RiskBadge } from "./Meters";
+import { PickBadge } from "./Primitives";
 import { kickoff, opportunityColor, bestLean, normProb } from "@/lib/intel";
 import { matchSlug } from "@/lib/slug";
 import type { MatchRow } from "@/lib/types";
 
-export function MatchCard({ m, rank }: { m: MatchRow; rank?: number }) {
+export function MatchCard({
+  m,
+  rank,
+  pick,
+}: {
+  m: MatchRow;
+  rank?: number;
+  /** Optional BANKER/STRONG tier if this fixture is in today's Form Index Picks. */
+  pick?: "BANKER" | "STRONG";
+}) {
   const k = kickoff(m.date);
   const opp = m.opportunity?.opportunity_score ?? null;
   const lean = bestLean(m);
@@ -39,6 +49,7 @@ export function MatchCard({ m, rank }: { m: MatchRow; rank?: number }) {
         <span className="mono truncate text-[0.6rem] uppercase tracking-widest text-muted">
           {m.tournament?.name ?? m.competition}
         </span>
+        {pick && <PickBadge tier={pick} compact />}
         <span className="mono ml-auto shrink-0 text-[0.6rem] text-faint">
           {k.day} · {k.time}
         </span>

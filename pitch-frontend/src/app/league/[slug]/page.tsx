@@ -6,6 +6,7 @@ import { Crest } from "@/components/Crest";
 import { StatCell } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
 import { Tabs } from "@/components/Tabs";
+import { Collapsible } from "@/components/Collapsible";
 import { teamSlug } from "@/lib/slug";
 import { n0, n1, km, pct, difficultyBand } from "@/lib/intel";
 import { Explain } from "@/components/Explain";
@@ -39,7 +40,6 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
     [...teams].filter((r) => key(r) != null).sort((a, b) => (key(b) ?? 0) - (key(a) ?? 0));
 
   const powerRanking = rankBy((r) => r.intel?.form_index);
-  const readinessRanking = rankBy((r) => r.intel?.readiness_score);
   const qualityRanking = rankBy((r) => r.betting?.team_quality_score);
 
   const avgQuality = qualityRanking.length > 0
@@ -52,8 +52,8 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const ppgByTeam: Record<number, number | null> = {};
   table.forEach((s) => { ppgByTeam[s.team.id] = (s.matches ?? 0) > 0 ? (s.points ?? 0) / (s.matches ?? 1) : null; });
 
-  // ── OVERVIEW ──
-  const overview = (
+  // ── League conditions / model calibration — folded into the "More" collapsible ──
+  const conditions = (
     <div className="space-y-4">
       {intel && (
         <Panel title="League conditions">
@@ -148,7 +148,6 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
     <div className="space-y-4">
       <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
       <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} explain="power_ranking" />
-      <RankPanel title="Readiness ranking" rows={readinessRanking} value={(r) => r.intel?.readiness_score} color="var(--edge)" explain="readiness" />
       {qualityRanking.length > 0 && (
         <Panel title="Top teams by quality" explain="team_quality_score">
           <div className="mono grid grid-cols-[1.5rem_1fr_repeat(4,2.75rem)] items-center gap-1 border-b border-line pb-2 text-[0.55rem] uppercase tracking-wide text-faint">
@@ -274,15 +273,18 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
       </section>
       <Tabs
         items={[
-          { id: "overview", label: "Overview", content: overview },
           { id: "standings", label: "Standings", content: standingsTab },
-          { id: "teams", label: "Teams", content: teamsTab },
           { id: "power", label: "Power Rankings", content: powerTab },
           { id: "fixtures", label: "Fixtures", content: fixturesTab },
-          { id: "goals", label: "Goals", content: goals },
-          { id: "markets", label: "Markets", content: markets },
         ]}
       />
+
+      <Collapsible title="More — league conditions, teams, goals & markets">
+        {conditions}
+        {teamsTab}
+        {goals}
+        {markets}
+      </Collapsible>
     </div>
   );
 }

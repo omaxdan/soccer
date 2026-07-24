@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pitch-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:\\wamp64\\www\\soccer\\pitch-frontend", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}

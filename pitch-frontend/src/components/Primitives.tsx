@@ -53,6 +53,29 @@ export function StatCell({
   );
 }
 
+// ── Form Index Pick badge (BANKER/STRONG from the daily betting card) ────
+export function PickBadge({
+  tier,
+  compact = false,
+}: {
+  tier: "BANKER" | "STRONG" | null | undefined;
+  compact?: boolean;
+}) {
+  if (tier !== "BANKER" && tier !== "STRONG") return null;
+  const isBanker = tier === "BANKER";
+  const color = isBanker ? "var(--edge)" : "var(--amber)";
+  return (
+    <span
+      className="mono inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[0.55rem] font-bold tracking-wide"
+      style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)` }}
+      title={isBanker ? "Form Index Pick — Banker" : "Form Index Pick — Strong"}
+    >
+      <span aria-hidden>{isBanker ? "🏠" : "✅"}</span>
+      {!compact && tier}
+    </span>
+  );
+}
+
 // ── Section with terminal eyebrow header ─────────────────
 export function Section({
   index,

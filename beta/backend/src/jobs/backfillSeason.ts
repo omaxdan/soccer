@@ -167,7 +167,7 @@ export async function backfillYears(
   let failureCount = 0;
 
   for (let year = startYear; year <= endYear; year++) {
-    logger.info({ year }, `Backfilling year ${year}`);
+    logger.debug({ year }, `Backfilling year ${year}`);
 
     try {
       const result = await backfillSeason(year, country, league);
@@ -180,7 +180,7 @@ export async function backfillYears(
       }
 
       // Sleep between years to avoid rate limits
-      logger.info('Sleeping 2 minutes before next year...');
+      logger.debug('Sleeping 2 minutes before next year...');
       await sleep(120000);
     } catch (error: any) {
       logger.error(

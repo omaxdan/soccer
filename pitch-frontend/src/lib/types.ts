@@ -152,6 +152,8 @@ export interface MatchRow {
   awayIntel?: TeamIntelligence | null;
   homeSeasonStats?: import("./performance").TeamSeasonStats | null;
   awaySeasonStats?: import("./performance").TeamSeasonStats | null;
+  homeFormQuality?: TeamFormQuality | null;
+  awayFormQuality?: TeamFormQuality | null;
 }
 
 export interface TeamMatchImpact {
@@ -342,8 +344,12 @@ export interface AccumulatorMatch {
   match_up: string;
   competition: string;
   form_gap: number;
-  confidence: string;
-  win_pct: number;
+  confidence?: string;
+  win_pct?: number;
+  league?: string;
+  rank_score?: number;
+  readiness_gap?: number;  // ✅ Add this
+  classification?: string;
   day?: string;
   date?: string;
 }
@@ -508,6 +514,99 @@ export interface TeamBettingIntelligence {
   updated_at: string | null;
 }
 
+// ── Team resume: strength dashboard / ratings / identity ─
+export interface TeamStrengthDashboard {
+  team_id: number;
+  overall_rating: number | null;
+  attack_rating: number | null;
+  midfield_rating: number | null;
+  defense_rating: number | null;
+  set_piece_rating: number | null;
+  tactical_rating: number | null;
+  experience_rating: number | null;
+  form_trend: string | null;
+  form_rating: number | null;
+}
+
+export interface TeamStrengthRatings {
+  team_id: number;
+  league_position: number | null;
+  points_per_game: number | null;
+  win_percentage: number | null;
+  strength_score: number | null;
+  market_value_eur: number | null;
+  lineup_versatility_score: number | null;
+}
+
+export interface TeamPlayingStyle {
+  team_id: number;
+  playing_style: string | null;
+  possession_score: number | null;
+  passing_style: string | null;
+  attacking_style: string | null;
+  defensive_style: string | null;
+  style_confidence: number | null;
+}
+
+export interface TeamStrengthItem {
+  team_id: number;
+  strength_type: string;
+  description: string | null;
+  score: number | null;
+}
+
+export interface TeamWeaknessItem {
+  team_id: number;
+  weakness_type: string;
+  description: string | null;
+  score: number | null;
+}
+
+export interface TeamTacticalFormationEntry {
+  match_id: number;
+  formation: string;
+  match_date: string;
+}
+
+export interface TeamTacticalPattern {
+  pattern: string;
+  description: string;
+}
+
+export interface TeamSystemEffectiveness {
+  formation: string;
+  effectiveness_score: number;
+}
+
+export interface TeamTacticalVariations {
+  team_id: number;
+  formation_history: TeamTacticalFormationEntry[] | null;
+  tactical_patterns: TeamTacticalPattern[] | null;
+  system_effectiveness: TeamSystemEffectiveness[] | null;
+  adaptability_score: { depth: number; width: number; pressing: number; counter_attack: number } | null;
+  game_state_adaptations: string[] | null;
+}
+
+export interface TeamTransferIntelligence {
+  team_id: number;
+  transfers_in: number | null;
+  transfers_out: number | null;
+  retained_players: number | null;
+  retention_percentage: number | null;
+  transfer_activity_score: number | null;
+}
+
+export interface PlayerInjuryRow {
+  player_id: number;
+  name: string;
+  short_name: string | null;
+  injury_reason: string | null;
+  injury_status: string | null;
+  expected_return_days: number | null;
+  days_out: number | null;
+  injury_severity_score: number | null;
+}
+
 export interface MatchHalfTimeIntelligence {
   match_id: number;
   home_ht_win_prob: number | null;
@@ -531,4 +630,28 @@ export interface MatchHalfTimeIntelligence {
   btts_2h_prob: number | null;
   confidence_score: number | null;
   confidence_band: string | null;
+}
+
+// mv_match_scoring_probabilities — percentage fields come back as strings
+// from the materialized view (numeric column serialized over PostgREST),
+// not numbers; parsed on read.
+export interface MatchScoringProbabilities {
+  match_id: number;
+  home_team: string | null;
+  away_team: string | null;
+  home_scores_pct: string | number | null;
+  home_sample: number | null;
+  away_concedes_pct: string | number | null;
+  away_concede_sample: number | null;
+  home_to_score_pct: string | number | null;
+  away_scores_pct: string | number | null;
+  away_sample: number | null;
+  home_concedes_pct: string | number | null;
+  home_concede_sample: number | null;
+  away_to_score_pct: string | number | null;
+  btts_pct: string | number | null;
+  historical_btts_pct: string | number | null;
+  league_btts_pct: string | number | null;
+  btts_verdict: string | null;
+  components_available: number | null;
 }

@@ -109,7 +109,7 @@ export async function processFormForMatch(
     const homeResult_db = await teamFormHistoryRepository.upsert(homeFormRecord);
     const awayResult_db = await teamFormHistoryRepository.upsert(awayFormRecord);
 
-    logger.info(
+    logger.debug(
       {
         matchId,
         homeTeamId: match.home_team_id,

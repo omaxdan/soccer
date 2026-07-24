@@ -13,7 +13,14 @@ const LENSES: { id: Lens; label: string }[] = [
   { id: "goals", label: "Goal-rich" },
 ];
 
-export function BoardClient({ matches }: { matches: MatchRow[] }) {
+export function BoardClient({
+  matches,
+  picks,
+}: {
+  matches: MatchRow[];
+  /** Optional match_id → BANKER/STRONG lookup from the daily betting card. */
+  picks?: Map<number, "BANKER" | "STRONG">;
+}) {
   const [lens, setLens] = useState<Lens>("all");
   const [comp, setComp] = useState<string>("all");
 
@@ -89,7 +96,7 @@ export function BoardClient({ matches }: { matches: MatchRow[] }) {
           </button>
         </div>
       ) : (
-        <BoardRows matches={filtered} />
+        <BoardRows matches={filtered} picks={picks} />
       )}
     </div>
   );

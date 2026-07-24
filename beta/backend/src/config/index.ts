@@ -70,7 +70,10 @@ function loadConfig(): Config {
       env: (process.env.NODE_ENV as any) || 'development',
     },
     log: {
-      level: process.env.LOG_LEVEL || 'debug',
+      // 'info' by default — per-item/progress logs across the pipeline are
+      // logger.debug(), so this keeps normal runs to lifecycle + summary
+      // lines only. Set LOG_LEVEL=debug locally to see per-item detail.
+      level: process.env.LOG_LEVEL || 'info',
     },
     cron: {
       enabled: process.env.CRON_ENABLED === 'true',

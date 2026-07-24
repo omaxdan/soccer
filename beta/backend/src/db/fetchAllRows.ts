@@ -105,7 +105,7 @@ export async function fetchAllRows<T = any>(
 
     if (!data || data.length === 0) break;
     all = all.concat(data);
-    logger.info({ label, page, pageRows: data.length, totalSoFar: all.length }, 'fetchAllRows page fetched');
+    logger.debug({ label, page, pageRows: data.length, totalSoFar: all.length }, 'fetchAllRows page fetched');
     if (data.length < pageSize) break;
     page++;
   }

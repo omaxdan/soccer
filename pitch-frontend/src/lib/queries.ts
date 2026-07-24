@@ -5,6 +5,7 @@ import type {
   TeamFormQuality, TeamVenuePerformance, TeamMomentum, PositionDepth,
   PredictedLineupPlayer, LeagueIntelligence, LeagueGapSummary,
   DailyBettingCard,  // ✅ Add this
+  MatchScoringProbabilities,
 } from "./types";
 import * as M from "./mock";
 import { normProb } from "./intel";
@@ -112,6 +113,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     .from("matches")
     .select(
       `id, external_match_id, date, status, competition, venue_id,
+       stadium:stadiums(name, city),
        tournament:tournaments(id, external_id, name, slug, country:countries(id, name, alpha2)),
        home:teams!matches_home_team_id_fkey(${TEAM_COLS}),
        away:teams!matches_away_team_id_fkey(${TEAM_COLS})`
@@ -127,7 +129,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     teamImpactHome, teamImpactAway, impactAdvantage, keyBattlesRaw,
     positionalMatchupsRaw, tacticalAdvantages, performanceComparison,
     substitutionImpact, squadDepthComparison,
-    homeBetting, awayBetting, homeIntel, awayIntel, homeSeasonStats, awaySeasonStats] = await Promise.all([
+    homeBetting, awayBetting, homeIntel, awayIntel, homeSeasonStats, awaySeasonStats,
+    homeFormQuality, awayFormQuality] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
@@ -151,6 +154,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     client.from("team_intelligence").select("*").eq("team_id", awayTeam.id).maybeSingle(),
     client.from("team_season_statistics").select("*").eq("team_id", homeTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
     client.from("team_season_statistics").select("*").eq("team_id", awayTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
+    client.from("team_form_quality").select("*").eq("team_id", homeTeam.id).maybeSingle(),
+    client.from("team_form_quality").select("*").eq("team_id", awayTeam.id).maybeSingle(),
   ]);
 
   const keyBattles = ((keyBattlesRaw.data as any[]) ?? []).map((b) => ({
@@ -165,6 +170,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     status: m.status, competition: m.competition,
     tournament: normTournament(m.tournament),
     home: homeTeam, away: awayTeam,
+    venue: (m.stadium as any)?.name ?? null,
     home_score: result.data?.home_score ?? null,
     away_score: result.data?.away_score ?? null,
     intel: intel.data ? normIntel(intel.data) : null,
@@ -186,6 +192,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     awayIntel: (awayIntel.data as any) ?? null,
     homeSeasonStats: (homeSeasonStats.data as any) ?? null,
     awaySeasonStats: (awaySeasonStats.data as any) ?? null,
+    homeFormQuality: (homeFormQuality.data as any) ?? null,
+    awayFormQuality: (awayFormQuality.data as any) ?? null,
   };
 }
 
@@ -197,6 +205,17 @@ export async function getMatchHalfTimeIntelligence(
   if (!client) return null;
   const { data } = await client.from("match_half_time_intelligence").select("*").eq("match_id", matchId).maybeSingle();
   return (data as any) ?? null;
+}
+
+export async function getMatchScoringProbs(matchId: number): Promise<MatchScoringProbabilities | null> {
+  const client = db();
+  if (!client) return null;
+  const { data } = await client
+    .from("mv_match_scoring_probabilities")
+    .select("*")
+    .eq("match_id", matchId)
+    .maybeSingle();
+  return (data as MatchScoringProbabilities) ?? null;
 }
 
 export async function getLineups(matchId: number): Promise<PredictedLineupPlayer[]> {
@@ -433,6 +452,14 @@ export async function getTeamIntel(id: number): Promise<{
   depth: PositionDepth[];
   motivation: import("./types").TeamMotivationData | null;
   versatility: import("./types").TeamVersatilityLatest | null;
+  strengthDashboard: import("./types").TeamStrengthDashboard | null;
+  strengthRatings: import("./types").TeamStrengthRatings | null;
+  playingStyle: import("./types").TeamPlayingStyle | null;
+  strengths: import("./types").TeamStrengthItem[];
+  weaknesses: import("./types").TeamWeaknessItem[];
+  tacticalVariations: import("./types").TeamTacticalVariations | null;
+  transferIntel: import("./types").TeamTransferIntelligence | null;
+  injuries: import("./types").PlayerInjuryRow[];
 }> {
   const client = db();
   if (!client) {
@@ -447,9 +474,20 @@ export async function getTeamIntel(id: number): Promise<{
       depth: M.MOCK_DEPTH[id] ?? [],
       motivation: M.MOCK_MOTIVATION[id] ?? null,
       versatility: null,
+      strengthDashboard: null,
+      strengthRatings: null,
+      playingStyle: null,
+      strengths: [],
+      weaknesses: [],
+      tacticalVariations: null,
+      transferIntel: null,
+      injuries: [],
     };
   }
-  const [intel, betting, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility] = await Promise.all([
+  const [
+    intel, betting, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility,
+    strengthDashboard, strengthRatings, playingStyle, strengths, weaknesses, tacticalVariations, transferIntel, injuredPlayers,
+  ] = await Promise.all([
     client.from("team_intelligence").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_betting_intelligence").select("*").eq("team_id", id)
       .order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
@@ -466,6 +504,16 @@ export async function getTeamIntel(id: number): Promise<{
     // team profile page. Most recent computed row stands in as a proxy.
     client.from("team_versatility").select("*").eq("team_id", id)
       .order("calculated_at", { ascending: false }).limit(1).maybeSingle(),
+    client.from("team_strength_dashboard").select("*").eq("team_id", id).maybeSingle(),
+    client.from("team_strength_ratings").select("*").eq("team_id", id).maybeSingle(),
+    client.from("team_playing_style").select("*").eq("team_id", id).maybeSingle(),
+    client.from("team_strengths").select("*").eq("team_id", id).order("score", { ascending: false }),
+    client.from("team_weaknesses").select("*").eq("team_id", id).order("score", { ascending: true }),
+    client.from("team_tactical_variations").select("*").eq("team_id", id).maybeSingle(),
+    client.from("team_transfer_intelligence").select("*").eq("team_id", id).maybeSingle(),
+    client.from("players")
+      .select("id, name, short_name, player_injuries!inner(injury_reason, injury_status, expected_return_days, days_out, injury_severity_score)")
+      .eq("team_id", id).eq("player_injuries.active", true),
   ]);
   return {
     intel: intel.data ?? null,
@@ -476,12 +524,47 @@ export async function getTeamIntel(id: number): Promise<{
     depth: (depth.data as PositionDepth[]) ?? [],
     motivation: (motivation.data as any) ?? null,
     versatility: (versatility.data as any) ?? null,
+    strengthDashboard: (strengthDashboard.data as any) ?? null,
+    strengthRatings: (strengthRatings.data as any) ?? null,
+    playingStyle: (playingStyle.data as any) ?? null,
+    strengths: (strengths.data as any) ?? [],
+    weaknesses: (weaknesses.data as any) ?? [],
+    tacticalVariations: (tacticalVariations.data as any) ?? null,
+    transferIntel: (transferIntel.data as any) ?? null,
+    injuries: ((injuredPlayers.data as any[]) ?? []).map((p) => {
+      const pi = Array.isArray(p.player_injuries) ? p.player_injuries[0] : p.player_injuries;
+      return {
+        player_id: p.id, name: p.name, short_name: p.short_name,
+        injury_reason: pi?.injury_reason ?? null, injury_status: pi?.injury_status ?? null,
+        expected_return_days: pi?.expected_return_days ?? null, days_out: pi?.days_out ?? null,
+        injury_severity_score: pi?.injury_severity_score ?? null,
+      };
+    }),
   };
 }
 
 export async function getTeamUpcoming(id: number, limit = 5): Promise<MatchRow[]> {
   const board = await getBoard(40);
   return board.filter((m) => m.home.id === id || m.away.id === id).slice(0, limit);
+}
+
+// Current league position/points/GF/GA for a single team — same table as
+// getLeagueStandings, filtered to one team's most recent season instead of
+// a whole tournament. Powers the team page's quick League Position/PPG/GD
+// cards.
+export type TeamStanding = Omit<import("./types").TournamentStanding, "team">;
+export async function getTeamStanding(teamId: number): Promise<TeamStanding | null> {
+  const client = db();
+  if (!client) return null;
+  const { data } = await client
+    .from("tournament_standings")
+    .select("position, matches, wins, draws, losses, scores_for, scores_against, points")
+    .eq("team_id", teamId)
+    .eq("standings_type", "total")
+    .order("season_external_id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as TeamStanding) ?? null;
 }
 
 // Next-N fixture difficulty (precomputed in team_fixture_difficulty).

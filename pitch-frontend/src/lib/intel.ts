@@ -4,6 +4,7 @@ import type {
   SignalDirection,
   ScorelineProb,
   TeamGoalDependency,
+  BankerSingle,
 } from "./types";
 
 // ── Numeric formatting ───────────────────────────────────
@@ -37,8 +38,17 @@ export function normProb(v: number | null | undefined): number {
 
 export function normScorelines(raw: ScorelineProb[] | null): ScorelineProb[] {
   if (!raw || raw.length === 0) return [];
+  // FIX: the warehouse stores each scoreline as { home, away, probability }
+  // — there's no `score` string in the DB at all, so the label rendered
+  // `s.score` and always came back blank. Build "H–A" from the real
+  // home/away numbers instead (falling back to any pre-built `score` if
+  // one is ever present, e.g. from mock data).
   return [...raw]
-    .map((s) => ({ ...s, probability: normProb(s.probability) }))
+    .map((s) => ({
+      ...s,
+      score: s.score ?? (s.home != null && s.away != null ? `${s.home}–${s.away}` : "—"),
+      probability: normProb(s.probability),
+    }))
     .sort((a, b) => b.probability - a.probability)
     .slice(0, 5);
 }
@@ -47,12 +57,14 @@ export function normScorelines(raw: ScorelineProb[] | null): ScorelineProb[] {
 export function kickoff(dateStr: string): { day: string; time: string; rel: string } {
   const d = new Date(dateStr);
   const now = new Date();
-  const day = d.toLocaleDateString(undefined, {
+  // ✅ Force en-GB locale on both server AND client
+  const day = d.toLocaleDateString("en-GB", {
     weekday: "short",
     day: "numeric",
     month: "short",
   });
-  const time = d.toLocaleTimeString(undefined, {
+  
+  const time = d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -222,4 +234,16 @@ export function signalStrengthLabel(strength: number | null | undefined): string
   if (s >= 3) return "Moderate";
   if (s >= 1) return "Weak";
   return "Very weak";
+}
+
+// match_id → BANKER/STRONG lookup from the daily betting card, so pages
+// that already have a match's id can flag "this is a Form Index Pick"
+// without re-deriving tiers themselves. MODERATE/WEAK picks are excluded —
+// only the two badge-worthy tiers are kept.
+export function pickTierByMatch(singles: BankerSingle[]): Map<number, "BANKER" | "STRONG"> {
+  const map = new Map<number, "BANKER" | "STRONG">();
+  for (const s of singles) {
+    if (s.confidence === "BANKER" || s.confidence === "STRONG") map.set(s.match_id, s.confidence);
+  }
+  return map;
 }

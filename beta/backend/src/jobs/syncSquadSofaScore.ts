@@ -702,7 +702,7 @@ async function syncOneTeamSquad(
   // two different formulas computing the same field — removed per the
   // schema cleanup (migration 007) to keep one source of truth per score.
 
-  logger.info({
+  logger.debug({
     teamId: team.id, teamName: team.name,
     players: totalCount, injured: injCount,
     positions: positionMap.size, transfers: transfersIn?.length ?? 0,

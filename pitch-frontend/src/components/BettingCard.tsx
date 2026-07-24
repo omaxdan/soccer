@@ -78,7 +78,9 @@ export function BettingCard({ card }: Props) {
         <MiniStat label="STRONG" value={strongs.length} color="var(--amber)" />
         <MiniStat 
           label="Best Acc" 
-          value={`${todayDouble ? Math.round(todayDouble.acc_probability * 100) : 0}%`}
+          value={todayDouble && todayDouble.matches ? 
+            `+${todayDouble.matches.reduce((sum, m) => sum + (m.readiness_gap || 0), 0)}` : 
+            "—"}
           color="var(--accent)" 
         />
       </div>
@@ -260,12 +262,18 @@ function PicksRow({ single }: { single: BankerSingle }) {
 }
 
 function AccumulatorRow({ acc }: { acc: Accumulator }) {
+  // ✅ Calculate combined gap from matches
+  const combinedGap = acc.matches 
+    ? acc.matches.reduce((sum, m) => sum + (m.readiness_gap || 0), 0) 
+    : 0;
+
   return (
     <div className="panel-raised p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-semibold">{acc.name}</span>
+        {/* ✅ Show combined gap instead of fake percentage */}
         <span className="mono text-sm font-bold" style={{ color: "var(--amber)" }}>
-          {(acc.acc_probability * 100).toFixed(1)}%
+          +{combinedGap} combined gap
         </span>
       </div>
 

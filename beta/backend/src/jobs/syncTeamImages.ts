@@ -83,7 +83,7 @@ export async function syncTeamImages(externalIds?: number[]): Promise<{ teamsPro
     if (storagePath) {
       await db.from('teams').update({ crest_storage_path: storagePath }).eq('id', team.id);
       written++;
-      logger.info({ teamId: team.id, teamName: team.name, storagePath }, 'Team crest synced');
+      logger.debug({ teamId: team.id, teamName: team.name, storagePath }, 'Team crest synced');
     } else {
       errors++;
     }
@@ -128,7 +128,7 @@ export async function syncTournamentImages(externalIds?: number[]): Promise<{ to
     if (storagePath) {
       await db.from('tournaments').update({ logo_storage_path: storagePath }).eq('id', t.id);
       written++;
-      logger.info({ tournamentId: t.id, tournamentName: t.name, storagePath }, 'Tournament logo synced');
+      logger.debug({ tournamentId: t.id, tournamentName: t.name, storagePath }, 'Tournament logo synced');
     } else {
       errors++;
     }

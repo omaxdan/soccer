@@ -1,7 +1,7 @@
 import { getBoard, getBettingCard } from "@/lib/queries";
 import { BoardClient } from "@/components/BoardClient";
 import { BettingCard } from "@/components/BettingCard";
-import { opportunityColor } from "@/lib/intel";
+import { opportunityColor, pickTierByMatch } from "@/lib/intel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +24,12 @@ export default async function DashboardPage() {
   const strongEdges = matches.filter(
     (m) => (m.opportunity?.opportunity_score ?? 0) >= 60
   ).length;
+  const picks = pickTierByMatch(bettingCard.singles);
 
   return (
     <div className="space-y-4">
-      <BettingCard card={bettingCard} /> 
+      <BettingCard card={bettingCard} />
+      <BoardClient matches={matches} picks={picks} />
     </div>
   );
 }

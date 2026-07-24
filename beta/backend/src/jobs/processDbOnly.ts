@@ -536,20 +536,46 @@ function haversineKm(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * FIX (travel audit): true "same stadium" comparisons (e.g. is this venue
+ * actually the team's home ground?) need a tolerance — registered team and
+ * stadium coordinates rarely match to the decimal, so a raw haversine
+ * distance is never exactly 0 even for a genuine home match. Anything under
+ * `toleranceKm` is treated as the same location.
+ */
+function isSameLocation(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+  toleranceKm: number
+): boolean {
+  return haversineKm(a.lat, a.lng, b.lat, b.lng) < toleranceKm;
+}
+
 // ─── TEAM TRAVEL LOAD PROCESSOR ──────────────────────────────────────────────
 
 /**
- * Computes travel load for every team that has both a home location and
- * away match venue data. Purely DB-derived — zero API calls.
+ * Computes travel load for every team with match activity in the last 30
+ * days. Purely DB-derived — zero API calls.
  *
- * Reads:  team_locations (home lat/lng)
- *         matches (away_team_id, venue_id, date)
+ * Travel is detected by diffing the VENUE of each team's own consecutive
+ * matches (home + away fixtures both included) — every venue change is a
+ * trip, which captures the outward leg, the RETURN leg home, and any
+ * "home" fixture actually played away from the team's own ground (see
+ * Flaw 1 fix below). team_locations is only used to (a) resolve which
+ * teams exist for the zero-trip backfill (Flaw 2) and (b) flag teams with
+ * no location data at all (Flaw 4) — it's no longer needed to detect a
+ * trip in the first place.
+ *
+ * Reads:  team_locations (team universe for zero-trip backfill)
+ *         matches (home_team_id, away_team_id, venue_id, date)
  *         stadiums (lat/lng per venue)
- * Writes: team_travel_load (km windows, away match counts, fatigue score)
+ * Writes: team_travel_load (km windows, trip counts, fatigue score — one
+ *         row per team with activity in the window, including 0-travel
+ *         teams)
  *
  * Travel fatigue score formula — PER SPEC (section 4), polarity inverted
  * for consistency with congestion_score (higher = worse, matches frontend):
- *   1. Average away-trip distance over last 14 days → spec distance band:
+ *   1. Average trip distance over last 14 days → spec distance band:
  *      0-100km=100(good)...2000km+=25(good) — i.e. spec's "Travel Score"
  *   2. fatigue = 100 - specScore  (so higher fatigue = longer travel)
  *   3. fatigue += active_competitions × 3   (spec subtracts from good score;
@@ -593,18 +619,32 @@ export async function processTeamTravelLoad(): Promise<{
       locations.map((l: any) => [l.team_id, { lat: l.latitude, lng: l.longitude }])
     );
 
-    // 2. Load away matches with venue coordinates (last 30 days)
-    const awayMatches = await fetchAllRows(
+    // 2. Load ALL matches (home + away) with venue coordinates (last 30 days)
+    // FIX (Flaw 1 — CRITICAL): previously this only queried away_team_id
+    // matches, so only the OUTWARD leg of every trip was ever measured —
+    // the return trip home was never counted, undercounting total travel
+    // by roughly half. We now load every match either team appears in and
+    // detect travel by diffing the VENUE of each team's consecutive
+    // matches (step 4 below) — a venue change is a trip in EITHER
+    // direction, which naturally captures the return leg the moment a
+    // team's next match is back at their own stadium (or anywhere else),
+    // and also captures "home" fixtures actually played away from the
+    // team's own ground (ground-sharing, neutral cup finals) that the old
+    // away-only query could never see since those are home_team_id rows.
+    // FIX (Flaw 3): explicit status allow-list instead of the fragile
+    // `.not(status, in, "(...)")` string-matching exclusion used elsewhere
+    // (same issue flagged in processTeamFixtureLoad).
+    const windowMatches = await fetchAllRows(
       db
         .from('matches')
-        .select('away_team_id, venue_id, date')
+        .select('home_team_id, away_team_id, venue_id, date')
         .gte('date', ago30)
         .not('venue_id', 'is', null)
-        .in('status', ['finished', 'live'])
+        .in('status', ['finished', 'live', 'half_time'])
     );
 
-    // 3. Load stadium coordinates
-    const venueIds = [...new Set((awayMatches || []).map((m: any) => m.venue_id).filter(Boolean))];
+    // 3. Load stadium coordinates for every venue that appears
+    const venueIds = [...new Set((windowMatches || []).map((m: any) => m.venue_id).filter(Boolean))];
     const stadiumCoordMap = new Map<number, { lat: number; lng: number }>();
 
     if (venueIds.length > 0) {
@@ -622,25 +662,67 @@ export async function processTeamTravelLoad(): Promise<{
       }
     }
 
-    // 4. Group away matches by team and compute distances
+    // 4. Build each team's chronological venue log (both home + away
+    // fixtures), then walk it to detect trips by venue change. This
+    // replaces the old "distance from registered home location to away
+    // venue" calculation — it no longer even needs team_locations to
+    // detect a trip, only where each of the team's own matches was played.
+    interface MatchAppearance { date: Date; venueId: number }
+    const teamMatchLog = new Map<number, MatchAppearance[]>();
+
+    for (const m of windowMatches || []) {
+      if (!m.venue_id) continue; // edge case: no venue on the match — location unknowable, skip
+      const entry: MatchAppearance = { date: new Date(m.date), venueId: m.venue_id };
+      if (m.home_team_id) {
+        if (!teamMatchLog.has(m.home_team_id)) teamMatchLog.set(m.home_team_id, []);
+        teamMatchLog.get(m.home_team_id)!.push(entry);
+      }
+      if (m.away_team_id) {
+        if (!teamMatchLog.has(m.away_team_id)) teamMatchLog.set(m.away_team_id, []);
+        teamMatchLog.get(m.away_team_id)!.push(entry);
+      }
+    }
+
     interface TripRecord { date: Date; km: number }
     const teamTrips = new Map<number, TripRecord[]>();
 
-    for (const m of awayMatches || []) {
-      const teamId  = m.away_team_id;
-      const venueId = m.venue_id;
-      if (!teamId || !venueId) continue;
+    for (const [teamId, appearances] of teamMatchLog) {
+      appearances.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-      const home  = homeLocMap.get(teamId);
-      const venue = stadiumCoordMap.get(venueId);
-      if (!home || !venue) continue;
+      let prevVenueId: number | null = null;
+      let prevVenueCoord: { lat: number; lng: number } | null = null;
 
-      // Skip if team is playing at their own stadium (rare edge case)
-      const km = haversineKm(home.lat, home.lng, venue.lat, venue.lng);
-      if (km < 5) continue; // <5 km = effectively a home game, skip
+      for (const app of appearances) {
+        const venueCoord = stadiumCoordMap.get(app.venueId);
+        // edge case: venue has no coordinates on file — can't compute a
+        // distance, skip without disturbing prevVenue (location genuinely
+        // unknown, not "unchanged").
+        if (!venueCoord) continue;
 
-      if (!teamTrips.has(teamId)) teamTrips.set(teamId, []);
-      teamTrips.get(teamId)!.push({ date: new Date(m.date), km });
+        if (prevVenueCoord === null) {
+          // edge case: first match in the window — nothing to diff
+          // against yet, so no trip is counted for it; this just
+          // establishes the team's starting location for the rest of the
+          // window (matches before the window aren't loaded).
+          prevVenueId = app.venueId;
+          prevVenueCoord = venueCoord;
+          continue;
+        }
+
+        if (app.venueId !== prevVenueId) {
+          // Venue changed since the team's last match — that's a trip,
+          // whether outward (home → away venue), the return leg (away
+          // venue → home stadium — the round trip Flaw 1 was missing), or
+          // a move to/from a neutral venue.
+          const km = haversineKm(prevVenueCoord.lat, prevVenueCoord.lng, venueCoord.lat, venueCoord.lng);
+          if (!teamTrips.has(teamId)) teamTrips.set(teamId, []);
+          teamTrips.get(teamId)!.push({ date: app.date, km });
+        }
+        // else: same venue as last time (e.g. two home games in a row) — no trip.
+
+        prevVenueId = app.venueId;
+        prevVenueCoord = venueCoord;
+      }
     }
 
     // 5. Compute rolling window stats per team
@@ -690,6 +772,10 @@ export async function processTeamTravelLoad(): Promise<{
       // (matches the same 90-day lookback used in congestion + team_intelligence).
       const travelFatigueScore = 100 - specTravelScore; // competition modifier applied in post-loop pass
 
+      // NOTE: the away_matches_last_*_days columns (schema name unchanged —
+      // no migration for this) now count TRIPS detected by venue change,
+      // not literally away_team_id fixtures — this includes the return leg
+      // home and any neutral-venue "home" fixture per Flaw 1 above.
       rows.push({
         team_id:                    teamId,
         snapshot_date:              snapshot,
@@ -705,6 +791,32 @@ export async function processTeamTravelLoad(): Promise<{
       });
     }
 
+    // FIX (Flaw 2): teams with zero trips in the window previously got NO
+    // row at all, so downstream consumers (team_intelligence etc.) read a
+    // missing row as NULL rather than "confirmed 0 travel, fully rested".
+    // Backfill an explicit zero row for every team we have a known home
+    // location for that had no trips this window. travel_fatigue_score
+    // starts at 0 here (100 - specTravelScore(0km) = 100 - 100 = 0) and
+    // still passes through the same active-competition modifier below as
+    // every other row, so a team with 0 travel but several concurrent
+    // competitions still reads as mildly fatigued, per spec.
+    for (const teamId of homeLocMap.keys()) {
+      if (teamTrips.has(teamId)) continue;
+      rows.push({
+        team_id:                   teamId,
+        snapshot_date:             snapshot,
+        km_last_7_days:            0,
+        km_last_14_days:           0,
+        km_last_30_days:           0,
+        away_matches_last_7_days:  0,
+        away_matches_last_14_days: 0,
+        away_matches_last_30_days: 0,
+        avg_trip_distance_km:      0,
+        travel_fatigue_score:      0,
+        calculated_at:             new Date().toISOString(),
+      });
+    }
+
     // ── Apply active-competition modifier (spec section 4) ──────────────────
     // Spec: GoodScore - (active_competitions × 3). Since our column is
     // inverted (bad-high), this becomes: fatigue + (active_competitions × 3).
@@ -715,7 +827,10 @@ export async function processTeamTravelLoad(): Promise<{
         .select('home_team_id, away_team_id, competition')
         .gte('date', ago90b)
         .not('competition', 'is', null)
-        .not('status', 'in', '("cancelled","postponed")')
+        // FIX (Flaw 3): explicit allow-list instead of the fragile quoted
+        // `.not(status, in, "(...)")` string-matching exclusion (same
+        // issue flagged in processTeamFixtureLoad).
+        .in('status', ['finished', 'live', 'half_time'])
     );
 
     const teamCompCountTravel = new Map<number, Set<string>>();
@@ -734,8 +849,16 @@ export async function processTeamTravelLoad(): Promise<{
     }
 
 
+    // FIX (Flaw 4): the old check only ever looked at teams already inside
+    // teamTrips against homeLocMap — but every team in teamTrips necessarily
+    // already had a homeLocMap entry (it was required to compute distance
+    // in the old algorithm), so this was structurally always 0. It now
+    // reports every team that actually appeared in a match in the lookback
+    // window but has no team_locations row at all — teams with trips AND
+    // teams with none are both covered, since teamMatchLog is built from
+    // the raw match data independently of homeLocMap.
     const teamsSkippedNoLocation =
-      [...teamTrips.keys()].filter(id => !homeLocMap.has(id)).length;
+      [...teamMatchLog.keys()].filter(id => !homeLocMap.has(id)).length;
 
     // 6. Batch upsert
     const chunkSize = 500;
@@ -748,11 +871,14 @@ export async function processTeamTravelLoad(): Promise<{
       written += chunk.length;
     }
 
+    // teamsProcessed now reflects rows.length (trips-based rows + Flaw 2's
+    // zero-trip backfill rows) rather than teamTrips.size, so it matches
+    // how many teams actually got a snapshot row written this run.
     logger.info(
-      { teamsProcessed: teamTrips.size, rowsWritten: written, teamsSkippedNoLocation },
+      { teamsProcessed: rows.length, rowsWritten: written, teamsSkippedNoLocation },
       'processTeamTravelLoad completed'
     );
-    return { teamsProcessed: teamTrips.size, rowsWritten: written, teamsSkippedNoLocation };
+    return { teamsProcessed: rows.length, rowsWritten: written, teamsSkippedNoLocation };
 
   } catch (error: any) {
     logger.error({ error: error.message }, 'processTeamTravelLoad failed');
@@ -773,6 +899,11 @@ export async function processTeamTravelLoad(): Promise<{
  *
  * travel_advantage_km > 0 = away team traveled more (home team advantage)
  * travel_advantage_km < 0 = home team traveled more (neutral/away venue)
+ *
+ * travel_advantage_team_id is null, with travel_advantage_note explaining
+ * why, when the "home" team also traveled a meaningful distance to the
+ * venue (>10km) — cup finals, derbies at a neutral ground, ground-sharing,
+ * etc. Both teams travelled, so "advantage" would be misleading.
  */
 export async function processMatchTravelIntelligence(opts?: {
   dateFrom?: string;
@@ -876,8 +1007,14 @@ export async function processMatchTravelIntelligence(opts?: {
 
       if (!venue) { skippedNoVenue++; continue; }
 
+      // FIX (Flaw 1): a true home match's venue IS the home stadium, so
+      // distance should read exactly 0, not a few km of coordinate
+      // imprecision between the team's registered location and the
+      // stadium's registered location. Within 1km = same stadium.
       const homeKm = homeLoc
-        ? Math.round(haversineKm(homeLoc.lat, homeLoc.lng, venue.lat, venue.lng))
+        ? (isSameLocation(homeLoc, venue, 1.0)
+            ? 0
+            : Math.round(haversineKm(homeLoc.lat, homeLoc.lng, venue.lat, venue.lng)))
         : null;
       const awayKm = awayLoc
         ? Math.round(haversineKm(awayLoc.lat, awayLoc.lng, venue.lat, venue.lng))
@@ -888,34 +1025,60 @@ export async function processMatchTravelIntelligence(opts?: {
         ? Math.round(awayKm - homeKm)
         : null;
 
-      // The team with less travel has the advantage
+      // FIX (Flaw 2): if the "home" team is also away from their own
+      // stadium (cup final, derby at a neutral ground, ground-sharing,
+      // etc.), assigning "advantage" to whoever travelled marginally less
+      // is misleading — both teams travelled. Null out the advantage team
+      // and record why; the raw km columns above stay correct either way.
       let advantageTeamId: number | null = null;
-      if (advantageKm !== null) {
+      let advantageNote: string | null = null;
+      if (homeKm !== null && homeKm > 10) {
+        advantageNote = 'neutral venue — both teams traveled';
+      } else if (advantageKm !== null) {
+        // The team with less travel has the advantage
         if (advantageKm > 0) advantageTeamId = m.home_team_id;  // home traveled less
         else if (advantageKm < 0) advantageTeamId = m.away_team_id; // away traveled less
         // advantageKm === 0 = equal travel, null team
       }
 
       rows.push({
-        match_id:                m.id,
-        match_date:              m.date,  // denormalized — see migration 007
-        home_team_distance_km:   homeKm,
-        away_team_distance_km:   awayKm,
-        travel_advantage_km:     advantageKm,
+        match_id:                 m.id,
+        match_date:               m.date,  // denormalized — see migration 007
+        home_team_distance_km:    homeKm,
+        away_team_distance_km:    awayKm,
+        travel_advantage_km:      advantageKm,
         travel_advantage_team_id: advantageTeamId,
-        calculated_at:           new Date().toISOString(),
+        travel_advantage_note:    advantageNote,
+        calculated_at:            new Date().toISOString(),
       });
     }
 
-    // Batch upsert
+    // FIX (Flaw 3): chunked upsert previously never checked `error` and had
+    // no rollback — if a later chunk failed, earlier chunks were already
+    // committed, leaving partial data with no way to tell from the return
+    // value. Now we check every chunk's error, and on failure delete every
+    // row THIS RUN wrote (including already-committed earlier chunks) so a
+    // failed run never leaves a half-written state, then rethrow so the
+    // caller/outer catch sees the real failure instead of a silent partial
+    // success.
     const chunkSize = 500;
     let written = 0;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      const { error } = await db
-        .from('match_travel_intelligence')
-        .upsert(chunk, { onConflict: 'match_id' });
-      written += chunk.length;
+    const writtenMatchIds: number[] = [];
+    try {
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const chunk = rows.slice(i, i + chunkSize);
+        const { error } = await db
+          .from('match_travel_intelligence')
+          .upsert(chunk, { onConflict: 'match_id' });
+        if (error) throw new Error(`match_travel_intelligence upsert failed: ${error.message}`);
+        written += chunk.length;
+        writtenMatchIds.push(...chunk.map((r: any) => r.match_id));
+      }
+    } catch (upsertErr: any) {
+      if (writtenMatchIds.length > 0) {
+        await db.from('match_travel_intelligence').delete().in('match_id', writtenMatchIds);
+      }
+      throw upsertErr;
     }
 
     logger.info(
@@ -4376,6 +4539,14 @@ export async function processScorelinePredictions(): Promise<{
           predicted_home_goals: row.predicted_home_goals,
           predicted_away_goals: row.predicted_away_goals,
           predicted_scorelines: row.predicted_scorelines,
+          // FIX: win_probability_home/draw/away were computed above (into
+          // `rows`) but never included in this actual write payload, so
+          // they silently stayed null in the DB no matter how many times
+          // this job ran — the Win Probability panel on the match page
+          // had nothing to render.
+          win_probability_home: row.win_probability_home,
+          win_probability_draw: row.win_probability_draw,
+          win_probability_away: row.win_probability_away,
           updated_at: row.updated_at,
         }, { onConflict: 'match_id' });
       if (!error) written++;

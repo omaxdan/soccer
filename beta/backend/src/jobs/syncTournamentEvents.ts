@@ -107,7 +107,7 @@ export async function syncTournamentEvents(
       tournamentsProcessed++;
       totalMatches += result.matchesProcessed;
       totalTeams   += result.teamsDiscovered;
-      logger.info({ tournamentId, seasonId, ...result }, 'Tournament sync complete');
+      logger.debug({ tournamentId, seasonId, ...result }, 'Tournament sync complete');
     } catch (err: any) {
       errors++;
       logger.error({ tournamentId, seasonId, err: err.message }, 'Tournament sync failed — continuing to next');

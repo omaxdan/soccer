@@ -131,7 +131,7 @@ export async function syncTransfersForTeams(countries?: string[]): Promise<{
         transfersWritten += rows.length;
       }
 
-      logger.info({ teamId: team.id, teamName: team.name, transfersFound: rows.length }, 'Transfers synced');
+      logger.debug({ teamId: team.id, teamName: team.name, transfersFound: rows.length }, 'Transfers synced');
     } catch (error: any) {
       errors++;
       logger.error({ teamId: team.id, teamName: team.name, error: error.message }, 'Transfer sync failed for team');

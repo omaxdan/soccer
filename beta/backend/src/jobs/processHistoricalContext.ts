@@ -246,11 +246,11 @@ async function upsertBatchedWithRetry(
     while (attempt < maxRetries) {
       try {
         if (i % (UPSERT_BATCH * 5) === 0 || i === 0) {
-          logger.info(
-            { 
-              table, 
-              offset: i, 
-              batchSize: slice.length, 
+          logger.debug(
+            {
+              table,
+              offset: i,
+              batchSize: slice.length,
               total: rows.length,
               progress: `${Math.round((i / rows.length) * 100)}%`
             },
@@ -463,7 +463,7 @@ async function run(mode: 'backfill' | 'recent', recentDays: number) {
       const key = groupKeys[gIdx];
       
       if (gIdx % 10 === 0) {
-        logger.info(
+        logger.debug(
           { group: gIdx + 1, total: groupKeys.length, key },
           'Processing group'
         );

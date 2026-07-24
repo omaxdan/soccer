@@ -77,11 +77,11 @@ async function upsertBatchedWithRetry(
     while (attempt < maxRetries) {
       try {
         if (i % (UPSERT_BATCH * 5) === 0 || i === 0) {
-          logger.info(
-            { 
-              table, 
-              offset: i, 
-              batchSize: slice.length, 
+          logger.debug(
+            {
+              table,
+              offset: i,
+              batchSize: slice.length,
               total: rows.length,
               progress: `${Math.round((i / rows.length) * 100)}%`
             },

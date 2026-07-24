@@ -441,7 +441,7 @@ export async function syncPlayerSeasonStatistics(countries?: string[], teamExter
         playersWritten += rows.length;
       }
 
-      logger.info({ teamId: team.id, teamName: team.name, playersWritten: rows.length }, 'Player season stats synced');
+      logger.debug({ teamId: team.id, teamName: team.name, playersWritten: rows.length }, 'Player season stats synced');
     } catch (error: any) {
       errors++;
       logger.error({ teamId: team.id, teamName: team.name, error: error.message }, 'Player season stats sync failed');
@@ -551,7 +551,7 @@ export async function syncTeamSeasonStatistics(countries?: string[], teamExterna
 
       if (error) throw new Error(error.message);
       written++;
-      logger.info({ teamId: team.id, teamName: team.name }, 'Team season stats synced');
+      logger.debug({ teamId: team.id, teamName: team.name }, 'Team season stats synced');
     } catch (error: any) {
       errors++;
       logger.error({ teamId: team.id, teamName: team.name, error: error.message }, 'Team season stats sync failed');

@@ -277,7 +277,7 @@ export async function backtestSignals() {
         : `lift ${lift.toFixed(3)} < ${MIN_LIFT}`,
       evaluated_at: nowIso,
     });
-    logger.info(
+    logger.debug(
       { rule: rule.key, market: rule.market, fired, hitRate: hitRate.toFixed(3), base: base.toFixed(3), lift: lift.toFixed(3), calibrated },
       'Backtest: rule evaluated'
     );

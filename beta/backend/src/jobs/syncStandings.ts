@@ -293,7 +293,7 @@ export async function syncStandings(): Promise<{
         rowsWritten += dbRows.length;
       }
 
-      logger.info(
+      logger.debug(
         { tournamentId: ctx.tournamentId, teamsInTable: dbRows.length },
         'Standings synced'
       );

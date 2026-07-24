@@ -176,7 +176,7 @@ export async function syncTeamPlayers(
     );
     if (error) throw error;
 
-    logger.info({ teamId: team.id, name: team.name, players: players.length }, 'Squad synced');
+    logger.debug({ teamId: team.id, name: team.name, players: players.length }, 'Squad synced');
     return { playersProcessed: players.length, skipped: false, squadMetrics };
 
   } catch (error: any) {
