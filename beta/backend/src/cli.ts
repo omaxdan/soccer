@@ -1421,19 +1421,21 @@ async function handleCommand(command: string, ...args: string[]) {
       }
 
       case 'backtest:bands': {
-        // Honest confidence-band accuracy. Population is restricted to
-        // readiness_history rows frozen BEFORE kickoff, so the band being
-        // scored cannot see the result. Also logs the current-state (leaky)
-        // figures side by side — the delta is the leakage estimate. Only the
-        // archived figures are persisted.
+        // Honest confidence-band accuracy. Rebuilds the score per match from
+        // pre-kickoff tables (team_match_snapshots, team_intelligence_history,
+        // match_travel_intelligence), validates it against the frozen
+        // readiness_history score, and logs the current-state (leaky) figures
+        // for the delta. Only the reconstruction is persisted.
         logger.info('Backtesting confidence bands (point-in-time)...');
         const r = await backtestConfidenceBands();
         logger.info(
           {
             bands: r.bands,
             calibrated: r.calibrated,
-            archivedPopulation: r.archivedPopulation,
+            reconstructedPopulation: r.reconstructedPopulation,
+            frozenPopulation: r.frozenPopulation,
             currentPopulation: r.currentPopulation,
+            agreement: r.agreement,
             rejected: r.rejected,
           },
           'Confidence band backtest complete'

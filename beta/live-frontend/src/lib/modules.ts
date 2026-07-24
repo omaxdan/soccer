@@ -57,7 +57,12 @@ export interface ModuleDef {
   scope: ModuleScope;
   /** Minimum tier required to see the reading. */
   tier: Tier;
-  /** Source view backing this module, shown in the module directory. */
+  /**
+   * The table this module actually reads, shown in the module directory.
+   * These are existing warehouse tables — no module requires a precomputed
+   * view of its own. Keep this honest; it is the only place a reader can
+   * check where a number came from.
+   */
   source: string;
 }
 
@@ -104,7 +109,7 @@ export const MODULES: ModuleDef[] = [
     question: "Home-reliant or road warrior?",
     scope: "team",
     tier: "starter",
-    source: "mv_module_home_away",
+    source: "team_venue_performance",
   },
   {
     n: 2,
@@ -113,7 +118,7 @@ export const MODULES: ModuleDef[] = [
     question: "Peaking or crashing?",
     scope: "team",
     tier: "pro",
-    source: "mv_module_readiness_tracker",
+    source: "team_momentum",
   },
   {
     n: 3,
@@ -122,7 +127,7 @@ export const MODULES: ModuleDef[] = [
     question: "Predictable or volatile?",
     scope: "team",
     tier: "pro",
-    source: "mv_module_consistency",
+    source: "team_form_quality.volatility",
   },
   {
     n: 4,
@@ -131,7 +136,7 @@ export const MODULES: ModuleDef[] = [
     question: "Steps up against top teams?",
     scope: "team",
     tier: "pro",
-    source: "mv_module_giant_killer",
+    source: "team_form_quality.giant_killer_score",
   },
   {
     n: 5,
@@ -140,7 +145,7 @@ export const MODULES: ModuleDef[] = [
     question: "Does distance matter here?",
     scope: "match",
     tier: "starter",
-    source: "mv_module_travel",
+    source: "match_intelligence.away_travel_distance_km",
   },
   {
     n: 6,
@@ -149,7 +154,7 @@ export const MODULES: ModuleDef[] = [
     question: "Is a rest gap worth an edge?",
     scope: "match",
     tier: "pro",
-    source: "mv_module_rest",
+    source: "match_intelligence.home/away_rest_days",
   },
   {
     n: 7,
@@ -158,7 +163,7 @@ export const MODULES: ModuleDef[] = [
     question: "Over or under league?",
     scope: "league",
     tier: "starter",
-    source: "mv_module_league_goals",
+    source: "mv_match_scoring_probabilities.league_btts_pct",
   },
   {
     n: 8,
@@ -167,7 +172,7 @@ export const MODULES: ModuleDef[] = [
     question: "How reliable is this form gap?",
     scope: "match",
     tier: "starter",
-    source: "mv_module_form_gap",
+    source: "team_intelligence.form_index",
   },
   {
     n: 9,
@@ -176,7 +181,7 @@ export const MODULES: ModuleDef[] = [
     question: "Is BTTS rest-driven here?",
     scope: "match",
     tier: "pro",
-    source: "mv_module_btts_fatigue",
+    source: "match_intelligence + mv_match_scoring_probabilities",
   },
   {
     n: 10,
@@ -185,7 +190,7 @@ export const MODULES: ModuleDef[] = [
     question: "Can this pick be trusted?",
     scope: "match",
     tier: "starter",
-    source: "mv_module_confidence",
+    source: "match_intelligence.confidence_band + signal_backtests",
   },
   {
     n: 11,
@@ -194,7 +199,7 @@ export const MODULES: ModuleDef[] = [
     question: "Any HT/FT pattern?",
     scope: "match",
     tier: "pro",
-    source: "mv_module_halftime",
+    source: "match_half_time_intelligence",
   },
   {
     n: 12,
@@ -203,7 +208,7 @@ export const MODULES: ModuleDef[] = [
     question: "How likely is a clean sheet?",
     scope: "match",
     tier: "pro",
-    source: "mv_module_clean_sheet",
+    source: "mv_match_scoring_probabilities concede rates",
   },
 ];
 
@@ -307,8 +312,10 @@ function evalFormGap(ctx: MatchModuleContext): ModuleReading {
   const gap = Math.round((h - a) * 10) / 10;
   const abs = Math.abs(gap);
 
-  // Zones and rates mirror mv_module_form_gap exactly. Samples are null
-  // because the view hardcodes rates without carrying n — see MODULE_DEBT.
+  // Zone thresholds and rates are the published form-gap figures. Samples
+  // are null because no measured n exists for them yet — backtestSignals
+  // already measures FORM5_DIFF9_* against real populations, and these rates
+  // should be replaced by signal_backtests values once they clear the gate.
   let zone: string;
   let rate: number;
   if (abs > 30) {

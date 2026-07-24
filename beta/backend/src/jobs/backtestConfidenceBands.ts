@@ -2,91 +2,90 @@ import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { fetchAllRows } from '../db/fetchAllRows';
 import {
-  bandFor,
-  derivePick,
-  outcomeOf,
-  wilson,
-  BAND_ORDER,
-  BAND_COMPONENTS,
-  ARCHIVABLE_WEIGHT,
-  TOTAL_WEIGHT,
-  type ConfidenceBand,
-  type Pick,
+  bandFor, derivePick, outcomeOf, wilson, computeConfidenceScore,
+  BAND_ORDER, ARCHIVABLE_COMPONENTS, ARCHIVABLE_WEIGHT, TOTAL_WEIGHT,
+  type ConfidenceBand, type Pick, type ComponentKey,
 } from '../lib/confidenceBand';
 
 /**
  * CONFIDENCE BAND BACKTEST  (signal_backtests, rule_key = CBAND_*)
  *
- * WHY THIS EXISTS
- * ───────────────
- * The published band accuracy table (Elite 95.7 / Strong 97.9 / Moderate 78.4
- * / Risky 46.2 / Avoid 29.4 over 1,893 matches) was produced by joining
- * match_intelligence.confidence_band against finished results. That band is
- * derived from readiness, which is derived from team_intelligence.form_index —
- * a CURRENT-STATE table with one row per team and no snapshot_date.
+ * WHY
+ * ---
+ * The published band table (Elite 95.7 / Strong 97.9 / Moderate 78.4 /
+ * Risky 46.2 / Avoid 29.4 over 1,893 matches) was produced by joining
+ * match_intelligence.confidence_band against finished results. That band comes
+ * from readiness, which comes from team_intelligence.form_index - one row per
+ * team, no snapshot_date. A match from three months ago is therefore scored
+ * using form that already contains that match's result. Inflation concentrates
+ * where the gap is widest, which is why the low bands read plausibly and the
+ * top ones do not, and why Strong outranks Elite.
  *
- * So a finished match from three months ago was scored using form that already
- * contains that match's result. A side on a long unbeaten run carries a high
- * form index today, and every match in that run is counted as a correct call.
- * The distortion concentrates exactly where the gap is widest, which is why the
- * table reads plausibly at the bottom (Avoid 29.4, Risky 46.2 are roughly what
- * draws-as-losses produces near a zero gap) and impossibly at the top. 97.9% on
- * 1X2 outcomes is not a football number, and Strong outranking Elite is a band
- * inversion that a clean measurement does not produce.
+ * THREE MODES
+ * -----------
+ *   RECONSTRUCTED - the headline. Rebuilds the score per match from tables
+ *                   that carry genuine pre-kickoff values:
+ *                     readiness  <- team_match_snapshots.readiness_before
+ *                     injury     <- team_intelligence_history.injury_burden_score
+ *                     congestion <- team_intelligence_history.congestion_score
+ *                     stability  <- team_intelligence_history.squad_stability_score
+ *                     travel     <- match_travel_intelligence (geography, time-invariant)
+ *                   That is 70 of 100 weight and 5 components, clearing
+ *                   processDbOnly's >= 4 gate. Strength (20), venue (7) and
+ *                   motivation (3) have no historical source anywhere and are
+ *                   renormalised out - exactly what the live blend does when a
+ *                   component is missing. Only this mode is persisted.
  *
- * WHAT THIS JOB MEASURES
- * ──────────────────────
- *   MODE ARCHIVED  — the honest number. Population is readiness_history rows
- *                    written BEFORE kickoff (snapshot_at < match_date) and
- *                    since linked to a result. confidence_pct was frozen at
- *                    snapshot time, so re-banding it cannot see the future.
- *                    Only this mode is written to signal_backtests.
+ *   FROZEN        - readiness_history.confidence_pct, written before kickoff by
+ *                   archiveReadinessSnapshot. Smaller population but it is the
+ *                   real live score at full 8-component fidelity. Used to
+ *                   VALIDATE the reconstruction: on matches present in both,
+ *                   the two should broadly agree. If they do not, the
+ *                   reconstruction is wrong and its numbers are worthless.
  *
- *   MODE CURRENT   — the leaky number, reproduced deliberately. Same banding
- *                    applied to match_intelligence as it stands now. NOT
- *                    persisted. It exists so the delta between the two modes
- *                    can be logged, because that delta IS the leakage estimate.
+ *   CURRENT       - deliberately reproduces the leaky methodology. Logged for
+ *                   the delta, never written. Persisting it would let a leaked
+ *                   number reach the signal writer's calibration gate, which is
+ *                   the exact failure this layer exists to prevent.
  *
- * FIDELITY CAVEAT — read before quoting the archived figure
- * ─────────────────────────────────────────────────────────
- * Six of the eight components feeding the confidence score (strength, injury,
- * congestion, stability, venue, motivation — 60 of 100 weight) have no
- * pre-kickoff historical source anywhere in the warehouse. For matches
- * archived by archiveReadinessSnapshot the frozen confidence_pct DOES include
- * all eight, because it was computed live before kickoff. For anything older
- * than that job, no honest reconstruction is possible at any fidelity, and
- * this harness excludes those matches rather than approximating them.
+ * ANTI-LEAKAGE INVARIANTS
+ *   - team_intelligence_history rows must have snapshot_date STRICTLY BEFORE
+ *     the match date. snapshot_date is a DATE, so a same-day row cannot be
+ *     proven pre-kickoff and is rejected rather than assumed.
+ *   - snapshots older than STALE_DAYS are rejected, not carried forward.
+ *   - readiness_history rows must satisfy snapshot_at < match_date.
+ *   - no mode reads match_results except through the outcome evaluator.
  *
- * The practical consequence: the archived population is smaller than 1,893 and
- * grows only forward. That is the cost of having measured the wrong thing
- * first. Migration 033 archives the component vector so the next iteration can
- * attribute band performance to individual components.
- *
- * Depends on: archive:readiness (snapshot + link). DB-only. Idempotent.
+ * Depends on: process:historical-context, archive:readiness.
+ * DB-only. Idempotent.
  */
 
 const MIN_SAMPLE = Number(process.env.PT_MIN_SAMPLE ?? 200);
 const MIN_LIFT = Number(process.env.PT_MIN_LIFT ?? 1.05);
+/** How stale a team_intelligence_history row may be and still be used. */
+const STALE_DAYS = Number(process.env.PT_BAND_STALE_DAYS ?? 14);
 
-/** Bands are published claims; a small-sample band is not publishable. */
 const BAND_MARKET = 'PICK_STRICT';
+const DAY_MS = 86_400_000;
+
+type Mode = 'RECONSTRUCTED' | 'FROZEN' | 'CURRENT';
 
 interface Scored {
+  matchId: number;
   band: ConfidenceBand;
+  score: number;
   pick: Pick;
   outcome: Pick;
-  /** Pick landed exactly, draw counted as its own outcome. */
   strict: boolean;
-  /** Higher-readiness side did not lose. */
   lenient: boolean;
+  componentsWithData?: number;
 }
 
 interface BandStat {
   band: ConfidenceBand;
   n: number;
-  hitsStrict: number;
-  hitsLenient: number;
-  rateStrict: number;
+  hits: number;
+  rate: number;
   rateLenient: number;
   ciLow: number;
   ciHigh: number;
@@ -95,268 +94,337 @@ interface BandStat {
   calibrated: boolean;
 }
 
-function summarise(rows: Scored[], population: Scored[]): BandStat[] {
-  // Baseline is the strict hit rate across the WHOLE evaluated population —
-  // the same denominator convention backtestSignals.ts uses for lift.
-  const baseline =
-    population.length > 0
-      ? population.filter((r) => r.strict).length / population.length
-      : 0;
-
-  return BAND_ORDER.map((band) => {
-    const inBand = rows.filter((r) => r.band === band);
+function summarise(rows: Scored[]): BandStat[] {
+  const baseline = rows.length > 0 ? rows.filter(r => r.strict).length / rows.length : 0;
+  return BAND_ORDER.map(band => {
+    const inBand = rows.filter(r => r.band === band);
     const n = inBand.length;
-    const hitsStrict = inBand.filter((r) => r.strict).length;
-    const hitsLenient = inBand.filter((r) => r.lenient).length;
-    const rateStrict = n > 0 ? hitsStrict / n : 0;
-    const [ciLow, ciHigh] = wilson(hitsStrict, n);
-    const lift = baseline > 0 ? rateStrict / baseline : 0;
-
+    const hits = inBand.filter(r => r.strict).length;
+    const rate = n > 0 ? hits / n : 0;
+    const [ciLow, ciHigh] = wilson(hits, n);
+    const lift = baseline > 0 ? rate / baseline : 0;
     return {
-      band,
-      n,
-      hitsStrict,
-      hitsLenient,
-      rateStrict,
-      rateLenient: n > 0 ? hitsLenient / n : 0,
-      ciLow,
-      ciHigh,
-      baseline,
-      lift,
+      band, n, hits, rate,
+      rateLenient: n > 0 ? inBand.filter(r => r.lenient).length / n : 0,
+      ciLow, ciHigh, baseline, lift,
       calibrated: n >= MIN_SAMPLE && lift >= MIN_LIFT,
     };
   });
 }
 
-// ── MODE ARCHIVED — pre-kickoff snapshots only ──────────────────────────────
+/** Latest history row strictly before `beforeTs`, within STALE_DAYS. */
+interface HistPoint {
+  ts: number;
+  injury: number | null;
+  congestion: number | null;
+  stability: number | null;
+  readiness: number | null;
+}
+function latestBefore(list: HistPoint[] | undefined, beforeTs: number): HistPoint | null {
+  if (!list || list.length === 0) return null;
+  let lo = 0, hi = list.length - 1, found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid].ts < beforeTs) { found = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (found === -1) return null;
+  const row = list[found];
+  if (beforeTs - row.ts > STALE_DAYS * DAY_MS) return null;
+  return row;
+}
 
-async function archivedPopulation(): Promise<{
-  scored: Scored[];
-  rejected: Record<string, number>;
-}> {
-  const rows = await fetchAllRows<any>(
-    db
-      .from('readiness_history')
-      .select(
-        'match_id, snapshot_at, match_date, confidence_pct, predicted_pick, ' +
-          'home_readiness, away_readiness, final_outcome, ' +
-          'pick_correct_strict, pick_correct_lenient, result_linked_at'
-      )
-      .not('result_linked_at', 'is', null)
+const nOrNull = (v: any): number | null => {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+function verdicts(pick: Pick, homeReady: number, awayReady: number, outcome: Pick) {
+  const higher: Pick = homeReady > awayReady ? 'HOME' : homeReady < awayReady ? 'AWAY' : 'DRAW';
+  return {
+    strict: pick === outcome,
+    lenient: higher === 'DRAW' ? outcome === 'DRAW' : outcome === higher || outcome === 'DRAW',
+  };
+}
+
+export async function backtestConfidenceBands() {
+  logger.info(
+    {
+      minSample: MIN_SAMPLE, minLift: MIN_LIFT, staleDays: STALE_DAYS,
+      archivableWeight: `${ARCHIVABLE_WEIGHT}/${TOTAL_WEIGHT}`,
+      archivableComponents: ARCHIVABLE_COMPONENTS.map(c => c.key),
+    },
+    'Confidence band backtest: starting'
   );
 
+  // -- Load -----------------------------------------------------------------
+  const [matches, results, snaps, hist, travel, readyHist, intel] = await Promise.all([
+    fetchAllRows<any>(db.from('matches').select('id, home_team_id, away_team_id, date')),
+    fetchAllRows<any>(
+      db.from('match_results').select('match_id, home_score, away_score')
+        .not('home_score', 'is', null).not('away_score', 'is', null)
+    ),
+    fetchAllRows<any>(
+      db.from('team_match_snapshots').select('match_id, team_id, readiness_before')
+    ),
+    fetchAllRows<any>(
+      db.from('team_intelligence_history')
+        .select('team_id, snapshot_date, injury_burden_score, congestion_score, squad_stability_score, readiness_score')
+    ),
+    fetchAllRows<any>(
+      db.from('match_travel_intelligence')
+        .select('match_id, home_team_distance_km, away_team_distance_km')
+    ),
+    fetchAllRows<any>(
+      db.from('readiness_history')
+        .select('match_id, snapshot_at, match_date, confidence_pct, predicted_pick, home_readiness, away_readiness, final_outcome, pick_correct_strict, pick_correct_lenient, result_linked_at')
+        .not('result_linked_at', 'is', null)
+    ),
+    fetchAllRows<any>(
+      db.from('match_intelligence')
+        .select('match_id, confidence_score, home_readiness, away_readiness')
+        .not('confidence_score', 'is', null)
+    ),
+  ]);
+
+  const matchById = new Map<number, any>(matches.map((m: any) => [m.id, m]));
+  const snapByKey = new Map<string, any>(snaps.map((s: any) => [`${s.match_id}:${s.team_id}`, s]));
+  const travelByMatch = new Map<number, any>(travel.map((t: any) => [t.match_id, t]));
+  const intelByMatch = new Map<number, any>(intel.map((i: any) => [i.match_id, i]));
+
+  const histByTeam = new Map<number, HistPoint[]>();
+  for (const h of hist) {
+    const list = histByTeam.get(h.team_id) ?? [];
+    list.push({
+      ts: new Date(h.snapshot_date).getTime(),
+      injury: nOrNull(h.injury_burden_score),
+      congestion: nOrNull(h.congestion_score),
+      stability: nOrNull(h.squad_stability_score),
+      readiness: nOrNull(h.readiness_score),
+    });
+    histByTeam.set(h.team_id, list);
+  }
+  for (const list of histByTeam.values()) list.sort((a, b) => a.ts - b.ts);
+
+  // -- MODE RECONSTRUCTED ---------------------------------------------------
+  const reconstructed: Scored[] = [];
   const rejected: Record<string, number> = {
-    unlinked_or_unfinished: 0,
-    snapshot_not_before_kickoff: 0,
-    missing_confidence: 0,
-    missing_pick_or_outcome: 0,
+    no_match_row: 0, no_readiness: 0, no_history_window: 0,
+    below_component_gate: 0, no_pick: 0,
   };
 
-  const scored: Scored[] = [];
+  for (const r of results) {
+    const m = matchById.get(r.match_id);
+    if (!m) { rejected.no_match_row++; continue; }
 
-  for (const r of rows) {
-    // ── ANTI-LEAKAGE INVARIANT ──────────────────────────────────────────
-    // The snapshot must predate kickoff. A row written after the whistle is
-    // indistinguishable from the current-state path and is discarded, not
-    // salvaged. This check is the entire point of the job; do not relax it
-    // to grow the sample.
+    // Match date at day granularity: snapshot_date is a DATE, so anything on
+    // the same day cannot be proven pre-kickoff.
+    const kickTs = new Date(m.date).getTime();
+    const dayFloor = new Date(new Date(m.date).toISOString().slice(0, 10)).getTime();
+
+    const hSnap = snapByKey.get(`${m.id}:${m.home_team_id}`);
+    const aSnap = snapByKey.get(`${m.id}:${m.away_team_id}`);
+    const hHist = latestBefore(histByTeam.get(m.home_team_id), dayFloor);
+    const aHist = latestBefore(histByTeam.get(m.away_team_id), dayFloor);
+
+    // Readiness: replay snapshot first, dated history as fallback.
+    const hReady = nOrNull(hSnap?.readiness_before) ?? hHist?.readiness ?? null;
+    const aReady = nOrNull(aSnap?.readiness_before) ?? aHist?.readiness ?? null;
+    if (hReady == null || aReady == null) { rejected.no_readiness++; continue; }
+
+    if (!hHist || !aHist) { rejected.no_history_window++; continue; }
+
+    const { pick } = derivePick(hReady, aReady);
+    if (!pick) { rejected.no_pick++; continue; }
+    const pickSign: 1 | -1 = hReady - aReady >= 0 ? 1 : -1;
+
+    const tv = travelByMatch.get(m.id);
+    const homeKm = nOrNull(tv?.home_team_distance_km);
+    const awayKm = nOrNull(tv?.away_team_distance_km);
+
+    // Each gap signed toward HOME. Sign conventions mirror processDbOnly:
+    // an opponent's burden helps you, so injury/congestion are away-minus-home.
+    const gaps: Partial<Record<ComponentKey, number | null>> = {
+      readiness_gap: hReady - aReady,
+      injury_gap:
+        hHist.injury != null && aHist.injury != null ? aHist.injury - hHist.injury : null,
+      congestion_gap:
+        hHist.congestion != null && aHist.congestion != null
+          ? aHist.congestion - hHist.congestion : null,
+      travel_gap: homeKm != null && awayKm != null ? awayKm - homeKm : null,
+      stability_gap:
+        hHist.stability != null && aHist.stability != null
+          ? hHist.stability - aHist.stability : null,
+      // strength / venue / motivation: no historical source, renormalised out.
+    };
+
+    const scored = computeConfidenceScore(gaps, pickSign);
+    if (!scored) { rejected.below_component_gate++; continue; }
+
+    const outcome = outcomeOf(Number(r.home_score), Number(r.away_score));
+    const v = verdicts(pick, hReady, aReady, outcome);
+    reconstructed.push({
+      matchId: m.id, band: scored.band, score: scored.score, pick, outcome,
+      strict: v.strict, lenient: v.lenient,
+      componentsWithData: scored.componentsWithData,
+    });
+    void kickTs;
+  }
+
+  // -- MODE FROZEN ----------------------------------------------------------
+  const frozen: Scored[] = [];
+  let frozenRejectedNotPreKickoff = 0;
+  for (const r of readyHist) {
     const snapTs = r.snapshot_at ? new Date(r.snapshot_at).getTime() : null;
     const kickTs = r.match_date ? new Date(r.match_date).getTime() : null;
-    if (snapTs == null || kickTs == null || snapTs >= kickTs) {
-      rejected.snapshot_not_before_kickoff++;
-      continue;
-    }
-
-    if (r.confidence_pct == null) {
-      rejected.missing_confidence++;
-      continue;
-    }
-    if (!r.predicted_pick || !r.final_outcome) {
-      rejected.missing_pick_or_outcome++;
-      continue;
-    }
-
+    if (snapTs == null || kickTs == null || snapTs >= kickTs) { frozenRejectedNotPreKickoff++; continue; }
+    if (r.confidence_pct == null || !r.predicted_pick || !r.final_outcome) continue;
     const band = bandFor(Number(r.confidence_pct));
-    if (!band) {
-      rejected.missing_confidence++;
-      continue;
-    }
-
-    scored.push({
-      band,
-      pick: r.predicted_pick as Pick,
-      outcome: r.final_outcome as Pick,
-      // Trust the stored verdicts — they were computed by linkReadinessResults
-      // against the frozen snapshot. Recomputing here would risk drifting from
-      // the definition the rest of the platform reports against.
+    if (!band) continue;
+    frozen.push({
+      matchId: r.match_id, band, score: Number(r.confidence_pct),
+      pick: r.predicted_pick as Pick, outcome: r.final_outcome as Pick,
       strict: r.pick_correct_strict === true,
       lenient: r.pick_correct_lenient === true,
     });
   }
 
-  return { scored, rejected };
-}
-
-// ── MODE CURRENT — reproduces the leaky methodology, for comparison only ────
-
-async function currentPopulation(): Promise<Scored[]> {
-  const intel = await fetchAllRows<any>(
-    db
-      .from('match_intelligence')
-      .select('match_id, confidence_score, confidence_band, home_readiness, away_readiness')
-      .not('confidence_band', 'is', null)
-  );
-  const intelByMatch = new Map(intel.map((i: any) => [i.match_id, i]));
-
-  const results = await fetchAllRows<any>(
-    db
-      .from('match_results')
-      .select('match_id, home_score, away_score')
-      .not('home_score', 'is', null)
-      .not('away_score', 'is', null)
-  );
-
-  const scored: Scored[] = [];
-  for (const res of results) {
-    const i = intelByMatch.get(res.match_id);
+  // -- MODE CURRENT ---------------------------------------------------------
+  const current: Scored[] = [];
+  for (const r of results) {
+    const i = intelByMatch.get(r.match_id);
     if (!i) continue;
-
     const band = bandFor(Number(i.confidence_score));
     if (!band) continue;
-
     const { pick } = derivePick(i.home_readiness, i.away_readiness);
     if (!pick) continue;
-
-    const outcome = outcomeOf(Number(res.home_score), Number(res.away_score));
-    const higher: Pick =
-      i.home_readiness > i.away_readiness
-        ? 'HOME'
-        : i.home_readiness < i.away_readiness
-          ? 'AWAY'
-          : 'DRAW';
-
-    scored.push({
-      band,
-      pick,
-      outcome,
-      strict: pick === outcome,
-      lenient: higher === 'DRAW' ? outcome === 'DRAW' : outcome === higher || outcome === 'DRAW',
+    const outcome = outcomeOf(Number(r.home_score), Number(r.away_score));
+    const v = verdicts(pick, Number(i.home_readiness), Number(i.away_readiness), outcome);
+    current.push({
+      matchId: r.match_id, band, score: Number(i.confidence_score), pick, outcome,
+      strict: v.strict, lenient: v.lenient,
     });
   }
-  return scored;
-}
 
-// ── Entry point ─────────────────────────────────────────────────────────────
+  // -- Validation: does the reconstruction agree with the frozen score? ------
+  const frozenByMatch = new Map(frozen.map(f => [f.matchId, f]));
+  let overlap = 0, bandAgree = 0, scoreAbsErr = 0;
+  for (const rec of reconstructed) {
+    const f = frozenByMatch.get(rec.matchId);
+    if (!f) continue;
+    overlap++;
+    if (f.band === rec.band) bandAgree++;
+    scoreAbsErr += Math.abs(f.score - rec.score);
+  }
+  const agreement = {
+    overlap,
+    bandAgreementPct: overlap > 0 ? Number(((bandAgree / overlap) * 100).toFixed(1)) : null,
+    meanAbsScoreError: overlap > 0 ? Number((scoreAbsErr / overlap).toFixed(2)) : null,
+  };
+  if (overlap === 0) {
+    logger.warn('No overlap between RECONSTRUCTED and FROZEN — reconstruction is unvalidated.');
+  } else if ((agreement.bandAgreementPct ?? 0) < 60) {
+    logger.warn(
+      agreement,
+      'RECONSTRUCTED disagrees with the frozen pre-kickoff score on most matches. ' +
+      'The 70%-weight reconstruction is NOT a faithful stand-in for the live band. ' +
+      'Do not publish its rates until this is resolved.'
+    );
+  } else {
+    logger.info(agreement, 'Reconstruction validated against frozen pre-kickoff scores');
+  }
 
-export async function backtestConfidenceBands() {
+  // -- Report ---------------------------------------------------------------
+  const recStats = summarise(reconstructed);
+  const frozenStats = summarise(frozen);
+  const curStats = summarise(current);
+  const frozenBy = new Map(frozenStats.map(s => [s.band, s]));
+  const curBy = new Map(curStats.map(s => [s.band, s]));
+
   logger.info(
     {
-      minSample: MIN_SAMPLE,
-      minLift: MIN_LIFT,
-      archivableWeight: `${ARCHIVABLE_WEIGHT}/${TOTAL_WEIGHT}`,
-    },
-    'Confidence band backtest: starting'
-  );
-
-  const { scored: archived, rejected } = await archivedPopulation();
-  const current = await currentPopulation();
-
-  const archivedStats = summarise(archived, archived);
-  const currentStats = summarise(current, current);
-
-  logger.info(
-    {
-      archivedPopulation: archived.length,
-      currentPopulation: current.length,
+      reconstructed: reconstructed.length,
+      frozen: frozen.length,
+      current: current.length,
       rejected,
+      frozenRejectedNotPreKickoff,
     },
     'Confidence band backtest: populations built'
   );
 
-  // ── Side-by-side comparison — the leakage estimate ────────────────────────
-  const currentByBand = new Map(currentStats.map((s) => [s.band, s]));
-  for (const a of archivedStats) {
-    const c = currentByBand.get(a.band);
-    const delta = c ? (c.rateStrict - a.rateStrict) * 100 : null;
+  for (const s of recStats) {
+    const c = curBy.get(s.band);
+    const f = frozenBy.get(s.band);
     logger.info(
       {
-        band: a.band,
-        archived_n: a.n,
-        archived_pct: (a.rateStrict * 100).toFixed(1),
-        archived_ci: a.n > 0 ? `${a.ciLow.toFixed(1)}–${a.ciHigh.toFixed(1)}` : '—',
+        band: s.band,
+        reconstructed_n: s.n,
+        reconstructed_pct: (s.rate * 100).toFixed(1),
+        reconstructed_ci: s.n > 0 ? `${s.ciLow.toFixed(1)}-${s.ciHigh.toFixed(1)}` : '-',
+        frozen_n: f?.n ?? 0,
+        frozen_pct: f && f.n > 0 ? (f.rate * 100).toFixed(1) : '-',
         current_n: c?.n ?? 0,
-        current_pct: c ? (c.rateStrict * 100).toFixed(1) : '—',
-        leakage_delta_pts: delta != null ? delta.toFixed(1) : '—',
-        calibrated: a.calibrated,
+        current_pct: c && c.n > 0 ? (c.rate * 100).toFixed(1) : '-',
+        leakage_delta_pts: c && c.n > 0 ? ((c.rate - s.rate) * 100).toFixed(1) : '-',
+        lift: s.lift.toFixed(3),
+        calibrated: s.calibrated,
       },
-      'Confidence band: archived vs current'
+      'Confidence band: reconstructed vs frozen vs current'
     );
   }
 
-  const inverted = archivedStats.some((s, idx) => {
-    const next = archivedStats[idx + 1];
-    return next && s.n > 0 && next.n > 0 && next.rateStrict > s.rateStrict;
+  const nonMonotonic = recStats.some((s, i) => {
+    const next = recStats[i + 1];
+    return next && s.n > 0 && next.n > 0 && next.rate > s.rate;
   });
-  if (inverted) {
+  if (nonMonotonic) {
     logger.warn(
-      'Band ordering is not monotonic in the archived population — a higher band ' +
-        'scored worse than the band below it. Either the sample is too small or the ' +
-        'score formula does not separate. Do not publish band rates until resolved.'
+      'Band ordering is not monotonic in the reconstructed population - a higher band ' +
+      'scored worse than the band below it. Either the sample is too small or the score ' +
+      'does not separate. Do not publish band rates until resolved.'
     );
   }
 
-  // ── Persist ARCHIVED only ────────────────────────────────────────────────
-  // The current-state figures are diagnostics. Writing them to
-  // signal_backtests would let a leaked number reach the signal writer's
-  // calibration gate, which is the failure this whole layer exists to prevent.
+  // -- Persist RECONSTRUCTED only -------------------------------------------
   const nowIso = new Date().toISOString();
-  const componentNote =
-    `pre-kickoff snapshots only; ${ARCHIVABLE_WEIGHT}/${TOTAL_WEIGHT} weight ` +
-    `has an archived source (${BAND_COMPONENTS.filter((c) => c.archivedSource)
-      .map((c) => c.key)
-      .join(', ')})`;
+  const note =
+    `point-in-time reconstruction; ${ARCHIVABLE_WEIGHT}/${TOTAL_WEIGHT} weight from ` +
+    `${ARCHIVABLE_COMPONENTS.map(c => c.key).join(', ')}; stale window ${STALE_DAYS}d; ` +
+    `band agreement vs frozen ${agreement.bandAgreementPct ?? 'n/a'}% over n=${overlap}`;
 
-  const rows = archivedStats.map((s) => ({
+  const rows = recStats.map(s => ({
     rule_key: `CBAND_${s.band.toUpperCase()}`,
     market: BAND_MARKET,
     sample_size: s.n,
-    hits: s.hitsStrict,
-    hit_rate: Math.round(s.rateStrict * 10000) / 10000,
+    hits: s.hits,
+    hit_rate: Math.round(s.rate * 10000) / 10000,
     baseline_rate: Math.round(s.baseline * 10000) / 10000,
     lift: Math.round(s.lift * 1000) / 1000,
     is_calibrated: s.calibrated,
     window_days: null,
-    notes: s.calibrated
-      ? componentNote
-      : s.n < MIN_SAMPLE
-        ? `sample ${s.n} < ${MIN_SAMPLE}; ${componentNote}`
-        : `lift ${s.lift.toFixed(3)} < ${MIN_LIFT}; ${componentNote}`,
+    notes: s.calibrated ? note
+      : s.n < MIN_SAMPLE ? `sample ${s.n} < ${MIN_SAMPLE}; ${note}`
+      : `lift ${s.lift.toFixed(3)} < ${MIN_LIFT}; ${note}`,
     evaluated_at: nowIso,
   }));
 
-  const { error } = await db
-    .from('signal_backtests')
+  const { error } = await db.from('signal_backtests')
     .upsert(rows, { onConflict: 'rule_key,market' });
   if (error) throw new Error(`signal_backtests upsert failed: ${error.message}`);
 
-  const calibrated = rows.filter((r) => r.is_calibrated).length;
-  logger.info(
-    {
-      bands: rows.length,
-      calibrated,
-      archivedPopulation: archived.length,
-      currentPopulation: current.length,
-    },
-    'Confidence band backtest: complete'
-  );
+  const calibrated = rows.filter(r => r.is_calibrated).length;
+  logger.info({ bands: rows.length, calibrated }, 'Confidence band backtest: complete');
 
   return {
     bands: rows.length,
     calibrated,
-    archivedPopulation: archived.length,
+    reconstructedPopulation: reconstructed.length,
+    frozenPopulation: frozen.length,
     currentPopulation: current.length,
     rejected,
-    archivedStats,
-    currentStats,
+    agreement,
+    recStats,
+    frozenStats,
+    curStats,
   };
 }
