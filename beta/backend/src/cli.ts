@@ -37,6 +37,7 @@ import { sportsApiClient } from './services/sportsApiClient';
 import { processHistoricalContextBackfill, processHistoricalContextRecent } from './jobs/processHistoricalContext';
 import { processFormQuality } from './jobs/processFormQuality';
 import { backtestSignals } from './jobs/backtestSignals';
+import { backtestConfidenceBands } from './jobs/backtestConfidenceBands';
 import { processRiskOpportunity } from './jobs/processRiskOpportunity';
 
 /**
@@ -1416,6 +1417,27 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Backtesting signal rules...');
         const r = await backtestSignals();
         logger.info(r, 'Signal backtest complete');
+        break;
+      }
+
+      case 'backtest:bands': {
+        // Honest confidence-band accuracy. Population is restricted to
+        // readiness_history rows frozen BEFORE kickoff, so the band being
+        // scored cannot see the result. Also logs the current-state (leaky)
+        // figures side by side — the delta is the leakage estimate. Only the
+        // archived figures are persisted.
+        logger.info('Backtesting confidence bands (point-in-time)...');
+        const r = await backtestConfidenceBands();
+        logger.info(
+          {
+            bands: r.bands,
+            calibrated: r.calibrated,
+            archivedPopulation: r.archivedPopulation,
+            currentPopulation: r.currentPopulation,
+            rejected: r.rejected,
+          },
+          'Confidence band backtest complete'
+        );
         break;
       }
 
