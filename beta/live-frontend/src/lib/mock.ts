@@ -133,8 +133,8 @@ export const MOCK_FORM_QUALITY: Record<number, TeamFormQuality> = {
 };
 
 export const MOCK_VENUE: Record<number, TeamVenuePerformance> = {
-  1: { team_id: 1, home_win_pct: 72, away_win_pct: 38, home_points_per_game: 2.1, away_points_per_game: 1.2, venue_advantage_score: 78 },
-  2: { team_id: 2, home_win_pct: 61, away_win_pct: 44, home_points_per_game: 1.8, away_points_per_game: 1.5, venue_advantage_score: 55 },
+  1: { team_id: 1, home_matches: 3, away_matches: 3, home_win_pct: 72, away_win_pct: 38, home_points_per_game: 2.1, away_points_per_game: 1.2, venue_advantage_score: 78 },
+  2: { team_id: 2, home_matches: 3, away_matches: 3, home_win_pct: 61, away_win_pct: 44, home_points_per_game: 1.8, away_points_per_game: 1.5, venue_advantage_score: 55 },
 };
 
 export const MOCK_MOMENTUM: Record<number, TeamMomentum> = {

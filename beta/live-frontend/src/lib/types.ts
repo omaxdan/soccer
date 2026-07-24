@@ -154,6 +154,10 @@ export interface MatchRow {
   awaySeasonStats?: import("./performance").TeamSeasonStats | null;
   homeFormQuality?: TeamFormQuality | null;
   awayFormQuality?: TeamFormQuality | null;
+  // Venue split per side — needed by Module 1 on the match page. Everything
+  // else the team modules need is already carried above.
+  homeVenue?: TeamVenuePerformance | null;
+  awayVenue?: TeamVenuePerformance | null;
 }
 
 export interface TeamMatchImpact {
@@ -304,6 +308,8 @@ export interface TeamInjuryImpact {
 
 export interface TeamFormQuality {
   team_id: number;
+  /** Window size behind volatility / opponent_adjusted_form. */
+  window_matches?: number | null;
   opponent_adjusted_form: number | null;
   strength_of_schedule: number | null;
   giant_killer_score: number | null;
@@ -315,6 +321,9 @@ export interface TeamFormQuality {
   ppg_vs_top?: number | null;
   ppg_vs_middle?: number | null;
   ppg_vs_bottom?: number | null;
+  matches_vs_top?: number | null;
+  matches_vs_middle?: number | null;
+  matches_vs_bottom?: number | null;
 }
 
 // Betting Card types
@@ -386,6 +395,11 @@ export interface DailyBettingCard {
 
 export interface TeamVenuePerformance {
   team_id: number;
+  // Match counts behind the percentages. Present in the table all along and
+  // selected by `*` — they were simply never surfaced, which is why venue
+  // rates rendered without an n.
+  home_matches: number | null;
+  away_matches: number | null;
   home_win_pct: number | null;
   away_win_pct: number | null;
   home_points_per_game: number | null;

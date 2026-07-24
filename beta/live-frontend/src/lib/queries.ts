@@ -130,7 +130,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     positionalMatchupsRaw, tacticalAdvantages, performanceComparison,
     substitutionImpact, squadDepthComparison,
     homeBetting, awayBetting, homeIntel, awayIntel, homeSeasonStats, awaySeasonStats,
-    homeFormQuality, awayFormQuality] = await Promise.all([
+    homeFormQuality, awayFormQuality, homeVenue, awayVenue] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
@@ -156,6 +156,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     client.from("team_season_statistics").select("*").eq("team_id", awayTeam.id).order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
     client.from("team_form_quality").select("*").eq("team_id", homeTeam.id).maybeSingle(),
     client.from("team_form_quality").select("*").eq("team_id", awayTeam.id).maybeSingle(),
+    client.from("team_venue_performance").select("*").eq("team_id", homeTeam.id).maybeSingle(),
+    client.from("team_venue_performance").select("*").eq("team_id", awayTeam.id).maybeSingle(),
   ]);
 
   const keyBattles = ((keyBattlesRaw.data as any[]) ?? []).map((b) => ({
@@ -194,6 +196,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     awaySeasonStats: (awaySeasonStats.data as any) ?? null,
     homeFormQuality: (homeFormQuality.data as any) ?? null,
     awayFormQuality: (awayFormQuality.data as any) ?? null,
+    homeVenue: (homeVenue.data as any) ?? null,
+    awayVenue: (awayVenue.data as any) ?? null,
   };
 }
 

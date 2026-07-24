@@ -307,7 +307,7 @@ function evalFormGap(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.form_gap;
   const h = ctx.match.homeIntel?.form_index ?? null;
   const a = ctx.match.awayIntel?.form_index ?? null;
-  if (h == null || a == null) return inactive(def, "Form index missing");
+  if (h == null || a == null) return inactive(def, "No form index recorded for one or both teams");
 
   const gap = Math.round((h - a) * 10) / 10;
   const abs = Math.abs(gap);
@@ -362,7 +362,7 @@ function evalFormGap(ctx: MatchModuleContext): ModuleReading {
 function evalConfidence(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.confidence;
   const band = ctx.match.intel?.confidence_band ?? null;
-  if (!band) return inactive(def, "Band not computed");
+  if (!band) return inactive(def, "Confidence band not yet computed for this fixture");
 
   // Bands and their backtested accuracy. Samples ARE known here, which is
   // exactly why this module is the one that shows an interval.
@@ -410,7 +410,7 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
 function evalTravel(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.travel;
   const km = ctx.match.intel?.away_travel_distance_km ?? null;
-  if (km == null) return inactive(def, "Travel distance missing");
+  if (km == null) return inactive(def, "No travel distance recorded for this fixture");
 
   let band: string;
   let awayRate: number;
@@ -455,7 +455,7 @@ function evalRest(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.rest;
   const hr = ctx.match.intel?.home_rest_days ?? null;
   const ar = ctx.match.intel?.away_rest_days ?? null;
-  if (hr == null || ar == null) return inactive(def, "Rest days missing");
+  if (hr == null || ar == null) return inactive(def, "Rest days not recorded for one or both teams");
 
   const gap = hr - ar;
   let scenario: string;
@@ -511,7 +511,7 @@ function evalBttsFatigue(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.btts_fatigue;
   const hr = ctx.match.intel?.home_rest_days ?? null;
   const ar = ctx.match.intel?.away_rest_days ?? null;
-  if (hr == null || ar == null) return inactive(def, "Rest days missing");
+  if (hr == null || ar == null) return inactive(def, "Rest days not recorded — fatigue split cannot be set");
 
   let scenario: string;
   let rate: number;
@@ -555,7 +555,7 @@ function evalBttsFatigue(ctx: MatchModuleContext): ModuleReading {
 function evalCleanSheet(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.clean_sheet;
   const s = ctx.scoring;
-  if (!s) return inactive(def, "Scoring probabilities unavailable");
+  if (!s) return inactive(def, "Scoring probabilities not published for this fixture");
 
   // Clean sheet = the opponent fails to score. Derived from the concede rates
   // already carried by match_scoring_probabilities, WITH their samples.
@@ -563,7 +563,7 @@ function evalCleanSheet(ctx: MatchModuleContext): ModuleReading {
   const awayConcedes = num(s.away_concedes_pct);
   const homeCs = homeConcedes != null ? 100 - homeConcedes : null;
   const awayCs = awayConcedes != null ? 100 - awayConcedes : null;
-  if (homeCs == null && awayCs == null) return inactive(def, "Concede rates missing");
+  if (homeCs == null && awayCs == null) return inactive(def, "No concede rates recorded for either side");
 
   const hs = s.home_concede_sample ?? null;
   const as = s.away_concede_sample ?? null;
@@ -613,7 +613,7 @@ function evalCleanSheet(ctx: MatchModuleContext): ModuleReading {
 function evalHalftime(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.halftime;
   const ht = ctx.match.halfTime;
-  if (!ht) return inactive(def, "Half-time model unavailable");
+  if (!ht) return inactive(def, "No half-time data available for this fixture");
 
   const options = [
     { k: "Home/Home", v: ht.hh_prob },
@@ -621,7 +621,7 @@ function evalHalftime(ctx: MatchModuleContext): ModuleReading {
     { k: "Draw/Draw", v: ht.dd_prob },
     { k: "Away/Away", v: ht.aa_prob },
   ].filter((o) => o.v != null) as { k: string; v: number }[];
-  if (options.length === 0) return inactive(def, "No HT/FT probabilities");
+  if (options.length === 0) return inactive(def, "Half-time row exists but carries no HT/FT probabilities");
 
   const top = options.sort((a, b) => b.v - a.v)[0];
   const status: ModuleStatus = top.v >= 30 ? "supports" : "neutral";
@@ -647,7 +647,7 @@ function evalLeagueGoals(ctx: MatchModuleContext): ModuleReading {
     (ctx.match.intel?.predicted_home_goals ?? 0) +
     (ctx.match.intel?.predicted_away_goals ?? 0);
 
-  if (leagueBtts == null && !predTotal) return inactive(def, "League profile unavailable");
+  if (leagueBtts == null && !predTotal) return inactive(def, "No scoring profile published for this competition");
 
   const profile =
     leagueBtts == null
@@ -683,6 +683,64 @@ function evalLeagueGoals(ctx: MatchModuleContext): ModuleReading {
   };
 }
 
+
+// ── Shared classifiers ───────────────────────────────────
+// Both the single-team view (team page) and the two-sided view (match page)
+// route through these, so the same underlying numbers can never be labelled
+// two different ways on two different pages.
+
+export function classifyVenue(hw: number, aw: number) {
+  const disparity = Math.round((hw - aw) * 10) / 10;
+  let type = "Neutral";
+  if (hw >= 66 && aw <= 20) type = "Home reliant";
+  else if (aw >= 66 && hw <= 20) type = "Road warrior";
+  else if (hw >= 60 && aw >= 40) type = "All weather";
+  return { type, disparity };
+}
+
+export function classifyTrend(last5: number, prior5: number) {
+  const change = last5 - prior5;
+  let trend = "Stable";
+  if (change >= 5) trend = "Surging";
+  else if (change <= -5) trend = "Crashing";
+  else if (change >= 2) trend = "Improving";
+  else if (change <= -2) trend = "Declining";
+  return { trend, change };
+}
+
+export function classifyConsistency(vol: number, oaf: number | null) {
+  if (vol <= 0.6 && (oaf ?? 0) >= 70) return "Reliable strong";
+  if (vol <= 0.6 && (oaf ?? 100) < 40) return "Reliable weak";
+  if (vol <= 0.6) return "Predictable";
+  if (vol >= 1.5) return "Erratic";
+  return "Moderate";
+}
+
+export function classifyGiantKiller(
+  gk: number | null,
+  ftb: number | null,
+  ppgTop: number | null
+) {
+  if ((gk ?? 0) >= 80) return "Strong vs top";
+  if ((ftb ?? 0) >= 70) return "Flat-track bully";
+  if ((ppgTop ?? 9) <= 0.5) return "Struggles vs top";
+  return "Neutral";
+}
+
+/**
+ * Prior-five points, derived from the two cumulative windows that
+ * team_intelligence already carries. Avoids a team_momentum read on the match
+ * page for a number that is already implied by data in hand.
+ */
+export function priorFiveFrom(
+  last5: number | null | undefined,
+  last10: number | null | undefined
+): number | null {
+  if (last5 == null || last10 == null) return null;
+  const prior = last10 - last5;
+  return prior >= 0 ? prior : null;
+}
+
 // ── Team-scope evaluators ────────────────────────────────
 
 function evalHomeAway(ctx: TeamModuleContext): ModuleReading {
@@ -690,13 +748,10 @@ function evalHomeAway(ctx: TeamModuleContext): ModuleReading {
   const v = ctx.venue;
   const hw = v?.home_win_pct ?? null;
   const aw = v?.away_win_pct ?? null;
-  if (hw == null || aw == null) return inactive(def, "Venue split unavailable");
+  if (hw == null || aw == null) return inactive(def, "No home/away split recorded for this team");
 
-  const disparity = Math.round((hw - aw) * 10) / 10;
-  let type = "Neutral";
-  if (hw >= 66 && aw <= 20) type = "Home reliant";
-  else if (aw >= 66 && hw <= 20) type = "Road warrior";
-  else if (hw >= 60 && aw >= 40) type = "All weather";
+  const { type, disparity } = classifyVenue(hw, aw);
+  const hn = v?.home_matches ?? null;
 
   const status: ModuleStatus =
     type === "Neutral" ? "neutral" : Math.abs(disparity) >= 40 ? "supports" : "neutral";
@@ -710,7 +765,7 @@ function evalHomeAway(ctx: TeamModuleContext): ModuleReading {
       { label: "Away win", value: `${aw.toFixed(0)}%`, color: "var(--cool)" },
       { label: "Disparity", value: sign(disparity) },
     ],
-    baseline: { rate: hw, sample: null, label: "home wins" },
+    baseline: { rate: hw, sample: hn, label: "home wins" },
     verdict:
       type === "Home reliant"
         ? "Wins at home, does not travel. Fade away fixtures until this shifts."
@@ -727,14 +782,9 @@ function evalReadinessTracker(ctx: TeamModuleContext): ModuleReading {
   const m = ctx.momentum;
   const last5 = m?.last_5_points ?? null;
   const prior5 = m?.prior_5_points ?? null;
-  if (last5 == null || prior5 == null) return inactive(def, "No prior window to compare");
+  if (last5 == null || prior5 == null) return inactive(def, "Not enough matches to compare two five-game windows");
 
-  const change = last5 - prior5;
-  let trend = "Stable";
-  if (change >= 5) trend = "Surging";
-  else if (change <= -5) trend = "Crashing";
-  else if (change >= 2) trend = "Improving";
-  else if (change <= -2) trend = "Declining";
+  const { trend, change } = classifyTrend(last5, prior5);
 
   const status: ModuleStatus =
     trend === "Surging" ? "supports" : trend === "Crashing" ? "contradicts" : "neutral";
@@ -762,14 +812,10 @@ function evalConsistency(ctx: TeamModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.consistency;
   const q = ctx.formQuality;
   const vol = q?.volatility ?? null;
-  if (vol == null) return inactive(def, "Volatility not computed");
+  if (vol == null) return inactive(def, "Volatility not yet computed for this team");
 
   const oaf = q?.opponent_adjusted_form ?? null;
-  let profile = "Moderate";
-  if (vol <= 0.6 && (oaf ?? 0) >= 70) profile = "Reliable strong";
-  else if (vol <= 0.6 && (oaf ?? 100) < 40) profile = "Reliable weak";
-  else if (vol <= 0.6) profile = "Predictable";
-  else if (vol >= 1.5) profile = "Erratic";
+  const profile = classifyConsistency(vol, oaf);
 
   const status: ModuleStatus =
     profile === "Erratic" ? "contradicts" : vol <= 0.6 ? "supports" : "neutral";
@@ -802,12 +848,9 @@ function evalGiantKiller(ctx: TeamModuleContext): ModuleReading {
   const q = ctx.formQuality;
   const gk = q?.giant_killer_score ?? null;
   const ftb = q?.flat_track_bully_score ?? null;
-  if (gk == null && ftb == null) return inactive(def, "Not enough fixtures vs top sides");
+  if (gk == null && ftb == null) return inactive(def, "Fewer than three fixtures against top-tier opposition");
 
-  let profile = "Neutral";
-  if ((gk ?? 0) >= 80) profile = "Strong vs top";
-  else if ((ftb ?? 0) >= 70) profile = "Flat-track bully";
-  else if ((q?.ppg_vs_top ?? 9) <= 0.5) profile = "Struggles vs top";
+  const profile = classifyGiantKiller(gk, ftb, q?.ppg_vs_top ?? null);
 
   const status: ModuleStatus =
     profile === "Strong vs top"
@@ -863,13 +906,7 @@ export function evaluateMatchModules(ctx: MatchModuleContext): ModuleReading[] {
     evalHalftime(ctx),
     evalLeagueGoals(ctx),
   ];
-  const rank: Record<ModuleStatus, number> = {
-    contradicts: 0,
-    supports: 1,
-    neutral: 2,
-    inactive: 3,
-  };
-  return readings.sort((a, b) => rank[a.status] - rank[b.status] || a.def.n - b.def.n);
+  return sortReadings(readings);
 }
 
 /** Full per-team module report. */
@@ -891,6 +928,16 @@ export interface ModuleTally {
   firing: number;
 }
 
+/**
+ * Team-scope modules describe a side's standing habits, not this fixture.
+ * They are shown on the match page for context but must not move consensus —
+ * a permanently home-reliant team would otherwise cast the same vote every
+ * week regardless of the opponent.
+ */
+export function isInformational(def: ModuleDef): boolean {
+  return def.scope === "team";
+}
+
 export function tally(readings: ModuleReading[]): ModuleTally {
   const t: ModuleTally = {
     supports: 0,
@@ -900,6 +947,7 @@ export function tally(readings: ModuleReading[]): ModuleTally {
     firing: 0,
   };
   for (const r of readings) {
+    if (isInformational(r.def)) continue;
     t[r.status] += 1;
     if (r.status !== "inactive") t.firing += 1;
   }
@@ -921,4 +969,223 @@ export function overallVerdict(t: ModuleTally): {
     return { label: "STRONG", color: "var(--edge)" };
   if (t.supports >= 3) return { label: "MODERATE", color: "var(--warn)" };
   return { label: "WEAK", color: "var(--risk)" };
+}
+
+
+// ── Ordering ─────────────────────────────────────────────
+// Green, then amber, then red, then grey. Note this deliberately puts
+// contradicting modules LAST; the verdict summary and the consensus cap are
+// what keep a lone disagreement from being missed.
+const STATUS_RANK: Record<ModuleStatus, number> = {
+  supports: 0,
+  neutral: 1,
+  contradicts: 2,
+  inactive: 3,
+};
+
+export function sortReadings(readings: ModuleReading[]): ModuleReading[] {
+  return [...readings].sort(
+    (a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.def.n - b.def.n
+  );
+}
+
+// ── Team modules, two-sided (match page) ─────────────────
+// Same modules as the team page, but rendered as a head-to-head so a reader
+// can see whether the pick side's standing profile actually helps in THIS
+// fixture. Status is always judged relative to the pick side.
+
+export interface MatchTeamSides {
+  homeName: string;
+  awayName: string;
+  home: TeamModuleContext;
+  away: TeamModuleContext;
+  pickSide: "home" | "away" | null;
+}
+
+/** Status from "does the pick side hold the better profile here?" */
+function sideStatus(
+  pickSide: "home" | "away" | null,
+  homeFavourable: boolean,
+  awayFavourable: boolean
+): ModuleStatus {
+  if (pickSide == null) return "neutral";
+  const pickOk = pickSide === "home" ? homeFavourable : awayFavourable;
+  const oppOk = pickSide === "home" ? awayFavourable : homeFavourable;
+  if (pickOk && !oppOk) return "supports";
+  if (oppOk && !pickOk) return "contradicts";
+  return "neutral";
+}
+
+const pickName = (s: MatchTeamSides) =>
+  s.pickSide === "home" ? s.homeName : s.pickSide === "away" ? s.awayName : null;
+
+function evalHomeAwayMatch(s: MatchTeamSides): ModuleReading {
+  const def = MODULE_BY_KEY.home_away;
+  const hv = s.home.venue;
+  const av = s.away.venue;
+  const hHome = hv?.home_win_pct ?? null;
+  const hAway = hv?.away_win_pct ?? null;
+  const aHome = av?.home_win_pct ?? null;
+  const aAway = av?.away_win_pct ?? null;
+  if (hHome == null || hAway == null || aHome == null || aAway == null)
+    return inactive(def, "No home/away split recorded for one or both teams");
+
+  const hc = classifyVenue(hHome, hAway);
+  const ac = classifyVenue(aHome, aAway);
+  // In THIS fixture the home team plays at home and the away team travels.
+  const homeFav = hc.type === "Home reliant" || hc.type === "All weather";
+  const awayFav = ac.type === "Road warrior" || ac.type === "All weather";
+  const status = sideStatus(s.pickSide, homeFav, awayFav);
+  const hn = hv?.home_matches ?? null;
+  const an = av?.away_matches ?? null;
+
+  return {
+    def,
+    status,
+    headline: `${s.homeName}: ${hc.type} · ${s.awayName}: ${ac.type}`,
+    rows: [
+      { label: `${s.homeName} at home`, value: `${hHome.toFixed(0)}%${hn ? ` (n=${hn})` : ""}`, color: "var(--edge)" },
+      { label: `${s.awayName} away`, value: `${aAway.toFixed(0)}%${an ? ` (n=${an})` : ""}`, color: "var(--cool)" },
+      { label: `${s.homeName} split`, value: sign(hc.disparity) },
+      { label: `${s.awayName} split`, value: sign(ac.disparity) },
+    ],
+    baseline:
+      s.pickSide === "away"
+        ? { rate: aAway, sample: an, label: `${s.awayName} away wins` }
+        : { rate: hHome, sample: hn, label: `${s.homeName} home wins` },
+    verdict:
+      status === "supports"
+        ? `${pickName(s)} holds the venue profile that fits this fixture.`
+        : status === "contradicts"
+          ? `The venue profile favours the opponent, not ${pickName(s) ?? "the pick"}.`
+          : "Neither side's venue habit gives an edge in this fixture.",
+  };
+}
+
+function evalReadinessMatch(s: MatchTeamSides): ModuleReading {
+  const def = MODULE_BY_KEY.readiness;
+  const h5 = s.home.intel?.last_5_points ?? null;
+  const a5 = s.away.intel?.last_5_points ?? null;
+  const hPrior = priorFiveFrom(h5, s.home.intel?.last_10_points);
+  const aPrior = priorFiveFrom(a5, s.away.intel?.last_10_points);
+  if (h5 == null || a5 == null || hPrior == null || aPrior == null)
+    return inactive(def, "Not enough matches to compare two five-game windows");
+
+  const hc = classifyTrend(h5, hPrior);
+  const ac = classifyTrend(a5, aPrior);
+  const status = sideStatus(
+    s.pickSide,
+    hc.change >= 2 && hc.change > ac.change,
+    ac.change >= 2 && ac.change > hc.change
+  );
+
+  return {
+    def,
+    status,
+    headline: `${s.homeName}: ${hc.trend} · ${s.awayName}: ${ac.trend}`,
+    rows: [
+      { label: `${s.homeName} last 5`, value: `${h5} pts` },
+      { label: `${s.homeName} prior 5`, value: `${hPrior} pts` },
+      { label: `${s.homeName} change`, value: sign(hc.change) },
+      { label: `${s.awayName} last 5`, value: `${a5} pts` },
+      { label: `${s.awayName} prior 5`, value: `${aPrior} pts` },
+      { label: `${s.awayName} change`, value: sign(ac.change) },
+    ],
+    baseline: null,
+    verdict:
+      status === "supports"
+        ? `${pickName(s)} is the side trending upward into this fixture.`
+        : status === "contradicts"
+          ? `The opponent carries the better momentum into this fixture.`
+          : "Both sides arrive on a similar trajectory.",
+  };
+}
+
+function evalConsistencyMatch(s: MatchTeamSides): ModuleReading {
+  const def = MODULE_BY_KEY.consistency;
+  const hq = s.home.formQuality;
+  const aq = s.away.formQuality;
+  const hv = hq?.volatility ?? null;
+  const av = aq?.volatility ?? null;
+  if (hv == null || av == null)
+    return inactive(def, "Volatility not yet computed for one or both teams");
+
+  const hp = classifyConsistency(hv, hq?.opponent_adjusted_form ?? null);
+  const ap = classifyConsistency(av, aq?.opponent_adjusted_form ?? null);
+  const status = sideStatus(s.pickSide, hv <= 0.6, av <= 0.6);
+  const hn = hq?.window_matches ?? null;
+  const an = aq?.window_matches ?? null;
+
+  return {
+    def,
+    status,
+    headline: `${s.homeName}: ${hp} · ${s.awayName}: ${ap}`,
+    rows: [
+      { label: `${s.homeName} volatility`, value: `${hv.toFixed(2)}${hn ? ` (n=${hn})` : ""}` },
+      { label: `${s.awayName} volatility`, value: `${av.toFixed(2)}${an ? ` (n=${an})` : ""}` },
+      { label: `${s.homeName} profile`, value: hp },
+      { label: `${s.awayName} profile`, value: ap },
+    ],
+    baseline: null,
+    verdict:
+      status === "supports"
+        ? `${pickName(s)} is the more repeatable side — form-based reads hold up better against them.`
+        : status === "contradicts"
+          ? `${pickName(s) ?? "The pick"} swings match to match while the opponent does not.`
+          : "Both sides are similarly repeatable.",
+  };
+}
+
+function evalGiantKillerMatch(s: MatchTeamSides): ModuleReading {
+  const def = MODULE_BY_KEY.giant_killer;
+  const hq = s.home.formQuality;
+  const aq = s.away.formQuality;
+  const hgk = hq?.giant_killer_score ?? null;
+  const agk = aq?.giant_killer_score ?? null;
+  if (hgk == null && agk == null)
+    return inactive(def, "Fewer than three fixtures against top-tier opposition");
+
+  const hp = classifyGiantKiller(hgk, hq?.flat_track_bully_score ?? null, hq?.ppg_vs_top ?? null);
+  const ap = classifyGiantKiller(agk, aq?.flat_track_bully_score ?? null, aq?.ppg_vs_top ?? null);
+  const status = sideStatus(s.pickSide, hp === "Strong vs top", ap === "Strong vs top");
+  const hn = hq?.matches_vs_top ?? null;
+  const an = aq?.matches_vs_top ?? null;
+
+  return {
+    def,
+    status,
+    headline: `${s.homeName}: ${hp} · ${s.awayName}: ${ap}`,
+    rows: [
+      { label: `${s.homeName} vs top`, value: hq?.ppg_vs_top != null ? `${hq.ppg_vs_top.toFixed(2)} ppg${hn ? ` (n=${hn})` : ""}` : "—" },
+      { label: `${s.awayName} vs top`, value: aq?.ppg_vs_top != null ? `${aq.ppg_vs_top.toFixed(2)} ppg${an ? ` (n=${an})` : ""}` : "—" },
+      { label: `${s.homeName} profile`, value: hp },
+      { label: `${s.awayName} profile`, value: ap },
+    ],
+    baseline: null,
+    verdict:
+      status === "supports"
+        ? `${pickName(s)} raises its level against stronger opposition.`
+        : status === "contradicts"
+          ? "The opponent is the side that steps up against better teams."
+          : "Neither side shows a clear tier effect.",
+  };
+}
+
+export function evaluateTeamModulesForMatch(s: MatchTeamSides): ModuleReading[] {
+  return [
+    evalHomeAwayMatch(s),
+    evalReadinessMatch(s),
+    evalConsistencyMatch(s),
+    evalGiantKillerMatch(s),
+  ];
+}
+
+/** All twelve modules for a fixture: eight match-scope plus four team-scope. */
+export function evaluateAllMatchModules(
+  ctx: MatchModuleContext,
+  sides?: MatchTeamSides
+): ModuleReading[] {
+  const matchLevel = evaluateMatchModules(ctx);
+  const teamLevel = sides ? evaluateTeamModulesForMatch(sides) : [];
+  return sortReadings([...matchLevel, ...teamLevel]);
 }

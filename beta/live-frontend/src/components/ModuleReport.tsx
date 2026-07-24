@@ -1,35 +1,41 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ModuleReport — the body of /match/[slug].
 //
-// Replaces the tab strip. A match page is now a scrollable report of which
-// modules fired, ordered so that anything CONTRADICTING the pick surfaces
-// first. Burying the disagreeing module below the fold is the single most
-// expensive UI mistake this product could make.
+// One scrollable report of which of the twelve modules fired for this fixture:
+// eight match-scope, plus the four team-scope modules rendered head-to-head.
+//
+// Team-scope modules are shown for context but excluded from consensus. A
+// permanently home-reliant side would otherwise cast the same vote every week
+// regardless of who it was playing.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from "react";
 import {
-  evaluateMatchModules,
+  evaluateAllMatchModules,
   derivePickSide,
   tally,
   overallVerdict,
+  isInformational,
+  MODULES,
   type ModuleReading,
+  type MatchTeamSides,
 } from "@/lib/modules";
 import type { MatchRow, MatchScoringProbabilities, LeagueGapSummary } from "@/lib/types";
 import type { Tier } from "@/lib/tier";
 import { ModuleCard, ModuleVerdictSummary } from "./ModuleCard";
-import { IconGate } from "./icons/ModuleIcons";
+import { IconGate, IconInactive } from "./icons/ModuleIcons";
 
 function narrative(readings: ModuleReading[], match: MatchRow): string {
-  const supports = readings.filter((r) => r.status === "supports");
-  const against = readings.filter((r) => r.status === "contradicts");
+  const scoring = readings.filter((r) => !isInformational(r.def));
+  const supports = scoring.filter((r) => r.status === "supports");
+  const against = scoring.filter((r) => r.status === "contradicts");
   const home = match.home.short_name || match.home.name;
   const away = match.away.short_name || match.away.name;
   const pick = derivePickSide(match);
   const side = pick === "home" ? home : pick === "away" ? away : null;
 
-  if (readings.every((r) => r.status === "inactive"))
-    return "No module produced a reading for this fixture. There is nothing here to act on.";
+  if (scoring.every((r) => r.status === "inactive"))
+    return "No match-level module produced a reading for this fixture. There is nothing here to act on.";
 
   const supportText = supports.length
     ? `${supports.map((r) => r.def.name.toLowerCase()).join(", ")} line up ${
@@ -62,9 +68,33 @@ export function ModuleReport({
   showInactive?: boolean;
 }) {
   const pickSide = derivePickSide(match);
-  const readings = evaluateMatchModules({ match, pickSide, scoring, leagueGap });
+
+  // Team-scope context is assembled from data getMatch already returns.
+  const sides: MatchTeamSides = {
+    homeName: match.home.short_name || match.home.name,
+    awayName: match.away.short_name || match.away.name,
+    pickSide,
+    home: {
+      intel: match.homeIntel ?? null,
+      formQuality: match.homeFormQuality ?? null,
+      venue: match.homeVenue ?? null,
+      momentum: null,
+    },
+    away: {
+      intel: match.awayIntel ?? null,
+      formQuality: match.awayFormQuality ?? null,
+      venue: match.awayVenue ?? null,
+      momentum: null,
+    },
+  };
+
+  const readings = evaluateAllMatchModules(
+    { match, pickSide, scoring, leagueGap },
+    sides
+  );
   const active = showInactive ? readings : readings.filter((r) => r.status !== "inactive");
   const dormant = readings.filter((r) => r.status === "inactive");
+  const firing = readings.filter((r) => r.status !== "inactive").length;
   const t = tally(readings);
   const overall = overallVerdict(t);
 
@@ -75,8 +105,8 @@ export function ModuleReport({
         <div>
           <div className="label-cap">Modules firing</div>
           <div className="mono tnum text-lg font-semibold text-text">
-            {t.firing}
-            <span className="text-sm text-faint">/{readings.length}</span>
+            {firing}
+            <span className="text-sm text-faint">/{MODULES.length}</span>
           </div>
         </div>
         <div className="h-8 w-px bg-line" />
@@ -94,22 +124,22 @@ export function ModuleReport({
           <div className="label-cap">Pick side</div>
           <div className="mono text-lg font-semibold text-text">
             {pickSide === "home"
-              ? match.home.short_name || match.home.name
+              ? sides.homeName
               : pickSide === "away"
-              ? match.away.short_name || match.away.name
-              : "None"}
+                ? sides.awayName
+                : "None"}
           </div>
         </div>
         <p className="ml-auto flex max-w-xs items-start gap-2 text-[0.65rem] leading-relaxed text-faint">
           <span className="mt-px text-faint">
             <IconGate size={13} />
           </span>
-          Consensus is capped by any contradicting module. Two disagreements force WEAK
-          regardless of how many modules agree.
+          Consensus counts the eight match-level modules only, and is capped by any
+          contradiction. Two disagreements force WEAK.
         </p>
       </div>
 
-      {/* Firing modules */}
+      {/* Firing modules — supports, then neutral, then contradicts */}
       <div className="grid gap-3 lg:grid-cols-2">
         {active.map((r) => (
           <ModuleCard key={r.def.key} reading={r} viewer={viewer} />
@@ -119,17 +149,20 @@ export function ModuleReport({
       {/* Verdict summary */}
       <ModuleVerdictSummary readings={readings} narrative={narrative(readings, match)} />
 
-      {/* Dormant modules — listed, never hidden entirely */}
+      {/* Dormant modules — always listed, always with a reason */}
       {!showInactive && dormant.length > 0 && (
         <section className="panel p-4">
-          <h2 className="mono mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted">
+          <h2 className="mono mb-2.5 flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted">
+            <IconInactive size={13} />
             Did not fire ({dormant.length})
           </h2>
-          <ul className="grid gap-1.5 sm:grid-cols-2">
+          <ul className="space-y-1.5">
             {dormant.map((r) => (
-              <li key={r.def.key} className="mono text-[0.68rem] text-faint">
-                M{r.def.n} {r.def.name}
-                <span className="ml-1.5 opacity-70">— {r.headline}</span>
+              <li key={r.def.key} className="text-[0.7rem] leading-relaxed">
+                <span className="mono font-semibold text-muted">
+                  M{r.def.n} {r.def.name}
+                </span>
+                <span className="text-faint"> — {r.headline}</span>
               </li>
             ))}
           </ul>
