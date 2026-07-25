@@ -89,7 +89,7 @@ export function ModuleReport({
   };
 
   const readings = evaluateAllMatchModules(
-    { match, pickSide, scoring, leagueGap },
+    { match, pickSide, scoring, leagueGap, travel: match.travel ?? null },
     sides
   );
   const active = showInactive ? readings : readings.filter((r) => r.status !== "inactive");

@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type {
+  ModuleTravelRow,
   MatchRow,
   TeamIntelligence,
   TeamFormQuality,
@@ -84,6 +85,24 @@ export interface Baseline {
   label: string;
   /** Base rate for the same outcome across all matches, if known. */
   baseRate?: number | null;
+  /**
+   * Where the sample came from.
+   *
+   * "measured"   — counted by backtestSignals / backtestConfidenceBands from a
+   *                point-in-time population. Safe to show a confidence interval.
+   * "unreplayed" — from the original 1,893-match analysis, which scored finished
+   *                matches using CURRENT team form and therefore contains
+   *                lookahead. The count is real; the rate it sits beside is not
+   *                yet trustworthy. Rendered with a marker, never as a clean stat.
+   */
+  provenance?: "measured" | "unreplayed";
+  /**
+   * True when `sample` is the total across every band of this module rather
+   * than the count for THIS band. A pooled n cannot support a per-band
+   * interval, so <Rate /> suppresses the CI instead of drawing a falsely
+   * narrow one.
+   */
+  pooled?: boolean;
 }
 
 export interface ReadingRow {
@@ -318,6 +337,8 @@ export function intervalWidth(b: Baseline): number | null {
 
 export interface MatchModuleContext {
   match: MatchRow;
+  /** Row from mv_module_travel for this fixture, when loaded. */
+  travel?: ModuleTravelRow | null;
   /** Which side the platform's pick favours. Derived from readiness gap. */
   pickSide: "home" | "away" | null;
   scoring?: MatchScoringProbabilities | null;
@@ -349,18 +370,16 @@ function evalFormGap(ctx: MatchModuleContext): ModuleReading {
   // should be replaced by signal_backtests values once they clear the gate.
   let zone: string;
   let rate: number;
+  let zoneSample: number;
+  let zonePooled: boolean;
   if (abs > 30) {
-    zone = "Banker";
-    rate = 75.7;
+    zone = "Banker"; rate = 75.7; zoneSample = 366; zonePooled = false;
   } else if (abs >= 15) {
-    zone = "Strong";
-    rate = 72.6;
+    zone = "Strong"; rate = 72.6; zoneSample = 1893; zonePooled = true;
   } else if (abs >= 5) {
-    zone = "Lean";
-    rate = 41.1;
+    zone = "Lean"; rate = 41.1; zoneSample = 1893; zonePooled = true;
   } else {
-    zone = "Coin flip";
-    rate = 14.5;
+    zone = "Coin flip"; rate = 14.5; zoneSample = 1893; zonePooled = true;
   }
 
   const favours: "home" | "away" = gap >= 0 ? "home" : "away";
@@ -378,7 +397,13 @@ function evalFormGap(ctx: MatchModuleContext): ModuleReading {
       { label: "Away form", value: a.toFixed(1) },
       { label: "Favours", value: favours === "home" ? "Home" : "Away" },
     ],
-    baseline: { rate, sample: null, label: "favourite wins in this zone" },
+    baseline: {
+      rate,
+      sample: zoneSample,
+      pooled: zonePooled,
+      label: "favourite wins in this zone",
+      provenance: "unreplayed",
+    },
     verdict:
       abs < 5
         ? "No usable separation — the gap is inside the noise floor."
@@ -425,7 +450,12 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
       { label: "Evidence streams", value: score != null ? "≥ 4" : "—" },
     ],
     baseline: row
-      ? { rate: row.rate, sample: row.sample, label: "favourite wins in this band" }
+      ? {
+          rate: row.rate,
+          sample: row.sample,
+          label: "favourite wins in this band",
+          provenance: "unreplayed",
+        }
       : null,
     verdict:
       band === "Avoid"
@@ -441,44 +471,99 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
 function evalTravel(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.travel;
   const km = ctx.match.intel?.away_travel_distance_km ?? null;
-  if (km == null) return inactive(def, "No travel distance recorded for this fixture");
+  const profile = ctx.travel?.travel_profile ?? null;
 
-  let band: string;
-  let awayRate: number;
-  let homeRate: number;
-  if (km < 100) {
-    band = "Minimal (<100km)";
-    awayRate = 28.6;
-    homeRate = 48.1;
-  } else if (km <= 300) {
-    band = "Short (100–300km)";
-    awayRate = 26.3;
-    homeRate = 44.9;
-  } else if (km <= 600) {
-    band = "Moderate (300–600km)";
-    awayRate = 26.0;
-    homeRate = 44.4;
-  } else {
-    band = "Long (600km+)";
-    awayRate = 28.8;
-    homeRate = 42.3;
+  if (km == null && profile == null)
+    return inactive(def, "No travel distance recorded for this fixture");
+
+  // Single-trip distance stays as context. Away win rate moves under three
+  // points across every band, so distance alone still cannot carry a verdict —
+  // the cumulative profile is what does the work.
+  let band: string | null = null;
+  let awayRate: number | null = null;
+  let homeRate: number | null = null;
+  let bandSample: number | null = null;
+  if (km != null) {
+    if (km < 100) { band = "Minimal (<100km)"; awayRate = 28.6; homeRate = 48.1; bandSample = 77; }
+    else if (km <= 300) { band = "Short (100–300km)"; awayRate = 26.3; homeRate = 44.9; bandSample = 167; }
+    else if (km <= 600) { band = "Moderate (300–600km)"; awayRate = 26.0; homeRate = 44.4; bandSample = 169; }
+    else { band = "Long (600km+)"; awayRate = 28.8; homeRate = 42.3; bandSample = 222; }
   }
 
-  // Away win rate barely moves across bands (26–29%). Travel alone is not a
-  // signal; saying otherwise would be dishonest. This module is neutral by
-  // construction unless paired with rest.
+  const PROFILES: Record<
+    string,
+    { status: ModuleStatus; label: string; verdict: string }
+  > = {
+    HOME_FRESH_ADVANTAGE: {
+      status: "supports",
+      label: "Home fresher",
+      verdict: "Home team significantly fresher — supports home pick.",
+    },
+    AWAY_FRESH_ADVANTAGE: {
+      status: "contradicts",
+      label: "Away fresher",
+      verdict: "Away team significantly fresher — contradicts home pick.",
+    },
+    AWAY_TRAVEL_FATIGUE: {
+      status: "supports",
+      label: "Away travel-fatigued",
+      verdict: "Away side is carrying a heavy travel load — supports home pick.",
+    },
+    HOME_TRAVEL_FATIGUE: {
+      status: "contradicts",
+      label: "Home travel-fatigued",
+      verdict: "Home side is carrying a heavy travel load — contradicts home pick.",
+    },
+    BOTH_TRAVEL_HEAVY: {
+      status: "neutral",
+      label: "Both travel-heavy",
+      verdict: "Both teams travel-heavy — fatigue may affect both.",
+    },
+    NO_TRAVEL_EDGE: {
+      status: "neutral",
+      label: "No travel edge",
+      verdict: "Neither team has significant travel burden — no edge.",
+    },
+  };
+
+  const hit = profile ? PROFILES[profile] : null;
+
+  // The profile is written from the home team's point of view, so a pick on
+  // the away side inverts what "supports" means.
+  let status: ModuleStatus = hit?.status ?? "neutral";
+  if (hit && ctx.pickSide === "away") {
+    if (status === "supports") status = "contradicts";
+    else if (status === "contradicts") status = "supports";
+  }
+
+  const rows: ReadingRow[] = [];
+  if (km != null)
+    rows.push({ label: "Away single trip", value: `${Math.round(km).toLocaleString()} km` });
+  if (band) rows.push({ label: "Distance band", value: band });
+  if (profile)
+    rows.push({ label: "Travel profile", value: hit?.label ?? profile, color: statusColor(status) });
+  if (homeRate != null)
+    rows.push({ label: "Home win in band", value: `${homeRate.toFixed(1)}%` });
+
   return {
     def,
-    status: "neutral",
-    headline: `${Math.round(km).toLocaleString()} km · ${band}`,
-    rows: [
-      { label: "Away travel", value: `${Math.round(km).toLocaleString()} km` },
-      { label: "Band", value: band },
-      { label: "Home win in band", value: `${homeRate.toFixed(1)}%` },
-    ],
-    baseline: { rate: awayRate, sample: null, label: "away wins at this distance" },
+    status,
+    headline: hit
+      ? `${hit.label}${km != null ? ` · ${Math.round(km).toLocaleString()} km trip` : ""}`
+      : `${Math.round(km ?? 0).toLocaleString()} km · ${band ?? "Unclassified"}`,
+    rows,
+    baseline:
+      awayRate != null
+        ? {
+            rate: awayRate,
+            sample: bandSample,
+            label: "away wins at this distance",
+            provenance: "unreplayed",
+          }
+        : null,
     verdict:
-      "Away win rate moves under 3 points across every distance band — travel alone does not predict. Read it alongside Module 6.",
+      hit?.verdict ??
+      "Away win rate moves under three points across every distance band — single-trip distance alone does not predict.",
   };
 }
 
@@ -528,7 +613,13 @@ function evalRest(ctx: MatchModuleContext): ModuleReading {
       { label: "Away rest", value: `${ar}d` },
       { label: "Gap", value: `${sign(gap)}d` },
     ],
-    baseline: { rate: homeRate, sample: null, label: "home wins in this scenario" },
+    baseline: {
+      rate: homeRate,
+      sample: 1179,
+      pooled: true,
+      label: "home wins in this scenario",
+      provenance: "unreplayed",
+    },
     verdict:
       gap >= 7
         ? "The only rest scenario that clears the home baseline by a wide margin."
@@ -575,7 +666,13 @@ function evalBttsFatigue(ctx: MatchModuleContext): ModuleReading {
         ? [{ label: "Live BTTS estimate", value: `${live.toFixed(0)}%` }]
         : []),
     ],
-    baseline: { rate, sample: null, label: "BTTS in this fatigue scenario" },
+    baseline: {
+      rate,
+      sample: 1179,
+      pooled: true,
+      label: "BTTS in this fatigue scenario",
+      provenance: "unreplayed",
+    },
     verdict:
       rate >= 58
         ? "A rested away side is the one fatigue split that meaningfully lifts BTTS."

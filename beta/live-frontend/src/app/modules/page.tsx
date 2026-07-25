@@ -139,12 +139,6 @@ export default async function ModuleDirectory() {
                     </span>
                   </dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-2">
-                  <dt className="label-cap">Source</dt>
-                  <dd className="mono truncate text-[0.62rem] text-faint" title={def.source}>
-                    {def.source}
-                  </dd>
-                </div>
               </dl>
 
               <div className="mt-auto pt-3">

@@ -31,7 +31,7 @@ export function Rate({
     return <span className="mono text-faint">—</span>;
   }
 
-  const { rate, sample, label, baseRate } = baseline;
+  const { rate, sample, label, baseRate, provenance, pooled } = baseline;
   const textSize =
     size === "lg" ? "text-2xl" : size === "sm" ? "text-[0.8rem]" : "text-base";
 
@@ -66,22 +66,47 @@ export function Rate({
   }
 
   const [lo, hi] = wilson(rate, sample);
-  const width = hi - lo;
-  const wide = width > 12;
-  const color = wide ? "var(--warn)" : "var(--text)";
+  const wide = hi - lo > 12;
+  const unreplayed = provenance === "unreplayed";
+  // An unreplayed rate is not made trustworthy by having an n beside it. The
+  // 1,893-match analysis scored finished matches with current team form, so
+  // the count is real while the percentage still carries lookahead. Colour it
+  // like the caveat it is.
+  const color = unreplayed || wide ? "var(--warn)" : "var(--text)";
 
   return (
     <span className="inline-flex flex-col gap-0.5">
-      <span className="inline-flex items-baseline gap-2">
+      <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className={`mono tnum font-semibold ${textSize}`} style={{ color }}>
           {rate.toFixed(1)}%
         </span>
-        <span className="mono text-[0.65rem] tnum text-muted">n={sample.toLocaleString()}</span>
+        <span className="mono text-[0.65rem] tnum text-muted">
+          n={sample.toLocaleString()}
+          {pooled && <span className="ml-1 text-faint">pooled</span>}
+        </span>
+        {unreplayed && (
+          <span
+            className="mono rounded px-1 py-px text-[0.55rem] tracking-widest"
+            style={{
+              color: "var(--warn)",
+              background: "color-mix(in srgb, var(--warn) 12%, transparent)",
+            }}
+            title="From the 1,893-match analysis, which scored finished matches using current team form. Awaiting the point-in-time replay (backtest:bands)."
+          >
+            UNREPLAYED
+          </span>
+        )}
       </span>
-      <span className="mono text-[0.62rem] tnum" style={{ color: wide ? "var(--warn)" : "var(--faint)" }}>
-        95% CI {lo.toFixed(1)}–{hi.toFixed(1)}
-        {wide && " · wide"}
-      </span>
+      {pooled ? (
+        <span className="mono text-[0.62rem] text-faint">
+          total across all bands — no per-band interval
+        </span>
+      ) : (
+        <span className="mono text-[0.62rem] tnum" style={{ color: wide ? "var(--warn)" : "var(--faint)" }}>
+          95% CI {lo.toFixed(1)}–{hi.toFixed(1)}
+          {wide && " · wide"}
+        </span>
+      )}
       {showLabel && (
         <span className="text-[0.65rem] text-faint">
           {label}

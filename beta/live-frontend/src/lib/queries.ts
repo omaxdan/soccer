@@ -75,7 +75,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
   // were already computed above. Without these the dashboard cannot evaluate
   // modules 1-4, 11 or 12 at all, so the module filter reports 0 for them
   // however the predicate is written.
-  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring] = await Promise.all([
+  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring, travel] = await Promise.all([
     client.from("match_intelligence").select("*").in("match_id", ids),
     client.from("match_opportunity").select("*").in("match_id", ids),
     client.from("match_risk_intelligence").select("*").in("match_id", ids),
@@ -84,6 +84,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     client.from("team_venue_performance").select("*").in("team_id", teamIds),
     client.from("match_half_time_intelligence").select("*").in("match_id", ids),
     client.from("mv_match_scoring_probabilities").select("*").in("match_id", ids),
+    client.from("mv_module_travel").select("*").in("match_id", ids),
   ]);
 
   const iMap = indexBy(intel.data, "match_id");
@@ -94,6 +95,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
   const venueMap = indexBy(tVenue.data, "team_id");
   const htMap = indexBy(htIntel.data, "match_id");
   const spMap = indexBy(scoring.data, "match_id");
+  const tvMap = indexBy(travel.data, "match_id");
 
   const rows: MatchRow[] = matches.map((m: any) => ({
     id: m.id, external_match_id: m.external_match_id, date: m.date,
@@ -113,6 +115,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     awayVenue: (venueMap[m.away?.id] as any) ?? null,
     halfTime: (htMap[m.id] as any) ?? null,
     scoring: (spMap[m.id] as any) ?? null,
+    travel: (tvMap[m.id] as any) ?? null,
   }));
   return sortBoard(rows);
 }
@@ -151,7 +154,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     positionalMatchupsRaw, tacticalAdvantages, performanceComparison,
     substitutionImpact, squadDepthComparison,
     homeBetting, awayBetting, homeIntel, awayIntel, homeSeasonStats, awaySeasonStats,
-    homeFormQuality, awayFormQuality, homeVenue, awayVenue] = await Promise.all([
+    homeFormQuality, awayFormQuality, homeVenue, awayVenue, travelRow] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
@@ -179,6 +182,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     client.from("team_form_quality").select("*").eq("team_id", awayTeam.id).maybeSingle(),
     client.from("team_venue_performance").select("*").eq("team_id", homeTeam.id).maybeSingle(),
     client.from("team_venue_performance").select("*").eq("team_id", awayTeam.id).maybeSingle(),
+    client.from("mv_module_travel").select("*").eq("match_id", id).maybeSingle(),
   ]);
 
   const keyBattles = ((keyBattlesRaw.data as any[]) ?? []).map((b) => ({
@@ -219,6 +223,7 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     awayFormQuality: (awayFormQuality.data as any) ?? null,
     homeVenue: (homeVenue.data as any) ?? null,
     awayVenue: (awayVenue.data as any) ?? null,
+    travel: (travelRow.data as any) ?? null,
   };
 }
 

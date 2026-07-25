@@ -114,6 +114,28 @@ export interface MarketSignal {
   locked?: boolean | null;
 }
 
+/**
+ * A row of mv_module_travel.
+ *
+ * Only `travel_profile` is pinned. The view was created directly in the
+ * database and never committed as a migration, so the cumulative travel
+ * columns have no authoritative name anywhere in this repo — the index
+ * signature lets the row through untouched until those names are confirmed.
+ */
+export interface ModuleTravelRow {
+  match_id: number;
+  travel_profile?:
+    | "HOME_FRESH_ADVANTAGE"
+    | "AWAY_FRESH_ADVANTAGE"
+    | "BOTH_TRAVEL_HEAVY"
+    | "NO_TRAVEL_EDGE"
+    | "AWAY_TRAVEL_FATIGUE"
+    | "HOME_TRAVEL_FATIGUE"
+    | null;
+  away_travel_distance_km?: number | null;
+  [column: string]: unknown;
+}
+
 export interface MatchRow {
   id: number;
   external_match_id: number;
@@ -137,6 +159,7 @@ export interface MatchRow {
   away_form?: string | null;
   halfTime?: MatchHalfTimeIntelligence | null;
   scoring?: MatchScoringProbabilities | null;
+  travel?: ModuleTravelRow | null;
   teamImpact?: { home: TeamMatchImpact | null; away: TeamMatchImpact | null };
   impactAdvantage?: MatchImpactAdvantage | null;
   keyBattles?: MatchKeyBattle[];

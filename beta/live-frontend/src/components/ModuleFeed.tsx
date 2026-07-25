@@ -77,7 +77,7 @@ export function buildFeed(matches: MatchRow[], singles: BankerSingle[]): FeedEnt
     return {
       match: m,
       readings: evaluateAllMatchModules(
-        { match: m, pickSide, scoring: m.scoring ?? null },
+        { match: m, pickSide, scoring: m.scoring ?? null, travel: m.travel ?? null },
         sides
       ),
     };
