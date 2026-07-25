@@ -75,7 +75,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
   // were already computed above. Without these the dashboard cannot evaluate
   // modules 1-4, 11 or 12 at all, so the module filter reports 0 for them
   // however the predicate is written.
-  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring, travel] = await Promise.all([
+  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring, travel, weatherRows] = await Promise.all([
     client.from("match_intelligence").select("*").in("match_id", ids),
     client.from("match_opportunity").select("*").in("match_id", ids),
     client.from("match_risk_intelligence").select("*").in("match_id", ids),
@@ -85,6 +85,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     client.from("match_half_time_intelligence").select("*").in("match_id", ids),
     client.from("mv_match_scoring_probabilities").select("*").in("match_id", ids),
     client.from("mv_module_travel").select("*").in("match_id", ids),
+    client.from("match_weather").select("*").in("match_id", ids),
   ]);
 
   const iMap = indexBy(intel.data, "match_id");
@@ -96,6 +97,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
   const htMap = indexBy(htIntel.data, "match_id");
   const spMap = indexBy(scoring.data, "match_id");
   const tvMap = indexBy(travel.data, "match_id");
+  const wMap = indexBy(weatherRows.data, "match_id");
 
   const rows: MatchRow[] = matches.map((m: any) => ({
     id: m.id, external_match_id: m.external_match_id, date: m.date,
@@ -116,6 +118,7 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     halfTime: (htMap[m.id] as any) ?? null,
     scoring: (spMap[m.id] as any) ?? null,
     travel: (tvMap[m.id] as any) ?? null,
+    weather: (wMap[m.id] as any) ?? null,
   }));
   return sortBoard(rows);
 }

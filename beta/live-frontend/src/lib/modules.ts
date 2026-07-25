@@ -46,7 +46,8 @@ export type ModuleKey =
   | "btts_fatigue"
   | "confidence"
   | "halftime"
-  | "clean_sheet";
+  | "clean_sheet"
+  | "weather";
 
 export interface ModuleDef {
   /** Display number — stable, quoted in marketing and support. Never reuse. */
@@ -234,7 +235,81 @@ export const MODULES: ModuleDef[] = [
     tier: "pro",
     source: "mv_module_clean_sheet",
   },
+  {
+    n: 13,
+    key: "weather",
+    name: "Weather Impact",
+    question: "Do the conditions move goals or the result?",
+    scope: "match",
+    tier: "pro",
+    source: "match_weather",
+  },
 ];
+
+// ── Weather reference cells ──────────────────────────────
+// Observed cells from the 635-match weather analysis. Only 62 of those 635
+// matches fall into a profile at all, so these are thin slices of a thin
+// slice. Everything downstream — pooled baseline, which metric leads, the
+// status and the verdict wording — is COMPUTED from this table rather than
+// written out per profile, so correcting a cell corrects the whole card.
+export interface WeatherCell {
+  profile: string;
+  condition: string;
+  tempMin: number;
+  tempMax: number;
+  sample: number;
+  avgGoals: number;
+  bttsPct: number;
+  over25Pct: number;
+  homeWinPct: number;
+}
+
+export const WEATHER_CELLS: WeatherCell[] = [
+  { profile: "WARM_RAIN",     condition: "Light Rain", tempMin: 20, tempMax: 30, sample: 8,  avgGoals: 3.88, bttsPct: 75.0, over25Pct: 87.5, homeWinPct: 62.5 },
+  { profile: "HOT_CLEAR",     condition: "Clear",      tempMin: 30, tempMax: Infinity, sample: 8,  avgGoals: 2.63, bttsPct: 50.0, over25Pct: 75.0, homeWinPct: 87.5 },
+  { profile: "WARM_CLOUDY",   condition: "Cloudy",     tempMin: 20, tempMax: 30, sample: 23, avgGoals: 2.52, bttsPct: 56.5, over25Pct: 52.2, homeWinPct: 39.1 },
+  { profile: "WARM_OVERCAST", condition: "Overcast",   tempMin: 20, tempMax: 30, sample: 11, avgGoals: 2.55, bttsPct: 63.6, over25Pct: 45.5, homeWinPct: 54.5 },
+  { profile: "COOL_CLEAR",    condition: "Clear",      tempMin: 10, tempMax: 20, sample: 6,  avgGoals: 2.67, bttsPct: 50.0, over25Pct: 66.7, homeWinPct: 16.7 },
+  { profile: "COOL_RAIN",     condition: "Light Rain", tempMin: 10, tempMax: 20, sample: 6,  avgGoals: 2.33, bttsPct: 33.3, over25Pct: 33.3, homeWinPct: 33.3 },
+];
+
+/**
+ * Sample floor a cell must clear before it is allowed to drive a directional
+ * verdict. Mirrors the backend calibration gate (sample >= 200) that
+ * backtestSignals and backtestConfidenceBands publish against, so a weather
+ * cell is held to the same standard as every other published rule.
+ */
+export const WEATHER_MIN_SAMPLE = 200;
+
+/** Weighted pooled rates across every cell — the comparison point. */
+export function weatherPooled() {
+  const n = WEATHER_CELLS.reduce((t, c) => t + c.sample, 0);
+  const w = (pick: (c: WeatherCell) => number) =>
+    WEATHER_CELLS.reduce((t, c) => t + (pick(c) * c.sample) / 100, 0);
+  return {
+    sample: n,
+    bttsPct: (w((c) => c.bttsPct) / n) * 100,
+    over25Pct: (w((c) => c.over25Pct) / n) * 100,
+    homeWinPct: (w((c) => c.homeWinPct) / n) * 100,
+    avgGoals: WEATHER_CELLS.reduce((t, c) => t + c.avgGoals * c.sample, 0) / n,
+  };
+}
+
+export function weatherCellFor(
+  tempC: number | null | undefined,
+  condition: string | null | undefined
+): WeatherCell | null {
+  if (tempC == null || !condition) return null;
+  const c = condition.trim().toLowerCase();
+  return (
+    WEATHER_CELLS.find(
+      (cell) =>
+        cell.condition.toLowerCase() === c &&
+        tempC >= cell.tempMin &&
+        tempC < cell.tempMax
+    ) ?? null
+  );
+}
 
 /**
  * What one row of a module's view represents. Team modules are one row per
@@ -470,97 +545,111 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
 
 function evalTravel(ctx: MatchModuleContext): ModuleReading {
   const def = MODULE_BY_KEY.travel;
-  const km = ctx.match.intel?.away_travel_distance_km ?? null;
-  const profile = ctx.travel?.travel_profile ?? null;
+  const tv = ctx.travel ?? null;
+  // Prefer the view's own trip distance; fall back to match_intelligence so
+  // the module still reads on fixtures the view has not covered.
+  const km = num(tv?.away_trip_km) ?? ctx.match.intel?.away_travel_distance_km ?? null;
+  const profile = tv?.travel_profile ?? null;
 
   if (km == null && profile == null)
     return inactive(def, "No travel distance recorded for this fixture");
 
-  // Single-trip distance stays as context. Away win rate moves under three
-  // points across every band, so distance alone still cannot carry a verdict —
-  // the cumulative profile is what does the work.
-  let band: string | null = null;
-  let awayRate: number | null = null;
-  let homeRate: number | null = null;
-  let bandSample: number | null = null;
-  if (km != null) {
-    if (km < 100) { band = "Minimal (<100km)"; awayRate = 28.6; homeRate = 48.1; bandSample = 77; }
-    else if (km <= 300) { band = "Short (100–300km)"; awayRate = 26.3; homeRate = 44.9; bandSample = 167; }
-    else if (km <= 600) { band = "Moderate (300–600km)"; awayRate = 26.0; homeRate = 44.4; bandSample = 169; }
-    else { band = "Long (600km+)"; awayRate = 28.8; homeRate = 42.3; bandSample = 222; }
-  }
+  const BANDS = [
+    { max: 100, label: "Minimal (<100km)", away: 28.6, home: 48.1, n: 77 },
+    { max: 300, label: "Short (100–300km)", away: 26.3, home: 44.9, n: 167 },
+    { max: 600, label: "Moderate (300–600km)", away: 26.0, home: 44.4, n: 169 },
+    { max: Infinity, label: "Long (600km+)", away: 28.8, home: 42.3, n: 222 },
+  ];
+  const band = km != null ? BANDS.find((b) => km < b.max) ?? BANDS[3] : null;
 
-  const PROFILES: Record<
-    string,
-    { status: ModuleStatus; label: string; verdict: string }
-  > = {
+  const PROFILES: Record<string, { status: ModuleStatus; label: string; verdict: string }> = {
     HOME_FRESH_ADVANTAGE: {
-      status: "supports",
-      label: "Home fresher",
+      status: "supports", label: "Home fresher",
       verdict: "Home team significantly fresher — supports home pick.",
     },
     AWAY_FRESH_ADVANTAGE: {
-      status: "contradicts",
-      label: "Away fresher",
+      status: "contradicts", label: "Away fresher",
       verdict: "Away team significantly fresher — contradicts home pick.",
     },
     AWAY_TRAVEL_FATIGUE: {
-      status: "supports",
-      label: "Away travel-fatigued",
+      status: "supports", label: "Away travel-fatigued",
       verdict: "Away side is carrying a heavy travel load — supports home pick.",
     },
     HOME_TRAVEL_FATIGUE: {
-      status: "contradicts",
-      label: "Home travel-fatigued",
+      status: "contradicts", label: "Home travel-fatigued",
       verdict: "Home side is carrying a heavy travel load — contradicts home pick.",
     },
     BOTH_TRAVEL_HEAVY: {
-      status: "neutral",
-      label: "Both travel-heavy",
+      status: "neutral", label: "Both travel-heavy",
       verdict: "Both teams travel-heavy — fatigue may affect both.",
     },
     NO_TRAVEL_EDGE: {
-      status: "neutral",
-      label: "No travel edge",
+      status: "neutral", label: "No travel edge",
       verdict: "Neither team has significant travel burden — no edge.",
     },
   };
-
   const hit = profile ? PROFILES[profile] : null;
 
-  // The profile is written from the home team's point of view, so a pick on
-  // the away side inverts what "supports" means.
+  // The profile is written from the home team's point of view, so backing the
+  // away side inverts what "supports" means.
   let status: ModuleStatus = hit?.status ?? "neutral";
   if (hit && ctx.pickSide === "away") {
     if (status === "supports") status = "contradicts";
     else if (status === "contradicts") status = "supports";
   }
 
+  const homeName = ctx.match.home.short_name || ctx.match.home.name;
+  const awayName = ctx.match.away.short_name || ctx.match.away.name;
+  const kmFmt = (v: number | null) =>
+    v == null ? "—" : `${Math.round(v).toLocaleString()} km`;
+  const load = (
+    d7: number | null,
+    d14: number | null,
+    trips: number | null,
+    fatigue: number | null
+  ) => {
+    const parts: string[] = [];
+    if (d7 != null) parts.push(kmFmt(d7));
+    if (trips != null) parts.push(`${trips} trip${trips === 1 ? "" : "s"}`);
+    if (fatigue != null) parts.push(`fatigue ${Math.round(fatigue)}/100`);
+    const head = parts.length ? parts.join(" · ") : "—";
+    return d14 != null ? `${head} · 14d ${kmFmt(d14)}` : head;
+  };
+
   const rows: ReadingRow[] = [];
-  if (km != null)
-    rows.push({ label: "Away single trip", value: `${Math.round(km).toLocaleString()} km` });
-  if (band) rows.push({ label: "Distance band", value: band });
+  // Away side first: it is the one doing the travelling.
+  rows.push({ label: `${awayName} today`, value: kmFmt(km), color: "var(--cool)" });
+  rows.push({
+    label: `${awayName} this week`,
+    value: load(num(tv?.away_km_7d), num(tv?.away_km_14d), num(tv?.away_trips_7d), num(tv?.away_fatigue_score)),
+  });
+  rows.push({ label: `${homeName} today`, value: kmFmt(0), color: "var(--edge)" });
+  rows.push({
+    label: `${homeName} this week`,
+    value: load(num(tv?.home_km_7d), num(tv?.home_km_14d), num(tv?.home_trips_7d), num(tv?.home_fatigue_score)),
+  });
+  const gap = num(tv?.travel_gap_7d);
+  if (gap != null)
+    rows.push({ label: "7d gap (away − home)", value: `${sign(Math.round(gap))} km` });
   if (profile)
-    rows.push({ label: "Travel profile", value: hit?.label ?? profile, color: statusColor(status) });
-  if (homeRate != null)
-    rows.push({ label: "Home win in band", value: `${homeRate.toFixed(1)}%` });
+    rows.push({ label: "Profile", value: profile, color: statusColor(status) });
+  if (band) rows.push({ label: "Trip band", value: tv?.trip_band ?? band.label });
 
   return {
     def,
     status,
     headline: hit
-      ? `${hit.label}${km != null ? ` · ${Math.round(km).toLocaleString()} km trip` : ""}`
-      : `${Math.round(km ?? 0).toLocaleString()} km · ${band ?? "Unclassified"}`,
+      ? `${hit.label}${km != null ? ` · ${kmFmt(km)} trip` : ""}`
+      : `${kmFmt(km)} · ${tv?.trip_band ?? band?.label ?? "Unclassified"}`,
     rows,
-    baseline:
-      awayRate != null
-        ? {
-            rate: awayRate,
-            sample: bandSample,
-            label: "away wins at this distance",
-            provenance: "unreplayed",
-          }
-        : null,
+    baseline: band
+      ? {
+          rate: band.home,
+          sample: band.n,
+          label: "home wins in this distance band",
+          provenance: "unreplayed",
+        }
+      : null,
     verdict:
       hit?.verdict ??
       "Away win rate moves under three points across every distance band — single-trip distance alone does not predict.",
@@ -764,6 +853,105 @@ function evalHalftime(ctx: MatchModuleContext): ModuleReading {
       top.v >= 30
         ? "One HT/FT path is clearly dominant — worth a look on the correct-half markets."
         : "HT/FT probability is spread thin. No standout path.",
+  };
+}
+
+function evalWeather(ctx: MatchModuleContext): ModuleReading {
+  const def = MODULE_BY_KEY.weather;
+  const w = ctx.match.weather ?? null;
+  const temp = w?.temperature_c ?? null;
+  const condition = w?.weather_condition ?? null;
+  if (temp == null && !condition)
+    return inactive(def, "No weather recorded for this fixture");
+
+  const conditionLine = `${condition ?? "Unknown"}${temp != null ? ` · ${Math.round(temp)}°C` : ""}`;
+  const rows: ReadingRow[] = [
+    { label: "Condition", value: condition ?? "—" },
+    { label: "Temperature", value: temp != null ? `${Math.round(temp)}°C` : "—" },
+  ];
+  if (w?.wind_speed_kmh != null)
+    rows.push({ label: "Wind", value: `${Math.round(w.wind_speed_kmh)} km/h` });
+  if (w?.humidity != null)
+    rows.push({ label: "Humidity", value: `${Math.round(w.humidity)}%` });
+
+  const cell = weatherCellFor(temp, condition);
+  if (!cell) {
+    rows.push({ label: "Profile", value: "None" });
+    return {
+      def,
+      status: "neutral",
+      headline: conditionLine,
+      rows,
+      baseline: null,
+      verdict:
+        "Conditions fall outside every measured weather profile — no effect to apply.",
+    };
+  }
+
+  // Which metric this cell departs from the pooled rate on most. Computed,
+  // not assigned, so the card follows the data if a cell is corrected.
+  const pooled = weatherPooled();
+  const metrics = [
+    { key: "Over 2.5", rate: cell.over25Pct, base: pooled.over25Pct },
+    { key: "BTTS", rate: cell.bttsPct, base: pooled.bttsPct },
+    { key: "Home win", rate: cell.homeWinPct, base: pooled.homeWinPct },
+  ];
+  const lead = metrics.reduce((a, b) =>
+    Math.abs(b.rate - b.base) > Math.abs(a.rate - a.base) ? b : a
+  );
+
+  const [lo, hi] = wilson(lead.rate, cell.sample);
+  const separates = lo > lead.base || hi < lead.base;
+  const calibrated = cell.sample >= WEATHER_MIN_SAMPLE;
+
+  rows.push({ label: "Profile", value: cell.profile });
+  rows.push({ label: "Avg goals", value: cell.avgGoals.toFixed(2) });
+  rows.push({ label: "BTTS", value: `${cell.bttsPct.toFixed(1)}%` });
+  rows.push({ label: "Over 2.5", value: `${cell.over25Pct.toFixed(1)}%` });
+  rows.push({ label: "Home win", value: `${cell.homeWinPct.toFixed(1)}%` });
+
+  const direction = lead.rate > lead.base ? "above" : "below";
+
+  // Status only moves when the cell clears the sample gate AND its interval
+  // clears the pooled rate. On the current table nothing does, so this stays
+  // neutral rather than printing a directional call off single-digit samples.
+  let verdict: string;
+  let status: ModuleStatus = "neutral";
+  if (!calibrated) {
+    verdict =
+      `${cell.profile}: ${lead.key} ran ${lead.rate.toFixed(1)}% against a pooled ` +
+      `${lead.base.toFixed(1)}%, but on ${cell.sample} matches the 95% interval is ` +
+      `${lo.toFixed(0)}–${hi.toFixed(0)}%. Below the ${WEATHER_MIN_SAMPLE}-match gate ` +
+      `every other published rule has to clear, so this is context, not a signal.`;
+  } else if (!separates) {
+    verdict =
+      `${cell.profile}: ${lead.key} at ${lead.rate.toFixed(1)}% is not separable from ` +
+      `the pooled ${lead.base.toFixed(1)}% — the interval spans it.`;
+  } else {
+    status = lead.key === "Home win"
+      ? (lead.rate > lead.base ? "supports" : "contradicts")
+      : "supports";
+    // A home-win effect argues against a pick on the away side.
+    if (ctx.pickSide === "away" && lead.key === "Home win")
+      status = status === "supports" ? "contradicts" : "supports";
+    verdict =
+      `${cell.profile}: ${lead.key} runs ${Math.abs(lead.rate - lead.base).toFixed(1)} points ` +
+      `${direction} the pooled rate on ${cell.sample} matches (95% CI ${lo.toFixed(0)}–${hi.toFixed(0)}%).`;
+  }
+
+  return {
+    def,
+    status,
+    headline: `${conditionLine} · ${cell.profile}`,
+    rows,
+    baseline: {
+      rate: lead.rate,
+      sample: cell.sample,
+      label: `${lead.key} under ${cell.profile}`,
+      baseRate: lead.base,
+      provenance: "unreplayed",
+    },
+    verdict,
   };
 }
 
@@ -1033,6 +1221,7 @@ export function evaluateMatchModules(ctx: MatchModuleContext): ModuleReading[] {
     evalTravel(ctx),
     evalHalftime(ctx),
     evalLeagueGoals(ctx),
+    evalWeather(ctx),
   ];
   return sortReadings(readings);
 }

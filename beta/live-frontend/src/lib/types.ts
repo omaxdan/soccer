@@ -114,25 +114,31 @@ export interface MarketSignal {
   locked?: boolean | null;
 }
 
-/**
- * A row of mv_module_travel.
- *
- * Only `travel_profile` is pinned. The view was created directly in the
- * database and never committed as a migration, so the cumulative travel
- * columns have no authoritative name anywhere in this repo — the index
- * signature lets the row through untouched until those names are confirmed.
- */
+/** A row of mv_module_travel. Columns confirmed against production. */
 export interface ModuleTravelRow {
   match_id: number;
-  travel_profile?:
+  /** Distance the away side travels for THIS fixture. */
+  away_trip_km: number | null;
+  trip_band: "MINIMAL" | "SHORT" | "MODERATE" | "LONG" | null;
+  away_km_7d: number | null;
+  home_km_7d: number | null;
+  away_km_14d: number | null;
+  home_km_14d: number | null;
+  away_trips_7d: number | null;
+  home_trips_7d: number | null;
+  /** 0–100, higher is worse. */
+  away_fatigue_score: number | null;
+  home_fatigue_score: number | null;
+  /** away cumulative − home cumulative, over 7 days. */
+  travel_gap_7d: number | null;
+  travel_profile:
     | "HOME_FRESH_ADVANTAGE"
     | "AWAY_FRESH_ADVANTAGE"
     | "BOTH_TRAVEL_HEAVY"
-    | "NO_TRAVEL_EDGE"
     | "AWAY_TRAVEL_FATIGUE"
     | "HOME_TRAVEL_FATIGUE"
+    | "NO_TRAVEL_EDGE"
     | null;
-  away_travel_distance_km?: number | null;
   [column: string]: unknown;
 }
 

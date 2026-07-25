@@ -149,6 +149,16 @@ export const IconCleanSheet = (p: IconProps) => (
   </Svg>
 );
 
+// ── Module 13 · Weather Impact ───────────────────────────
+export const IconWeather = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="7.5" r="3" />
+    <path d="M8 2v1.2M8 11.8V13M3.5 7.5H2.3M13.7 7.5h-1.2M4.8 4.3 4 3.5M11.2 4.3l.8-.8" strokeWidth={0.9} />
+    <path d="M17 19H8.5a3.5 3.5 0 0 1 0-7 4.5 4.5 0 0 1 8.7-.9A3.4 3.4 0 0 1 17 19z" />
+    <path d="M10 21.5l-.6 1M14 21.5l-.6 1" strokeWidth={0.9} />
+  </Svg>
+);
+
 export const MODULE_ICONS: Record<ModuleKey, (p: IconProps) => React.ReactElement> = {
   home_away: IconHomeAway,
   readiness: IconReadiness,
@@ -162,6 +172,7 @@ export const MODULE_ICONS: Record<ModuleKey, (p: IconProps) => React.ReactElemen
   confidence: IconConfidence,
   halftime: IconHalftime,
   clean_sheet: IconCleanSheet,
+  weather: IconWeather,
 };
 
 export function ModuleIcon({
