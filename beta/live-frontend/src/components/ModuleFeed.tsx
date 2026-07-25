@@ -14,6 +14,7 @@ import {
   overallVerdict,
 } from "@/lib/modules";
 import type { MatchRow, BankerSingle } from "@/lib/types";
+import type { ModuleKey, ModuleReading } from "@/lib/modules";
 import { canSee, type Tier } from "@/lib/tier";
 import { Crest } from "./Crest";
 import { ModuleChip } from "./ModuleCard";
@@ -42,17 +43,37 @@ function withCardForm(m: MatchRow, single: BankerSingle | undefined): MatchRow {
   };
 }
 
+export interface FeedEntry {
+  match: MatchRow;
+  readings: ModuleReading[];
+}
+
+/** Evaluate every board fixture once. Shared by the feed and its filter. */
+export function buildFeed(matches: MatchRow[], singles: BankerSingle[]): FeedEntry[] {
+  const byMatch = new Map(singles.map((s) => [s.match_id, s]));
+  return matches.map((match) => {
+    const m = withCardForm(match, byMatch.get(match.id));
+    return { match: m, readings: evaluateMatchModules({ match: m, pickSide: derivePickSide(m) }) };
+  });
+}
+
+/** Entries where the given module actually produced a reading. */
+export function filterFeed(entries: FeedEntry[], key: ModuleKey | null): FeedEntry[] {
+  if (!key) return entries;
+  return entries.filter((e) =>
+    e.readings.some((r) => r.def.key === key && r.status !== "inactive")
+  );
+}
+
 export function ModuleFeedRow({
-  match,
-  single,
+  entry,
   viewer,
 }: {
-  match: MatchRow;
-  single?: BankerSingle;
+  entry: FeedEntry;
   viewer: Tier;
 }) {
-  const m = withCardForm(match, single);
-  const readings = evaluateMatchModules({ match: m, pickSide: derivePickSide(m) });
+  const m = entry.match;
+  const readings = entry.readings;
   const firing = readings.filter((r) => r.status !== "inactive");
   const t = tally(readings);
   const overall = overallVerdict(t);
@@ -130,19 +151,26 @@ export function ModuleFeedRow({
 }
 
 export function ModuleFeed({
-  matches,
-  singles,
+  entries,
   viewer,
 }: {
-  matches: MatchRow[];
-  singles: BankerSingle[];
+  entries: FeedEntry[];
   viewer: Tier;
 }) {
-  const byMatch = new Map(singles.map((s) => [s.match_id, s]));
+  if (entries.length === 0) {
+    return (
+      <div className="panel p-5 text-center">
+        <p className="mono text-[0.72rem] text-muted">No fixture in the window fires this module.</p>
+        <p className="mt-1 text-[0.66rem] text-faint">
+          The module&rsquo;s view may still hold rows for fixtures outside the board window.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      {matches.map((m) => (
-        <ModuleFeedRow key={m.id} match={m} single={byMatch.get(m.id)} viewer={viewer} />
+      {entries.map((e) => (
+        <ModuleFeedRow key={e.match.id} entry={e} viewer={viewer} />
       ))}
     </div>
   );

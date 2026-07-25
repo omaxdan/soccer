@@ -767,3 +767,87 @@ function fallbackCard(): DailyBettingCard {
     accumulators: [],
   };
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Module directory counts
+//
+// COUNT(*) per module view. Uses head:true so PostgREST returns the count in
+// the Content-Range header without transferring a single row — counting 1,386
+// readiness rows by fetching them would be absurd, and fetchAllRows would
+// paginate through all of them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { MODULES, type ModuleKey } from "./modules";
+
+export interface ModuleViewCount {
+  key: ModuleKey;
+  view: string;
+  /** null means the view could not be read — see `error`. */
+  count: number | null;
+  error?: string;
+}
+
+export async function getModuleViewCounts(): Promise<
+  Record<ModuleKey, ModuleViewCount>
+> {
+  const client = db();
+  const empty = () =>
+    MODULES.reduce(
+      (acc, m) => ({
+        ...acc,
+        [m.key]: { key: m.key, view: m.source, count: null, error: "offline" },
+      }),
+      {} as Record<ModuleKey, ModuleViewCount>
+    );
+  if (!client) return empty();
+
+  const entries = await Promise.all(
+    MODULES.map(async (m): Promise<ModuleViewCount> => {
+      try {
+        const { count, error } = await client
+          .from(m.source)
+          .select("*", { count: "exact", head: true });
+        if (error) {
+          // Most common cause by far: the materialized view exists but has no
+          // GRANT SELECT to the anon role, so PostgREST cannot see it.
+          return { key: m.key, view: m.source, count: null, error: error.message };
+        }
+        return { key: m.key, view: m.source, count: count ?? 0 };
+      } catch (e) {
+        return {
+          key: m.key,
+          view: m.source,
+          count: null,
+          error: e instanceof Error ? e.message : "unknown error",
+        };
+      }
+    })
+  );
+
+  return entries.reduce(
+    (acc, e) => ({ ...acc, [e.key]: e }),
+    {} as Record<ModuleKey, ModuleViewCount>
+  );
+}
+
+/** Scheduled fixtures inside the rolling window the modules cover. */
+export async function getUpcomingFixtureCount(days = 3): Promise<number | null> {
+  const client = db();
+  if (!client) return null;
+  const now = new Date();
+  const from = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+  const to = new Date(from.getTime() + days * 86_400_000);
+  try {
+    const { count, error } = await client
+      .from("matches")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "scheduled")
+      .gte("date", from.toISOString())
+      .lt("date", to.toISOString());
+    if (error) return null;
+    return count ?? 0;
+  } catch {
+    return null;
+  }
+}

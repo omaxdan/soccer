@@ -58,10 +58,15 @@ export interface ModuleDef {
   /** Minimum tier required to see the reading. */
   tier: Tier;
   /**
-   * The table this module actually reads, shown in the module directory.
-   * These are existing warehouse tables — no module requires a precomputed
-   * view of its own. Keep this honest; it is the only place a reader can
-   * check where a number came from.
+   * The materialized view backing this module, shown in the directory and
+   * counted for the "firing now" figure.
+   *
+   * NOTE: the in-page evaluators in this file do NOT read these views — they
+   * read the base tables directly (match_intelligence, team_form_quality,
+   * team_venue_performance, mv_match_scoring_probabilities). So a view's row
+   * count and the number of fixtures the evaluators actually light up for can
+   * differ, because the view's WHERE clause and the evaluator's null-checks
+   * are not the same rule. See MODULE_COUNT_CAVEAT in the directory page.
    */
   source: string;
 }
@@ -109,7 +114,7 @@ export const MODULES: ModuleDef[] = [
     question: "Home-reliant or road warrior?",
     scope: "team",
     tier: "starter",
-    source: "team_venue_performance",
+    source: "mv_module_home_away",
   },
   {
     n: 2,
@@ -118,7 +123,7 @@ export const MODULES: ModuleDef[] = [
     question: "Peaking or crashing?",
     scope: "team",
     tier: "pro",
-    source: "team_momentum",
+    source: "mv_module_readiness_tracker",
   },
   {
     n: 3,
@@ -127,7 +132,7 @@ export const MODULES: ModuleDef[] = [
     question: "Predictable or volatile?",
     scope: "team",
     tier: "pro",
-    source: "team_form_quality.volatility",
+    source: "mv_module_consistency",
   },
   {
     n: 4,
@@ -136,7 +141,7 @@ export const MODULES: ModuleDef[] = [
     question: "Steps up against top teams?",
     scope: "team",
     tier: "pro",
-    source: "team_form_quality.giant_killer_score",
+    source: "mv_module_giant_killer",
   },
   {
     n: 5,
@@ -145,7 +150,7 @@ export const MODULES: ModuleDef[] = [
     question: "Does distance matter here?",
     scope: "match",
     tier: "starter",
-    source: "match_intelligence.away_travel_distance_km",
+    source: "mv_module_travel",
   },
   {
     n: 6,
@@ -154,7 +159,7 @@ export const MODULES: ModuleDef[] = [
     question: "Is a rest gap worth an edge?",
     scope: "match",
     tier: "pro",
-    source: "match_intelligence.home/away_rest_days",
+    source: "mv_module_rest",
   },
   {
     n: 7,
@@ -163,7 +168,7 @@ export const MODULES: ModuleDef[] = [
     question: "Over or under league?",
     scope: "league",
     tier: "starter",
-    source: "mv_match_scoring_probabilities.league_btts_pct",
+    source: "mv_module_league_goals",
   },
   {
     n: 8,
@@ -172,7 +177,7 @@ export const MODULES: ModuleDef[] = [
     question: "How reliable is this form gap?",
     scope: "match",
     tier: "starter",
-    source: "team_intelligence.form_index",
+    source: "mv_module_form_gap",
   },
   {
     n: 9,
@@ -181,7 +186,7 @@ export const MODULES: ModuleDef[] = [
     question: "Is BTTS rest-driven here?",
     scope: "match",
     tier: "pro",
-    source: "match_intelligence + mv_match_scoring_probabilities",
+    source: "mv_module_btts_fatigue",
   },
   {
     n: 10,
@@ -190,7 +195,7 @@ export const MODULES: ModuleDef[] = [
     question: "Can this pick be trusted?",
     scope: "match",
     tier: "starter",
-    source: "match_intelligence.confidence_band + signal_backtests",
+    source: "mv_module_confidence",
   },
   {
     n: 11,
@@ -199,7 +204,7 @@ export const MODULES: ModuleDef[] = [
     question: "Any HT/FT pattern?",
     scope: "match",
     tier: "pro",
-    source: "match_half_time_intelligence",
+    source: "mv_module_halftime",
   },
   {
     n: 12,
@@ -208,9 +213,35 @@ export const MODULES: ModuleDef[] = [
     question: "How likely is a clean sheet?",
     scope: "match",
     tier: "pro",
-    source: "mv_match_scoring_probabilities concede rates",
+    source: "mv_module_clean_sheet",
   },
 ];
+
+/**
+ * What one row of a module's view represents. Team modules are one row per
+ * team, league modules one row per competition, match modules one row per
+ * fixture — so "162" means three different things across the directory and
+ * the label has to say which.
+ */
+export function countUnit(def: ModuleDef, n: number): string {
+  const plural = n === 1 ? "" : "s";
+  if (def.scope === "team") return `team${plural}`;
+  if (def.scope === "league") return `competition${plural}`;
+  return `fixture${plural}`;
+}
+
+/** URL slug used by the dashboard module filter: m1 … m12. */
+export function moduleSlug(def: ModuleDef): string {
+  return `m${def.n}`;
+}
+
+export function moduleFromSlug(slug: string | undefined | null): ModuleDef | null {
+  if (!slug) return null;
+  const match = /^m(\d{1,2})$/i.exec(slug.trim());
+  if (!match) return null;
+  const n = Number(match[1]);
+  return MODULES.find((m) => m.n === n) ?? null;
+}
 
 export const MODULE_BY_KEY: Record<ModuleKey, ModuleDef> = MODULES.reduce(
   (acc, m) => ({ ...acc, [m.key]: m }),

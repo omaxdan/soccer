@@ -1,14 +1,34 @@
 import { getBoard, getBettingCard } from "@/lib/queries";
-import { ModuleFeed } from "@/components/ModuleFeed";
-import { MODULES } from "@/lib/modules";
+import Link from "next/link";
+import { ModuleFeed, buildFeed, filterFeed } from "@/components/ModuleFeed";
+import { MODULES, moduleFromSlug } from "@/lib/modules";
 import { currentTier } from "@/lib/tier";
-import { IconConfidence, IconModules, IconGate } from "@/components/icons/ModuleIcons";
+import {
+  IconConfidence,
+  IconModules,
+  IconGate,
+  ModuleIcon,
+  IconContradicts,
+} from "@/components/icons/ModuleIcons";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const [matches, bettingCard] = await Promise.all([getBoard(24), getBettingCard()]);
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ module?: string }>;
+}) {
+  const [{ module: moduleParam }, matches, bettingCard] = await Promise.all([
+    searchParams,
+    getBoard(24),
+    getBettingCard(),
+  ]);
   const viewer = currentTier();
+
+  // ?module=m5 — set by the VIEW ACTIVATIONS links in the module directory.
+  const focus = moduleFromSlug(moduleParam);
+  const allEntries = buildFeed(matches, bettingCard.singles);
+  const entries = filterFeed(allEntries, focus?.key ?? null);
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -94,7 +114,31 @@ export default async function DashboardPage() {
             SORTED BY CONSENSUS
           </span>
         </header>
-        <ModuleFeed matches={matches} singles={bettingCard.singles} viewer={viewer} />
+
+        {focus && (
+          <div
+            className="panel mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5"
+            style={{ borderColor: "color-mix(in srgb, var(--amber) 30%, var(--line))" }}
+          >
+            <span className="text-amber">
+              <ModuleIcon moduleKey={focus.key} size={15} />
+            </span>
+            <span className="mono text-[0.72rem] font-semibold text-text">
+              M{focus.n} {focus.name}
+            </span>
+            <span className="mono tnum text-[0.66rem] text-muted">
+              {entries.length} of {allEntries.length} fixtures firing
+            </span>
+            <Link
+              href="/"
+              className="mono ml-auto inline-flex items-center gap-1 text-[0.6rem] tracking-widest text-faint transition-colors hover:text-text"
+            >
+              <IconContradicts size={10} />
+              CLEAR FILTER
+            </Link>
+          </div>
+        )}
+        <ModuleFeed entries={entries} viewer={viewer} />
       </section>
     </div>
   );
