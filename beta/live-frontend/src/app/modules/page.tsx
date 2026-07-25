@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getModuleViewCounts, getUpcomingFixtureCount } from "@/lib/queries";
+import { getModuleViewCounts, getUpcomingFixtureIds } from "@/lib/queries";
 import { MODULES, countUnit, moduleSlug, statusColor } from "@/lib/modules";
 import { canSee, currentTier, upgradeTarget } from "@/lib/tier";
 import {
@@ -19,10 +19,11 @@ export const metadata: Metadata = {
 };
 
 export default async function ModuleDirectory() {
-  const [counts, fixtureCount] = await Promise.all([
-    getModuleViewCounts(),
-    getUpcomingFixtureCount(3),
-  ]);
+  // Window first, then count each match-scope view against it, so the header
+  // figure and the per-module figures describe the same set of fixtures.
+  const fixtureIds = await getUpcomingFixtureIds(3);
+  const counts = await getModuleViewCounts(fixtureIds);
+  const fixtureCount = fixtureIds?.length ?? null;
   const viewer = currentTier();
 
   const freeCount = MODULES.filter((m) => m.tier === "starter").length;
@@ -35,7 +36,7 @@ export default async function ModuleDirectory() {
           Module directory
         </h1>
         <p className="mt-2 max-w-2xl text-[0.78rem] leading-relaxed text-muted">
-          Twelve modules. Each answers exactly one question from historical patterns in the
+          {MODULES.length} modules. Each answers exactly one question from historical patterns in the
           match record. Nothing here is a model output — every figure traces to a count of
           finished matches.
         </p>

@@ -47,17 +47,29 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const homeName = m.home.short_name || m.home.name;
   const awayName = m.away.short_name || m.away.name;
 
-  // ── MATCH STORY — plain-English paragraph connecting team identity to
-  // fixture, tense-aware (upcoming fixture vs full-time result) ──
+  // ── MATCH STORY — plain-English paragraph, tense-aware ──
+  //
+  // Three bugs previously made this contradict the rest of the page:
+  //   1. "Despite {cmp}" was fixed text, so a home side with the HIGHER
+  //      strength rating read "Despite a higher overall strength rating".
+  //   2. Travel compared home vs away distance. The home side travels 0 km by
+  //      definition, so "615 km less travel gave them the edge" was true of
+  //      every home team in every fixture — a tautology dressed as a finding.
+  //   3. It asserted the home team held the edge unconditionally, without
+  //      consulting readiness_gap. On a fixture picked toward the away side the
+  //      story argued for the home side while the module report argued the
+  //      opposite, directly above it.
+  //
+  // Direction now comes from readiness_gap, the same input derivePickSide()
+  // uses, so the story and the module report cannot disagree.
   const matchStoryParts: string[] = [];
   {
     const isFinished = m.status === "finished" || (m.home_score != null && m.away_score != null);
     const hosted = isFinished ? "hosted" : "hosts";
-    const gave = isFinished ? "gave" : "gives";
     const predicted = isFinished ? "predicted" : "predicts";
     const was = isFinished ? "was" : "is";
-    const favored = isFinished ? "favored" : "favors";
-    const added = isFinished ? "added to" : "adds to";
+    const favoured = isFinished ? "favoured" : "favours";
+    const leant = isFinished ? "leant" : "leans";
 
     const hf = m.homeIntel?.last_5_results;
     const hfi = m.homeIntel?.form_index;
@@ -67,39 +79,99 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         : `${homeName} ${hosted} ${awayName}.`
     );
 
-    if (i?.home_strength_rating != null && i?.away_strength_rating != null) {
-      const hs = i.home_strength_rating, as_ = i.away_strength_rating;
-      const cmp =
-        hs < as_ ? `a lower overall strength rating (${n0(hs)} vs ${n0(as_)})`
-        : hs > as_ ? `a higher overall strength rating (${n0(hs)} vs ${n0(as_)})`
-        : `an even strength rating (${n0(hs)} vs ${n0(as_)})`;
-      const advBits: string[] = [];
-      if (i.home_venue_advantage != null) advBits.push(`strong home advantage (${n0(i.home_venue_advantage)}/100)`);
-      if (i.home_travel_distance_km != null && i.away_travel_distance_km != null) {
-        const diff = i.away_travel_distance_km - i.home_travel_distance_km;
-        if (diff > 0) advBits.push(`${km(diff)} less travel`);
-        else if (diff < 0) advBits.push(`${km(Math.abs(diff))} more travel`);
+    const gap = i?.readiness_gap ?? null;
+    const side: "home" | "away" | null =
+      gap == null || gap === 0 ? null : gap > 0 ? "home" : "away";
+    const pickName = side === "home" ? homeName : side === "away" ? awayName : null;
+    const otherName = side === "home" ? awayName : homeName;
+
+    if (gap != null && side && pickName) {
+      const forBits: string[] = [];
+      const againstBits: string[] = [];
+
+      // Strength — assigned to whichever side actually holds it.
+      const hs = i?.home_strength_rating ?? null;
+      const as_ = i?.away_strength_rating ?? null;
+      if (hs != null && as_ != null && hs !== as_) {
+        const strongerIsPick = (hs > as_) === (side === "home");
+        const phrase = `higher strength rating (${n0(Math.max(hs, as_))} vs ${n0(Math.min(hs, as_))})`;
+        (strongerIsPick ? forBits : againstBits).push(phrase);
       }
-      if (advBits.length > 0) {
-        matchStoryParts.push(`Despite ${cmp}, ${homeName}’s ${advBits.join(" and ")} ${gave} them the edge.`);
+
+      // Venue advantage — compared, not assumed to sit with the home side.
+      const hv = i?.home_venue_advantage ?? null;
+      const av = i?.away_venue_advantage ?? null;
+      if (hv != null && av != null && Math.abs(hv - av) >= 5) {
+        const venueIsPick = (hv > av) === (side === "home");
+        const phrase = `venue edge (${n0(Math.max(hv, av))}/100)`;
+        (venueIsPick ? forBits : againstBits).push(phrase);
       }
+
+      // Travel is a burden carried by the away side, not an asset either team
+      // "holds", so it gets its own clause rather than joining the lists above.
+      const trip: number | null =
+        (m.travel?.away_trip_km ?? null) ?? i?.away_travel_distance_km ?? null;
+      const travelClause =
+        trip != null && trip >= 300
+          ? side === "home"
+            ? `, with ${awayName} arriving off a ${km(trip)} trip`
+            : `, though ${awayName} arrives off a ${km(trip)} trip`
+          : "";
+
+      const lead = `Readiness ${leant} toward ${pickName} by ${Math.abs(Math.round(gap))}`;
+      const withArticle = (bits: string[]) => bits.map((b) => `the ${b}`).join(" and ");
+      // "Degerfors’s" reads badly; a trailing s takes the bare apostrophe.
+      const possessive = (name: string) => (name.endsWith("s") ? `${name}’` : `${name}’s`);
+      let body: string;
+      if (forBits.length && againstBits.length) {
+        body = `${lead}, backed by ${withArticle(forBits)}, against ${possessive(otherName)} ${againstBits.join(" and ")}`;
+      } else if (forBits.length) {
+        body = `${lead}, backed by ${withArticle(forBits)}`;
+      } else if (againstBits.length) {
+        body = `${lead}, against ${possessive(otherName)} ${againstBits.join(" and ")}`;
+      } else {
+        body = lead;
+      }
+      matchStoryParts.push(`${body}${travelClause}.`);
+    } else {
+      matchStoryParts.push(`Readiness ${was} level between the two sides — no directional lean.`);
     }
 
     const topBattle = m.keyBattles?.[0];
     if (topBattle?.home_player_name && topBattle?.away_player_name) {
-      matchStoryParts.push(`The ${topBattle.title} between ${topBattle.home_player_name} and ${topBattle.away_player_name} ${was} ${topBattle.battle_outcome_prediction ?? "closely matched"}.`);
+      matchStoryParts.push(
+        `The ${topBattle.title} between ${topBattle.home_player_name} and ${topBattle.away_player_name} ${was} ${topBattle.battle_outcome_prediction ?? "closely matched"}.`
+      );
     }
 
     if (i?.predicted_home_goals != null && i?.predicted_away_goals != null) {
-      const confStr = i.confidence_score != null ? ` (confidence: ${Math.round(i.confidence_score)}%)` : "";
-      matchStoryParts.push(`The model ${predicted} ${n1(i.predicted_home_goals)}–${n1(i.predicted_away_goals)}${confStr}.`);
+      const confStr =
+        i.confidence_score != null
+          ? ` (confidence ${Math.round(i.confidence_score)}%${i.confidence_band ? `, ${i.confidence_band.toLowerCase()}` : ""})`
+          : "";
+      matchStoryParts.push(
+        `The model ${predicted} ${n1(i.predicted_home_goals)}–${n1(i.predicted_away_goals)}${confStr}.`
+      );
     }
 
+    // Weather previously claimed a travel burden on every fixture for the same
+    // reason as above. It now only speaks when a real rest or travel gap exists.
     if (m.weather?.temperature_c != null) {
-      const restEdgeHome = i?.home_rest_days != null && i?.away_rest_days != null && i.home_rest_days > i.away_rest_days;
-      const travelBurdenAway = i?.home_travel_distance_km != null && i?.away_travel_distance_km != null && i.away_travel_distance_km > i.home_travel_distance_km;
-      const impact = restEdgeHome ? `${favored} the well-rested home team` : travelBurdenAway ? `${added} the away team’s travel burden` : `${was} a neutral factor`;
-      matchStoryParts.push(`Weather (${Math.round(m.weather.temperature_c)}°C${m.weather.weather_condition ? `, ${m.weather.weather_condition}` : ""}) ${impact}.`);
+      const restGap =
+        i?.home_rest_days != null && i?.away_rest_days != null
+          ? i.home_rest_days - i.away_rest_days
+          : null;
+      const trip: number | null =
+        (m.travel?.away_trip_km ?? null) ?? i?.away_travel_distance_km ?? null;
+      const impact =
+        restGap != null && Math.abs(restGap) >= 3
+          ? `${favoured} the better-rested ${restGap > 0 ? homeName : awayName}`
+          : trip != null && trip >= 600
+            ? `${was} another burden on top of ${awayName}’s long trip`
+            : `${was} a neutral factor`;
+      matchStoryParts.push(
+        `Weather (${Math.round(m.weather.temperature_c)}°C${m.weather.weather_condition ? `, ${m.weather.weather_condition}` : ""}) ${impact}.`
+      );
     }
   }
 

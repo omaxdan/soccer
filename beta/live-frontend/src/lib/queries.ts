@@ -815,9 +815,34 @@ export interface ModuleViewCount {
   error?: string;
 }
 
-export async function getModuleViewCounts(): Promise<
-  Record<ModuleKey, ModuleViewCount>
-> {
+/**
+ * Ids of scheduled fixtures inside the rolling window the modules cover.
+ * Match-scope counts are restricted to these so "firing now" means "in the
+ * window", not "every row the view has ever held".
+ */
+export async function getUpcomingFixtureIds(days = 3): Promise<number[] | null> {
+  const client = db();
+  if (!client) return null;
+  const now = new Date();
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const to = new Date(from.getTime() + days * 86_400_000);
+  try {
+    const { data, error } = await client
+      .from("matches")
+      .select("id")
+      .eq("status", "scheduled")
+      .gte("date", from.toISOString())
+      .lt("date", to.toISOString());
+    if (error || !data) return null;
+    return (data as { id: number }[]).map((r) => r.id);
+  } catch {
+    return null;
+  }
+}
+
+export async function getModuleViewCounts(
+  fixtureIds?: number[] | null
+): Promise<Record<ModuleKey, ModuleViewCount>> {
   const client = db();
   const empty = () =>
     MODULES.reduce(
@@ -832,9 +857,19 @@ export async function getModuleViewCounts(): Promise<
   const entries = await Promise.all(
     MODULES.map(async (m): Promise<ModuleViewCount> => {
       try {
-        const { count, error } = await client
-          .from(m.source)
-          .select("*", { count: "exact", head: true });
+        let query = client.from(m.source).select("*", { count: "exact", head: true });
+        // Team and league modules are one row per team / per competition, so a
+        // fixture window does not apply to them. Match modules are windowed —
+        // otherwise M12 reports 155 while the header says 140 fixtures exist,
+        // and M13 counts weather rows for fixtures that have already been
+        // played.
+        if (m.scope === "match" && fixtureIds) {
+          if (fixtureIds.length === 0) {
+            return { key: m.key, view: m.source, count: 0 };
+          }
+          query = query.in("match_id", fixtureIds);
+        }
+        const { count, error } = await query;
         if (error) {
           // Most common cause by far: the materialized view exists but has no
           // GRANT SELECT to the anon role, so PostgREST cannot see it.
@@ -858,25 +893,3 @@ export async function getModuleViewCounts(): Promise<
   );
 }
 
-/** Scheduled fixtures inside the rolling window the modules cover. */
-export async function getUpcomingFixtureCount(days = 3): Promise<number | null> {
-  const client = db();
-  if (!client) return null;
-  const now = new Date();
-  const from = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  );
-  const to = new Date(from.getTime() + days * 86_400_000);
-  try {
-    const { count, error } = await client
-      .from("matches")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "scheduled")
-      .gte("date", from.toISOString())
-      .lt("date", to.toISOString());
-    if (error) return null;
-    return count ?? 0;
-  } catch {
-    return null;
-  }
-}
