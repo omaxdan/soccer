@@ -7,6 +7,7 @@ import { StatCell, PickBadge } from "@/components/Primitives";
 import { OpportunityRiskMeter, BarMeter, VersusBar } from "@/components/Meters";
 import { PitchLineup } from "@/components/Pitch";
 import { ModuleReport, buildMatchReadings } from "@/components/ModuleReport";
+import { MatchReport, MATCH_REPORT_ANCHOR } from "@/components/MatchReport";
 import { currentTier } from "@/lib/tier";
 import { teamSlug } from "@/lib/slug";
 import {
@@ -355,13 +356,26 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
       {/* 3 — Module report: 12 modules, ordered green → amber → red → grey,
               with the verdict summary rendered inside it. */}
-      <ModuleReport match={m} readings={moduleReadings} viewer={currentTier()} />
+      <ModuleReport
+        match={m}
+        readings={moduleReadings}
+        viewer={currentTier()}
+        reportAnchor={MATCH_REPORT_ANCHOR}
+      />
 
       {/* 4 — Predicted lineups */}
       {lineupSection}
 
       {/* 5 — Match story */}
       {matchStory}
+
+      {/* 6 — Printable match report, built from the same readings */}
+      <MatchReport
+        match={m}
+        readings={moduleReadings}
+        homeLineup={homeLineup}
+        awayLineup={awayLineup}
+      />
     </div>
   );
 }

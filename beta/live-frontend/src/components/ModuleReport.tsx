@@ -24,7 +24,7 @@ import {
 import type { MatchRow, MatchScoringProbabilities, LeagueGapSummary } from "@/lib/types";
 import type { Tier } from "@/lib/tier";
 import { ModuleCard, ModuleVerdictSummary } from "./ModuleCard";
-import { IconGate, IconUnverified } from "./icons/ModuleIcons";
+import { IconGate, IconUnverified, IconArrowRight } from "./icons/ModuleIcons";
 
 /** Team-scope context assembled from data getMatch already returns. */
 export function matchTeamSides(match: MatchRow): MatchTeamSides {
@@ -97,10 +97,13 @@ export function ModuleReport({
   match,
   readings,
   viewer,
+  reportAnchor,
 }: {
   match: MatchRow;
   readings: ModuleReading[];
   viewer: Tier;
+  /** Fragment id of the printable report, if one is rendered below. */
+  reportAnchor?: string;
 }) {
   const pickSide = derivePickSide(match);
   const sides = matchTeamSides(match);
@@ -184,6 +187,21 @@ export function ModuleReport({
       )}
 
       {/* Module cards — supports, then neutral, then contradicts */}
+      {reportAnchor && (
+        <div className="flex justify-end">
+          <a
+            href={`#${reportAnchor}`}
+            className="mono inline-flex items-center gap-1.5 rounded-term px-2.5 py-1.5 text-[0.62rem] font-semibold tracking-widest transition-colors hover:bg-raised"
+            style={{
+              color: "var(--amber)",
+              border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
+            }}
+          >
+            VIEW FULL REPORT
+            <IconArrowRight size={12} />
+          </a>
+        </div>
+      )}
       <div className="grid gap-3 lg:grid-cols-2">
         {active.map((r) => (
           <ModuleCard key={r.def.key} reading={r} viewer={viewer} />
