@@ -136,6 +136,7 @@ export interface MatchRow {
   home_form?: string | null;
   away_form?: string | null;
   halfTime?: MatchHalfTimeIntelligence | null;
+  scoring?: MatchScoringProbabilities | null;
   teamImpact?: { home: TeamMatchImpact | null; away: TeamMatchImpact | null };
   impactAdvantage?: MatchImpactAdvantage | null;
   keyBattles?: MatchKeyBattle[];

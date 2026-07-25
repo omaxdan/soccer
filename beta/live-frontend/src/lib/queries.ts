@@ -70,17 +70,30 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
 
   const ids = matches.map((m: any) => m.id);
   const teamIds = Array.from(new Set(matches.flatMap((m: any) => [m.home?.id, m.away?.id]).filter(Boolean)));
-  const [intel, opp, risk, tIntel] = await Promise.all([
+  // One batch, as before. team_intelligence widens from two columns to all of
+  // them (same round trip), and four reads join it keyed on the id arrays that
+  // were already computed above. Without these the dashboard cannot evaluate
+  // modules 1-4, 11 or 12 at all, so the module filter reports 0 for them
+  // however the predicate is written.
+  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring] = await Promise.all([
     client.from("match_intelligence").select("*").in("match_id", ids),
     client.from("match_opportunity").select("*").in("match_id", ids),
     client.from("match_risk_intelligence").select("*").in("match_id", ids),
-    client.from("team_intelligence").select("team_id, last_5_results").in("team_id", teamIds),
+    client.from("team_intelligence").select("*").in("team_id", teamIds),
+    client.from("team_form_quality").select("*").in("team_id", teamIds),
+    client.from("team_venue_performance").select("*").in("team_id", teamIds),
+    client.from("match_half_time_intelligence").select("*").in("match_id", ids),
+    client.from("mv_match_scoring_probabilities").select("*").in("match_id", ids),
   ]);
 
   const iMap = indexBy(intel.data, "match_id");
   const oMap = indexBy(opp.data, "match_id");
   const rMap = indexBy(risk.data, "match_id");
   const formMap = indexBy(tIntel.data, "team_id");
+  const fqMap = indexBy(tFormQ.data, "team_id");
+  const venueMap = indexBy(tVenue.data, "team_id");
+  const htMap = indexBy(htIntel.data, "match_id");
+  const spMap = indexBy(scoring.data, "match_id");
 
   const rows: MatchRow[] = matches.map((m: any) => ({
     id: m.id, external_match_id: m.external_match_id, date: m.date,
@@ -92,6 +105,14 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
     risk: rMap[m.id] ? normRisk(rMap[m.id]) : null,
     home_form: formMap[m.home?.id]?.last_5_results ?? null,
     away_form: formMap[m.away?.id]?.last_5_results ?? null,
+    homeIntel: (formMap[m.home?.id] as any) ?? null,
+    awayIntel: (formMap[m.away?.id] as any) ?? null,
+    homeFormQuality: (fqMap[m.home?.id] as any) ?? null,
+    awayFormQuality: (fqMap[m.away?.id] as any) ?? null,
+    homeVenue: (venueMap[m.home?.id] as any) ?? null,
+    awayVenue: (venueMap[m.away?.id] as any) ?? null,
+    halfTime: (htMap[m.id] as any) ?? null,
+    scoring: (spMap[m.id] as any) ?? null,
   }));
   return sortBoard(rows);
 }

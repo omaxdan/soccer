@@ -8,7 +8,7 @@
 import React from "react";
 import Link from "next/link";
 import {
-  evaluateMatchModules,
+  evaluateAllMatchModules,
   derivePickSide,
   tally,
   overallVerdict,
@@ -32,14 +32,14 @@ function withCardForm(m: MatchRow, single: BankerSingle | undefined): MatchRow {
     ...m,
     homeIntel: {
       ...(m.homeIntel ?? ({ team_id: m.home.id } as any)),
-      form_index: single.home_form,
+      form_index: m.homeIntel?.form_index ?? single.home_form,
     },
     awayIntel: {
       ...(m.awayIntel ?? ({ team_id: m.away.id } as any)),
-      form_index: single.away_form,
+      form_index: m.awayIntel?.form_index ?? single.away_form,
     },
-    home_form: single.home_form_string ?? m.home_form,
-    away_form: single.away_form_string ?? m.away_form,
+    home_form: m.home_form ?? single.home_form_string,
+    away_form: m.away_form ?? single.away_form_string,
   };
 }
 
@@ -53,7 +53,34 @@ export function buildFeed(matches: MatchRow[], singles: BankerSingle[]): FeedEnt
   const byMatch = new Map(singles.map((s) => [s.match_id, s]));
   return matches.map((match) => {
     const m = withCardForm(match, byMatch.get(match.id));
-    return { match: m, readings: evaluateMatchModules({ match: m, pickSide: derivePickSide(m) }) };
+    const pickSide = derivePickSide(m);
+    // Same twelve-module context the match page builds, so the feed, the
+    // filter chip and the fixture's own report can never disagree about
+    // whether a module fired.
+    const sides = {
+      homeName: m.home.short_name || m.home.name,
+      awayName: m.away.short_name || m.away.name,
+      pickSide,
+      home: {
+        intel: m.homeIntel ?? null,
+        formQuality: m.homeFormQuality ?? null,
+        venue: m.homeVenue ?? null,
+        momentum: null,
+      },
+      away: {
+        intel: m.awayIntel ?? null,
+        formQuality: m.awayFormQuality ?? null,
+        venue: m.awayVenue ?? null,
+        momentum: null,
+      },
+    };
+    return {
+      match: m,
+      readings: evaluateAllMatchModules(
+        { match: m, pickSide, scoring: m.scoring ?? null },
+        sides
+      ),
+    };
   });
 }
 
