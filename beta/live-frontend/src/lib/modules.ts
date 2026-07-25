@@ -122,6 +122,13 @@ export interface ModuleReading {
   baseline: Baseline | null;
   /** One-line plain-English call. Never a recommendation to stake. */
   verdict: string;
+  /**
+   * Machine-readable classification (VENUE edge, travel profile, weather
+   * profile...). Anything outside the card that needs to branch on what a
+   * module concluded reads this instead of recomputing from raw columns —
+   * that duplication is how the match story ended up contradicting M1.
+   */
+  code?: string;
 }
 
 // ── Registry ─────────────────────────────────────────────
@@ -1014,14 +1021,46 @@ export function classifyVenue(hw: number, aw: number) {
   return { type, disparity };
 }
 
+export type VenueEdge =
+  | "HOME_VENUE_EDGE"
+  | "AWAY_VENUE_EDGE"
+  | "HOME_VENUE_LEAN"
+  | "AWAY_VENUE_LEAN"
+  | "NO_VENUE_EDGE";
+
+/**
+ * Venue edge for a specific fixture.
+ *
+ * `homeHomePct` is the home side's win rate AT HOME; `awayAwayPct` is the away
+ * side's win rate ON THE ROAD. Comparing those two is what makes this
+ * fixture-specific — classifying each team's overall profile in isolation was
+ * why 0% at home against 67% away came back "no edge".
+ */
+export function classifyFixtureVenue(
+  homeHomePct: number,
+  awayAwayPct: number
+): VenueEdge {
+  if (homeHomePct >= 60 && awayAwayPct <= 20) return "HOME_VENUE_EDGE";
+  if (awayAwayPct >= 60 && homeHomePct <= 20) return "AWAY_VENUE_EDGE";
+  if (homeHomePct >= 50 && awayAwayPct <= 25) return "HOME_VENUE_LEAN";
+  if (awayAwayPct >= 50 && homeHomePct <= 25) return "AWAY_VENUE_LEAN";
+  return "NO_VENUE_EDGE";
+}
+
 export function classifyTrend(last5: number, prior5: number) {
   const change = last5 - prior5;
-  let trend = "Stable";
-  if (change >= 5) trend = "Surging";
-  else if (change <= -5) trend = "Crashing";
-  else if (change >= 2) trend = "Improving";
-  else if (change <= -2) trend = "Declining";
-  return { trend, change };
+  const signed = change > 0 ? `+${change}` : `${change}`;
+  // The label states the delta it is derived from. "Stable" alone read as a
+  // judgement on the team; it only ever meant "this week matched last week",
+  // which a side on 1 point from 15 games also satisfies.
+  let base: string;
+  if (change >= 10) base = "SURGING";
+  else if (change <= -10) base = "CRASHING";
+  else if (change >= 3) base = "IMPROVING";
+  else if (change <= -3) base = "DECLINING";
+  else base = "STABLE";
+  const trend = base === "STABLE" ? "STABLE (no change)" : `${base} (${signed})`;
+  return { trend, base, change, signed };
 }
 
 export function classifyConsistency(vol: number, oaf: number | null) {
@@ -1245,16 +1284,6 @@ export interface ModuleTally {
   firing: number;
 }
 
-/**
- * Team-scope modules describe a side's standing habits, not this fixture.
- * They are shown on the match page for context but must not move consensus —
- * a permanently home-reliant team would otherwise cast the same vote every
- * week regardless of the opponent.
- */
-export function isInformational(def: ModuleDef): boolean {
-  return def.scope === "team";
-}
-
 export function tally(readings: ModuleReading[]): ModuleTally {
   const t: ModuleTally = {
     supports: 0,
@@ -1264,7 +1293,6 @@ export function tally(readings: ModuleReading[]): ModuleTally {
     firing: 0,
   };
   for (const r of readings) {
-    if (isInformational(r.def)) continue;
     t[r.status] += 1;
     if (r.status !== "inactive") t.firing += 1;
   }
@@ -1272,20 +1300,31 @@ export function tally(readings: ModuleReading[]): ModuleTally {
 }
 
 /**
- * Overall confidence from the module spread. Deliberately conservative: a
- * single contradicting module caps the result, because in backtests the
- * failure mode is always "we ignored the one signal that disagreed".
+ * Overall confidence from the module spread.
+ *
+ * Contradictions are the primary gate; support count decides the rest.
+ *   2+ contradictions            -> WEAK
+ *   1 contradiction, any support -> MODERATE
+ *   1 contradiction, no support  -> WEAK   (nothing argues for the pick and
+ *                                           something argues against it —
+ *                                           MODERATE would overstate that)
+ *   0 contradictions, 2+ support -> STRONG
+ *   0 contradictions, 1 support  -> MODERATE
+ *   0 contradictions, no support -> NEUTRAL
  */
 export function overallVerdict(t: ModuleTally): {
-  label: "STRONG" | "MODERATE" | "WEAK" | "NO READ";
+  label: "STRONG" | "MODERATE" | "NEUTRAL" | "WEAK" | "NO READ";
   color: string;
 } {
   if (t.firing === 0) return { label: "NO READ", color: "var(--faint)" };
   if (t.contradicts >= 2) return { label: "WEAK", color: "var(--risk)" };
-  if (t.supports >= 5 && t.contradicts === 0)
-    return { label: "STRONG", color: "var(--edge)" };
-  if (t.supports >= 3) return { label: "MODERATE", color: "var(--warn)" };
-  return { label: "WEAK", color: "var(--risk)" };
+  if (t.contradicts === 1)
+    return t.supports >= 1
+      ? { label: "MODERATE", color: "var(--warn)" }
+      : { label: "WEAK", color: "var(--risk)" };
+  if (t.supports >= 2) return { label: "STRONG", color: "var(--edge)" };
+  if (t.supports === 1) return { label: "MODERATE", color: "var(--warn)" };
+  return { label: "NEUTRAL", color: "var(--muted)" };
 }
 
 
@@ -1333,6 +1372,8 @@ function sideStatus(
   return "neutral";
 }
 
+const pts = (n: number) => `${n} ${n === 1 ? "pt" : "pts"}`;
+
 const pickName = (s: MatchTeamSides) =>
   s.pickSide === "home" ? s.homeName : s.pickSide === "away" ? s.awayName : null;
 
@@ -1341,41 +1382,59 @@ function evalHomeAwayMatch(s: MatchTeamSides): ModuleReading {
   const hv = s.home.venue;
   const av = s.away.venue;
   const hHome = hv?.home_win_pct ?? null;
-  const hAway = hv?.away_win_pct ?? null;
-  const aHome = av?.home_win_pct ?? null;
   const aAway = av?.away_win_pct ?? null;
-  if (hHome == null || hAway == null || aHome == null || aAway == null)
+  if (hHome == null || aAway == null)
     return inactive(def, "No home/away split recorded for one or both teams");
 
-  const hc = classifyVenue(hHome, hAway);
-  const ac = classifyVenue(aHome, aAway);
-  // In THIS fixture the home team plays at home and the away team travels.
-  const homeFav = hc.type === "Home reliant" || hc.type === "All weather";
-  const awayFav = ac.type === "Road warrior" || ac.type === "All weather";
-  const status = sideStatus(s.pickSide, homeFav, awayFav);
+  const edge = classifyFixtureVenue(hHome, aAway);
   const hn = hv?.home_matches ?? null;
   const an = av?.away_matches ?? null;
+
+  const favours: "home" | "away" | null =
+    edge === "HOME_VENUE_EDGE" || edge === "HOME_VENUE_LEAN"
+      ? "home"
+      : edge === "AWAY_VENUE_EDGE" || edge === "AWAY_VENUE_LEAN"
+        ? "away"
+        : null;
+
+  const status: ModuleStatus =
+    favours == null || s.pickSide == null
+      ? "neutral"
+      : favours === s.pickSide
+        ? "supports"
+        : "contradicts";
+
+  const VERDICTS: Record<VenueEdge, string> = {
+    HOME_VENUE_EDGE: `HOME_VENUE_EDGE — ${s.homeName} dominates at home.`,
+    AWAY_VENUE_EDGE: `AWAY_VENUE_EDGE — ${s.awayName} strong on the road.`,
+    HOME_VENUE_LEAN: `HOME_VENUE_LEAN — slight home advantage.`,
+    AWAY_VENUE_LEAN: `AWAY_VENUE_LEAN — slight away advantage.`,
+    NO_VENUE_EDGE: `NO_VENUE_EDGE — neither side's venue habit gives an edge.`,
+  };
 
   return {
     def,
     status,
-    headline: `${s.homeName}: ${hc.type} · ${s.awayName}: ${ac.type}`,
+    code: edge,
+    headline: `${s.homeName} ${hHome.toFixed(0)}% home · ${s.awayName} ${aAway.toFixed(0)}% away`,
     rows: [
-      { label: `${s.homeName} at home`, value: `${hHome.toFixed(0)}%${hn ? ` (n=${hn})` : ""}`, color: "var(--edge)" },
-      { label: `${s.awayName} away`, value: `${aAway.toFixed(0)}%${an ? ` (n=${an})` : ""}`, color: "var(--cool)" },
-      { label: `${s.homeName} split`, value: sign(hc.disparity) },
-      { label: `${s.awayName} split`, value: sign(ac.disparity) },
+      {
+        label: `${s.homeName} at home`,
+        value: `${hHome.toFixed(0)}%${hn ? ` (n=${hn})` : ""}`,
+        color: "var(--edge)",
+      },
+      {
+        label: `${s.awayName} away`,
+        value: `${aAway.toFixed(0)}%${an ? ` (n=${an})` : ""}`,
+        color: "var(--cool)",
+      },
+      { label: "Edge", value: edge, color: statusColor(status) },
     ],
     baseline:
-      s.pickSide === "away"
+      favours === "away"
         ? { rate: aAway, sample: an, label: `${s.awayName} away wins` }
         : { rate: hHome, sample: hn, label: `${s.homeName} home wins` },
-    verdict:
-      status === "supports"
-        ? `${pickName(s)} holds the venue profile that fits this fixture.`
-        : status === "contradicts"
-          ? `The venue profile favours the opponent, not ${pickName(s) ?? "the pick"}.`
-          : "Neither side's venue habit gives an edge in this fixture.",
+    verdict: VERDICTS[edge],
   };
 }
 
@@ -1392,13 +1451,14 @@ function evalReadinessMatch(s: MatchTeamSides): ModuleReading {
   const ac = classifyTrend(a5, aPrior);
   const status = sideStatus(
     s.pickSide,
-    hc.change >= 2 && hc.change > ac.change,
-    ac.change >= 2 && ac.change > hc.change
+    hc.change >= 3 && hc.change > ac.change,
+    ac.change >= 3 && ac.change > hc.change
   );
 
   return {
     def,
     status,
+    code: s.pickSide === "away" ? ac.base : hc.base,
     headline: `${s.homeName}: ${hc.trend} · ${s.awayName}: ${ac.trend}`,
     rows: [
       { label: `${s.homeName} last 5`, value: `${h5} pts` },
@@ -1409,12 +1469,11 @@ function evalReadinessMatch(s: MatchTeamSides): ModuleReading {
       { label: `${s.awayName} change`, value: sign(ac.change) },
     ],
     baseline: null,
+    // The points are stated alongside the label so "STABLE" cannot be read as
+    // a comment on quality when it only describes week-over-week change.
     verdict:
-      status === "supports"
-        ? `${pickName(s)} is the side trending upward into this fixture.`
-        : status === "contradicts"
-          ? `The opponent carries the better momentum into this fixture.`
-          : "Both sides arrive on a similar trajectory.",
+      `${s.homeName}: ${hc.trend} — ${pts(h5)} from last 5 matches. ` +
+      `${s.awayName}: ${ac.trend} — ${pts(a5)} from last 5 matches.`,
   };
 }
 

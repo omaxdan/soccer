@@ -6,7 +6,7 @@ import { Crest } from "@/components/Crest";
 import { StatCell, PickBadge } from "@/components/Primitives";
 import { OpportunityRiskMeter, BarMeter, VersusBar } from "@/components/Meters";
 import { PitchLineup } from "@/components/Pitch";
-import { ModuleReport } from "@/components/ModuleReport";
+import { ModuleReport, buildMatchReadings } from "@/components/ModuleReport";
 import { currentTier } from "@/lib/tier";
 import { teamSlug } from "@/lib/slug";
 import {
@@ -46,6 +46,15 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
   const homeName = m.home.short_name || m.home.name;
   const awayName = m.away.short_name || m.away.name;
+
+  // Modules are evaluated once here and shared with <ModuleReport />. The
+  // story reads their verdicts rather than re-deriving conclusions from raw
+  // columns — previously it scored venue from match_intelligence's
+  // home_venue_advantage while M1 scored it from actual home/away win rates,
+  // so the page could claim a home venue edge directly above a card showing
+  // the home side winning 0% of its home games.
+  const moduleReadings = buildMatchReadings(m, scoringProbs);
+  const readingFor = (n: number) => moduleReadings.find((r) => r.def.n === n) ?? null;
 
   // ── MATCH STORY — plain-English paragraph, tense-aware ──
   //
@@ -98,13 +107,23 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         (strongerIsPick ? forBits : againstBits).push(phrase);
       }
 
-      // Venue advantage — compared, not assumed to sit with the home side.
-      const hv = i?.home_venue_advantage ?? null;
-      const av = i?.away_venue_advantage ?? null;
-      if (hv != null && av != null && Math.abs(hv - av) >= 5) {
-        const venueIsPick = (hv > av) === (side === "home");
-        const phrase = `venue edge (${n0(Math.max(hv, av))}/100)`;
-        (venueIsPick ? forBits : againstBits).push(phrase);
+      // Venue — taken from Module 1's verdict, not recomputed. M1 compares the
+      // home side's home record against the away side's road record; the raw
+      // home_venue_advantage score regularly disagrees with it.
+      const venue = readingFor(1);
+      const venueCode = venue?.code ?? null;
+      if (venueCode && venueCode !== "NO_VENUE_EDGE") {
+        const venueSide = venueCode.startsWith("HOME_") ? "home" : "away";
+        const strength = venueCode.endsWith("_EDGE") ? "venue edge" : "slight venue lean";
+        const rate =
+          venueSide === "home"
+            ? m.homeVenue?.home_win_pct ?? null
+            : m.awayVenue?.away_win_pct ?? null;
+        const phrase =
+          rate != null
+            ? `${strength} (${n0(rate)}% ${venueSide === "home" ? "at home" : "on the road"})`
+            : strength;
+        (venueSide === side ? forBits : againstBits).push(phrase);
       }
 
       // Travel is a burden carried by the away side, not an asset either team
@@ -336,11 +355,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
       {/* 3 — Module report: 12 modules, ordered green → amber → red → grey,
               with the verdict summary rendered inside it. */}
-      <ModuleReport
-        match={m}
-        scoring={scoringProbs}
-        viewer={currentTier()}
-      />
+      <ModuleReport match={m} readings={moduleReadings} viewer={currentTier()} />
 
       {/* 4 — Predicted lineups */}
       {lineupSection}

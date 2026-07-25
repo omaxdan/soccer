@@ -11,7 +11,6 @@ import Link from "next/link";
 import {
   statusColor,
   statusWord,
-  isInformational,
   type ModuleReading,
   type ModuleDef,
   type ModuleStatus,
@@ -131,26 +130,15 @@ export function ModuleCard({
             {def.name}
           </h3>
         </div>
-        <span className="flex shrink-0 flex-col items-end gap-1">
-          <span
-            className="mono inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.55rem] font-semibold tracking-widest"
-            style={{
-              color,
-              background: `color-mix(in srgb, ${color} 12%, transparent)`,
-            }}
-          >
-            <StatusIcon status={status} size={11} />
-            {statusWord(status)}
-          </span>
-          {isInformational(def) && (
-            <span
-              className="mono rounded px-1.5 py-0.5 text-[0.5rem] tracking-widest"
-              style={{ color: "var(--faint)", border: "1px solid var(--line)" }}
-              title="Team-level module — shown for context, excluded from consensus"
-            >
-              INFO ONLY
-            </span>
-          )}
+        <span
+          className="mono inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[0.55rem] font-semibold tracking-widest"
+          style={{
+            color,
+            background: `color-mix(in srgb, ${color} 12%, transparent)`,
+          }}
+        >
+          <StatusIcon status={status} size={11} />
+          {statusWord(status)}
         </span>
       </header>
 
@@ -210,13 +198,9 @@ export function ModuleVerdictSummary({
   readings: ModuleReading[];
   narrative?: string;
 }) {
-  const scoring = readings.filter((r) => !isInformational(r.def));
-  const supports = scoring.filter((r) => r.status === "supports");
-  const neutral = scoring.filter((r) => r.status === "neutral");
-  const contradicts = scoring.filter((r) => r.status === "contradicts");
-  const info = readings.filter(
-    (r) => isInformational(r.def) && r.status !== "inactive"
-  );
+  const supports = readings.filter((r) => r.status === "supports");
+  const neutral = readings.filter((r) => r.status === "neutral");
+  const contradicts = readings.filter((r) => r.status === "contradicts");
 
   const Line = ({
     status,
@@ -260,11 +244,7 @@ export function ModuleVerdictSummary({
           {narrative}
         </p>
       )}
-      <p className="mt-2 text-[0.68rem] leading-relaxed text-faint">
-        Team-level modules{" "}
-        {info.length > 0 ? `(${info.map((r) => `M${r.def.n}`).join(", ")}) ` : "(M1–M4) "}
-        are informational only and do not count toward consensus.
-      </p>
+
     </section>
   );
 }

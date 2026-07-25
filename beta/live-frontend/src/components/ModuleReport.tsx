@@ -1,12 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // ModuleReport — the body of /match/[slug].
 //
-// One scrollable report of which of the twelve modules fired for this fixture:
-// eight match-scope, plus the four team-scope modules rendered head-to-head.
+// All thirteen modules count toward consensus now, team-scope included. The
+// team modules on this page are two-sided: each compares the home side's
+// profile against the away side's and judges relative to the pick, so they
+// describe THIS fixture rather than restating a season-long habit.
 //
-// Team-scope modules are shown for context but excluded from consensus. A
-// permanently home-reliant side would otherwise cast the same vote every week
-// regardless of who it was playing.
+// Readings are built by the page and passed in, so the match story can be
+// written from the same verdicts the cards show instead of re-deriving them
+// from raw columns — that duplication is what made the story contradict M1.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from "react";
@@ -15,7 +17,6 @@ import {
   derivePickSide,
   tally,
   overallVerdict,
-  isInformational,
   MODULES,
   type ModuleReading,
   type MatchTeamSides,
@@ -23,19 +24,57 @@ import {
 import type { MatchRow, MatchScoringProbabilities, LeagueGapSummary } from "@/lib/types";
 import type { Tier } from "@/lib/tier";
 import { ModuleCard, ModuleVerdictSummary } from "./ModuleCard";
-import { IconGate, IconInactive } from "./icons/ModuleIcons";
+import { IconGate, IconUnverified } from "./icons/ModuleIcons";
+
+/** Team-scope context assembled from data getMatch already returns. */
+export function matchTeamSides(match: MatchRow): MatchTeamSides {
+  return {
+    homeName: match.home.short_name || match.home.name,
+    awayName: match.away.short_name || match.away.name,
+    pickSide: derivePickSide(match),
+    home: {
+      intel: match.homeIntel ?? null,
+      formQuality: match.homeFormQuality ?? null,
+      venue: match.homeVenue ?? null,
+      momentum: null,
+    },
+    away: {
+      intel: match.awayIntel ?? null,
+      formQuality: match.awayFormQuality ?? null,
+      venue: match.awayVenue ?? null,
+      momentum: null,
+    },
+  };
+}
+
+/** Single evaluation point for a fixture. Call once, share the result. */
+export function buildMatchReadings(
+  match: MatchRow,
+  scoring?: MatchScoringProbabilities | null,
+  leagueGap?: LeagueGapSummary | null
+): ModuleReading[] {
+  return evaluateAllMatchModules(
+    {
+      match,
+      pickSide: derivePickSide(match),
+      scoring: scoring ?? match.scoring ?? null,
+      leagueGap,
+      travel: match.travel ?? null,
+    },
+    matchTeamSides(match)
+  );
+}
 
 function narrative(readings: ModuleReading[], match: MatchRow): string {
-  const scoring = readings.filter((r) => !isInformational(r.def));
-  const supports = scoring.filter((r) => r.status === "supports");
-  const against = scoring.filter((r) => r.status === "contradicts");
+  const supports = readings.filter((r) => r.status === "supports");
+  const against = readings.filter((r) => r.status === "contradicts");
   const home = match.home.short_name || match.home.name;
   const away = match.away.short_name || match.away.name;
   const pick = derivePickSide(match);
   const side = pick === "home" ? home : pick === "away" ? away : null;
 
-  if (scoring.every((r) => r.status === "inactive"))
-    return "No match-level module produced a reading for this fixture. There is nothing here to act on.";
+  if (readings.every((r) => r.status === "inactive"))
+    return "No module produced a reading for this fixture. There is nothing here to act on.";
 
   const supportText = supports.length
     ? `${supports.map((r) => r.def.name.toLowerCase()).join(", ")} line up ${
@@ -56,45 +95,17 @@ function narrative(readings: ModuleReading[], match: MatchRow): string {
 
 export function ModuleReport({
   match,
-  scoring,
-  leagueGap,
+  readings,
   viewer,
-  showInactive = false,
 }: {
   match: MatchRow;
-  scoring?: MatchScoringProbabilities | null;
-  leagueGap?: LeagueGapSummary | null;
+  readings: ModuleReading[];
   viewer: Tier;
-  showInactive?: boolean;
 }) {
   const pickSide = derivePickSide(match);
-
-  // Team-scope context is assembled from data getMatch already returns.
-  const sides: MatchTeamSides = {
-    homeName: match.home.short_name || match.home.name,
-    awayName: match.away.short_name || match.away.name,
-    pickSide,
-    home: {
-      intel: match.homeIntel ?? null,
-      formQuality: match.homeFormQuality ?? null,
-      venue: match.homeVenue ?? null,
-      momentum: null,
-    },
-    away: {
-      intel: match.awayIntel ?? null,
-      formQuality: match.awayFormQuality ?? null,
-      venue: match.awayVenue ?? null,
-      momentum: null,
-    },
-  };
-
-  const readings = evaluateAllMatchModules(
-    { match, pickSide, scoring, leagueGap, travel: match.travel ?? null },
-    sides
-  );
-  const active = showInactive ? readings : readings.filter((r) => r.status !== "inactive");
+  const sides = matchTeamSides(match);
+  const active = readings.filter((r) => r.status !== "inactive");
   const dormant = readings.filter((r) => r.status === "inactive");
-  const firing = readings.filter((r) => r.status !== "inactive").length;
   const t = tally(readings);
   const overall = overallVerdict(t);
 
@@ -105,7 +116,7 @@ export function ModuleReport({
         <div>
           <div className="label-cap">Modules firing</div>
           <div className="mono tnum text-lg font-semibold text-text">
-            {firing}
+            {active.length}
             <span className="text-sm text-faint">/{MODULES.length}</span>
           </div>
         </div>
@@ -134,40 +145,50 @@ export function ModuleReport({
           <span className="mt-px text-faint">
             <IconGate size={13} />
           </span>
-          Consensus counts the eight match-level modules only, and is capped by any
-          contradiction. Two disagreements force WEAK.
+          One disagreement caps consensus at MODERATE. Two disagreements force WEAK.
         </p>
       </div>
 
-      {/* Firing modules — supports, then neutral, then contradicts */}
-      <div className="grid gap-3 lg:grid-cols-2">
-        {active.map((r) => (
-          <ModuleCard key={r.def.key} reading={r} viewer={viewer} />
-        ))}
-      </div>
-
-      {/* Verdict summary */}
+      {/* Verdict summary — conclusion before the evidence */}
       <ModuleVerdictSummary readings={readings} narrative={narrative(readings, match)} />
 
-      {/* Dormant modules — always listed, always with a reason */}
-      {!showInactive && dormant.length > 0 && (
-        <section className="panel p-4">
-          <h2 className="mono mb-2.5 flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-muted">
-            <IconInactive size={13} />
+      {/* Data gaps, surfaced before the cards rather than after them */}
+      {dormant.length > 0 && (
+        <section
+          className="panel p-4"
+          style={{ borderColor: "color-mix(in srgb, var(--warn) 28%, var(--line))" }}
+        >
+          <h2
+            className="mono mb-2.5 flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em]"
+            style={{ color: "var(--warn)" }}
+          >
+            <IconUnverified size={14} />
             Did not fire ({dormant.length})
           </h2>
           <ul className="space-y-1.5">
             {dormant.map((r) => (
-              <li key={r.def.key} className="text-[0.7rem] leading-relaxed">
-                <span className="mono font-semibold text-muted">
-                  M{r.def.n} {r.def.name}
+              <li key={r.def.key} className="flex items-start gap-2 text-[0.7rem] leading-relaxed">
+                <span className="mt-0.5 shrink-0" style={{ color: "var(--warn)" }}>
+                  <IconUnverified size={12} />
                 </span>
-                <span className="text-faint"> — {r.headline}</span>
+                <span>
+                  <span className="mono font-semibold text-muted">
+                    M{r.def.n} {r.def.name}
+                  </span>
+                  <span className="text-faint"> — {r.headline}</span>
+                </span>
               </li>
             ))}
           </ul>
         </section>
       )}
+
+      {/* Module cards — supports, then neutral, then contradicts */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {active.map((r) => (
+          <ModuleCard key={r.def.key} reading={r} viewer={viewer} />
+        ))}
+      </div>
     </div>
   );
 }
