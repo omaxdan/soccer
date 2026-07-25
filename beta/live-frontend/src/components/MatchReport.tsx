@@ -21,9 +21,11 @@ import {
   type ModuleReading,
   type Baseline,
 } from "@/lib/modules";
+import Link from "next/link";
 import type { MatchRow, PredictedLineupPlayer } from "@/lib/types";
+import { canSee, type Tier } from "@/lib/tier";
 import { getFormationName, unitConfidence } from "@/lib/formation";
-import { IconUnverified, IconSupports, IconContradicts, IconNeutral } from "./icons/ModuleIcons";
+import { IconUnverified, IconSupports, IconContradicts, IconNeutral, IconLock } from "./icons/ModuleIcons";
 
 // ── Formatting helpers ───────────────────────────────────
 
@@ -137,22 +139,30 @@ export const MATCH_REPORT_ANCHOR = "match-report";
 
 export function MatchReport({
   match: m,
-  readings,
+  readings: allReadings,
   homeLineup,
   awayLineup,
+  viewer,
 }: {
   match: MatchRow;
   readings: ModuleReading[];
   homeLineup: PredictedLineupPlayer[];
   awayLineup: PredictedLineupPlayer[];
+  viewer: Tier;
 }) {
+  // The module cards used to carry tier gating; with those gone this report is
+  // the only surface showing per-module detail, so the gate moves here.
+  // Consensus is still computed across EVERY module — the tier decides how much
+  // working is shown, not whether the conclusion is correct.
+  const readings = allReadings.filter((r) => canSee(r.def, viewer));
+  const gated = allReadings.filter((r) => !canSee(r.def, viewer));
   const i = m.intel;
   const homeName = m.home.short_name || m.home.name;
   const awayName = m.away.short_name || m.away.name;
   const pickSide = derivePickSide(m);
   const pickName = pickSide === "home" ? homeName : pickSide === "away" ? awayName : null;
 
-  const t = tally(readings);
+  const t = tally(allReadings);
   const overall = overallVerdict(t);
   const supports = readings.filter((r) => r.status === "supports");
   const contradicts = readings.filter((r) => r.status === "contradicts");
@@ -278,7 +288,7 @@ export function MatchReport({
     ]);
   takeaways.push([
     "Data quality",
-    `${readings.length - dormant.length} of ${MODULES.length} modules firing`,
+    `${allReadings.filter((r) => r.status !== "inactive").length} of ${MODULES.length} modules firing`,
   ]);
   const widest = readings.filter((r) => isWide(r.baseline));
   if (widest.length)
@@ -459,6 +469,23 @@ export function MatchReport({
       <Section title="Key takeaways">
         <KeyValueTable headers={["Takeaway", "Detail"]} rows={takeaways} />
       </Section>
+
+      {gated.length > 0 && (
+        <p className="mt-4 flex items-start gap-2 text-[0.68rem] leading-relaxed text-muted">
+          <span className="mt-0.5 text-faint">
+            <IconLock size={12} />
+          </span>
+          <span>
+            {gated.length} module{gated.length === 1 ? "" : "s"} (
+            {gated.map((r) => `M${r.def.n}`).join(", ")}) are counted in the consensus above
+            but their detail is not shown on this tier.{" "}
+            <Link href="/pricing" className="text-amber underline underline-offset-2">
+              See plans
+            </Link>
+            .
+          </span>
+        </p>
+      )}
 
       <p className="mt-4 flex items-start gap-2 border-t border-line pt-3 text-[0.64rem] text-faint">
         <span className="mt-px" style={{ color: "var(--warn)" }}>

@@ -22,9 +22,8 @@ import {
   type MatchTeamSides,
 } from "@/lib/modules";
 import type { MatchRow, MatchScoringProbabilities, LeagueGapSummary } from "@/lib/types";
-import type { Tier } from "@/lib/tier";
-import { ModuleCard, ModuleVerdictSummary } from "./ModuleCard";
-import { IconGate, IconUnverified, IconArrowRight } from "./icons/ModuleIcons";
+import { ModuleVerdictSummary } from "./ModuleCard";
+import { IconGate, IconUnverified } from "./icons/ModuleIcons";
 
 /** Team-scope context assembled from data getMatch already returns. */
 export function matchTeamSides(match: MatchRow): MatchTeamSides {
@@ -96,14 +95,17 @@ function narrative(readings: ModuleReading[], match: MatchRow): string {
 export function ModuleReport({
   match,
   readings,
-  viewer,
-  reportAnchor,
+  report,
 }: {
   match: MatchRow;
   readings: ModuleReading[];
-  viewer: Tier;
-  /** Fragment id of the printable report, if one is rendered below. */
-  reportAnchor?: string;
+  /**
+   * The full match report, rendered between the data gaps and the verdict
+   * summary. The per-module cards this component used to render are gone —
+   * the report carries the same readings in a denser form, and showing both
+   * meant every module appeared twice on one page.
+   */
+  report?: React.ReactNode;
 }) {
   const pickSide = derivePickSide(match);
   const sides = matchTeamSides(match);
@@ -152,10 +154,7 @@ export function ModuleReport({
         </p>
       </div>
 
-      {/* Verdict summary — conclusion before the evidence */}
-      <ModuleVerdictSummary readings={readings} narrative={narrative(readings, match)} />
-
-      {/* Data gaps, surfaced before the cards rather than after them */}
+      {/* Data gaps, surfaced before the report */}
       {dormant.length > 0 && (
         <section
           className="panel p-4"
@@ -186,27 +185,11 @@ export function ModuleReport({
         </section>
       )}
 
-      {/* Module cards — supports, then neutral, then contradicts */}
-      {reportAnchor && (
-        <div className="flex justify-end">
-          <a
-            href={`#${reportAnchor}`}
-            className="mono inline-flex items-center gap-1.5 rounded-term px-2.5 py-1.5 text-[0.62rem] font-semibold tracking-widest transition-colors hover:bg-raised"
-            style={{
-              color: "var(--amber)",
-              border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
-            }}
-          >
-            VIEW FULL REPORT
-            <IconArrowRight size={12} />
-          </a>
-        </div>
-      )}
-      <div className="grid gap-3 lg:grid-cols-2">
-        {active.map((r) => (
-          <ModuleCard key={r.def.key} reading={r} viewer={viewer} />
-        ))}
-      </div>
+      {/* Full match report */}
+      {report}
+
+      {/* Verdict summary */}
+      <ModuleVerdictSummary readings={readings} narrative={narrative(readings, match)} />
     </div>
   );
 }
