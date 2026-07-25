@@ -154,7 +154,10 @@ export function ModuleReport({
         </p>
       </div>
 
-      {/* Data gaps, surfaced before the report */}
+      {/* Full match report */}
+      {report}
+
+      {/* Data gaps, after the report */}
       {dormant.length > 0 && (
         <section
           className="panel p-4"
@@ -184,9 +187,6 @@ export function ModuleReport({
           </ul>
         </section>
       )}
-
-      {/* Full match report */}
-      {report}
 
       {/* Verdict summary */}
       <ModuleVerdictSummary readings={readings} narrative={narrative(readings, match)} />

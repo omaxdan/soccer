@@ -166,6 +166,10 @@ export interface MatchRow {
   halfTime?: MatchHalfTimeIntelligence | null;
   scoring?: MatchScoringProbabilities | null;
   travel?: ModuleTravelRow | null;
+  homeInjuries?: PlayerInjuryRow[];
+  awayInjuries?: PlayerInjuryRow[];
+  homeInjuryImpact?: TeamInjuryImpact | null;
+  awayInjuryImpact?: TeamInjuryImpact | null;
   teamImpact?: { home: TeamMatchImpact | null; away: TeamMatchImpact | null };
   impactAdvantage?: MatchImpactAdvantage | null;
   keyBattles?: MatchKeyBattle[];

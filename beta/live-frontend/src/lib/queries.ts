@@ -132,6 +132,18 @@ function sortBoard(rows: MatchRow[]): MatchRow[] {
 }
 
 // ── Single match (full report) ───────────────────────────
+function mapInjuries(rows: unknown): import("./types").PlayerInjuryRow[] {
+  return ((rows as any[]) ?? []).map((p) => {
+    const pi = Array.isArray(p.player_injuries) ? p.player_injuries[0] : p.player_injuries;
+    return {
+      player_id: p.id, name: p.name, short_name: p.short_name,
+      injury_reason: pi?.injury_reason ?? null, injury_status: pi?.injury_status ?? null,
+      expected_return_days: pi?.expected_return_days ?? null, days_out: pi?.days_out ?? null,
+      injury_severity_score: pi?.injury_severity_score ?? null,
+    };
+  });
+}
+
 export async function getMatch(id: number): Promise<MatchRow | null> {
   const client = db();
   if (!client) return M.MOCK_MATCHES.find((m) => m.id === id) ?? null;
@@ -157,7 +169,8 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     positionalMatchupsRaw, tacticalAdvantages, performanceComparison,
     substitutionImpact, squadDepthComparison,
     homeBetting, awayBetting, homeIntel, awayIntel, homeSeasonStats, awaySeasonStats,
-    homeFormQuality, awayFormQuality, homeVenue, awayVenue, travelRow] = await Promise.all([
+    homeFormQuality, awayFormQuality, homeVenue, awayVenue, travelRow,
+    homeInj, awayInj, homeInjImpact, awayInjImpact] = await Promise.all([
     client.from("match_intelligence").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_opportunity").select("*").eq("match_id", id).maybeSingle(),
     client.from("match_risk_intelligence").select("*").eq("match_id", id).maybeSingle(),
@@ -186,6 +199,14 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     client.from("team_venue_performance").select("*").eq("team_id", homeTeam.id).maybeSingle(),
     client.from("team_venue_performance").select("*").eq("team_id", awayTeam.id).maybeSingle(),
     client.from("mv_module_travel").select("*").eq("match_id", id).maybeSingle(),
+    client.from("players")
+      .select("id, name, short_name, player_injuries!inner(injury_reason, injury_status, expected_return_days, days_out, injury_severity_score)")
+      .eq("team_id", homeTeam.id).eq("player_injuries.active", true),
+    client.from("players")
+      .select("id, name, short_name, player_injuries!inner(injury_reason, injury_status, expected_return_days, days_out, injury_severity_score)")
+      .eq("team_id", awayTeam.id).eq("player_injuries.active", true),
+    client.from("team_injury_impact").select("*").eq("team_id", homeTeam.id).maybeSingle(),
+    client.from("team_injury_impact").select("*").eq("team_id", awayTeam.id).maybeSingle(),
   ]);
 
   const keyBattles = ((keyBattlesRaw.data as any[]) ?? []).map((b) => ({
@@ -227,6 +248,10 @@ export async function getMatch(id: number): Promise<MatchRow | null> {
     homeVenue: (homeVenue.data as any) ?? null,
     awayVenue: (awayVenue.data as any) ?? null,
     travel: (travelRow.data as any) ?? null,
+    homeInjuries: mapInjuries(homeInj.data),
+    awayInjuries: mapInjuries(awayInj.data),
+    homeInjuryImpact: (homeInjImpact.data as any) ?? null,
+    awayInjuryImpact: (awayInjImpact.data as any) ?? null,
   };
 }
 

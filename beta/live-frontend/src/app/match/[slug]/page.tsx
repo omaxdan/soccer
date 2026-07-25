@@ -5,9 +5,9 @@ import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs } from
 import { Crest } from "@/components/Crest";
 import { StatCell, PickBadge } from "@/components/Primitives";
 import { OpportunityRiskMeter, BarMeter, VersusBar } from "@/components/Meters";
-import { PitchLineup } from "@/components/Pitch";
 import { ModuleReport, buildMatchReadings } from "@/components/ModuleReport";
 import { MatchReport } from "@/components/MatchReport";
+import { InjuryPanel } from "@/components/InjuryPanel";
 import { currentTier } from "@/lib/tier";
 import { teamSlug } from "@/lib/slug";
 import {
@@ -48,166 +48,9 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const homeName = m.home.short_name || m.home.name;
   const awayName = m.away.short_name || m.away.name;
 
-  // Modules are evaluated once here and shared with <ModuleReport />. The
-  // story reads their verdicts rather than re-deriving conclusions from raw
-  // columns — previously it scored venue from match_intelligence's
-  // home_venue_advantage while M1 scored it from actual home/away win rates,
-  // so the page could claim a home venue edge directly above a card showing
-  // the home side winning 0% of its home games.
+  // Modules are evaluated once and shared with <ModuleReport />, which passes
+  // the readings on to <MatchReport />.
   const moduleReadings = buildMatchReadings(m, scoringProbs);
-  const readingFor = (n: number) => moduleReadings.find((r) => r.def.n === n) ?? null;
-
-  // ── MATCH STORY — plain-English paragraph, tense-aware ──
-  //
-  // Three bugs previously made this contradict the rest of the page:
-  //   1. "Despite {cmp}" was fixed text, so a home side with the HIGHER
-  //      strength rating read "Despite a higher overall strength rating".
-  //   2. Travel compared home vs away distance. The home side travels 0 km by
-  //      definition, so "615 km less travel gave them the edge" was true of
-  //      every home team in every fixture — a tautology dressed as a finding.
-  //   3. It asserted the home team held the edge unconditionally, without
-  //      consulting readiness_gap. On a fixture picked toward the away side the
-  //      story argued for the home side while the module report argued the
-  //      opposite, directly above it.
-  //
-  // Direction now comes from readiness_gap, the same input derivePickSide()
-  // uses, so the story and the module report cannot disagree.
-  const matchStoryParts: string[] = [];
-  {
-    const isFinished = m.status === "finished" || (m.home_score != null && m.away_score != null);
-    const hosted = isFinished ? "hosted" : "hosts";
-    const predicted = isFinished ? "predicted" : "predicts";
-    const was = isFinished ? "was" : "is";
-    const favoured = isFinished ? "favoured" : "favours";
-    const leant = isFinished ? "leant" : "leans";
-
-    const hf = m.homeIntel?.last_5_results;
-    const hfi = m.homeIntel?.form_index;
-    matchStoryParts.push(
-      hf && hfi != null
-        ? `${homeName} ${hosted} ${awayName} with ${hf} form (${n0(hfi)}/100).`
-        : `${homeName} ${hosted} ${awayName}.`
-    );
-
-    const gap = i?.readiness_gap ?? null;
-    const side: "home" | "away" | null =
-      gap == null || gap === 0 ? null : gap > 0 ? "home" : "away";
-    const pickName = side === "home" ? homeName : side === "away" ? awayName : null;
-    const otherName = side === "home" ? awayName : homeName;
-
-    if (gap != null && side && pickName) {
-      const forBits: string[] = [];
-      const againstBits: string[] = [];
-
-      // Strength — assigned to whichever side actually holds it.
-      const hs = i?.home_strength_rating ?? null;
-      const as_ = i?.away_strength_rating ?? null;
-      if (hs != null && as_ != null && hs !== as_) {
-        const strongerIsPick = (hs > as_) === (side === "home");
-        const phrase = `higher strength rating (${n0(Math.max(hs, as_))} vs ${n0(Math.min(hs, as_))})`;
-        (strongerIsPick ? forBits : againstBits).push(phrase);
-      }
-
-      // Venue — taken from Module 1's verdict, not recomputed. M1 compares the
-      // home side's home record against the away side's road record; the raw
-      // home_venue_advantage score regularly disagrees with it.
-      const venue = readingFor(1);
-      const venueCode = venue?.code ?? null;
-      if (venueCode && venueCode !== "NO_VENUE_EDGE") {
-        const venueSide = venueCode.startsWith("HOME_") ? "home" : "away";
-        const strength = venueCode.endsWith("_EDGE") ? "venue edge" : "slight venue lean";
-        const rate =
-          venueSide === "home"
-            ? m.homeVenue?.home_win_pct ?? null
-            : m.awayVenue?.away_win_pct ?? null;
-        const phrase =
-          rate != null
-            ? `${strength} (${n0(rate)}% ${venueSide === "home" ? "at home" : "on the road"})`
-            : strength;
-        (venueSide === side ? forBits : againstBits).push(phrase);
-      }
-
-      // Travel is a burden carried by the away side, not an asset either team
-      // "holds", so it gets its own clause rather than joining the lists above.
-      const trip: number | null =
-        (m.travel?.away_trip_km ?? null) ?? i?.away_travel_distance_km ?? null;
-      const travelClause =
-        trip != null && trip >= 300
-          ? side === "home"
-            ? `, with ${awayName} arriving off a ${km(trip)} trip`
-            : `, though ${awayName} arrives off a ${km(trip)} trip`
-          : "";
-
-      const lead = `Readiness ${leant} toward ${pickName} by ${Math.abs(Math.round(gap))}`;
-      const withArticle = (bits: string[]) => bits.map((b) => `the ${b}`).join(" and ");
-      // "Degerfors’s" reads badly; a trailing s takes the bare apostrophe.
-      const possessive = (name: string) => (name.endsWith("s") ? `${name}’` : `${name}’s`);
-      let body: string;
-      if (forBits.length && againstBits.length) {
-        body = `${lead}, backed by ${withArticle(forBits)}, against ${possessive(otherName)} ${againstBits.join(" and ")}`;
-      } else if (forBits.length) {
-        body = `${lead}, backed by ${withArticle(forBits)}`;
-      } else if (againstBits.length) {
-        body = `${lead}, against ${possessive(otherName)} ${againstBits.join(" and ")}`;
-      } else {
-        body = lead;
-      }
-      matchStoryParts.push(`${body}${travelClause}.`);
-    } else {
-      matchStoryParts.push(`Readiness ${was} level between the two sides — no directional lean.`);
-    }
-
-    const topBattle = m.keyBattles?.[0];
-    if (topBattle?.home_player_name && topBattle?.away_player_name) {
-      matchStoryParts.push(
-        `The ${topBattle.title} between ${topBattle.home_player_name} and ${topBattle.away_player_name} ${was} ${topBattle.battle_outcome_prediction ?? "closely matched"}.`
-      );
-    }
-
-    if (i?.predicted_home_goals != null && i?.predicted_away_goals != null) {
-      const confStr =
-        i.confidence_score != null
-          ? ` (confidence ${Math.round(i.confidence_score)}%${i.confidence_band ? `, ${i.confidence_band.toLowerCase()}` : ""})`
-          : "";
-      matchStoryParts.push(
-        `The model ${predicted} ${n1(i.predicted_home_goals)}–${n1(i.predicted_away_goals)}${confStr}.`
-      );
-    }
-
-    // Weather previously claimed a travel burden on every fixture for the same
-    // reason as above. It now only speaks when a real rest or travel gap exists.
-    if (m.weather?.temperature_c != null) {
-      const restGap =
-        i?.home_rest_days != null && i?.away_rest_days != null
-          ? i.home_rest_days - i.away_rest_days
-          : null;
-      const trip: number | null =
-        (m.travel?.away_trip_km ?? null) ?? i?.away_travel_distance_km ?? null;
-      const impact =
-        restGap != null && Math.abs(restGap) >= 3
-          ? `${favoured} the better-rested ${restGap > 0 ? homeName : awayName}`
-          : trip != null && trip >= 600
-            ? `${was} another burden on top of ${awayName}’s long trip`
-            : `${was} a neutral factor`;
-      matchStoryParts.push(
-        `Weather (${Math.round(m.weather.temperature_c)}°C${m.weather.weather_condition ? `, ${m.weather.weather_condition}` : ""}) ${impact}.`
-      );
-    }
-  }
-
-  // ── PERFORMANCE ZONES — summary stats explaining the zone-by-zone radar
-  // (full radar + advantage grid stays in Full Breakdown → Teams, unchanged) ──
-  const pc = m.performanceComparison;
-  const zones = pc ? [
-    { label: "Attack", adv: pc.attacking_advantage, home: pc.attacking_home_score, away: pc.attacking_away_score },
-    { label: "Defence", adv: pc.defensive_advantage, home: pc.defensive_home_score, away: pc.defensive_away_score },
-    { label: "Midfield", adv: pc.midfield_advantage, home: pc.midfield_home_score, away: pc.midfield_away_score },
-    { label: "Tactical", adv: pc.tactical_advantage, home: pc.tactical_home_score, away: pc.tactical_away_score },
-    { label: "Set piece", adv: pc.set_piece_advantage, home: pc.set_piece_home_score, away: pc.set_piece_away_score },
-    { label: "Form", adv: pc.form_advantage, home: pc.form_home_score, away: pc.form_away_score },
-  ].filter((z): z is { label: string; adv: number; home: number | null; away: number | null } => z.adv != null) : [];
-  const biggestZone = zones.length > 0 ? zones.reduce((a, b) => Math.abs(b.adv) > Math.abs(a.adv) ? b : a) : null;
-  const closestZone = zones.length > 0 ? zones.reduce((a, b) => Math.abs(b.adv) < Math.abs(a.adv) ? b : a) : null;
 
   // ── Standalone sections (no tabs) ──
   // Everything below used to be a tab body. The page is now one scroll:
@@ -236,36 +79,6 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         </span>
       )}
     </section>
-  ) : null;
-
-  const lineupSection = (homeLineup.length > 0 || awayLineup.length > 0) ? (
-    <section>
-      <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">
-        Predicted lineups
-      </h2>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {homeLineup.length > 0 && (
-          <div className="panel p-4"><PitchLineup team={m.home} players={homeLineup} /></div>
-        )}
-        {awayLineup.length > 0 && (
-          <div className="panel p-4"><PitchLineup team={m.away} players={awayLineup} /></div>
-        )}
-      </div>
-    </section>
-  ) : null;
-
-  const matchStory = matchStoryParts.length > 0 ? (
-    <Panel title="Match story">
-      <p className="text-[0.85rem] leading-relaxed text-text">{matchStoryParts.join(" ")}</p>
-      <div className="mono mt-3 flex gap-4 border-t border-line pt-3 text-[0.62rem]">
-        <Link href={`/team/${teamSlug(m.home)}`} className="text-muted transition-colors hover:text-amber">
-          View {homeName} profile →
-        </Link>
-        <Link href={`/team/${teamSlug(m.away)}`} className="text-muted transition-colors hover:text-amber">
-          View {awayName} profile →
-        </Link>
-      </div>
-    </Panel>
   ) : null;
 
   return (
@@ -354,7 +167,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
       {/* 2 — Pick badge */}
       {pickBand}
 
-      {/* 3 — Module report: consensus bar, data gaps, the full match report,
+      {/* 3 — Module report: consensus bar, the full match report, data gaps,
               then the verdict summary. Per-module cards were removed; the
               report carries the same readings without duplicating them. */}
       <ModuleReport
@@ -371,11 +184,8 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         }
       />
 
-      {/* 4 — Predicted lineups */}
-      {lineupSection}
-
-      {/* 5 — Match story */}
-      {matchStory}
+      {/* 4 — Unavailable players, when either side has records */}
+      <InjuryPanel match={m} />
 
     </div>
   );
