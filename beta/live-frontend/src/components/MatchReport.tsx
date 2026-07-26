@@ -102,7 +102,7 @@ function KeyValueTable({
       )}
       <tbody>
         {rows.map(([label, a, b], idx) => (
-          <tr key={`${label}-${idx}`} className="border-b border-line/60 last:border-0">
+          <tr key={`${label}-${idx}`} className="border-b border-line last:border-0">
             <td className="py-1.5 pr-3 align-top text-muted">{label}</td>
             <td className="mono py-1.5 pr-3 align-top text-text">{a}</td>
             {wide && <td className="mono py-1.5 align-top text-text">{b ?? ""}</td>}

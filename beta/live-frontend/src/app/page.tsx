@@ -1,5 +1,6 @@
 import { getBoard, getBettingCard } from "@/lib/queries";
 import Link from "next/link";
+import { ColumnKey } from "@/components/FeedTable";
 import {
   ModuleFeed,
   SortControl,
@@ -145,7 +146,11 @@ export default async function DashboardPage({
             </Link>
           </div>
         )}
-        <ModuleFeed entries={entries} viewer={viewer} sort={sort} />
+        <ColumnKey />
+
+        <div className="mt-3">
+          <ModuleFeed entries={entries} viewer={viewer} sort={sort} />
+        </div>
       </section>
     </div>
   );

@@ -8,6 +8,11 @@ const config: Config = {
         ink: "var(--ink)",
         panel: "var(--panel)",
         raised: "var(--raised)",
+        // NOTE: these are plain var() references, so Tailwind cannot inject an
+        // alpha channel. Opacity modifiers such as `border-line/70` compile to
+        // nothing and the element silently falls back to Tailwind's default
+        // border colour (#e5e7eb) — near-white on this theme. Use the bare
+        // class, or an inline color-mix(), instead of a slash modifier.
         line: "var(--line)",
         text: "var(--text)",
         muted: "var(--muted)",

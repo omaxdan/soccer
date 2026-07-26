@@ -30,7 +30,7 @@ import type { MatchRow } from "@/lib/types";
 import { canSee, type Tier } from "@/lib/tier";
 import { Crest } from "./Crest";
 import { kickoff } from "@/lib/intel";
-import { matchSlug, teamSlug } from "@/lib/slug";
+import { matchSlug } from "@/lib/slug";
 import type { FeedEntry } from "./ModuleFeed";
 
 const DASH = "–";
@@ -161,14 +161,45 @@ function TeamCell({ team, sub }: { team: MatchRow["home"]; sub: string }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5">
       <Crest team={team} size={16} />
-      <Link
-        href={`/team/${teamSlug(team)}`}
-        className="mono truncate text-[0.7rem] font-semibold text-text transition-colors hover:text-amber md:text-[0.78rem]"
-      >
+      <span className="mono truncate text-[0.7rem] font-semibold text-text md:text-[0.78rem]">
         {team.short_name || team.name}
-      </Link>
+      </span>
       <span className="mono ml-auto shrink-0 text-[0.55rem] text-faint">{sub}</span>
     </span>
+  );
+}
+
+/**
+ * Fills a cell with a link to the fixture, so the whole row is a target
+ * without any client JavaScript.
+ *
+ * Only the kickoff cell carries an accessible name; the rest are hidden from
+ * assistive tech and removed from the tab order. Otherwise a screen reader
+ * would announce thirty identical "Santos vs Chapecoense" links per fixture
+ * and the keyboard would need thirty tabs to cross one row.
+ */
+function CellLink({
+  href,
+  children,
+  label,
+  className = "",
+}: {
+  href: string;
+  children: React.ReactNode;
+  label?: string;
+  className?: string;
+}) {
+  const hidden = label == null;
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      aria-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
+      className={`block h-full w-full ${className}`}
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -183,6 +214,54 @@ function groupLabel(e: FeedEntry, by: FeedGrouping): string {
       month: "long",
     });
   return e.match.competition ?? e.match.tournament?.name ?? "Other";
+}
+
+/**
+ * Column key. Open by default so the abbreviations are discoverable without a
+ * hover — the <th> title attributes only help on a pointer device, and this
+ * table is designed for a phone first.
+ */
+export function ColumnKey() {
+  const swatch = (status: ModuleStatus, label: string) => {
+    const c = statusColor(status);
+    return (
+      <span key={label} className="inline-flex items-center gap-1">
+        <span
+          className="inline-block h-2 w-2 rounded-full"
+          style={{ background: `color-mix(in srgb, ${c} 55%, transparent)` }}
+          aria-hidden="true"
+        />
+        <span className="text-faint">{label}</span>
+      </span>
+    );
+  };
+  return (
+    <details open className="panel px-3 py-2">
+      <summary className="mono flex cursor-pointer list-none items-center gap-2 text-[0.6rem] uppercase tracking-[0.14em] text-muted [&::-webkit-details-marker]:hidden">
+        <span className="inline-block text-faint transition-transform [details[open]_&]:rotate-90">
+          ›
+        </span>
+        Column key
+      </summary>
+      <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+        {MODULES.map((def) => (
+          <li key={def.key} className="text-[0.6rem] leading-relaxed">
+            <span className="mono font-semibold text-text">{def.abbrev}</span>{" "}
+            <span className="text-muted">{def.name}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mono mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2 text-[0.58rem]">
+        {swatch("supports", "supports the pick")}
+        {swatch("neutral", "neutral")}
+        {swatch("contradicts", "contradicts the pick")}
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-line" aria-hidden="true" />
+          <span className="text-faint">did not fire</span>
+        </span>
+      </p>
+    </details>
+  );
 }
 
 export function FeedTable({
@@ -256,13 +335,16 @@ export function FeedTable({
               return (
                 <React.Fragment key={m.id}>
                   {/* Home row */}
-                  <tr className="border-t border-line/70 transition-colors hover:bg-raised">
+                  <tr className="border-t border-line transition-colors hover:bg-raised">
                     <td
                       rowSpan={2}
                       className={`${stickyBody} px-2 py-1.5 align-middle`}
                       style={{ left: 0, minWidth: TIME_W }}
                     >
-                      <Link href={`/match/${matchSlug(m)}`} className="block">
+                      <CellLink
+                        href={`/match/${matchSlug(m)}`}
+                        label={`${m.home.short_name || m.home.name} versus ${m.away.short_name || m.away.name}, ${k.day} ${k.time}`}
+                      >
                         <span className="mono block text-[0.65rem] text-faint">{k.day}</span>
                         <span className="mono tnum block text-[0.75rem] text-text">{k.time}</span>
                         <span
@@ -274,13 +356,15 @@ export function FeedTable({
                         >
                           {overall.label}
                         </span>
-                      </Link>
+                      </CellLink>
                     </td>
                     <td
                       className={`${stickyBody} px-2 py-1`}
                       style={{ left: TIME_W, minWidth: TEAM_W }}
                     >
-                      <TeamCell team={m.home} sub="H" />
+                      <CellLink href={`/match/${matchSlug(m)}`}>
+                        <TeamCell team={m.home} sub="H" />
+                      </CellLink>
                     </td>
                     {MODULES.map((def) => {
                       const r = byKey.get(def.key) ?? null;
@@ -294,7 +378,9 @@ export function FeedTable({
                           className="mono tnum px-1 py-1 text-center text-[0.68rem] md:text-[0.75rem]"
                           style={tint(r?.status ?? null, locked)}
                         >
-                          {locked ? DASH : c.home}
+                          <CellLink href={`/match/${matchSlug(m)}`}>
+                            {locked ? DASH : c.home}
+                          </CellLink>
                         </td>
                       );
                     })}
@@ -306,7 +392,9 @@ export function FeedTable({
                       className={`${stickyBody} px-2 py-1`}
                       style={{ left: TIME_W, minWidth: TEAM_W }}
                     >
-                      <TeamCell team={m.away} sub="A" />
+                      <CellLink href={`/match/${matchSlug(m)}`}>
+                        <TeamCell team={m.away} sub="A" />
+                      </CellLink>
                     </td>
                     {MODULES.filter((def) => cellFor(def, e).away !== null).map((def) => {
                       const r = byKey.get(def.key) ?? null;
@@ -318,7 +406,9 @@ export function FeedTable({
                           className="mono tnum px-1 py-1 text-center text-[0.68rem] md:text-[0.75rem]"
                           style={tint(r?.status ?? null, locked)}
                         >
-                          {locked ? DASH : (c.away as string)}
+                          <CellLink href={`/match/${matchSlug(m)}`}>
+                            {locked ? DASH : (c.away as string)}
+                          </CellLink>
                         </td>
                       );
                     })}
@@ -330,5 +420,92 @@ export function FeedTable({
         ))}
       </table>
     </div>
+  );
+}
+
+
+// ── Date navigation ──────────────────────────────────────
+// A strip rather than a dropdown: the days come from the fixtures actually
+// present, so it never offers an empty date, and one compact scrollable line
+// is less friction than opening a menu to change the thing this page is
+// organised around. Links, so it works without JavaScript and is shareable.
+
+export interface DayOption {
+  /** YYYY-MM-DD, the value carried in ?date= */
+  key: string;
+  label: string;
+  count: number;
+  isToday: boolean;
+}
+
+export function dayKeyOf(date: string | Date): string {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+export function buildDayOptions(entries: FeedEntry[]): DayOption[] {
+  const today = dayKeyOf(new Date());
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    const k = dayKeyOf(e.match.date);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, count]) => {
+      const d = new Date(`${key}T12:00:00`);
+      return {
+        key,
+        count,
+        isToday: key === today,
+        label:
+          key === today
+            ? "Today"
+            : d.toLocaleDateString(undefined, {
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+              }),
+      };
+    });
+}
+
+export function DateNav({
+  days,
+  active,
+  total,
+}: {
+  days: DayOption[];
+  active: string | null;
+  total: number;
+}) {
+  if (days.length <= 1) return null;
+  const chip = (href: string, label: string, count: number, on: boolean) => (
+    <Link
+      key={href}
+      href={href}
+      className="mono shrink-0 rounded-term px-2.5 py-1.5 text-[0.62rem] tracking-wide transition-colors"
+      style={{
+        color: on ? "var(--ink)" : "var(--muted)",
+        background: on ? "var(--amber)" : "transparent",
+        border: `1px solid ${on ? "var(--amber)" : "var(--line)"}`,
+      }}
+    >
+      {label}
+      <span className={`ml-1.5 tnum ${on ? "opacity-70" : "text-faint"}`}>{count}</span>
+    </Link>
+  );
+  return (
+    <nav
+      aria-label="Match day"
+      className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {chip("/matches", "All", total, active == null)}
+      {days.map((d) =>
+        chip(`/matches?date=${d.key}`, d.label, d.count, active === d.key)
+      )}
+    </nav>
   );
 }
