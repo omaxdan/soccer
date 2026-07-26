@@ -145,7 +145,7 @@ export function ModuleFeed({
       </div>
     );
   }
-  return <FeedTable entries={sortEntries(entries, sort)} viewer={viewer} sort={sort} />;
+  return <FeedTable entries={sortEntries(entries, sort)} viewer={viewer} groupBy="league" />;
 }
 
 // ── Sort control ─────────────────────────────────────────

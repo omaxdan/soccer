@@ -31,7 +31,7 @@ import { canSee, type Tier } from "@/lib/tier";
 import { Crest } from "./Crest";
 import { kickoff } from "@/lib/intel";
 import { matchSlug, teamSlug } from "@/lib/slug";
-import type { FeedEntry, FeedSort } from "./ModuleFeed";
+import type { FeedEntry } from "./ModuleFeed";
 
 const DASH = "–";
 
@@ -172,20 +172,37 @@ function TeamCell({ team, sub }: { team: MatchRow["home"]; sub: string }) {
   );
 }
 
+/** How the table breaks fixtures into sections. */
+export type FeedGrouping = "league" | "day";
+
+function groupLabel(e: FeedEntry, by: FeedGrouping): string {
+  if (by === "day")
+    return new Date(e.match.date).toLocaleDateString(undefined, {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  return e.match.competition ?? e.match.tournament?.name ?? "Other";
+}
+
 export function FeedTable({
   entries,
   viewer,
-  sort,
+  groupBy = "league",
+  maxHeight = "calc(100vh - 11rem)",
 }: {
   entries: FeedEntry[];
   viewer: Tier;
-  sort: FeedSort;
+  /** Board groups by competition; the schedule view groups by match day. */
+  groupBy?: FeedGrouping;
+  /** The wrapper must scroll vertically for the sticky head to do anything. */
+  maxHeight?: string;
 }) {
-  // Group by competition; ordering was already applied by the caller.
+  // Ordering was already applied by the caller; grouping preserves it.
   const groups = new Map<string, FeedEntry[]>();
   for (const e of entries) {
-    const league = e.match.competition ?? e.match.tournament?.name ?? "Other";
-    groups.set(league, [...(groups.get(league) ?? []), e]);
+    const key = groupLabel(e, groupBy);
+    groups.set(key, [...(groups.get(key) ?? []), e]);
   }
 
   const headCell =
@@ -193,7 +210,7 @@ export function FeedTable({
   const stickyBody = "sticky z-10 bg-panel";
 
   return (
-    <div className="panel max-h-[calc(100vh-11rem)] overflow-auto">
+    <div className="panel overflow-auto" style={{ maxHeight }}>
       <table className="w-full min-w-[54rem] border-collapse">
         <thead>
           <tr className="border-b border-line">
@@ -217,14 +234,14 @@ export function FeedTable({
           </tr>
         </thead>
 
-        {[...groups.entries()].map(([league, list]) => (
-          <tbody key={league}>
+        {[...groups.entries()].map(([label, list]) => (
+          <tbody key={label}>
             <tr>
               <td
                 colSpan={MODULES.length + 2}
                 className="mono border-y border-line bg-raised px-2 py-1 text-[0.6rem] uppercase tracking-[0.14em] text-muted"
               >
-                {league}
+                {label}
                 <span className="ml-2 tnum text-faint">{list.length}</span>
               </td>
             </tr>
