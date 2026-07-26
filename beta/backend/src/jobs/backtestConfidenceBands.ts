@@ -56,12 +56,36 @@ import {
  *   - readiness_history rows must satisfy snapshot_at < match_date.
  *   - no mode reads match_results except through the outcome evaluator.
  *
+ * THE RECONSTRUCTION CANNOT OUTGROW THE ARCHIVE — verified, do not retry
+ * ─────────────────────────────────────────────────────────────────────────
+ * team_match_snapshots.readiness_before is populated from readiness_history
+ * and is NULL wherever no archive row exists (processHistoricalContext.ts:524).
+ * That is correct: the replay can rebuild league position, points and form
+ * from results, but readiness needs the injury, congestion and travel state as
+ * it stood that day, and nothing recorded it. The replay declines to invent it.
+ *
+ * The consequence is structural. A full backfill was run — 160 groups, 1,999
+ * matches replayed, 4,436 snapshots written — and no_readiness stayed at
+ * exactly 1,587. The reconstruction is bounded by the same archive FROZEN
+ * reads from, so its whole justification (a larger population) cannot be
+ * realised: 329 against frozen's 325.
+ *
+ * Running the backfill again will not move it. The honest sample grows only
+ * forward, through archive:readiness. Frozen is the source; the reconstruction
+ * is a fidelity cross-check and nothing more.
+ *
  * Depends on: process:historical-context, archive:readiness.
  * DB-only. Idempotent.
  */
 
 const MIN_SAMPLE = Number(process.env.PT_MIN_SAMPLE ?? 200);
 const MIN_LIFT = Number(process.env.PT_MIN_LIFT ?? 1.05);
+/**
+ * Both bands in a pair must reach this before their ordering is testable.
+ * Below it, an out-of-order pair says nothing about the score.
+ */
+const MIN_MONOTONIC_SAMPLE = Number(process.env.PT_MIN_MONOTONIC_SAMPLE ?? 30);
+
 /** How stale a team_intelligence_history row may be and still be used. */
 const STALE_DAYS = Number(process.env.PT_BAND_STALE_DAYS ?? 14);
 
@@ -376,15 +400,46 @@ export async function backtestConfidenceBands() {
     );
   }
 
-  const nonMonotonic = frozenStats.some((s, i) => {
-    const next = frozenStats[i + 1];
-    return next && s.n > 0 && next.n > 0 && next.rate > s.rate;
-  });
-  if (nonMonotonic) {
+  // -- Monotonicity ----------------------------------------------------------
+  //
+  // An inversion only counts when the two bands can actually be told apart.
+  // The first version tested `n > 0`, which meant Strong at n=5 (0/5, interval
+  // 0.0-43.4) "inverted" against Moderate at 37.7 (26.6-50.3) — intervals that
+  // overlap across almost their whole range. That warning fired on every run
+  // and told the operator to withhold every rate, which is how a warning stops
+  // being read.
+  //
+  // Now a pair must both clear MIN_MONOTONIC_SAMPLE and have Wilson intervals
+  // that do not overlap. Bands too thin to judge are reported separately, as
+  // information rather than as an alarm.
+  const inversions: string[] = [];
+  const tooThin: string[] = [];
+  for (let i = 0; i < frozenStats.length - 1; i++) {
+    const hi = frozenStats[i];
+    const lo = frozenStats[i + 1];
+    if (hi.n < MIN_MONOTONIC_SAMPLE || lo.n < MIN_MONOTONIC_SAMPLE) {
+      if (hi.n > 0 && lo.n > 0 && lo.rate > hi.rate)
+        tooThin.push(`${hi.band}(n=${hi.n}) < ${lo.band}(n=${lo.n})`);
+      continue;
+    }
+    if (lo.rate > hi.rate && lo.ciLow > hi.ciHigh)
+      inversions.push(
+        `${hi.band} ${(hi.rate * 100).toFixed(1)}% [${hi.ciLow.toFixed(1)}-${hi.ciHigh.toFixed(1)}] ` +
+        `below ${lo.band} ${(lo.rate * 100).toFixed(1)}% [${lo.ciLow.toFixed(1)}-${lo.ciHigh.toFixed(1)}]`
+      );
+  }
+
+  if (inversions.length > 0) {
     logger.warn(
-      'Band ordering is not monotonic in the frozen population - a higher band ' +
-      'scored worse than the band below it. Either the sample is too small or the score ' +
-      'does not separate. Do not publish band rates until resolved.'
+      { inversions },
+      'Band ordering inverts on non-overlapping intervals - the score does not ' +
+      'separate these bands. Do not publish their rates until resolved.'
+    );
+  } else if (tooThin.length > 0) {
+    logger.info(
+      { pairs: tooThin, minSample: MIN_MONOTONIC_SAMPLE },
+      'Band pairs out of order but below the sample floor - not evidence of an ' +
+      'inversion, just too few matches to order them'
     );
   }
 
