@@ -18,18 +18,12 @@ import {
   derivePickSide,
   tally,
   overallVerdict,
-  statusColor,
-  MODULES,
   type ModuleKey,
   type ModuleReading,
-  type ModuleStatus,
 } from "@/lib/modules";
 import type { MatchRow, BankerSingle } from "@/lib/types";
-import { canSee, type Tier } from "@/lib/tier";
-import { Crest } from "./Crest";
-import { ModuleCard } from "./ModuleCard";
-import { kickoff } from "@/lib/intel";
-import { matchSlug, teamSlug } from "@/lib/slug";
+import type { Tier } from "@/lib/tier";
+import { FeedTable } from "./FeedTable";
 
 // ── Sorting ──────────────────────────────────────────────
 
@@ -122,133 +116,13 @@ function sortValue(e: FeedEntry, sort: FeedSort): number {
   return CONSENSUS_RANK[overallVerdict(tally(e.readings)).label] ?? 9;
 }
 
-// ── Pills ────────────────────────────────────────────────
-
-function pillStyle(status: ModuleStatus | null, locked: boolean) {
-  if (locked || status == null || status === "inactive") {
-    return {
-      color: "var(--faint)",
-      background: "color-mix(in srgb, var(--line) 50%, transparent)",
-      border: "1px solid transparent",
-    };
-  }
-  const c = statusColor(status);
-  return {
-    color: c,
-    background: `color-mix(in srgb, ${c} 15%, transparent)`,
-    border: `1px solid color-mix(in srgb, ${c} 35%, transparent)`,
-  };
-}
-
-function PillRow({
-  readings,
-  viewer,
-}: {
-  readings: ModuleReading[];
-  viewer: Tier;
-}) {
-  const byKey = new Map(readings.map((r) => [r.def.key, r]));
-  return (
-    <div className="flex flex-wrap gap-1" aria-label="Module status">
-      {MODULES.map((def) => {
-        const r = byKey.get(def.key) ?? null;
-        const locked = !canSee(def, viewer);
-        const fired = r != null && r.status !== "inactive";
-        return (
-          <span
-            key={def.key}
-            title={`M${def.n} ${def.name}${r ? ` — ${r.status}` : ""}`}
-            className="mono inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[7px] font-bold leading-none tracking-tight"
-            style={pillStyle(r?.status ?? null, locked)}
-          >
-            {fired && !locked ? def.abbrev : "—"}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Row ──────────────────────────────────────────────────
-
-function TeamLine({ team }: { team: MatchRow["home"] }) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <Crest team={team} size={20} />
-      <Link
-        href={`/team/${teamSlug(team)}`}
-        className="mono truncate text-[0.78rem] font-semibold text-text transition-colors hover:text-amber"
-      >
-        <span className="md:hidden">{team.short_name || team.name}</span>
-        <span className="hidden md:inline">{team.name}</span>
-      </Link>
-    </span>
-  );
-}
-
-export function ModuleFeedRow({
-  entry,
-  viewer,
-}: {
-  entry: FeedEntry;
-  viewer: Tier;
-}) {
-  const m = entry.match;
-  const t = tally(entry.readings);
-  const overall = overallVerdict(t);
-  const k = kickoff(m.date);
-  const active = entry.readings.filter((r) => r.status !== "inactive");
-
-  return (
-    <details className="panel group overflow-hidden transition-colors hover:bg-raised">
-      <summary className="flex cursor-pointer list-none flex-col gap-2 p-3 [&::-webkit-details-marker]:hidden">
-        {/* Kickoff + the two sides */}
-        <div className="flex items-start gap-3">
-          <span className="mono flex shrink-0 flex-col text-[0.7rem] leading-tight text-muted md:flex-row md:gap-1.5">
-            <span className="tnum text-text">{k.time}</span>
-            <span className="text-faint">{k.day}</span>
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-2.5">
-            <TeamLine team={m.home} />
-            <TeamLine team={m.away} />
-          </span>
-          <Link
-            href={`/match/${matchSlug(m)}`}
-            className="mono shrink-0 self-center rounded-term px-2 py-1 text-[0.58rem] tracking-widest text-faint transition-colors hover:text-amber"
-            aria-label="Open full match report"
-          >
-            REPORT
-          </Link>
-        </div>
-
-        {/* Pills + consensus */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <PillRow readings={entry.readings} viewer={viewer} />
-          <span
-            className="mono ml-auto shrink-0 rounded px-1.5 py-0.5 text-[0.58rem] font-bold tracking-widest"
-            style={{
-              color: overall.color,
-              background: `color-mix(in srgb, ${overall.color} 15%, transparent)`,
-            }}
-          >
-            {overall.label} · {t.supports}S {t.neutral}N {t.contradicts}C
-          </span>
-        </div>
-      </summary>
-
-      {/* Expanded module detail */}
-      <div className="border-t border-line p-3">
-        <div className="grid gap-3 lg:grid-cols-2">
-          {active.map((r) => (
-            <ModuleCard key={r.def.key} reading={r} viewer={viewer} />
-          ))}
-        </div>
-      </div>
-    </details>
-  );
-}
-
 // ── Feed ─────────────────────────────────────────────────
+// Rendering lives in FeedTable; this keeps the ordering so the sort means the
+// same thing for fixtures and for the groups they sit in.
+
+export function sortEntries(entries: FeedEntry[], sort: FeedSort): FeedEntry[] {
+  return [...entries].sort((a, b) => sortValue(a, sort) - sortValue(b, sort));
+}
 
 export function ModuleFeed({
   entries,
@@ -271,39 +145,7 @@ export function ModuleFeed({
       </div>
     );
   }
-
-  // Group by competition, then apply the chosen sort inside each group and to
-  // the groups themselves, so the ordering means the same thing at both levels.
-  const groups = new Map<string, FeedEntry[]>();
-  for (const e of entries) {
-    const league = e.match.competition ?? e.match.tournament?.name ?? "Other";
-    groups.set(league, [...(groups.get(league) ?? []), e]);
-  }
-
-  const ordered = [...groups.entries()]
-    .map(([league, list]) => ({
-      league,
-      list: [...list].sort((a, b) => sortValue(a, sort) - sortValue(b, sort)),
-    }))
-    .sort((a, b) => sortValue(a.list[0], sort) - sortValue(b.list[0], sort));
-
-  return (
-    <div className="space-y-5">
-      {ordered.map(({ league, list }) => (
-        <section key={league}>
-          <h3 className="mono mb-2 border-b border-line pb-1.5 text-[0.62rem] uppercase tracking-[0.14em] text-muted">
-            {league}
-            <span className="ml-2 tnum text-faint">{list.length}</span>
-          </h3>
-          <div className="space-y-2">
-            {list.map((e) => (
-              <ModuleFeedRow key={e.match.id} entry={e} viewer={viewer} />
-            ))}
-          </div>
-        </section>
-      ))}
-    </div>
-  );
+  return <FeedTable entries={sortEntries(entries, sort)} viewer={viewer} sort={sort} />;
 }
 
 // ── Sort control ─────────────────────────────────────────
