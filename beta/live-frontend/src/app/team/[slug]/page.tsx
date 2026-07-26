@@ -15,8 +15,24 @@ import { StatCell, FormString } from "@/components/Primitives";
 import { BarMeter } from "@/components/Meters";
 import { MatchCard } from "@/components/MatchCard";
 import { Collapsible } from "@/components/Collapsible";
-import { TeamModuleProfile } from "@/components/TeamModuleProfile";
-import { currentTier } from "@/lib/tier";
+import {
+  ExecutiveSummary,
+  KeyInsights,
+  Pillars,
+  MarketProfile,
+  DangerZone,
+  TacticalIdentity,
+} from "@/components/TeamBrief";
+import {
+  buildSummary,
+  buildBadges,
+  buildInsights,
+  buildPillars,
+  buildMarkets,
+  buildRisks,
+  buildIdentity,
+  type TeamBriefInput,
+} from "@/lib/teamBrief";
 import { InsightList, SignalGrid } from "@/components/PerformanceIntel";
 import { n0, n1, pct, km, money, dependencyVerdict, positionLabel, difficultyBand, pickTierByMatch } from "@/lib/intel";
 import { Explain } from "@/components/Explain";
@@ -41,6 +57,19 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
     intel, betting: bettingIntelRow, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility,
     strengthDashboard, strengthRatings, playingStyle, strengths, weaknesses, tacticalVariations, transferIntel, injuries,
   } = await getTeamIntel(team.id);
+
+  // Everything the brief needs, from the single fetch above. No new queries.
+  const brief: TeamBriefInput = {
+    teamName: team.short_name || team.name,
+    intel: intel ?? null,
+    formQuality: formQuality ?? null,
+    venue: venue ?? null,
+    momentum: momentum ?? null,
+    betting: (bettingIntelRow as any) ?? null,
+    goalDep: (goalDep as any) ?? null,
+    dashboard: (strengthDashboard as any) ?? null,
+    style: (playingStyle as any) ?? null,
+  };
   const [upcoming, seasonStats, difficulty, keyPlayers, recentForm, standing, bettingCard] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
@@ -82,179 +111,6 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   const topScorer = keyPlayers.find((p) => p.id === goalDep?.top_scorer_player_id);
 
   // ── PROFILE — the team's resume, told as one scrollable story ──
-  const profileTab = (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Panel title="Performance snapshot">
-          <BarRow label="Attack" value={strengthDashboard?.attack_rating ?? profile.quality.attack} color="var(--amber)" explain="attack_rating" />
-          <BarRow label="Midfield" value={strengthDashboard?.midfield_rating ?? null} color="var(--cool)" />
-          <BarRow label="Defence" value={strengthDashboard?.defense_rating ?? profile.quality.defence} color="var(--edge)" explain="defence_rating" />
-          <BarRow label="Set piece" value={strengthDashboard?.set_piece_rating ?? null} color="var(--warn)" />
-        </Panel>
-        <Panel title="Home vs away split">
-          <div className="grid grid-cols-3 items-center gap-y-2 text-center">
-            <span />
-            <span className="label-cap">Home</span>
-            <span className="label-cap">Away</span>
-            <span className="text-left text-[0.65rem] text-muted">PPG</span>
-            <span className="mono text-[0.8rem] font-semibold tnum">{n1(venue?.home_points_per_game)}</span>
-            <span className="mono text-[0.8rem] font-semibold tnum">{n1(venue?.away_points_per_game)}</span>
-            <span className="text-left text-[0.65rem] text-muted">Win%</span>
-            <span className="mono text-[0.8rem] font-semibold tnum" style={{ color: "var(--edge)" }}>{pct(venue?.home_win_pct)}</span>
-            <span className="mono text-[0.8rem] font-semibold tnum" style={{ color: "var(--cool)" }}>{pct(venue?.away_win_pct)}</span>
-            <span className="text-left text-[0.65rem] text-muted">Goal diff</span>
-            <span className="mono text-[0.8rem] text-faint">—</span>
-            <span className="mono text-[0.8rem] text-faint">—</span>
-          </div>
-          {venue?.venue_advantage_score != null && (
-            <p className="mono mt-3 border-t border-line pt-2.5 text-[0.65rem] text-muted">
-              Venue advantage <span className="text-text">{n0(venue.venue_advantage_score)}/100</span>
-            </p>
-          )}
-        </Panel>
-      </div>
-
-      {(playingStyle || strengths.length > 0 || weaknesses.length > 0) && (
-        <Panel title="Identity">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCell label="Playing style" value={playingStyle?.playing_style ?? "—"} />
-            <StatCell label="Formation" value={formation ?? "—"} />
-            <StatCell label="Passing style" value={playingStyle?.passing_style ?? "—"} />
-            <StatCell label="Possession" value={playingStyle?.possession_score != null ? n0(playingStyle.possession_score) : "—"} sub={playingStyle?.possession_score != null ? "/100" : undefined} />
-          </div>
-          {(strengths.length > 0 || weaknesses.length > 0) && (
-            <div className="mt-4 grid gap-4 border-t border-line pt-3 sm:grid-cols-2">
-              {strengths.length > 0 && (
-                <div>
-                  <p className="label-cap mb-2" style={{ color: "var(--edge)" }}>Strengths</p>
-                  <ul className="space-y-1.5">
-                    {strengths.slice(0, 4).map((s) => (
-                      <li key={s.strength_type} className="flex items-start gap-2 text-[0.78rem] leading-snug">
-                        <span className="text-edge">+</span>
-                        <span className="text-muted">{s.description ?? s.strength_type.replace(/_/g, " ").toLowerCase()}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {weaknesses.length > 0 && (
-                <div>
-                  <p className="label-cap mb-2" style={{ color: "var(--risk)" }}>Weaknesses</p>
-                  <ul className="space-y-1.5">
-                    {weaknesses.slice(0, 4).map((w) => (
-                      <li key={w.weakness_type} className="flex items-start gap-2 text-[0.78rem] leading-snug">
-                        <span className="text-risk">−</span>
-                        <span className="text-muted">{w.description ?? w.weakness_type.replace(/_/g, " ").toLowerCase()}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </Panel>
-      )}
-
-      {(last5.length > 0 || intel?.last_5_results) && (
-        <Panel title="Season story">
-          {intel?.last_5_results && (
-            <div className="mb-3 flex items-center justify-between">
-              <span className="label-cap">Last 5</span>
-              <FormString results={intel.last_5_results} />
-            </div>
-          )}
-          {last5.length > 0 && (
-            <ul className="space-y-1.5">
-              {last5.map((m, idx) => {
-                const resultColor = m.result === "W" ? "var(--edge)" : m.result === "L" ? "var(--risk)" : "var(--warn)";
-                return (
-                  <li key={idx} className="flex items-center gap-3 border-b border-line py-1.5 last:border-0">
-                    <span className="mono grid h-5 w-5 shrink-0 place-items-center rounded-[3px] text-[0.65rem] font-bold" style={{ color: resultColor, background: `color-mix(in srgb, ${resultColor} 16%, transparent)` }}>{m.result}</span>
-                    <span className="mono w-16 shrink-0 text-[0.62rem] text-faint">{new Date(m.match_date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                    <span className="mono text-[0.55rem] uppercase text-faint">{m.is_home == null ? "" : m.is_home ? "H" : "A"}</span>
-                    <span className="mono ml-auto text-[0.8rem] font-semibold tnum">{m.goals_for ?? "—"}–{m.goals_against ?? "—"}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {last5.length > 0 && (
-            <div className="mono mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[0.7rem] text-muted">
-              <span>BTTS <span className="text-text">{bttsKnown > 0 ? `${Math.round((bttsCount / bttsKnown) * 100)}%` : "—"}</span></span>
-              <span>Clean sheets <span className="text-text">{Math.round((cleanSheets / last5.length) * 100)}%</span></span>
-            </div>
-          )}
-        </Panel>
-      )}
-
-      {(keyPlayers.length > 0 || goalDep || injuries.length > 0) && (
-        <Panel title="Key players">
-          {keyPlayers.length > 0 && (
-            <ul className="space-y-2.5">
-              {keyPlayers.slice(0, 3).map((p) => (
-                <li key={p.id} className="flex items-center gap-3">
-                  <span className="mono w-6 shrink-0 text-center text-[0.7rem] text-faint tnum">{p.jersey_number ?? "—"}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[0.8rem] font-medium">{p.short_name ?? p.name}</span>
-                      {p.current_injury && <span className="mono shrink-0 rounded bg-risk/15 px-1.5 py-0.5 text-[0.55rem] font-semibold text-risk">OUT</span>}
-                    </div>
-                    <span className="mono text-[0.6rem] text-faint">{p.position ? positionLabel(p.position) : ""}</span>
-                  </div>
-                  <div className="w-20 shrink-0"><BarMeter value={p.importance_score} max={100} color="var(--amber)" height={6} /></div>
-                  <span className="mono w-7 shrink-0 text-right text-[0.72rem] font-semibold text-amber tnum">{n0(p.importance_score)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {goalDep && (
-            <div className="mono mt-3 flex items-center justify-between border-t border-line pt-3 text-[0.72rem] text-muted">
-              <span className="label-cap">Top scorer</span>
-              <span className="text-text">
-                {topScorer?.short_name ?? topScorer?.name ?? "—"} · {n0(goalDep.top_scorer_goals)}g ({pct(goalDep.top_scorer_pct)} of team goals)
-              </span>
-            </div>
-          )}
-          {injuries.length > 0 && (
-            <div className="mt-3 border-t border-line pt-3">
-              <p className="label-cap mb-2">Players out</p>
-              <ul className="space-y-1.5">
-                {injuries.slice(0, 5).map((p) => (
-                  <li key={p.player_id} className="flex items-center justify-between gap-2 text-[0.72rem]">
-                    <span className="truncate text-text">{p.short_name ?? p.name}</span>
-                    <span className="mono shrink-0 text-faint">
-                      {p.injury_reason ?? "—"}{p.expected_return_days != null ? ` · ~${p.expected_return_days}d return` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Panel>
-      )}
-
-      {intel && (
-        <Panel title="Context">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCell label="Readiness" value={n0(intel.readiness_score)} sub="/100" explain="readiness" />
-            <StatCell label="Rest days" value={intel.rest_days_avg != null ? `${n1(intel.rest_days_avg)}d` : "—"} />
-            <StatCell label="Travel load" value={km(intel.travel_load_km)} />
-            <StatCell label="Congestion" value={n0(intel.congestion_score)} />
-          </div>
-          {motivation && (
-            <div className="mono mt-3 flex items-center justify-between border-t border-line pt-3 text-[0.72rem]">
-              <span className="label-cap">Motivation</span>
-              <span className="font-semibold" style={{ color: motivationBandColor(motivation.motivation_band) }}>
-                {motivationBandLabel(motivation.motivation_band)}
-              </span>
-            </div>
-          )}
-        </Panel>
-      )}
-    </div>
-  );
-
-  // ── SCHEDULE ──
   const scheduleTab = (
     <div className="space-y-4">
       {upcoming.length > 0 ? (
@@ -329,66 +185,6 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
             <StatCell label="Travel 14d" value={km(intel.travel_load_km)} />
             <StatCell label="Congestion" value={n0(intel.congestion_score)} />
           </div>
-        </Panel>
-      )}
-    </div>
-  );
-
-  const bettingProfileTab = (
-    <div className="space-y-4">
-      <Panel title="Market reads">
-        <div className="space-y-3">
-          <MarketRow label="Winner market" read={profile.betting.winner} explain="winner_market_score" />
-          <MarketRow label="Goals market" read={profile.betting.goals} explain="goals_market_score" />
-          <MarketRow label="BTTS" read={profile.betting.btts} explain="btts_score" />
-          <MarketRow label="Cards" read={profile.betting.cards} explain="cards_market_score" />
-        </div>
-        <div className="mono mt-4 flex items-center justify-between border-t border-line pt-3 text-[0.7rem]">
-          <span className="text-muted">Predictability <span className="text-text">{profile.predictability}</span></span>
-          <span className="text-muted">Volatility <span className="text-text">{profile.volatility}</span></span>
-        </div>
-      </Panel>
-      <div className="grid grid-cols-2 gap-3">
-        <ScoreTile label="Attack efficiency" value={perf?.attackEfficiency ?? null} />
-        <ScoreTile label="Goal dependency" value={dep.pct != null ? Math.round(dep.pct) : null} invert suffix="%" subtitle={dep.label} />
-      </div>
-      {(profile.bettingIntel.finishing != null || profile.bettingIntel.shotAccuracy != null ||
-        profile.bettingIntel.conversion != null || profile.bettingIntel.bigChanceConversion != null ||
-        profile.bettingIntel.goalCreation != null) && (
-        <Panel title="Shot & finishing intelligence">
-          {profile.bettingIntel.finishing != null && <BarRow label="Finishing" value={profile.bettingIntel.finishing} color="var(--amber)" explain="finishing_efficiency" />}
-          {profile.bettingIntel.shotAccuracy != null && <BarRow label="Shot accuracy" value={profile.bettingIntel.shotAccuracy} color="var(--edge)" explain="shot_accuracy" />}
-          {profile.bettingIntel.conversion != null && <BarRow label="Conversion" value={profile.bettingIntel.conversion} color="var(--amber)" explain="shot_conversion_rate" />}
-          {profile.bettingIntel.bigChanceConversion != null && <BarRow label="Big chances" value={profile.bettingIntel.bigChanceConversion} color="var(--warn)" explain="big_chance_conversion" />}
-          {profile.bettingIntel.goalCreation != null && <BarRow label="Goal creation" value={profile.bettingIntel.goalCreation} color="var(--edge)" explain="goal_creation_score" />}
-        </Panel>
-      )}
-      {(profile.bettingIntel.goalPrevention != null || profile.bettingIntel.cleanSheet != null) && (
-        <Panel title="Goal prevention">
-          {profile.bettingIntel.goalPrevention != null && <BarRow label="Goal prevention" value={profile.bettingIntel.goalPrevention} color="var(--edge)" explain="goal_prevention_score" />}
-          {profile.bettingIntel.cleanSheet != null && <BarRow label="Clean sheet" value={profile.bettingIntel.cleanSheet} color="var(--edge)" explain="clean_sheet_reliability" />}
-        </Panel>
-      )}
-      {goalDep && (
-        <Panel title="Goal distribution" explain="goal_dependency">
-          <div className="mono grid grid-cols-3 gap-2 text-[0.7rem] text-muted">
-            <span>Total <span className="text-text">{n0(goalDep.total_goals)}</span></span>
-            <span>Top scorer <span className="text-text">{n0(goalDep.top_scorer_goals)}</span></span>
-            <span>Top-2 <span className="text-text">{pct(goalDep.top_2_scorers_pct)}</span></span>
-          </div>
-          {goalDep.top_scorer_no_backup && (
-            <p className="mono mt-2 rounded-term border border-risk/30 bg-risk/10 p-2 text-[0.7rem] text-risk">
-              One-man attack: no comparable backup if the top scorer misses.
-            </p>
-          )}
-        </Panel>
-      )}
-      {perf && perf.attack.length > 0 && <Panel title="Attacking intelligence"><InsightList insights={perf.attack} /></Panel>}
-      {perf && perf.defense.length > 0 && <Panel title="Defensive intelligence"><InsightList insights={perf.defense} /></Panel>}
-      {perf && perf.signals.length > 0 && (
-        <Panel title="Derived market signals">
-          <SignalGrid signals={perf.signals} />
-          <p className="mono mt-2 text-[0.55rem] text-faint">From season-long efficiency, not single-match form. Not betting advice.</p>
         </Panel>
       )}
     </div>
@@ -571,21 +367,37 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
         </div>
       </section>
 
-      {/* ── MODULE PROFILE — no tabs ────────────────────── */}
-      <TeamModuleProfile
-        ctx={{ intel, formQuality, venue, momentum }}
-        viewer={currentTier()}
-        teamName={team.short_name || team.name}
-      />
+      {/* ── 1 Executive summary ─────────────────────────── */}
+      <ExecutiveSummary summary={buildSummary(brief)} badges={buildBadges(brief)} />
 
-      <Collapsible title="Profile">{profileTab}</Collapsible>
+      {/* ── 2 Key insights — only those that fire ────────── */}
+      <KeyInsights insights={buildInsights(brief)} />
+
+      {/* ── 3 Three pillars ─────────────────────────────── */}
+      <Pillars pillars={buildPillars(brief)} />
+
+      {/* ── 4 Market profile ────────────────────────────── */}
+      <MarketProfile markets={buildMarkets(brief)} />
+
+      {/* ── 5 Danger zone ───────────────────────────────── */}
+      <DangerZone risks={buildRisks(brief)} />
+
+      {/* ── 6-8 Detail, below the decision ──────────────── */}
+      <Collapsible title="Recent form and momentum">{momentumTab}</Collapsible>
+      <Collapsible title="Performance deep dive">{formQualityTab}</Collapsible>
       <Collapsible title="Schedule">{scheduleTab}</Collapsible>
+
+      {/* ── 9 Identity ──────────────────────────────────── */}
+      <TacticalIdentity
+        rows={buildIdentity(brief)}
+        strengths={(strengths ?? []).map((x: any) => x.description).filter(Boolean)}
+        weaknesses={(weaknesses ?? []).map((x: any) => x.description).filter(Boolean)}
+      />
+      <Collapsible title="Tactical detail">{tacticalTab}</Collapsible>
+
+      {/* ── 10-11 Squad and transfers ───────────────────── */}
       <Collapsible title="Squad">{squadTab}</Collapsible>
-      <Collapsible title="Betting">{bettingProfileTab}</Collapsible>
-      <Collapsible title="Form quality">{formQualityTab}</Collapsible>
-      <Collapsible title="Tactical">{tacticalTab}</Collapsible>
       <Collapsible title="Transfers">{transferTab}</Collapsible>
-      <Collapsible title="Momentum">{momentumTab}</Collapsible>
     </div>
   );
 }

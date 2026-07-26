@@ -305,6 +305,7 @@ export interface TeamIntelligence {
   last_5_results: string | null;
   congestion_score: number | null;
   rest_days_avg: number | null;
+  travel_fatigue_score?: number | null;
   travel_load_km: number | null;
   squad_stability_score: number | null;
   injury_burden_score: number | null;
@@ -549,6 +550,7 @@ export interface TeamBettingIntelligence {
   volatility_score: number | null;
   predictability_score: number | null;
   sustainability_score: number | null;
+  sample_confidence: string | null;
   overperformance_score: number | null;
   underperformance_score: number | null;
   home_attack_rating: number | null;
