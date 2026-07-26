@@ -29,7 +29,7 @@ import {
  *                     injury     <- team_intelligence_history.injury_burden_score
  *                     congestion <- team_intelligence_history.congestion_score
  *                     stability  <- team_intelligence_history.squad_stability_score
- *                     travel     <- match_travel_intelligence (geography, time-invariant)
+ *                     travel     <- team_intelligence_history.travel_fatigue_score
  *                   That is 70 of 100 weight and 5 components, clearing
  *                   processDbOnly's >= 4 gate. Strength (20), venue (7) and
  *                   motivation (3) have no historical source anywhere and are
@@ -119,6 +119,7 @@ interface HistPoint {
   congestion: number | null;
   stability: number | null;
   readiness: number | null;
+  travelFatigue: number | null;
 }
 function latestBefore(list: HistPoint[] | undefined, beforeTs: number): HistPoint | null {
   if (!list || list.length === 0) return null;
@@ -158,7 +159,7 @@ export async function backtestConfidenceBands() {
   );
 
   // -- Load -----------------------------------------------------------------
-  const [matches, results, snaps, hist, travel, readyHist, intel] = await Promise.all([
+  const [matches, results, snaps, hist, readyHist, intel] = await Promise.all([
     fetchAllRows<any>(db.from('matches').select('id, home_team_id, away_team_id, date')),
     fetchAllRows<any>(
       db.from('match_results').select('match_id, home_score, away_score')
@@ -169,11 +170,7 @@ export async function backtestConfidenceBands() {
     ),
     fetchAllRows<any>(
       db.from('team_intelligence_history')
-        .select('team_id, snapshot_date, injury_burden_score, congestion_score, squad_stability_score, readiness_score')
-    ),
-    fetchAllRows<any>(
-      db.from('match_travel_intelligence')
-        .select('match_id, home_team_distance_km, away_team_distance_km')
+        .select('team_id, snapshot_date, injury_burden_score, congestion_score, squad_stability_score, readiness_score, travel_fatigue_score')
     ),
     fetchAllRows<any>(
       db.from('readiness_history')
@@ -189,7 +186,6 @@ export async function backtestConfidenceBands() {
 
   const matchById = new Map<number, any>(matches.map((m: any) => [m.id, m]));
   const snapByKey = new Map<string, any>(snaps.map((s: any) => [`${s.match_id}:${s.team_id}`, s]));
-  const travelByMatch = new Map<number, any>(travel.map((t: any) => [t.match_id, t]));
   const intelByMatch = new Map<number, any>(intel.map((i: any) => [i.match_id, i]));
 
   const histByTeam = new Map<number, HistPoint[]>();
@@ -201,6 +197,7 @@ export async function backtestConfidenceBands() {
       congestion: nOrNull(h.congestion_score),
       stability: nOrNull(h.squad_stability_score),
       readiness: nOrNull(h.readiness_score),
+      travelFatigue: nOrNull(h.travel_fatigue_score),
     });
     histByTeam.set(h.team_id, list);
   }
@@ -238,10 +235,6 @@ export async function backtestConfidenceBands() {
     if (!pick) { rejected.no_pick++; continue; }
     const pickSign: 1 | -1 = hReady - aReady >= 0 ? 1 : -1;
 
-    const tv = travelByMatch.get(m.id);
-    const homeKm = nOrNull(tv?.home_team_distance_km);
-    const awayKm = nOrNull(tv?.away_team_distance_km);
-
     // Each gap signed toward HOME. Sign conventions mirror processDbOnly:
     // an opponent's burden helps you, so injury/congestion are away-minus-home.
     const gaps: Partial<Record<ComponentKey, number | null>> = {
@@ -251,7 +244,13 @@ export async function backtestConfidenceBands() {
       congestion_gap:
         hHist.congestion != null && aHist.congestion != null
           ? aHist.congestion - hHist.congestion : null,
-      travel_gap: homeKm != null && awayKm != null ? awayKm - homeKm : null,
+      // Cumulative fatigue, matching the live blend. The distance columns are
+      // deliberately not read here: they describe the trip to this venue, not
+      // the load the side is carrying into it.
+      travel_gap:
+        hHist.travelFatigue != null && aHist.travelFatigue != null
+          ? aHist.travelFatigue - hHist.travelFatigue
+          : null,
       stability_gap:
         hHist.stability != null && aHist.stability != null
           ? hHist.stability - aHist.stability : null,

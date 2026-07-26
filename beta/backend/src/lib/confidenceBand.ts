@@ -98,10 +98,13 @@ export const BAND_COMPONENTS: BandComponentSpec[] = [
     archivedSource: 'team_intelligence_history.congestion_score',
   },
   {
-    key: 'travel_gap', label: 'Travel gap (km)', saturation: 1500, weight: 10,
-    // Stadium-to-stadium distance is geography, not form. It does not move
-    // with results, so reading it retrospectively is not leakage.
-    archivedSource: 'match_travel_intelligence.home/away_team_distance_km',
+    key: 'travel_gap', label: 'Travel gap (cumulative fatigue)', saturation: 40, weight: 10,
+    // Was match_travel_intelligence distance-to-this-venue at saturation 1500.
+    // That column forces a true home match to 0 by design, so it described the
+    // trip rather than the fatigue, and a home side fresh off two away trips
+    // scored as untravelled. Now the same cumulative figure readiness uses.
+    // Saturation follows the unit change from kilometres to a 0-100 score.
+    archivedSource: 'team_intelligence_history.travel_fatigue_score',
   },
   {
     key: 'stability_gap', label: 'Squad stability gap', saturation: 40, weight: 5,

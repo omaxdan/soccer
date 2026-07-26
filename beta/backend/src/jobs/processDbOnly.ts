@@ -1,6 +1,5 @@
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
-import { computeTravelFatigue, type Trip } from '../lib/travelFatigue';
 import { isTrackedBySlug, isTrackedLeague } from '../config/trackedLeagues';
 import { computeMatchSignals, MatchSignalInput } from '../lib/signalLogic';
 // BETA: pagination helper moved to db/fetchAllRows and now ALWAYS orders
@@ -668,23 +667,23 @@ export async function processTeamTravelLoad(): Promise<{
     // replaces the old "distance from registered home location to away
     // venue" calculation — it no longer even needs team_locations to
     // detect a trip, only where each of the team's own matches was played.
-    interface MatchAppearance { date: Date; venueId: number; isAway: boolean }
+    interface MatchAppearance { date: Date; venueId: number }
     const teamMatchLog = new Map<number, MatchAppearance[]>();
 
     for (const m of windowMatches || []) {
       if (!m.venue_id) continue; // edge case: no venue on the match — location unknowable, skip
-      const when = new Date(m.date);
+      const entry: MatchAppearance = { date: new Date(m.date), venueId: m.venue_id };
       if (m.home_team_id) {
         if (!teamMatchLog.has(m.home_team_id)) teamMatchLog.set(m.home_team_id, []);
-        teamMatchLog.get(m.home_team_id)!.push({ date: when, venueId: m.venue_id, isAway: false });
+        teamMatchLog.get(m.home_team_id)!.push(entry);
       }
       if (m.away_team_id) {
         if (!teamMatchLog.has(m.away_team_id)) teamMatchLog.set(m.away_team_id, []);
-        teamMatchLog.get(m.away_team_id)!.push({ date: when, venueId: m.venue_id, isAway: true });
+        teamMatchLog.get(m.away_team_id)!.push(entry);
       }
     }
 
-    type TripRecord = Trip;
+    interface TripRecord { date: Date; km: number }
     const teamTrips = new Map<number, TripRecord[]>();
 
     for (const [teamId, appearances] of teamMatchLog) {
@@ -717,7 +716,7 @@ export async function processTeamTravelLoad(): Promise<{
           // a move to/from a neutral venue.
           const km = haversineKm(prevVenueCoord.lat, prevVenueCoord.lng, venueCoord.lat, venueCoord.lng);
           if (!teamTrips.has(teamId)) teamTrips.set(teamId, []);
-          teamTrips.get(teamId)!.push({ date: app.date, km, isAway: app.isAway });
+          teamTrips.get(teamId)!.push({ date: app.date, km });
         }
         // else: same venue as last time (e.g. two home games in a row) — no trip.
 
@@ -746,17 +745,32 @@ export async function processTeamTravelLoad(): Promise<{
         ? Math.round(allKms.reduce((s, k) => s + k, 0) / allKms.length)
         : 0;
 
-      // ── Travel fatigue — cumulative and time-decayed ─────────────────────
-      // Was: 100 - band(average trip distance over 14 days). That treated one
-      // 900 km trip and four 900 km trips as identical, ignored the km totals
-      // it had just computed, and dropped a trip's weight to zero the moment
-      // it aged out of the window rather than decaying it.
+      // ── Travel score per spec formula (section 4) ────────────────────────
+      // Spec's "Travel Score" is GOOD-HIGH (100 = short trip, 25 = very long
+      // trip) using the average trip distance over the last 14 days.
       //
-      // Now: decayed sum of every trip in the window plus recovery, run and
-      // turnaround modifiers. Polarity is unchanged — higher is still worse,
-      // matching congestion_score and what the frontend already renders.
-      const fatigue = computeTravelFatigue(trips30, today);
-      const travelFatigueScore = fatigue.score; // competition modifier applied in post-loop pass
+      // Our team_travel_load.travel_fatigue_score column is BAD-HIGH for
+      // consistency with team_fixture_load.congestion_score elsewhere in the
+      // codebase (frontend already renders both as "higher = worse, amber/red").
+      // So we compute spec's Travel Score, then invert: fatigue = 100 - score.
+      // The active-competition modifier in the spec subtracts from the GOOD
+      // score, which is equivalent to ADDING to our BAD-HIGH fatigue score.
+      const avgKm14 = trips14.length
+        ? Math.round(trips14.reduce((s, t) => s + t.km, 0) / trips14.length)
+        : 0;
+
+      let specTravelScore: number;
+      if      (avgKm14 <= 100)  specTravelScore = 100;
+      else if (avgKm14 <= 300)  specTravelScore = 90;
+      else if (avgKm14 <= 600)  specTravelScore = 80;
+      else if (avgKm14 <= 1000) specTravelScore = 65;
+      else if (avgKm14 <= 2000) specTravelScore = 45;
+      else                      specTravelScore = 25;
+
+      // Competition modifier applied after band lookup (per spec section 4).
+      // active_competitions for this team — filled in below via post-loop pass
+      // (matches the same 90-day lookback used in congestion + team_intelligence).
+      const travelFatigueScore = 100 - specTravelScore; // competition modifier applied in post-loop pass
 
       // NOTE: the away_matches_last_*_days columns (schema name unchanged —
       // no migration for this) now count TRIPS detected by venue change,
@@ -2023,9 +2037,10 @@ export async function processMatchIntelligencePartial(opts?: {
       // Congestion / Travel: own team, inverted to good-high
       const homeCongestionGood = homeCongestionRaw !== null ? 100 - homeCongestionRaw : null;
       const awayCongestionGood = awayCongestionRaw !== null ? 100 - awayCongestionRaw : null;
-      // Raw cumulative fatigue (bad-high) kept alongside the inverted
-      // good-high form, because readiness wants the inverted value and the
-      // confidence blend wants the raw gap.
+      // Raw cumulative fatigue (bad-high, from team_travel_load via
+      // team_intelligence) kept alongside the inverted good-high form:
+      // readiness wants the inverted value, the confidence blend below wants
+      // the raw gap. Same source for both, so they can no longer disagree.
       const homeTravelFatigue = homeIntel?.travel_fatigue_score ?? null;
       const awayTravelFatigue = awayIntel?.travel_fatigue_score ?? null;
       const homeTravelGood = homeTravelFatigue !== null ? 100 - homeTravelFatigue : null;
@@ -2128,22 +2143,28 @@ export async function processMatchIntelligencePartial(opts?: {
             [(homeOwnStrength !== null && awayOwnStrength !== null) ? homeOwnStrength - awayOwnStrength : null, 30, 20], // strength gap
             [(homeInjury !== null && awayInjury !== null) ? awayInjury - homeInjury : null, 40, 15], // injury gap (opponent's burden helps)
             [(homeCongRaw !== null && awayCongRaw !== null) ? awayCongRaw - homeCongRaw : null, 50, 10], // congestion gap
-            // Travel gap — cumulative fatigue, not this fixture's trip.
+            // BUG FIX — travel gap now reads CUMULATIVE fatigue, not this
+            // fixture's trip.
             //
-            // Was: awayKm - homeKm from match_travel_intelligence, where a
-            // true home match forces homeKm to 0 by design. A side playing at
-            // home after two long away trips therefore contributed a travel
-            // edge in its own favour, because the column only ever described
-            // the journey to THIS venue. Readiness already used the cumulative
-            // score (weight 15); the confidence blend did not, so the two
-            // disagreed about the same team on the same fixture.
+            // Was: awayKm - homeKm from match_travel_intelligence. That column
+            // is correct for what it means (distance to THIS venue) and forces
+            // a true home match to exactly 0 by design — but it is not a
+            // fatigue measure. A side playing at home after two long away trips
+            // contributed a travel edge in its OWN favour, while readiness
+            // (weight 15, a few lines above) was already reading the cumulative
+            // score. The two disagreed about the same team on the same fixture.
             //
-            // Now: the decayed fatigue gap. Saturation drops 1500 -> 40
-            // because the units changed from kilometres to a 0-100 score;
-            // leaving it at 1500 would have flattened the component to zero.
+            // Now: awayTravelFatigue - homeTravelFatigue, the same
+            // team_travel_load -> team_intelligence value readiness consumes.
+            //
+            // SATURATION 1500 -> 40 is a unit conversion, not a tuning change.
+            // The input moved from kilometres to a 0-100 score; at 1500 a full
+            // 100-point fatigue gap would clamp to an edge of 0.067 and the
+            // component would contribute essentially nothing. 40 keeps the
+            // component's reach comparable to the km version it replaces.
             [(homeTravelFatigue !== null && awayTravelFatigue !== null)
               ? awayTravelFatigue - homeTravelFatigue
-              : null, 40, 10],                                                                       // travel gap (fatigue)
+              : null, 40, 10],                                                                        // travel gap (cumulative fatigue)
             [(homeStability !== null && awayStability !== null) ? homeStability - awayStability : null, 40, 5], // stability gap
             [(homeVenueAdv !== null && awayVenueAdv !== null) ? homeVenueAdv - awayVenueAdv : null, 40, 7],     // venue gap
             [homeMotivation - awayMotivation, 20, 3],                                                // motivation proxy
