@@ -1,6 +1,11 @@
 import { getBoard, getBettingCard } from "@/lib/queries";
 import Link from "next/link";
-import { ColumnKey } from "@/components/FeedTable";
+import {
+  ColumnKey,
+  DateNav,
+  buildDayOptions,
+  dayKeyOf,
+} from "@/components/FeedTable";
 import {
   ModuleFeed,
   SortControl,
@@ -23,9 +28,10 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ module?: string; sort?: string }>;
+  searchParams: Promise<{ module?: string; sort?: string; date?: string }>;
 }) {
-  const [{ module: moduleParam, sort: sortParam }, matches, bettingCard] = await Promise.all([
+  const [{ module: moduleParam, sort: sortParam, date: dateParam }, matches, bettingCard] =
+    await Promise.all([
     searchParams,
     getBoard(24),
     getBettingCard(),
@@ -36,7 +42,13 @@ export default async function DashboardPage({
   const focus = moduleFromSlug(moduleParam);
   const sort = parseSort(sortParam);
   const allEntries = buildFeed(matches, bettingCard.singles);
-  const entries = filterFeed(allEntries, focus?.key ?? null);
+  const dayOptions = buildDayOptions(allEntries);
+  const activeDay =
+    dateParam && dayOptions.some((d) => d.key === dateParam) ? dateParam : null;
+  const dayFiltered = activeDay
+    ? allEntries.filter((e) => dayKeyOf(e.match.date) === activeDay)
+    : allEntries;
+  const entries = filterFeed(dayFiltered, focus?.key ?? null);
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -146,7 +158,17 @@ export default async function DashboardPage({
             </Link>
           </div>
         )}
-        <ColumnKey />
+        <DateNav
+          days={dayOptions}
+          active={activeDay}
+          total={allEntries.length}
+          basePath="/"
+          extraParams={{ sort, ...(moduleParam ? { module: moduleParam } : {}) }}
+        />
+
+        <div className="mt-3">
+          <ColumnKey />
+        </div>
 
         <div className="mt-3">
           <ModuleFeed entries={entries} viewer={viewer} sort={sort} />

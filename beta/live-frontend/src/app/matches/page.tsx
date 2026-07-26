@@ -19,9 +19,12 @@ export default async function FixturesPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
+  // Three days back, four forward — the strip needs past days to navigate to,
+  // and getBoard is forward-only unless given a window. Limit is raised to
+  // cover a full week rather than truncating mid-Saturday.
   const [{ date: dateParam }, matches] = await Promise.all([
     searchParams,
-    getBoard(40),
+    getBoard(300, { daysBack: 3, daysForward: 3 }),
   ]);
   const viewer = currentTier();
 

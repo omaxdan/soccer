@@ -42,7 +42,22 @@ function normTournament(t: any): import("./types").TournamentLite | null {
 }
 
 // ── Board: upcoming matches with attached intelligence ───
-export async function getBoard(limit = 24): Promise<MatchRow[]> {
+export interface BoardWindow {
+  /** Days before today to include. 0 = upcoming only, the board default. */
+  daysBack?: number;
+  /** Days after today to include. Omit for no forward bound. */
+  daysForward?: number;
+}
+
+/**
+ * `window` widens the fetch beyond the default "kickoff from three hours ago
+ * onward". The schedule view needs past days for its date strip; without a
+ * lower bound there is nothing behind today to navigate to.
+ */
+export async function getBoard(
+  limit = 24,
+  window?: BoardWindow
+): Promise<MatchRow[]> {
   const client = db();
   if (!client)
     return sortBoard(
@@ -53,8 +68,15 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
       }))
     );
 
-  const nowIso = new Date(Date.now() - 3 * 36e5).toISOString();
-  const { data: matches, error } = await client
+  const DAY = 86_400_000;
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const fromIso =
+    window?.daysBack != null
+      ? new Date(midnight.getTime() - window.daysBack * DAY).toISOString()
+      : new Date(Date.now() - 3 * 36e5).toISOString();
+
+  let query = client
     .from("matches")
     .select(
       `id, external_match_id, date, status, competition,
@@ -62,7 +84,16 @@ export async function getBoard(limit = 24): Promise<MatchRow[]> {
        home:teams!matches_home_team_id_fkey(${TEAM_COLS}),
        away:teams!matches_away_team_id_fkey(${TEAM_COLS})`
     )
-    .gte("date", nowIso)
+    .gte("date", fromIso);
+
+  if (window?.daysForward != null) {
+    query = query.lt(
+      "date",
+      new Date(midnight.getTime() + (window.daysForward + 1) * DAY).toISOString()
+    );
+  }
+
+  const { data: matches, error } = await query
     .order("date", { ascending: true })
     .limit(limit);
 

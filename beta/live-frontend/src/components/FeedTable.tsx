@@ -476,12 +476,23 @@ export function DateNav({
   days,
   active,
   total,
+  basePath = "/matches",
+  extraParams = {},
 }: {
   days: DayOption[];
   active: string | null;
   total: number;
+  basePath?: string;
+  /** Carried through every chip so ?sort= and ?module= survive a date change. */
+  extraParams?: Record<string, string>;
 }) {
-  if (days.length <= 1) return null;
+  if (days.length === 0) return null;
+  const hrefFor = (date?: string) => {
+    const qs = new URLSearchParams(extraParams);
+    if (date) qs.set("date", date);
+    const q = qs.toString();
+    return q ? `${basePath}?${q}` : basePath;
+  };
   const chip = (href: string, label: string, count: number, on: boolean) => (
     <Link
       key={href}
@@ -502,10 +513,8 @@ export function DateNav({
       aria-label="Match day"
       className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      {chip("/matches", "All", total, active == null)}
-      {days.map((d) =>
-        chip(`/matches?date=${d.key}`, d.label, d.count, active === d.key)
-      )}
+      {chip(hrefFor(), "All", total, active == null)}
+      {days.map((d) => chip(hrefFor(d.key), d.label, d.count, active === d.key))}
     </nav>
   );
 }
