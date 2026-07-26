@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getBandBacktests } from "@/lib/queries";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs } from "@/lib/queries";
@@ -50,7 +51,8 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
   // Modules are evaluated once and shared with <ModuleReport />, which passes
   // the readings on to <MatchReport />.
-  const moduleReadings = buildMatchReadings(m, scoringProbs);
+  const bandBacktests = await getBandBacktests();
+  const moduleReadings = buildMatchReadings(m, scoringProbs, null, bandBacktests);
 
   // ── Standalone sections (no tabs) ──
   // Everything below used to be a tab body. The page is now one scroll:

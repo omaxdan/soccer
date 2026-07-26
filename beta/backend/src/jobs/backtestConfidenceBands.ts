@@ -337,7 +337,7 @@ export async function backtestConfidenceBands() {
   const recStats = summarise(reconstructed);
   const frozenStats = summarise(frozen);
   const curStats = summarise(current);
-  const frozenBy = new Map(frozenStats.map(s => [s.band, s]));
+  const recBy = new Map(recStats.map(s => [s.band, s]));
   const curBy = new Map(curStats.map(s => [s.band, s]));
 
   logger.info(
@@ -351,34 +351,38 @@ export async function backtestConfidenceBands() {
     'Confidence band backtest: populations built'
   );
 
-  for (const s of recStats) {
-    const c = curBy.get(s.band);
-    const f = frozenBy.get(s.band);
+  for (const f of frozenStats) {
+    const c = curBy.get(f.band);
+    const r = recBy.get(f.band);
     logger.info(
       {
-        band: s.band,
-        reconstructed_n: s.n,
-        reconstructed_pct: (s.rate * 100).toFixed(1),
-        reconstructed_ci: s.n > 0 ? `${s.ciLow.toFixed(1)}-${s.ciHigh.toFixed(1)}` : '-',
-        frozen_n: f?.n ?? 0,
-        frozen_pct: f && f.n > 0 ? (f.rate * 100).toFixed(1) : '-',
+        band: f.band,
+        // FROZEN first and its lift/calibrated reported, because frozen is what
+        // gets persisted. The log previously led with the reconstruction and
+        // reported its lift beside a stored row that came from frozen.
+        frozen_n: f.n,
+        frozen_pct: f.n > 0 ? (f.rate * 100).toFixed(1) : '-',
+        frozen_ci: f.n > 0 ? `${f.ciLow.toFixed(1)}-${f.ciHigh.toFixed(1)}` : '-',
+        lift: f.lift.toFixed(3),
+        calibrated: f.calibrated,
+        stored: true,
+        reconstructed_n: r?.n ?? 0,
+        reconstructed_pct: r && r.n > 0 ? (r.rate * 100).toFixed(1) : '-',
         current_n: c?.n ?? 0,
         current_pct: c && c.n > 0 ? (c.rate * 100).toFixed(1) : '-',
-        leakage_delta_pts: c && c.n > 0 ? ((c.rate - s.rate) * 100).toFixed(1) : '-',
-        lift: s.lift.toFixed(3),
-        calibrated: s.calibrated,
+        leakage_delta_pts: c && c.n > 0 ? ((c.rate - f.rate) * 100).toFixed(1) : '-',
       },
-      'Confidence band: reconstructed vs frozen vs current'
+      'Confidence band: frozen (stored) vs reconstructed vs current'
     );
   }
 
-  const nonMonotonic = recStats.some((s, i) => {
-    const next = recStats[i + 1];
+  const nonMonotonic = frozenStats.some((s, i) => {
+    const next = frozenStats[i + 1];
     return next && s.n > 0 && next.n > 0 && next.rate > s.rate;
   });
   if (nonMonotonic) {
     logger.warn(
-      'Band ordering is not monotonic in the reconstructed population - a higher band ' +
+      'Band ordering is not monotonic in the frozen population - a higher band ' +
       'scored worse than the band below it. Either the sample is too small or the score ' +
       'does not separate. Do not publish band rates until resolved.'
     );

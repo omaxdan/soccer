@@ -949,3 +949,54 @@ export async function getModuleViewCounts(
   );
 }
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Measured confidence bands
+//
+// backtest:bands writes one row per band to signal_backtests. Reading them
+// here means the UI tracks the backtest instead of carrying a copy that goes
+// stale the moment the job runs again — the 1,893-match table sat in the
+// module registry for weeks after it was known to be wrong.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BandBacktest {
+  band: string;
+  rate: number;
+  sample: number;
+  lift: number;
+  isCalibrated: boolean;
+  evaluatedAt: string | null;
+}
+
+export async function getBandBacktests(): Promise<Record<string, BandBacktest>> {
+  const client = db();
+  if (!client) return {};
+  try {
+    const { data, error } = await client
+      .from("signal_backtests")
+      .select("rule_key, sample_size, hit_rate, lift, is_calibrated, evaluated_at")
+      .eq("market", "PICK_STRICT");
+    if (error || !data) return {};
+    const out: Record<string, BandBacktest> = {};
+    for (const r of data as any[]) {
+      const m = /^CBAND_(.+)$/.exec(r.rule_key ?? "");
+      if (!m) continue;
+      const band = m[1].charAt(0) + m[1].slice(1).toLowerCase();
+      // A band with no matches behind it carries no rate. Publishing 0.0% on
+      // n=0 would read as "never happens" rather than "never measured".
+      if (!r.sample_size || r.sample_size <= 0) continue;
+      out[band] = {
+        band,
+        rate: Number(r.hit_rate) * 100,
+        sample: Number(r.sample_size),
+        lift: Number(r.lift),
+        isCalibrated: r.is_calibrated === true,
+        evaluatedAt: r.evaluated_at ?? null,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}

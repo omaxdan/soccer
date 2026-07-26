@@ -50,7 +50,8 @@ export function matchTeamSides(match: MatchRow): MatchTeamSides {
 export function buildMatchReadings(
   match: MatchRow,
   scoring?: MatchScoringProbabilities | null,
-  leagueGap?: LeagueGapSummary | null
+  leagueGap?: LeagueGapSummary | null,
+  bandBacktests?: Record<string, { rate: number; sample: number; isCalibrated: boolean }> | null
 ): ModuleReading[] {
   return evaluateAllMatchModules(
     {
@@ -59,6 +60,7 @@ export function buildMatchReadings(
       scoring: scoring ?? match.scoring ?? null,
       leagueGap,
       travel: match.travel ?? null,
+      bandBacktests: bandBacktests ?? null,
     },
     matchTeamSides(match)
   );

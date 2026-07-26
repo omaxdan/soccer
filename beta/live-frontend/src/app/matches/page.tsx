@@ -1,4 +1,4 @@
-import { getBoard } from "@/lib/queries";
+import { getBoard, getBandBacktests } from "@/lib/queries";
 import { buildFeed, sortEntries } from "@/components/ModuleFeed";
 import {
   FeedTable,
@@ -27,13 +27,14 @@ export default async function FixturesPage({
     getBoard(300, { daysBack: 3, daysForward: 3 }),
   ]);
   const viewer = currentTier();
+  const bandBacktests = await getBandBacktests();
 
   // Same grid the board uses, grouped by match day instead of competition —
   // this page's job is the schedule, so kickoff order is fixed rather than
   // offered as a sort. No betting card is fetched: the card only ever back-
   // filled a missing form_index, and getBoard now carries team_intelligence
   // in full.
-  const all = sortEntries(buildFeed(matches, []), "kickoff");
+  const all = sortEntries(buildFeed(matches, [], bandBacktests), "kickoff");
   const dayOptions = buildDayOptions(all);
   // Only honour ?date= when that day actually has fixtures, so a stale link
   // shows the full schedule rather than an empty table.

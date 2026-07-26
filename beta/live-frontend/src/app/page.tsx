@@ -1,4 +1,4 @@
-import { getBoard, getBettingCard } from "@/lib/queries";
+import { getBoard, getBettingCard, getBandBacktests } from "@/lib/queries";
 import Link from "next/link";
 import {
   ColumnKey,
@@ -36,12 +36,13 @@ export default async function DashboardPage({
     getBoard(24),
     getBettingCard(),
   ]);
+  const bandBacktests = await getBandBacktests();
   const viewer = currentTier();
 
   // ?module=m5 — set by the VIEW ACTIVATIONS links in the module directory.
   const focus = moduleFromSlug(moduleParam);
   const sort = parseSort(sortParam);
-  const allEntries = buildFeed(matches, bettingCard.singles);
+  const allEntries = buildFeed(matches, bettingCard.singles, bandBacktests);
   const dayOptions = buildDayOptions(allEntries);
   const activeDay =
     dateParam && dayOptions.some((d) => d.key === dateParam) ? dateParam : null;

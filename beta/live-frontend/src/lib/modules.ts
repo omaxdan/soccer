@@ -436,6 +436,8 @@ export interface MatchModuleContext {
   match: MatchRow;
   /** Row from mv_module_travel for this fixture, when loaded. */
   travel?: ModuleTravelRow | null;
+  /** Measured band rates from signal_backtests, keyed by band name. */
+  bandBacktests?: Record<string, { rate: number; sample: number; isCalibrated: boolean }> | null;
   /** Which side the platform's pick favours. Derived from readiness gap. */
   pickSide: "home" | "away" | null;
   scoring?: MatchScoringProbabilities | null;
@@ -519,26 +521,11 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
 
   // Bands and their backtested accuracy. Samples ARE known here, which is
   // exactly why this module is the one that shows an interval.
-  // MEASURED, 2026-07-26, by backtest:bands against readiness_history — the
-  // frozen pre-kickoff score, full eight-component fidelity, snapshot_at <
-  // match_date enforced.
-  //
-  // These replace the 1,893-match figures (Elite 95.7 / Strong 97.9 /
-  // Moderate 78.4 / Risky 46.2 / Avoid 29.4). That table scored finished
-  // matches using CURRENT team form, and the run quantified the damage: the
-  // leaky path put 331 matches in Elite+Strong at ~97%, while the frozen path
-  // puts ZERO in Elite and five in Strong — which went 0 for 5. The top bands
-  // were manufactured by the leak.
-  //
-  // Elite has no measured row at all, so it gets none here. Strong's n=5
-  // cannot carry a rate and is likewise withheld; <Rate /> would otherwise
-  // draw a 0% with an interval spanning almost the whole range.
-  const TABLE: Record<string, { rate: number; sample: number }> = {
-    Moderate: { rate: 36.7, sample: 60 },
-    Risky: { rate: 34.8, sample: 141 },
-    Avoid: { rate: 26.8, sample: 112 },
-  };
-  const row = TABLE[band] ?? null;
+  // Measured rates come from signal_backtests via getBandBacktests(); nothing
+  // is hardcoded here. A band the backtest could not measure — Elite has no
+  // pre-kickoff matches at all, Strong has five — simply has no row, and the
+  // card shows no rate rather than a fabricated one.
+  const row = ctx.bandBacktests?.[band] ?? null;
   const score = ctx.match.intel?.confidence_score ?? null;
   const gap = ctx.match.intel?.readiness_gap ?? null;
 
@@ -566,14 +553,13 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
           provenance: "measured",
         }
       : null,
-    verdict:
-      band === "Avoid"
-        ? "The band is the model saying it does not know, and the measured rate agrees."
-        : band === "Risky"
-        ? "Measured near the Moderate rate — the two barely separate."
-        : band === "Moderate"
-        ? "The best-measured band, and it still lands close to the base rate."
-        : "No usable measurement exists for this band: the pre-kickoff archive holds almost no matches in it.",
+    // Verdict follows the measurement rather than the band's name: an unmeasured
+    // band says so, and a measured one quotes what it actually did.
+    verdict: !row
+      ? `No pre-kickoff measurement exists for the ${band} band yet — the archive holds too few matches in it to quote a rate.`
+      : row.isCalibrated
+        ? `Measured at ${row.rate.toFixed(1)}% over ${row.sample.toLocaleString()} pre-kickoff matches, above the publication gate.`
+        : `Measured at ${row.rate.toFixed(1)}% over ${row.sample.toLocaleString()} pre-kickoff matches — below the ${band === "Avoid" ? "" : ""}sample gate, so treat it as provisional.`,
   };
 }
 

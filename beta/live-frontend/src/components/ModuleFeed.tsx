@@ -71,7 +71,11 @@ export interface FeedEntry {
   readings: ModuleReading[];
 }
 
-export function buildFeed(matches: MatchRow[], singles: BankerSingle[]): FeedEntry[] {
+export function buildFeed(
+  matches: MatchRow[],
+  singles: BankerSingle[],
+  bandBacktests?: Record<string, { rate: number; sample: number; isCalibrated: boolean }> | null
+): FeedEntry[] {
   const byMatch = new Map(singles.map((s) => [s.match_id, s]));
   return matches.map((match) => {
     const m = withCardForm(match, byMatch.get(match.id));
@@ -96,7 +100,13 @@ export function buildFeed(matches: MatchRow[], singles: BankerSingle[]): FeedEnt
     return {
       match: m,
       readings: evaluateAllMatchModules(
-        { match: m, pickSide, scoring: m.scoring ?? null, travel: m.travel ?? null },
+        {
+          match: m,
+          pickSide,
+          scoring: m.scoring ?? null,
+          travel: m.travel ?? null,
+          bandBacktests: bandBacktests ?? null,
+        },
         sides
       ),
     };
