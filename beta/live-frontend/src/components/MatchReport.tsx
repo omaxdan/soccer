@@ -216,19 +216,6 @@ export function MatchReport({
   const confidenceReading = readings.find((r) => r.def.n === 10) ?? null;
   const bandRate = confidenceReading?.baseline?.rate ?? null;
 
-  // ── Key patterns — one row per firing module, straight from its reading ──
-  const keyPatterns: [string, React.ReactNode][] = readings
-    .filter((r) => r.status !== "inactive")
-    .map((r) => [
-      r.def.name,
-      <>
-        {r.headline}
-        {r.baseline && (
-          <span className="text-muted"> · {fmtBaseline(r.baseline)}</span>
-        )}
-      </>,
-    ]);
-
   // ── BTTS block — only when scoring probabilities are present ────────────
   const sp = m.scoring;
   const bttsRows: [string, React.ReactNode][] = [];
@@ -466,7 +453,7 @@ export function MatchReport({
 
       <Section title="Module summary">
         <KeyValueTable
-          headers={["Module", "Finding", "Historical context"]}
+          headers={["Module", "Finding", "Observed pattern"]}
           rows={readings
             .filter((r) => r.status !== "inactive")
             .map((r) => [
@@ -482,7 +469,12 @@ export function MatchReport({
                   <span className="text-faint"> · context</span>
                 )}
               </span>,
-              r.baseline ? fmtBaseline(r.baseline) : r.headline,
+              <>
+                {r.headline}
+                {r.baseline && (
+                  <span className="text-muted"> · {fmtBaseline(r.baseline)}</span>
+                )}
+              </>,
             ])}
         />
         <p className="mt-2 text-[0.7rem] text-muted">
@@ -492,10 +484,6 @@ export function MatchReport({
           </span>{" "}
           — {t.supports} support, {t.neutral} neutral, {t.contradicts} contradict.
         </p>
-      </Section>
-
-      <Section title="Key historical patterns">
-        <KeyValueTable headers={["Factor", "Observed pattern"]} rows={keyPatterns} />
       </Section>
 
       {bttsRows.length > 0 && (
