@@ -250,7 +250,11 @@ export function MatchReport({
     push("League BTTS", sp.league_btts_pct);
   }
 
-  // ── Takeaways — chosen by distance from an even split, not written out ──
+  // ── Takeaways ───────────────────────────────────────────────────────────
+  // Each answers three things: what the data shows, what it means, and what it
+  // implies for reading the rest of the report. Every figure is pulled from a
+  // reading — nothing is written per fixture, and none of these say what to
+  // stake. They describe where the evidence sits, not what to do about it.
   const spread = (r: ModuleReading) =>
     r.baseline ? Math.abs(r.baseline.rate - 50) : -1;
   const strongest = supports.length
@@ -262,40 +266,119 @@ export function MatchReport({
       )
     : null;
 
-  const takeaways: [string, React.ReactNode][] = [];
-  if (strongest)
-    takeaways.push([
-      "Strongest supporting pattern",
-      `${strongest.def.name} — ${strongest.headline}${
-        strongest.baseline ? ` · ${fmtBaseline(strongest.baseline)}` : ""
-      }`,
-    ]);
-  if (weakest)
-    takeaways.push([
-      "Strongest contradicting pattern",
-      `${weakest.def.name} — ${weakest.headline}${
-        weakest.baseline ? ` · ${fmtBaseline(weakest.baseline)}` : ""
-      }`,
-    ]);
-  takeaways.push([
-    "Module consensus",
-    `${overall.label} — ${t.supports} support, ${t.neutral} neutral, ${t.contradicts} contradict`,
-  ]);
-  if (bandRate != null)
-    takeaways.push([
-      "Historical upset rate in this band",
-      `${(100 - bandRate).toFixed(1)}% of the time the favoured side did not win`,
-    ]);
-  takeaways.push([
-    "Data quality",
-    `${allReadings.filter((r) => r.status !== "inactive").length} of ${MODULES.length} modules firing`,
-  ]);
-  const widest = readings.filter((r) => isWide(r.baseline));
-  if (widest.length)
-    takeaways.push([
-      "Treat as informational",
-      `${widest.map((r) => r.def.name).join(", ")} — interval too wide to lean on`,
-    ]);
+  const side = pickName ?? "the favoured side";
+  const takeaways: { lead: string; body: string }[] = [];
+
+  // 1 — strongest supporting module
+  if (strongest) {
+    const b = strongest.baseline;
+    takeaways.push({
+      lead: `${strongest.def.name} is the strongest supporting signal`,
+      body:
+        `${strongest.headline}. ` +
+        (b ? `Across the matches counted, ${b.label} ${fmtBaseline(b)}. ` : "") +
+        `${strongest.verdict} It is the largest single contributor to the ${overall.label} reading toward ${side}` +
+        (b && isWide(b)
+          ? `, though its interval is wide enough that it carries less weight than the headline rate suggests.`
+          : `.`),
+    });
+  }
+
+  // 2 — strongest contradicting module
+  if (weakest) {
+    const b = weakest.baseline;
+    takeaways.push({
+      lead: `${weakest.def.name} flags a concern`,
+      body:
+        `${weakest.headline}. ` +
+        (b ? `Historical rate: ${fmtBaseline(b)}. ` : "") +
+        `${weakest.verdict} With ${t.supports} module${t.supports === 1 ? "" : "s"} supporting and ` +
+        `${t.contradicts} against, consensus is held at ${overall.label} — a disagreement caps it ` +
+        `however many modules agree.`,
+    });
+  }
+
+  // 3 — rest, or failing that travel, with the threshold spelled out
+  const restGap =
+    i?.home_rest_days != null && i?.away_rest_days != null
+      ? i.home_rest_days - i.away_rest_days
+      : null;
+  const restReading = readings.find((r) => r.def.n === 6) ?? null;
+  const travelProfile = m.travel?.travel_profile ?? null;
+  if (restGap != null && Math.abs(restGap) >= 4) {
+    const ahead = restGap > 0 ? homeName : awayName;
+    takeaways.push({
+      lead: `Rest gap clears the four-day threshold`,
+      body:
+        `${ahead} has ${Math.abs(restGap)} extra days (${i?.home_rest_days}d vs ${i?.away_rest_days}d). ` +
+        `Four days is where rest starts to register in the record; below that the effect sits inside the noise. ` +
+        (restReading?.baseline
+          ? `Historical rate in this scenario: ${fmtBaseline(restReading.baseline)}.`
+          : ""),
+    });
+  } else if (travelProfile && travelProfile !== "NO_TRAVEL_EDGE") {
+    const travelReading = readings.find((r) => r.def.n === 5) ?? null;
+    takeaways.push({
+      lead: `Travel load is uneven`,
+      body:
+        `Profile: ${travelProfile.replace(/_/g, " ").toLowerCase()}. ` +
+        `${travelReading?.verdict ?? ""} Single-trip distance alone moves the away win rate by under three ` +
+        `points across every band, so this reads as a cumulative-load signal rather than a distance one.`,
+    });
+  }
+
+  // 4 — thin samples, named rather than buried
+  const thin = readings.filter(
+    (r) => r.baseline?.sample != null && !r.baseline.pooled && (r.baseline.sample as number) < 10
+  );
+  if (thin.length > 0) {
+    const widths = thin.map((r) => {
+      const b = r.baseline!;
+      const [lo, hi] = wilson(b.rate, b.sample as number);
+      return Math.round(hi - lo);
+    });
+    takeaways.push({
+      lead: `${thin.map((r) => r.def.name).join(" and ")} rest on very small samples`,
+      body:
+        `${thin.map((r) => `${r.def.name} n=${r.baseline!.sample}`).join(", ")}. ` +
+        (Math.min(...widths) === Math.max(...widths)
+          ? `Each interval spans about ${widths[0]} percentage points`
+          : `Their intervals span ${Math.min(...widths)}–${Math.max(...widths)} percentage points`) +
+        ` — wider than the effect they claim to measure. These are context rather than signals: the pattern ` +
+        `may well hold, but this many matches cannot show it either way.`,
+    });
+  }
+
+  // 5 — data quality
+  const firingCount = allReadings.filter((r) => r.status !== "inactive").length;
+  takeaways.push({
+    lead: `${firingCount} of ${MODULES.length} modules firing`,
+    body:
+      dormant.length > 0
+        ? `${dormant.map((r) => r.def.name).join(", ")} could not fire for this fixture. The consensus ` +
+          `above rests on ${firingCount} modules, not the full ${MODULES.length}.`
+        : `Every module produced a reading for this fixture.`,
+  });
+
+  // 6 — BTTS context, when scoring probabilities exist
+  const bttsPct = num(sp?.btts_pct);
+  const leagueBtts = num(sp?.league_btts_pct);
+  if (bttsPct != null && takeaways.length < 6) {
+    takeaways.push({
+      lead: `Both teams to score sits at ${bttsPct.toFixed(0)}%`,
+      body:
+        (sp?.btts_verdict ? `${sp.btts_verdict}. ` : "") +
+        (leagueBtts != null
+          ? `That is ${
+              bttsPct > leagueBtts ? "above" : bttsPct < leagueBtts ? "below" : "level with"
+            } the league rate of ${leagueBtts.toFixed(1)}%. `
+          : "") +
+        `It is built from each side's scoring and conceding rates in the samples listed above, so it ` +
+        `inherits their sample sizes.`,
+    });
+  }
+
+  const shownTakeaways = takeaways.slice(0, 6);
 
   return (
     <section
@@ -467,7 +550,17 @@ export function MatchReport({
       </Section>
 
       <Section title="Key takeaways">
-        <KeyValueTable headers={["Takeaway", "Detail"]} rows={takeaways} />
+        <ol className="space-y-2.5">
+          {shownTakeaways.map((k, idx) => (
+            <li key={k.lead} className="flex gap-2.5 text-[0.72rem] leading-relaxed">
+              <span className="mono shrink-0 tnum text-faint">{idx + 1}.</span>
+              <span>
+                <span className="mono font-semibold text-text">{k.lead}</span>
+                <span className="text-muted"> — {k.body}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
       </Section>
 
       {gated.length > 0 && (
