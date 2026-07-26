@@ -1,6 +1,12 @@
 import { getBoard, getBettingCard } from "@/lib/queries";
 import Link from "next/link";
-import { ModuleFeed, buildFeed, filterFeed } from "@/components/ModuleFeed";
+import {
+  ModuleFeed,
+  SortControl,
+  buildFeed,
+  filterFeed,
+  parseSort,
+} from "@/components/ModuleFeed";
 import { MODULES, moduleFromSlug } from "@/lib/modules";
 import { currentTier } from "@/lib/tier";
 import {
@@ -16,9 +22,9 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ module?: string }>;
+  searchParams: Promise<{ module?: string; sort?: string }>;
 }) {
-  const [{ module: moduleParam }, matches, bettingCard] = await Promise.all([
+  const [{ module: moduleParam, sort: sortParam }, matches, bettingCard] = await Promise.all([
     searchParams,
     getBoard(24),
     getBettingCard(),
@@ -27,6 +33,7 @@ export default async function DashboardPage({
 
   // ?module=m5 — set by the VIEW ACTIVATIONS links in the module directory.
   const focus = moduleFromSlug(moduleParam);
+  const sort = parseSort(sortParam);
   const allEntries = buildFeed(matches, bettingCard.singles);
   const entries = filterFeed(allEntries, focus?.key ?? null);
 
@@ -110,8 +117,8 @@ export default async function DashboardPage({
           <h2 className="mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">
             Module activations
           </h2>
-          <span className="mono ml-auto text-[0.6rem] tracking-widest text-faint">
-            SORTED BY CONSENSUS
+          <span className="ml-auto">
+            <SortControl current={sort} moduleParam={moduleParam} />
           </span>
         </header>
 
@@ -130,7 +137,7 @@ export default async function DashboardPage({
               {entries.length} of {allEntries.length} fixtures firing
             </span>
             <Link
-              href="/"
+              href={`/?sort=${sort}`}
               className="mono ml-auto inline-flex items-center gap-1 text-[0.6rem] tracking-widest text-faint transition-colors hover:text-text"
             >
               <IconContradicts size={10} />
@@ -138,7 +145,7 @@ export default async function DashboardPage({
             </Link>
           </div>
         )}
-        <ModuleFeed entries={entries} viewer={viewer} />
+        <ModuleFeed entries={entries} viewer={viewer} sort={sort} />
       </section>
     </div>
   );

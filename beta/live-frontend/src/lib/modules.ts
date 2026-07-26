@@ -59,6 +59,8 @@ export interface ModuleDef {
   scope: ModuleScope;
   /** Minimum tier required to see the reading. */
   tier: Tier;
+  /** Short label for the dashboard pill grid. Keep to four characters. */
+  abbrev: string;
   /**
    * The materialized view backing this module, shown in the directory and
    * counted for the "firing now" figure.
@@ -136,6 +138,7 @@ export interface ModuleReading {
 export const MODULES: ModuleDef[] = [
   {
     n: 1,
+    abbrev: "H/A",
     key: "home_away",
     name: "Home/Away Split",
     question: "Home-reliant or road warrior?",
@@ -145,6 +148,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 2,
+    abbrev: "RT",
     key: "readiness",
     name: "Readiness Tracker",
     question: "Peaking or crashing?",
@@ -154,6 +158,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 3,
+    abbrev: "CI",
     key: "consistency",
     name: "Consistency Index",
     question: "Predictable or volatile?",
@@ -163,6 +168,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 4,
+    abbrev: "GKI",
     key: "giant_killer",
     name: "Giant Killer Index",
     question: "Steps up against top teams?",
@@ -172,6 +178,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 5,
+    abbrev: "TI",
     key: "travel",
     name: "Travel Impact",
     question: "Does distance matter here?",
@@ -181,6 +188,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 6,
+    abbrev: "RA",
     key: "rest",
     name: "Rest Advantage",
     question: "Is a rest gap worth an edge?",
@@ -190,6 +198,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 7,
+    abbrev: "LGP",
     key: "league_goals",
     name: "League Goal Profile",
     question: "Over or under league?",
@@ -199,6 +208,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 8,
+    abbrev: "FGA",
     key: "form_gap",
     name: "Form Gap Accuracy",
     question: "How reliable is this form gap?",
@@ -208,6 +218,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 9,
+    abbrev: "BTF",
     key: "btts_fatigue",
     name: "BTTS by Fatigue",
     question: "Is BTTS rest-driven here?",
@@ -217,6 +228,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 10,
+    abbrev: "CC",
     key: "confidence",
     name: "Confidence Calibration",
     question: "Can this pick be trusted?",
@@ -226,6 +238,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 11,
+    abbrev: "HTFT",
     key: "halftime",
     name: "Half-Time Trends",
     question: "Any HT/FT pattern?",
@@ -235,6 +248,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 12,
+    abbrev: "CSP",
     key: "clean_sheet",
     name: "Clean Sheet Probability",
     question: "How likely is a clean sheet?",
@@ -244,6 +258,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     n: 13,
+    abbrev: "WI",
     key: "weather",
     name: "Weather Impact",
     question: "Do the conditions move goals or the result?",
