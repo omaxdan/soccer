@@ -384,14 +384,31 @@ export async function backtestConfidenceBands() {
     );
   }
 
-  // -- Persist RECONSTRUCTED only -------------------------------------------
+  // -- Persist FROZEN ---------------------------------------------------------
+  //
+  // The first run inverted this: RECONSTRUCTED was persisted and FROZEN was
+  // only a validation cross-check. Two results from that run overturned it.
+  //
+  //   1. The reconstruction failed its own validation — 55.5% band agreement
+  //      against frozen over 245 overlapping matches, mean absolute score
+  //      error 7.24. It disagrees with the real pre-kickoff score on nearly
+  //      half of them, so it is not a faithful stand-in for the live band.
+  //
+  //   2. It bought nothing. Its whole purpose was a larger population than the
+  //      forward-only archive, and it came out at 323 against frozen's 318 —
+  //      because 1,587 matches were rejected for having no point-in-time
+  //      readiness at all. team_match_snapshots does not cover the history.
+  //
+  // Frozen is the same size, at full eight-component fidelity, and is the
+  // score the product actually computed before kickoff. Reconstruction stays
+  // as a logged diagnostic.
   const nowIso = new Date().toISOString();
   const note =
-    `point-in-time reconstruction; ${ARCHIVABLE_WEIGHT}/${TOTAL_WEIGHT} weight from ` +
-    `${ARCHIVABLE_COMPONENTS.map(c => c.key).join(', ')}; stale window ${STALE_DAYS}d; ` +
-    `band agreement vs frozen ${agreement.bandAgreementPct ?? 'n/a'}% over n=${overlap}`;
+    `frozen pre-kickoff confidence_pct from readiness_history, full ` +
+    `${TOTAL_WEIGHT}/${TOTAL_WEIGHT} component fidelity; reconstruction agreed ` +
+    `${agreement.bandAgreementPct ?? 'n/a'}% over n=${overlap} and is diagnostic only`;
 
-  const rows = recStats.map(s => ({
+  const rows = frozenStats.map(s => ({
     rule_key: `CBAND_${s.band.toUpperCase()}`,
     market: BAND_MARKET,
     sample_size: s.n,

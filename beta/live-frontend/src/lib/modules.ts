@@ -519,12 +519,24 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
 
   // Bands and their backtested accuracy. Samples ARE known here, which is
   // exactly why this module is the one that shows an interval.
+  // MEASURED, 2026-07-26, by backtest:bands against readiness_history — the
+  // frozen pre-kickoff score, full eight-component fidelity, snapshot_at <
+  // match_date enforced.
+  //
+  // These replace the 1,893-match figures (Elite 95.7 / Strong 97.9 /
+  // Moderate 78.4 / Risky 46.2 / Avoid 29.4). That table scored finished
+  // matches using CURRENT team form, and the run quantified the damage: the
+  // leaky path put 331 matches in Elite+Strong at ~97%, while the frozen path
+  // puts ZERO in Elite and five in Strong — which went 0 for 5. The top bands
+  // were manufactured by the leak.
+  //
+  // Elite has no measured row at all, so it gets none here. Strong's n=5
+  // cannot carry a rate and is likewise withheld; <Rate /> would otherwise
+  // draw a 0% with an interval spanning almost the whole range.
   const TABLE: Record<string, { rate: number; sample: number }> = {
-    Elite: { rate: 95.7, sample: 23 },
-    Strong: { rate: 97.9, sample: 326 },
-    Moderate: { rate: 78.4, sample: 439 },
-    Risky: { rate: 46.2, sample: 785 },
-    Avoid: { rate: 29.4, sample: 320 },
+    Moderate: { rate: 36.7, sample: 60 },
+    Risky: { rate: 34.8, sample: 141 },
+    Avoid: { rate: 26.8, sample: 112 },
   };
   const row = TABLE[band] ?? null;
   const score = ctx.match.intel?.confidence_score ?? null;
@@ -551,17 +563,17 @@ function evalConfidence(ctx: MatchModuleContext): ModuleReading {
           rate: row.rate,
           sample: row.sample,
           label: "favourite wins in this band",
-          provenance: "unreplayed",
+          provenance: "measured",
         }
       : null,
     verdict:
       band === "Avoid"
-        ? "The band is the model saying it does not know. Treat the pick as unsupported."
+        ? "The band is the model saying it does not know, and the measured rate agrees."
         : band === "Risky"
-        ? "Below the coin-flip line historically. Low trust."
+        ? "Measured near the Moderate rate — the two barely separate."
         : band === "Moderate"
-        ? "Usable, with roughly a one-in-five upset rate."
-        : "Highest measured band — but see the interval, not just the headline rate.",
+        ? "The best-measured band, and it still lands close to the base rate."
+        : "No usable measurement exists for this band: the pre-kickoff archive holds almost no matches in it.",
   };
 }
 
