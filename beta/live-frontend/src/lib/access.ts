@@ -231,12 +231,19 @@ export interface ViewerIdentity {
   authenticated: boolean;
   email: string | null;
   isAdmin: boolean;
+  displayName: string | null;
+  avatarUrl: string | null;
+  /** Plan slug for the tier badge. "free" when signed in with no subscription. */
+  plan: string | null;
 }
 
 export const ANON_IDENTITY: ViewerIdentity = {
   authenticated: false,
   email: null,
   isAdmin: false,
+  displayName: null,
+  avatarUrl: null,
+  plan: null,
 };
 
 export async function getViewerIdentity(): Promise<ViewerIdentity> {
@@ -244,17 +251,38 @@ export async function getViewerIdentity(): Promise<ViewerIdentity> {
   if (!user) return ANON_IDENTITY;
   try {
     const client = await supabaseServer();
-    if (!client) return { authenticated: true, email: user.email, isAdmin: false };
-    const { data } = await client
-      .from("user_profiles").select("role").eq("user_id", user.id).maybeSingle();
+    if (!client)
+      return { ...ANON_IDENTITY, authenticated: true, email: user.email, plan: "free" };
+
+    const [profile, sub] = await Promise.all([
+      client
+        .from("user_profiles")
+        .select("role, display_name, avatar_url")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      client
+        .from("user_subscriptions")
+        .select("status, expires_at, plan:subscription_plans(slug)")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle(),
+    ]);
+
+    const p = profile.data as any;
+    const row = sub.data as any;
+    const live = row && (!row.expires_at || new Date(row.expires_at) > new Date());
+
     return {
       authenticated: true,
       email: user.email,
-      isAdmin: (data as any)?.role === "admin",
+      isAdmin: p?.role === "admin",
+      displayName: p?.display_name ?? null,
+      avatarUrl: p?.avatar_url ?? null,
+      plan: (live && row.plan?.slug) || "free",
     };
   } catch {
     // Signed in but the profile read failed — treat as a normal user rather
     // than hiding the session entirely.
-    return { authenticated: true, email: user.email, isAdmin: false };
+    return { ...ANON_IDENTITY, authenticated: true, email: user.email, plan: "free" };
   }
 }

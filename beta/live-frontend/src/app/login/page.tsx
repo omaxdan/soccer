@@ -4,9 +4,15 @@ import { signIn } from "@/lib/authActions";
 
 export const metadata = { title: "Sign in" };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   return (
     <AuthForm
+      oauthError={error}
       action={signIn}
       title="Sign in"
       submitLabel="SIGN IN"

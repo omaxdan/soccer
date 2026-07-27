@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 import { BottomNav, SideNav } from "@/components/Nav";
 import { getViewerIdentity } from "@/lib/access";
+import { AccountMenu } from "@/components/AccountMenu";
 import { StatusDot } from "@/components/StatusDot";
 import { LIVE } from "@/lib/supabase";
 
@@ -58,6 +59,7 @@ export default async function RootLayout({
             <div className="ml-auto">
               <StatusDot live={LIVE} />
             </div>
+            <AccountMenu identity={identity} />
           </div>
         </header>
 

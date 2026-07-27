@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { supabaseServer, getSessionUser } from "./supabase/server";
 
 // Server Actions run in a context where cookies CAN be written, which is why
@@ -21,6 +22,14 @@ export async function signIn(_prev: AuthState, form: FormData): Promise<AuthStat
   // Supabase deliberately does not distinguish a wrong password from an unknown
   // address, and neither should this — it would confirm which emails exist.
   if (error) return { error: "Those credentials were not accepted." };
+
+  // Same bookkeeping the OAuth callback does, so an email sign-in is not a
+  // second-class session with a stale last_login_at.
+  try {
+    await client.rpc("touch_last_login");
+  } catch {
+    /* not a reason to fail a valid sign-in */
+  }
 
   revalidatePath("/", "layout");
   redirect("/app");
@@ -90,4 +99,36 @@ export async function setSubscriptionsEnabled(enabled: boolean): Promise<{ error
 
   revalidatePath("/", "layout");
   return {};
+}
+
+
+/**
+ * Starts the Google OAuth flow.
+ *
+ * The redirect target is built from the request host rather than an env var so
+ * it is correct in local, preview and production without three configurations
+ * — but every value used still has to be registered in Supabase's redirect
+ * allow-list, which is what stops an attacker supplying their own.
+ */
+export async function signInWithGoogle(): Promise<void> {
+  const client = await supabaseServer(true);
+  if (!client) redirect("/login?error=Authentication+is+not+configured");
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  if (!host) redirect("/login?error=Could+not+determine+the+callback+address");
+
+  const { data, error } = await client!.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${proto}://${host}${base}/auth/callback`,
+      queryParams: { access_type: "offline", prompt: "consent" },
+    },
+  });
+  if (error || !data?.url)
+    redirect(`/login?error=${encodeURIComponent(error?.message ?? "Could not reach Google")}`);
+
+  redirect(data.url);
 }
