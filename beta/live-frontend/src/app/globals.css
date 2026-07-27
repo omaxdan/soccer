@@ -67,12 +67,12 @@ body {
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .panel-raised {
   background: var(--raised);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
 }
 .hairline {
   border-color: var(--line);

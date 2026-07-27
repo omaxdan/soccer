@@ -19,8 +19,8 @@ export default function PricingPage() {
   const starterModules = MODULES.filter((m) => m.tier === "starter");
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-6">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <h1 className="mono text-[0.9rem] font-semibold uppercase tracking-[0.16em] text-text">
           Pricing
         </h1>
@@ -37,7 +37,7 @@ export default function PricingPage() {
           return (
             <article
               key={plan.id}
-              className={featured ? "panel-raised p-5" : "panel p-5"}
+              className={featured ? "panel-raised p-4" : "panel p-4"}
               style={
                 featured
                   ? { borderColor: "color-mix(in srgb, var(--amber) 32%, var(--line))" }
@@ -103,7 +103,7 @@ export default function PricingPage() {
       </div>
 
       {/* What free actually gets you */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="mono mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">
           Included on the free tier
         </h2>
@@ -125,7 +125,7 @@ export default function PricingPage() {
       </section>
 
       {/* Honest footing */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 text-warn">
             <IconGate size={15} />

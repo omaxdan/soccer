@@ -43,8 +43,8 @@ export default async function SubscriptionPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-6">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Account</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Subscription</h1>
         <p className="mt-2 max-w-2xl text-[0.82rem] leading-relaxed text-muted">
@@ -67,7 +67,7 @@ export default async function SubscriptionPage() {
       </header>
 
       {identity.authenticated && (
-        <section className="panel p-5">
+        <section className="panel p-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="label-cap">Current plan</span>
             <span
@@ -107,7 +107,7 @@ export default async function SubscriptionPage() {
         {plans.map((p) => (
           <article
             key={p.name}
-            className={p.featured ? "panel-raised p-5" : "panel p-5"}
+            className={p.featured ? "panel-raised p-4" : "panel p-4"}
             style={
               p.featured
                 ? { borderColor: "color-mix(in srgb, var(--amber) 32%, var(--line))" }
@@ -136,7 +136,7 @@ export default async function SubscriptionPage() {
         ))}
       </div>
 
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="label-cap mb-2">Included on Free</h2>
         <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
           {free.map((m) => (

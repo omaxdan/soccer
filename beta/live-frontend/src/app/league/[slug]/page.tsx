@@ -65,7 +65,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
 
   // ── League conditions / model calibration — folded into the "More" collapsible ──
   const conditions = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {intel && (
         <Panel title="League conditions">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -156,7 +156,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
 
   // ── POWER RANKINGS (intelligence, league-scoped) ──
   const powerTab = powerRanking.length > 0 ? (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <p className="mono text-[0.6rem] leading-relaxed text-faint">Intelligence rankings — distinct from the official table. Scoped to this league only.</p>
       <RankPanel title="Power ranking (form index)" rows={powerRanking} value={(r) => r.intel?.form_index} explain="power_ranking" />
       {qualityRanking.length > 0 && (
@@ -193,7 +193,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const hardestFixtures = [...withDifficulty].sort((a, b) => (diffMap[b.team.id].next_5_difficulty ?? 0) - (diffMap[a.team.id].next_5_difficulty ?? 0)).slice(0, 5);
   const easiestFixtures = [...withDifficulty].sort((a, b) => (diffMap[a.team.id].next_5_difficulty ?? 0) - (diffMap[b.team.id].next_5_difficulty ?? 0)).slice(0, 5);
   const fixturesTab = withDifficulty.length > 0 ? (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Panel title="Hardest run of fixtures (next 5)" explain="fixture_difficulty">
         <ol className="space-y-2">
           {hardestFixtures.map((r, idx) => {
@@ -236,7 +236,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   // ── GOALS ──
   const bestForm = powerRanking.slice(0, 5);
   const goals = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <RankPanel title="In-form attacks" rows={bestForm} value={(r) => r.intel?.form_index} color="var(--amber)" />
       {intel && (
         <Panel title="Goal environment (league)">
@@ -251,7 +251,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
 
   // ── MARKETS ──
   const markets = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {gap ? (
         <Panel title="League betting tendencies">
           <div className="grid grid-cols-2 gap-3">
@@ -273,9 +273,9 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Link href="/leagues" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Leagues</Link>
-      <section className="panel p-5">
+      <section className="panel p-4">
         <div className="flex items-center gap-3">
           {tournament.logo_storage_path && <Crest team={{ id: tournament.id, name: tournament.name, short_name: null, crest_storage_path: tournament.logo_storage_path }} size={40} />}
           <div>
@@ -341,5 +341,5 @@ function RankPanel({ title, rows, value, color = "var(--amber)", explain }: { ti
   );
 }
 function Empty({ text }: { text: string }) {
-  return <p className="mono panel p-6 text-center text-[0.7rem] text-muted">{text}</p>;
+  return <p className="mono panel p-4 text-center text-[0.7rem] text-muted">{text}</p>;
 }

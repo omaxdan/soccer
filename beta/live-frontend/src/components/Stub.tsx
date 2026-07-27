@@ -20,8 +20,8 @@ export function Stub({
   instead?: { label: string; href: string };
 }) {
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <div className="flex items-center gap-2">
           <h1 className="mono text-[0.85rem] font-semibold uppercase tracking-[0.16em] text-text">
             {title}
@@ -39,7 +39,7 @@ export function Stub({
         <p className="mt-2 max-w-2xl text-[0.8rem] leading-relaxed text-muted">{purpose}</p>
       </header>
 
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="label-cap mb-2">Before this page can show anything real</h2>
         <ul className="space-y-1">
           {needs.map((n) => (

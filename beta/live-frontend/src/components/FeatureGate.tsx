@@ -193,7 +193,7 @@ export function ProTeaser({ lockedCount }: { lockedCount: number }) {
  */
 export function UpgradePrompt({ moduleCount, lockedCount }: { moduleCount: number; lockedCount: number }) {
   return (
-    <section className="panel p-5">
+    <section className="panel p-4">
       <h2 className="mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
         Want to understand why this pattern exists?
       </h2>

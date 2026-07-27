@@ -47,7 +47,7 @@ export function SubTabs({ items, initial }: { items: SubTabItem[]; initial?: str
           );
         })}
       </div>
-      <div key={current?.id} className="animate-fade-up">{current?.content}</div>
+      <div key={current?.id} className="">{current?.content}</div>
     </div>
   );
 }

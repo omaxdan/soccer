@@ -64,7 +64,7 @@ export function BettingCard({ card }: Props) {
 
 
   return (
-    <section className="scanlines panel overflow-hidden p-5">
+    <section className="panel overflow-hidden p-4">
       <p className="eyebrow">Form Index Picks</p>
       <h2 className="mt-1 text-[1.35rem] font-semibold leading-tight tracking-tight sm:text-2xl">
         {card.day}&rsquo;s Banker Bets
@@ -115,7 +115,7 @@ export function BettingCard({ card }: Props) {
       )}
 
       {/* Singles by date */}
-      <div className="mt-4 space-y-4">
+      <div className="mt-4 space-y-3">
         {Array.from(grouped.entries()).map(([date, picks]) => (
           <div key={date}>
             <p className="label-cap mb-2 text-text">

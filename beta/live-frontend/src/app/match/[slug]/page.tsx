@@ -133,11 +133,11 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   ) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Link href="/app" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
 
       {/* Hero */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <div className="flex items-center justify-between">
           <span className="mono text-[0.6rem] uppercase tracking-widest text-muted">{m.tournament?.name ?? m.competition}</span>
           <span className="mono text-[0.55rem] text-faint">#{m.external_match_id}</span>
@@ -453,7 +453,7 @@ function BattleRow({ label, home, away, flip }: { label: string; home: number | 
   );
 }
 function Empty({ text }: { text: string }) {
-  return <p className="mono panel p-6 text-center text-[0.7rem] text-muted">{text}</p>;
+  return <p className="mono panel p-4 text-center text-[0.7rem] text-muted">{text}</p>;
 }
 function signalColor(text: string | null | undefined): string {
   if (!text || text === "No Edge") return "var(--muted)";

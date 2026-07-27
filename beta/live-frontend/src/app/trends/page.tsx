@@ -50,8 +50,8 @@ export default async function TrendsPage() {
   const trends = build(teams);
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Tools</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Trends</h1>
         <p className="mt-2 max-w-2xl text-[0.82rem] leading-relaxed text-muted">
@@ -61,7 +61,7 @@ export default async function TrendsPage() {
       </header>
 
       {trends.length === 0 ? (
-        <div className="panel p-5 text-center">
+        <div className="panel p-4 text-center">
           <p className="mono text-[0.72rem] text-muted">No team intelligence available yet.</p>
         </div>
       ) : (

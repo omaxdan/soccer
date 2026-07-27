@@ -78,9 +78,9 @@ export default async function DashboardPage({
   const covered = new Set(bettingCard.singles.map((s) => s.match_id)).size;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* ── Hero: intelligence briefing ───────────────────── */}
-      <section className="panel scanlines p-5">
+      <section className="panel p-4">
         <div className="flex items-center gap-2">
           <span className="text-amber">
             <IconModules size={16} />

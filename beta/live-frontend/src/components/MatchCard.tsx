@@ -32,7 +32,7 @@ export function MatchCard({
   return (
     <Link
       href={`/match/${matchSlug(m)}`}
-      className="panel block p-4 transition-colors hover:border-faint animate-fade-up"
+      className="panel block p-4 transition-colors hover:border-faint"
     >
       <div className="mb-3 flex items-center gap-2">
         {rank != null && (

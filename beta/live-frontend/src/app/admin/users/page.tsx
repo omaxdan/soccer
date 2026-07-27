@@ -13,8 +13,8 @@ export default async function AdminUsersPage() {
     v ? new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Admin</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Users</h1>
         <p className="mono mt-2 text-[0.62rem] tracking-wide text-faint">
@@ -23,7 +23,7 @@ export default async function AdminUsersPage() {
       </header>
 
       {users.length === 0 ? (
-        <div className="panel p-5 text-center">
+        <div className="panel p-4 text-center">
           <p className="mono text-[0.72rem] text-muted">No accounts yet.</p>
           <p className="mt-1 text-[0.68rem] text-faint">
             Accounts are optional in beta, so this stays empty until people sign up.

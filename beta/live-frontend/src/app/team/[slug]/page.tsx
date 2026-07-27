@@ -117,7 +117,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
 
   // ── PROFILE — the team's resume, told as one scrollable story ──
   const scheduleTab = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {upcoming.length > 0 ? (
         <Panel title="Upcoming fixtures">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -157,7 +157,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
 
   // ── FULL BREAKDOWN ──
   const squadTab = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {injury && (injury.injured_count ?? 0) > 0 && (
         <Panel title="Availability impact">
           <div className="grid grid-cols-3 gap-3">
@@ -196,7 +196,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   );
 
   const formQualityTab = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {formQuality ? (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -232,7 +232,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   );
 
   const tacticalTab = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {tacticalVariations ? (
         <>
           {tacticalVariations.system_effectiveness && tacticalVariations.system_effectiveness.length > 0 && (
@@ -308,7 +308,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   );
 
   const transferTab = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {transferIntel ? (
         <Panel title="Transfer activity">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -330,7 +330,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   );
 
   const momentumTab = (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {momentum ? (
         <Panel title="Momentum">
           <div className="mono flex items-center gap-3 text-[0.75rem] text-muted">
@@ -347,9 +347,9 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Link href="/app" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
-      <section className="panel p-5">
+      <section className="panel p-4">
         <div className="flex items-center gap-3">
           <Crest team={team} size={48} />
           <div className="min-w-0 flex-1">

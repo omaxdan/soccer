@@ -372,7 +372,7 @@ export function MatchReport({
   ].filter((x): x is NonNullable<typeof x> => x !== null);
 
   return (
-    <section id={MATCH_REPORT_ANCHOR} className="panel scroll-mt-20 p-5" aria-label="Match report">
+    <section id={MATCH_REPORT_ANCHOR} className="panel scroll-mt-20 p-4" aria-label="Match report">
       <header className="border-b border-line pb-3">
         <h2 className="mono text-[0.9rem] font-semibold tracking-tight text-text">
           {homeName} vs {awayName}
@@ -657,7 +657,7 @@ export function MatchReport({
  */
 export function ImportantNote() {
   return (
-    <section className="panel p-5">
+    <section className="panel p-4">
       <h2 className="mono mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text">
         Important note
       </h2>

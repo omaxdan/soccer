@@ -16,7 +16,7 @@ export function Collapsible({
         <span className="inline-block text-faint transition-transform group-open:rotate-90">›</span>
         {title}
       </summary>
-      <div className="mt-3 space-y-4">{children}</div>
+      <div className="mt-3 space-y-3">{children}</div>
     </details>
   );
 }

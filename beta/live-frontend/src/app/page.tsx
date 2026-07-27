@@ -28,9 +28,9 @@ export default async function LandingPage() {
   const preview = buildFeed(matches, card.singles, bands, access).slice(0, 3);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Hero */}
-      <section className="panel scanlines p-6 sm:p-8">
+      <section className="panel scanlines p-4 sm:p-5">
         <p className="eyebrow">PitchTerminal</p>
         <h1 className="mt-2 max-w-3xl text-2xl font-semibold leading-tight tracking-tight sm:text-4xl">
           Football intelligence built from historical match patterns.
@@ -139,7 +139,7 @@ export default async function LandingPage() {
       )}
 
       {/* Problem */}
-      <section className="panel p-6">
+      <section className="panel p-4">
         <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
           Stats tell you what happened. PitchTerminal explains why it matters.
         </h2>
@@ -171,7 +171,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Engine */}
-      <section className="panel p-6">
+      <section className="panel p-4">
         <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
           {MODULES.length} modules. Each answers one historical question.
         </h2>
@@ -193,7 +193,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Trust */}
-      <section className="panel p-6">
+      <section className="panel p-4">
         <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
           Every figure arrives with its limits attached.
         </h2>

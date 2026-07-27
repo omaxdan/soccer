@@ -160,7 +160,7 @@ export function BottomNav({
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-panel/95 backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-panel md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {open && (

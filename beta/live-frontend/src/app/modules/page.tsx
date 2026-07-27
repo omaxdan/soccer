@@ -30,8 +30,8 @@ export default async function ModuleDirectory() {
   const unreadable = MODULES.filter((m) => counts[m.key]?.count == null);
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <h1 className="mono text-[0.85rem] font-semibold uppercase tracking-[0.16em] text-text">
           Module directory
         </h1>

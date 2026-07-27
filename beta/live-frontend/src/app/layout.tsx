@@ -42,7 +42,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-dvh pb-16 md:pb-0">
         {/* Terminal header */}
-        <header className="sticky top-0 z-30 border-b border-line bg-ink/90 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-line bg-ink">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
             <Link href="/" className="flex items-baseline gap-1.5">
               <span className="mono text-base font-bold tracking-tight text-text">
@@ -63,7 +63,7 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <div className="mx-auto flex max-w-6xl gap-6 px-4 py-4 md:py-6">
+        <div className="mx-auto flex max-w-6xl gap-4 px-3 py-3 md:px-4 md:py-4">
           <aside className="hidden w-44 shrink-0 md:block">
             <SideNav identity={identity} />
           </aside>

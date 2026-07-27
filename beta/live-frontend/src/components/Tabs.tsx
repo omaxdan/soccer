@@ -16,7 +16,7 @@ export function Tabs({ items, initial }: { items: TabItem[]; initial?: string })
 
   return (
     <div>
-      <div className="sticky top-14 z-20 -mx-4 border-b border-line bg-ink/90 px-4 backdrop-blur">
+      <div className="sticky top-14 z-20 -mx-4 border-b border-line bg-ink px-4">
         <div
           role="tablist"
           className="no-scrollbar flex gap-1 overflow-x-auto py-2"
@@ -41,7 +41,7 @@ export function Tabs({ items, initial }: { items: TabItem[]; initial?: string })
           })}
         </div>
       </div>
-      <div className="pt-4 animate-fade-up" key={current?.id}>
+      <div className="pt-4" key={current?.id}>
         {current?.content}
       </div>
     </div>

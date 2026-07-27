@@ -87,7 +87,7 @@ export function PerformanceIntelView({ perf }: { perf: PerformanceIntel }) {
       : "var(--edge)";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* headline scores */}
       <div className="grid grid-cols-2 gap-3">
         <div className="panel-raised p-3">

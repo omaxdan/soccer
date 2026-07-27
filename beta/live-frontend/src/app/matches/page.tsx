@@ -71,8 +71,8 @@ export default async function FixturesPage({
   const hiddenCount = dayEntries.length - entries.length;
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Fixtures</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
           Every tracked match, in kickoff order.
@@ -97,7 +97,7 @@ export default async function FixturesPage({
 
 
       {entries.length === 0 ? (
-        <div className="panel p-5 text-center">
+        <div className="panel p-4 text-center">
           <p className="mono text-[0.72rem] text-muted">No fixtures in the window.</p>
         </div>
       ) : (
@@ -109,7 +109,7 @@ export default async function FixturesPage({
       )}
 
       {hiddenCount > 0 && (
-        <div className="panel p-5">
+        <div className="panel p-4">
           <p className="text-[0.8rem] leading-relaxed text-text">
             {hiddenCount} more {hiddenCount === 1 ? "fixture" : "fixtures"} on this day are
             available with PitchTerminal Pro.

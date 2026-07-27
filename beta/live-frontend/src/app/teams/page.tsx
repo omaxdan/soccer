@@ -22,8 +22,8 @@ export default async function TeamsPage() {
   const sorted = [...teams].sort((a, b) => (b.readiness ?? -1) - (a.readiness ?? -1));
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Intelligence</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Teams</h1>
         <p className="mt-2 max-w-2xl text-[0.82rem] leading-relaxed text-muted">
@@ -36,7 +36,7 @@ export default async function TeamsPage() {
       </header>
 
       {sorted.length === 0 ? (
-        <div className="panel p-5 text-center">
+        <div className="panel p-4 text-center">
           <p className="mono text-[0.72rem] text-muted">No team intelligence available.</p>
         </div>
       ) : (

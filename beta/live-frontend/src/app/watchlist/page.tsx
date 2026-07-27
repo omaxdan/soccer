@@ -14,7 +14,7 @@ export default async function WatchlistPage() {
 
   if (!identity.authenticated) {
     return (
-      <div className="panel mx-auto max-w-lg p-6 text-center">
+      <div className="panel mx-auto max-w-lg p-4 text-center">
         <span className="text-faint">
           <IconStar size={20} />
         </span>
@@ -51,8 +51,8 @@ export default async function WatchlistPage() {
   const empty = items.length === 0;
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Main</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Watchlist</h1>
         <p className="mono mt-2 text-[0.62rem] tracking-wide text-faint">
@@ -61,7 +61,7 @@ export default async function WatchlistPage() {
       </header>
 
       {empty ? (
-        <div className="panel p-5 text-center">
+        <div className="panel p-4 text-center">
           <p className="mono text-[0.74rem] text-muted">Nothing saved yet.</p>
           <p className="mt-1 text-[0.7rem] leading-relaxed text-faint">
             Use the star on a match, team or competition to follow its intelligence.

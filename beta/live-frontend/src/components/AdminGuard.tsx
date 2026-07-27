@@ -19,7 +19,7 @@ export async function requireAdmin(): Promise<
   return {
     ok: false,
     ui: (
-      <div className="panel mx-auto max-w-lg p-6 text-center">
+      <div className="panel mx-auto max-w-lg p-4 text-center">
         <span className="text-faint">
           <IconLock size={20} />
         </span>

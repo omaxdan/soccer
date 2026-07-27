@@ -23,7 +23,7 @@ export function Explain({ metric, className = "" }: { metric: GlossaryKey; class
         i
       </button>
       {open && (
-        <div className="absolute left-0 top-5 z-20 w-64 rounded-term border border-line bg-raised p-3 text-left shadow-lg">
+        <div className="absolute left-0 top-5 z-20 w-64 rounded-term border border-line bg-raised p-3 text-left">
           <p className="mono mb-1.5 text-[0.6rem] font-semibold uppercase tracking-wide text-amber">{entry.label}</p>
           <p className="mb-2 text-[0.72rem] leading-relaxed text-text">{entry.what}</p>
           <p className="mb-2 text-[0.7rem] leading-relaxed text-muted"><span className="text-faint">Why it matters — </span>{entry.why}</p>

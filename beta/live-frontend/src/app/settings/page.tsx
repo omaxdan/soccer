@@ -26,7 +26,7 @@ export default async function SettingsPage() {
 
   if (!identity.authenticated) {
     return (
-      <div className="panel mx-auto max-w-lg p-6 text-center">
+      <div className="panel mx-auto max-w-lg p-4 text-center">
         <span className="text-faint">
           <IconLock size={20} />
         </span>
@@ -67,14 +67,14 @@ export default async function SettingsPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Account</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Settings</h1>
       </header>
 
       {/* Account */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="mono mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           Account
         </h2>
@@ -95,7 +95,7 @@ export default async function SettingsPage() {
       </section>
 
       {/* Subscription */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="mono mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           Subscription
         </h2>
@@ -145,7 +145,7 @@ export default async function SettingsPage() {
       </section>
 
       {/* Favourites */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="mono mb-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           Favourite leagues
         </h2>
@@ -165,7 +165,7 @@ export default async function SettingsPage() {
       </section>
 
       {/* Notifications */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="mono mb-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           Notifications
         </h2>
@@ -183,7 +183,7 @@ export default async function SettingsPage() {
       </section>
 
       {/* Actions */}
-      <section className="panel p-5">
+      <section className="panel p-4">
         <h2 className="mono mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           Account actions
         </h2>

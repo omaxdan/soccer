@@ -40,8 +40,8 @@ export default async function LeaguesPage() {
   const regionsPresent = REGIONS.filter((r) => cards.some((c) => c.region === r));
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">League intelligence</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
           Where the engine is calibrated — and where it isn&rsquo;t.

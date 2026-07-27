@@ -156,7 +156,7 @@ export function ModuleFeed({
 }) {
   if (entries.length === 0) {
     return (
-      <div className="panel p-5 text-center">
+      <div className="panel p-4 text-center">
         <p className="mono text-[0.72rem] text-muted">
           No fixture in the window fires this module.
         </p>

@@ -116,7 +116,7 @@ export function ModuleReport({
   const overall = overallVerdict(t);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Report bar */}
       <div className="panel flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3">
         <div>

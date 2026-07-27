@@ -39,7 +39,7 @@ export function ExecutiveSummary({
 }) {
   if (!summary && badges.length === 0) return null;
   return (
-    <section className="panel p-5">
+    <section className="panel p-4">
       {summary && (
         <p className="max-w-3xl text-[0.88rem] leading-relaxed text-text">{summary}</p>
       )}

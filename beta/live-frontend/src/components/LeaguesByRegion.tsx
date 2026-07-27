@@ -31,7 +31,7 @@ export function LeaguesByRegion({ leagues, regions }: { leagues: LeagueCard[]; r
       </div>
 
       {filtered.length === 0 ? (
-        <p className="mono panel p-6 text-center text-[0.7rem] text-muted">No leagues in this region yet.</p>
+        <p className="mono panel p-4 text-center text-[0.7rem] text-muted">No leagues in this region yet.</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {filtered.map((l) => (

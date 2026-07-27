@@ -17,8 +17,8 @@ export default async function AdminSettingsPage() {
   const on = ctx.subscriptionsEnabled;
 
   return (
-    <div className="space-y-4">
-      <header className="panel p-5">
+    <div className="space-y-3">
+      <header className="panel p-4">
         <p className="eyebrow">Admin</p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
           Subscription control
@@ -28,7 +28,7 @@ export default async function AdminSettingsPage() {
         </p>
       </header>
 
-      <section className="panel p-5">
+      <section className="panel p-4">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
             Subscription system
@@ -57,7 +57,7 @@ export default async function AdminSettingsPage() {
       </section>
 
       {stats && (
-        <section className="panel p-5">
+        <section className="panel p-4">
           <h2 className="mono mb-3 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
             Platform
           </h2>
@@ -101,7 +101,7 @@ export default async function AdminSettingsPage() {
         </section>
       )}
 
-      <section id="features" className="panel scroll-mt-20 p-5">
+      <section id="features" className="panel scroll-mt-20 p-4">
         <h2 className="mono mb-3 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           <IconGate size={14} />
           Feature flags

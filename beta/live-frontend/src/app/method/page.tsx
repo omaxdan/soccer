@@ -28,8 +28,8 @@ const PILLARS = [
 
 export default function MethodPage() {
   return (
-    <div className="space-y-4">
-      <header className="scanlines panel overflow-hidden p-5">
+    <div className="space-y-3">
+      <header className="panel overflow-hidden p-4">
         <p className="eyebrow">Method</p>
         <h1 className="mt-1 max-w-xl text-xl font-semibold leading-tight tracking-tight sm:text-2xl">
           Data is the engine. The explanation is the product.
@@ -47,7 +47,7 @@ export default function MethodPage() {
           hatches in from the right. A wide amber band with little coral is a
           clean read. A narrow gap means proceed with care.
         </p>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div>
             <p className="label-cap mb-1.5">Clean edge — Novorizontino v Sport</p>
             <OpportunityRiskMeter opportunity={86} risk={18} />
@@ -65,7 +65,7 @@ export default function MethodPage() {
         </Section>
       ))}
 
-      <section className="panel border-l-2 border-l-amber p-5">
+      <section className="panel border-l-2 border-l-amber p-4">
         <p className="eyebrow mb-1">On responsibility</p>
         <p className="text-[0.85rem] leading-relaxed text-text">
           PitchTerminal is an intelligence tool, not a tipping service. It

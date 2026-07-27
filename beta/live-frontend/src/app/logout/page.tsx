@@ -5,7 +5,7 @@ export const metadata = { title: "Sign out" };
 export default function LogoutPage() {
   return (
     <div className="mx-auto max-w-sm">
-      <form action={signOut} className="panel p-5 text-center">
+      <form action={signOut} className="panel p-4 text-center">
         <h1 className="mono text-[0.85rem] font-semibold uppercase tracking-[0.16em] text-text">
           Sign out
         </h1>

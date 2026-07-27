@@ -61,7 +61,7 @@ export function AuthForm({
         <span className="h-px flex-1 bg-line" />
       </div>
 
-      <form action={formAction} className="panel p-5">
+      <form action={formAction} className="panel p-4">
         <h1 className="mono text-[0.85rem] font-semibold uppercase tracking-[0.16em] text-text">
           {title}
         </h1>

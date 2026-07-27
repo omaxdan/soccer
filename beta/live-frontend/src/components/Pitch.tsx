@@ -111,7 +111,7 @@ export function PitchLineup({
 
       {/* selected player detail */}
       {selected && (
-        <div className="mt-2 rounded-term border border-line bg-raised p-3 animate-fade-up">
+        <div className="mt-2 rounded-term border border-line bg-raised p-3">
           <div className="flex items-center gap-2">
             <span className="mono grid h-6 w-6 place-items-center rounded bg-ink text-[0.65rem] font-bold text-amber">
               {selected.shirt_number ?? "•"}

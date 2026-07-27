@@ -1,8 +1,8 @@
 // Shared loading skeleton for route-level loading.tsx files.
 export function PageSkeleton({ label = "Loading intelligence" }: { label?: string }) {
   return (
-    <div className="space-y-4 animate-fade-up" aria-busy="true">
-      <div className="panel p-5">
+    <div className="space-y-3" aria-busy="true">
+      <div className="panel p-4">
         <div className="h-4 w-40 animate-pulse rounded bg-raised" />
         <div className="mt-4 h-8 w-3/4 animate-pulse rounded bg-raised" />
         <div className="mt-4 h-2 w-full animate-pulse rounded bg-raised" />
