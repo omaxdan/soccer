@@ -75,57 +75,114 @@ const UNLOCKS = [
  * "Available on Pro" — tells someone only that they are being kept out, which
  * reads as the platform hiding football rather than offering depth.
  */
-export function LockedModuleCard({ def }: { def: ModuleDef }) {
+export function LockedModuleCard({ defs }: { defs: ModuleDef[] }) {
   return (
     <article
       className="panel p-4"
-      style={{ borderColor: "color-mix(in srgb, var(--amber) 20%, var(--line))" }}
+      style={{ borderColor: "color-mix(in srgb, var(--amber) 22%, var(--line))" }}
     >
-      <header className="flex items-start gap-2.5">
-        <span className="mt-0.5 text-faint">
-          <ModuleIcon moduleKey={def.key} size={18} />
+      <div className="flex items-center gap-2">
+        <span style={{ color: "var(--amber)" }}>
+          <IconLock size={13} />
         </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="mono text-[0.78rem] font-semibold tracking-tight text-text">
-            {def.name}
-          </h3>
-          <p className="mt-0.5 text-[0.72rem] leading-relaxed text-muted">{def.question}</p>
-        </div>
-        <span
-          className="mono inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[0.52rem] font-bold tracking-widest"
-          style={{
-            color: "var(--amber)",
-            background: "color-mix(in srgb, var(--amber) 12%, transparent)",
-          }}
-        >
-          <IconLock size={10} />
-          PRO
-        </span>
-      </header>
+        <h3 className="mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+          Available with Pro
+        </h3>
+      </div>
+
+      <ul className="mt-2.5 grid gap-x-5 gap-y-1 sm:grid-cols-2">
+        {defs.map((d) => (
+          <li key={d.key} className="flex items-start gap-1.5 text-[0.74rem] text-text">
+            <span className="mt-0.5 shrink-0" style={{ color: "var(--edge)" }}>
+              <IconSupports size={10} />
+            </span>
+            <span className="min-w-0">
+              {d.name}
+              <span className="block text-[0.64rem] leading-snug text-faint">{d.question}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
 
       <div className="mt-3 border-t border-line pt-2.5">
-        <p className="label-cap mb-1.5">Pro unlocks</p>
-        <ul className="space-y-0.5">
-          {UNLOCKS.map((u) => (
-            <li key={u} className="flex items-start gap-1.5 text-[0.7rem] text-muted">
-              <span className="mt-0.5 shrink-0" style={{ color: "var(--amber)" }}>
-                <IconSupports size={10} />
-              </span>
-              {u}
-            </li>
-          ))}
-        </ul>
+        <p className="label-cap mb-1">Each adds</p>
+        <p className="text-[0.7rem] leading-relaxed text-muted">
+          {UNLOCKS.join(" · ")}
+        </p>
       </div>
 
       <Link
         href="/subscription"
-        className="mono mt-3 inline-flex items-center gap-1.5 rounded-term px-2.5 py-1.5 text-[0.62rem] font-semibold tracking-widest transition-opacity hover:opacity-80"
+        className="mono mt-3 inline-flex items-center gap-1.5 rounded-term px-2.5 py-1.5 text-[0.62rem] font-semibold tracking-widest"
         style={{ color: "var(--ink)", background: "var(--amber)" }}
       >
         UPGRADE TO PRO
         <IconArrowRight size={11} />
       </Link>
     </article>
+  );
+}
+
+/** A single locked module in the list beneath the card. */
+export function LockedRow({ def }: { def: ModuleDef }) {
+  return (
+    <li className="flex items-center gap-2 rounded-term px-2 py-1.5" style={{ background: "var(--raised)" }}>
+      <span className="text-faint">
+        <ModuleIcon moduleKey={def.key} size={13} />
+      </span>
+      <span className="mono min-w-0 flex-1 truncate text-[0.72rem] text-muted">{def.name}</span>
+      <span
+        className="mono shrink-0 rounded px-1.5 py-0.5 text-[0.5rem] font-bold tracking-widest"
+        style={{ color: "var(--amber)", background: "color-mix(in srgb, var(--amber) 12%, transparent)" }}
+      >
+        PRO
+      </span>
+    </li>
+  );
+}
+
+/**
+ * Sits directly under the Instant Verdict, so the value case appears before a
+ * reader scrolls the whole report rather than after it.
+ */
+export function ProTeaser({ lockedCount }: { lockedCount: number }) {
+  return (
+    <section
+      className="panel p-4"
+      style={{ borderColor: "color-mix(in srgb, var(--amber) 22%, var(--line))" }}
+    >
+      <h2 className="mono text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-text">
+        Full intelligence report
+      </h2>
+      <p className="mt-1 text-[0.76rem] leading-relaxed text-muted">
+        See why this fixture leans the way it does. {lockedCount} further evidence streams are
+        counted in this reading but not shown in full.
+      </p>
+      <ul className="mt-2 grid gap-x-5 gap-y-0.5 sm:grid-cols-2">
+        {[
+          "Evidence breakdown",
+          "Confidence calibration",
+          "Module agreement",
+          "Historical samples",
+          "Risk factors",
+        ].map((f) => (
+          <li key={f} className="flex items-center gap-1.5 text-[0.72rem] text-text">
+            <span style={{ color: "var(--edge)" }}>
+              <IconSupports size={10} />
+            </span>
+            {f}
+          </li>
+        ))}
+      </ul>
+      <Link
+        href="/subscription"
+        className="mono mt-3 inline-flex items-center gap-1.5 rounded-term px-2.5 py-1.5 text-[0.62rem] font-semibold tracking-widest"
+        style={{ color: "var(--ink)", background: "var(--amber)" }}
+      >
+        UPGRADE TO PRO
+        <IconArrowRight size={11} />
+      </Link>
+    </section>
   );
 }
 

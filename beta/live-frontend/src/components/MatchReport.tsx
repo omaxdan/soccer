@@ -25,7 +25,7 @@ import {
 import Link from "next/link";
 import type { MatchRow } from "@/lib/types";
 import { canSee, type Tier } from "@/lib/tier";
-import { LockedModuleCard, UpgradePrompt } from "./FeatureGate";
+import { LockedModuleCard, UpgradePrompt, ProTeaser, LockedRow } from "./FeatureGate";
 import { IconUnverified, IconSupports, IconContradicts, IconNeutral, IconLock } from "./icons/ModuleIcons";
 
 // ── Formatting helpers ───────────────────────────────────
@@ -346,6 +346,9 @@ export function MatchReport({
   );
 
   const lockedReadings = readings.filter((r) => r.locked);
+  // One flag drives every gated block below, so the page cannot show a
+  // consensus in one section and withhold it in the next.
+  const full = lockedReadings.length === 0;
 
   // ── Market profiles ───────────────────────────────────────────────────────
   const profileFor = (label: string, keys: number[]) => {
@@ -446,22 +449,36 @@ export function MatchReport({
             </div>
           )}
           <div>
-            <div className="label-cap">Evidence streams</div>
+            <div className="label-cap">
+              {full ? "Evidence streams" : "Signals analysed"}
+            </div>
             <div className="mono tnum text-[0.85rem] text-text">
-              {firing}<span className="text-[0.65rem] text-faint">/{MODULES.length}</span>
+              {firing}
+              {full && <span className="text-[0.65rem] text-faint">/{MODULES.length}</span>}
             </div>
           </div>
-          <div>
-            <div className="label-cap">Consensus</div>
-            <div className="mono text-[0.85rem] font-semibold" style={{ color: overall.color }}>
-              {overall.label}
-              <span className="ml-1.5 text-[0.6rem] font-normal text-faint">
-                {t.supports}S {t.neutral}N {t.contradicts}C
-              </span>
+          {full ? (
+            <div>
+              <div className="label-cap">Consensus</div>
+              <div className="mono text-[0.85rem] font-semibold" style={{ color: overall.color }}>
+                {overall.label}
+                <span className="ml-1.5 text-[0.6rem] font-normal text-faint">
+                  {t.supports}S {t.neutral}N {t.contradicts}C
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="label-cap">Consensus strength</div>
+              <div className="mono text-[0.8rem] font-semibold" style={{ color: "var(--amber)" }}>
+                Available on Pro
+              </div>
+            </div>
+          )}
         </div>
       </Section>
+
+      {!full && <ProTeaser lockedCount={lockedReadings.length} />}
 
       {/* 3 — Executive summary */}
       <Section title="Executive summary">
@@ -469,7 +486,30 @@ export function MatchReport({
       </Section>
 
       {/* 4 — Why confidence is limited */}
-      {limits.length > 0 && (
+      {!full && (
+        <Section title="Confidence limitations">
+          <p className="text-[0.76rem] leading-relaxed text-muted">
+            Some evidence streams for this fixture show uncertainty — thin samples,
+            contradicting signals, or a calibration band that has historically underperformed.
+          </p>
+          <ul className="mt-2 space-y-0.5">
+            {[
+              "Why confidence is limited on this fixture",
+              "Which streams contradict the lean",
+              "Historical reliability of this band, with its sample",
+            ].map((x) => (
+              <li key={x} className="text-[0.72rem] text-faint">
+                {x}
+              </li>
+            ))}
+          </ul>
+          <p className="mono mt-2 text-[0.62rem] tracking-widest" style={{ color: "var(--amber)" }}>
+            AVAILABLE ON PRO
+          </p>
+        </Section>
+      )}
+
+      {full && limits.length > 0 && (
         <Section title="Why confidence is limited">
           <ul className="space-y-1">
             {limits.map((l) => (
@@ -483,7 +523,30 @@ export function MatchReport({
       )}
 
       {/* 5 — Evidence scorecard */}
-      {scorecard.length > 0 && (
+      {!full && (
+        <Section title="Evidence scorecard">
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <div>
+              <div className="label-cap">Supporting signals</div>
+              <div className="mono tnum text-xl font-semibold" style={{ color: "var(--edge)" }}>
+                {supports.length}
+              </div>
+            </div>
+            <div>
+              <div className="label-cap">Conflicting signals</div>
+              <div className="mono tnum text-xl font-semibold" style={{ color: "var(--risk)" }}>
+                {contradicts.length}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-[0.72rem] leading-relaxed text-muted">
+            Which streams support and which conflict, with their strength, historical rate and
+            sample, is on Pro.
+          </p>
+        </Section>
+      )}
+
+      {full && scorecard.length > 0 && (
         <Section title="Evidence scorecard">
           <table className="w-full border-collapse text-[0.72rem]">
             <thead>
@@ -509,17 +572,33 @@ export function MatchReport({
       )}
 
       {lockedReadings.length > 0 && (
-        <Section title="Available on Pro">
-          <div className="grid gap-2.5 lg:grid-cols-2">
+        <Section title={`${lockedReadings.length} intelligence modules detected`}>
+          {/* One value card, then a compact row each. Repeating the full
+              upgrade pitch eight times produced scrolling fatigue and made the
+              page read as an advert rather than a report. */}
+          <LockedModuleCard defs={lockedReadings.map((r) => r.def)} />
+          <ul className="mt-2.5 grid gap-1 sm:grid-cols-2">
             {lockedReadings.map((r) => (
-              <LockedModuleCard key={r.def.key} def={r.def} />
+              <LockedRow key={r.def.key} def={r.def} />
             ))}
-          </div>
+          </ul>
         </Section>
       )}
 
       {/* 6 — Historical market profiles */}
-      {markets.length > 0 && (
+      {!full && (
+        <Section title="Historical market profiles">
+          <p className="text-[0.76rem] leading-relaxed text-muted">
+            Which market profiles this fixture&rsquo;s history aligns with, how strongly, and
+            which evidence streams drive each one.
+          </p>
+          <p className="mono mt-2 text-[0.62rem] tracking-widest" style={{ color: "var(--amber)" }}>
+            AVAILABLE ON PRO
+          </p>
+        </Section>
+      )}
+
+      {full && markets.length > 0 && (
         <Section title="Historical market profiles">
           <div className="grid gap-2.5 sm:grid-cols-2">
             {markets.map((mk) => (

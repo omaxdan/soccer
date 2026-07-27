@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/lib/queries";
-import { getAccessContext, redactReadings } from "@/lib/access";
+import { getAccessContext, redactReadings, canAccessFeature } from "@/lib/access";
 import { UpgradePrompt } from "@/components/FeatureGate";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
@@ -71,6 +71,11 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     rows.map((p) => ({ ...p, versatility_score: versatility[p.player_id] ?? null }));
   // Redacted server-side: a locked module's numbers never reach the client.
   const access = await getAccessContext();
+
+  // One flag for the whole page: the calibrated layer follows the Confidence
+  // Calibration module's own tier, so hero, verdict and scorecard cannot
+  // disagree about who sees what.
+  const heroFull = canAccessFeature(access, "CONFIDENCE_CALIBRATION");
   const moduleReadings = redactReadings(
     buildMatchReadings(m, scoringProbs, null, bandBacktests),
     access
@@ -161,47 +166,90 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
             here (expected goals, BTTS breakdown, winner market, adjusted form,
             giant killer, readiness gap) now appears once, in the Instant
             Verdict, rather than twice on one page. */}
+        {/* Free sees direction and coverage; the calibrated figures and the
+            consensus are Pro. The lean still carries a plain-language
+            reliability marker — a directional hint with NO indication of how
+            trustworthy it is would be the one genuinely irresponsible thing to
+            ship on a page aimed at bettors. */}
         <div className="mt-4 grid gap-2.5 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="panel p-3">
             <div className="label-cap">Historical lean</div>
             <div className="mono mt-0.5 truncate text-[0.95rem] font-semibold text-text">
               {heroPickName ?? "No edge"}
             </div>
+            {!heroFull && (
+              <div className="mono text-[0.58rem] text-faint">direction only</div>
+            )}
           </div>
 
-          <div className="panel p-3">
-            <div className="label-cap">Confidence</div>
-            <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
-              {i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
-            </div>
-            {i?.confidence_band && (
-              <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
-                {i.confidence_band}
+          {heroFull ? (
+            <div className="panel p-3">
+              <div className="label-cap">Confidence</div>
+              <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+                {i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
               </div>
+              {i?.confidence_band && (
+                <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
+                  {i.confidence_band}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="panel p-3">
+              <div className="label-cap">Confidence calibration</div>
+              <div className="mono mt-0.5 text-[0.8rem] font-semibold" style={{ color: "var(--amber)" }}>
+                Available on Pro
+              </div>
+              <div className="mono text-[0.58rem] text-faint">
+                how reliable this lean has been
+              </div>
+            </div>
+          )}
+
+          <div className="panel p-3">
+            <div className="label-cap">
+              {heroFull ? "Evidence" : "Intelligence coverage"}
+            </div>
+            {heroFull ? (
+              <>
+                <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+                  {heroFiring}
+                  <span className="text-[0.7rem] text-faint">/{MODULES.length}</span>
+                </div>
+                <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
+                  {heroOverall.label}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+                  {heroFiring}
+                </div>
+                <div className="mono text-[0.58rem] text-faint">signals analysed</div>
+              </>
             )}
           </div>
 
           <div className="panel p-3">
-            <div className="label-cap">Evidence</div>
-            <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
-              {heroFiring}
-              <span className="text-[0.7rem] text-faint">/{MODULES.length}</span>
+            <div className="label-cap">
+              {heroFull ? "Readiness" : "Readiness advantage"}
             </div>
-            <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
-              {heroOverall.label}
-            </div>
-          </div>
-
-          <div className="panel p-3">
-            <div className="label-cap">Readiness</div>
-            <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
-              {i?.home_readiness != null && i?.away_readiness != null
-                ? `${Math.round(i.home_readiness)} – ${Math.round(i.away_readiness)}`
-                : "—"}
-            </div>
-            {heroGap != null && heroGapName && (
-              <div className="mono text-[0.6rem] text-muted">
-                {heroGap > 0 ? "+" : ""}{Math.round(heroGap)} {heroGapName}
+            {heroFull ? (
+              <>
+                <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+                  {i?.home_readiness != null && i?.away_readiness != null
+                    ? `${Math.round(i.home_readiness)} – ${Math.round(i.away_readiness)}`
+                    : "—"}
+                </div>
+                {heroGap != null && heroGapName && (
+                  <div className="mono text-[0.6rem] text-muted">
+                    {heroGap > 0 ? "+" : ""}{Math.round(heroGap)} {heroGapName}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="mono mt-0.5 truncate text-[0.95rem] font-semibold text-text">
+                {heroGapName ?? "Level"}
               </div>
             )}
           </div>
