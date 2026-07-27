@@ -326,7 +326,7 @@ export async function getLineups(matchId: number): Promise<PredictedLineupPlayer
   // jersey_number) — mapped onto the same field name the UI expects.
   const { data, error } = await client
     .from("match_predicted_lineups")
-    .select(`team_id, player_id, position_code, rank_in_position, confidence,
+    .select(`team_id, player_id, position_code, rank_in_position, confidence, matches_started,
              player:players(id, name, short_name, position, secondary_position, tertiary_position, jersey_number, current_injury, injury_status, injury_reason, injury_return_days, market_value)`)
     .eq("match_id", matchId)
     .order("team_id", { ascending: true })
@@ -346,6 +346,7 @@ export async function getLineups(matchId: number): Promise<PredictedLineupPlayer
     tertiary_position: r.player?.tertiary_position ?? null,
     rank_in_position: r.rank_in_position,
     confidence: r.confidence,
+    matches_started: r.matches_started ?? null,
     shirt_number: r.player?.jersey_number ?? null,
     player: r.player,
   }));
@@ -995,6 +996,73 @@ export async function getBandBacktests(): Promise<Record<string, BandBacktest>> 
         evaluatedAt: r.evaluated_at ?? null,
       };
     }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-fixture player impact
+//
+// player_match_impact is already scoped to one match, so its scores carry the
+// opponent context that player_intelligence deliberately does not. Everything
+// the battles section ranks on is a column here — nothing is recomputed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getMatchPlayerImpact(
+  matchId: number
+): Promise<import("./types").MatchPlayerImpact[]> {
+  const client = db();
+  if (!client) return [];
+  try {
+    const { data, error } = await client
+      .from("player_match_impact")
+      .select(
+        `player_id, impact_score, importance_score, form_rating, goal_threat,
+         assist_threat, creativity_score, defensive_contribution, impact_band,
+         player:players(id, name, short_name, jersey_number, team_id, position, primary_position)`
+      )
+      .eq("match_id", matchId);
+    if (error || !data) return [];
+    return (data as any[])
+      .filter((r) => r.player)
+      .map((r) => ({
+        player_id: r.player_id,
+        team_id: r.player.team_id,
+        name: r.player.name,
+        short_name: r.player.short_name ?? null,
+        jersey_number: r.player.jersey_number ?? null,
+        position_code: r.player.primary_position ?? r.player.position ?? null,
+        impact_score: r.impact_score ?? null,
+        importance_score: r.importance_score ?? null,
+        form_rating: r.form_rating ?? null,
+        goal_threat: r.goal_threat ?? null,
+        assist_threat: r.assist_threat ?? null,
+        creativity_score: r.creativity_score ?? null,
+        defensive_contribution: r.defensive_contribution ?? null,
+        impact_band: r.impact_band ?? null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Versatility scores for a set of players, where a row exists. */
+export async function getPlayerVersatility(
+  playerIds: number[]
+): Promise<Record<number, number | null>> {
+  const client = db();
+  if (!client || playerIds.length === 0) return {};
+  try {
+    const { data, error } = await client
+      .from("player_versatility")
+      .select("player_id, versatility_score")
+      .in("player_id", playerIds);
+    if (error || !data) return {};
+    const out: Record<number, number | null> = {};
+    for (const v of data as any[]) out[v.player_id] = v.versatility_score ?? null;
     return out;
   } catch {
     return {};

@@ -459,6 +459,9 @@ export interface PredictedLineupPlayer {
   tertiary_position?: string | null;
   rank_in_position: number | null;
   confidence: number | null;
+  /** Season starts behind this prediction — a column on match_predicted_lineups. */
+  matches_started?: number | null;
+  versatility_score?: number | null;
   shirt_number?: number | null;
   player?: PlayerLite;
 }
@@ -704,4 +707,23 @@ export interface MatchScoringProbabilities {
   league_btts_pct: string | number | null;
   btts_verdict: string | null;
   components_available: number | null;
+}
+
+
+/** A row of player_match_impact, scoped to one fixture. */
+export interface MatchPlayerImpact {
+  player_id: number;
+  team_id: number;
+  name: string;
+  short_name: string | null;
+  jersey_number: number | null;
+  position_code: string | null;
+  impact_score: number | null;
+  importance_score: number | null;
+  form_rating: number | null;
+  goal_threat: number | null;
+  assist_threat: number | null;
+  creativity_score: number | null;
+  defensive_contribution: number | null;
+  impact_band: string | null;
 }

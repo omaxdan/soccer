@@ -22,9 +22,8 @@ import {
   type Baseline,
 } from "@/lib/modules";
 import Link from "next/link";
-import type { MatchRow, PredictedLineupPlayer } from "@/lib/types";
+import type { MatchRow } from "@/lib/types";
 import { canSee, type Tier } from "@/lib/tier";
-import { getFormationName, unitConfidence } from "@/lib/formation";
 import { IconUnverified, IconSupports, IconContradicts, IconNeutral, IconLock } from "./icons/ModuleIcons";
 
 // ── Formatting helpers ───────────────────────────────────
@@ -140,14 +139,10 @@ export const MATCH_REPORT_ANCHOR = "match-report";
 export function MatchReport({
   match: m,
   readings: allReadings,
-  homeLineup,
-  awayLineup,
   viewer,
 }: {
   match: MatchRow;
   readings: ModuleReading[];
-  homeLineup: PredictedLineupPlayer[];
-  awayLineup: PredictedLineupPlayer[];
   viewer: Tier;
 }) {
   // The module cards used to carry tier gating; with those gone this report is
@@ -492,32 +487,6 @@ export function MatchReport({
         </Section>
       )}
 
-      {(homeLineup.length > 0 || awayLineup.length > 0) && (
-        <Section title="Predicted lineups">
-          <KeyValueTable
-            headers={["Team", "Shape and unit confidence"]}
-            rows={[
-              ...(homeLineup.length
-                ? ([[homeName, unitLine(homeLineup)]] as [string, React.ReactNode][])
-                : []),
-              ...(awayLineup.length
-                ? ([[awayName, unitLine(awayLineup)]] as [string, React.ReactNode][])
-                : []),
-            ]}
-          />
-        </Section>
-      )}
-
-      <Section title="Important note">
-        <p className="text-[0.68rem] leading-relaxed text-muted">
-          PitchTerminal reports historical frequencies. It does not predict results, does not
-          price markets, and does not tell you what to stake. A published rate means only that
-          this pattern held at that frequency in the matches we counted, within the interval
-          shown. Rules that fall below our sample gate are marked, not hidden. Betting involves
-          risk of loss.
-        </p>
-      </Section>
-
       <Section title="Data notes">
         <KeyValueTable
           headers={["Module", "Status"]}
@@ -579,12 +548,24 @@ export function MatchReport({
   );
 }
 
-function unitLine(players: PredictedLineupPlayer[]): string {
-  const u = unitConfidence(players);
-  const bits = [
-    u.defence != null ? `DEF ${u.defence}%` : null,
-    u.midfield != null ? `MID ${u.midfield}%` : null,
-    u.attack != null ? `ATT ${u.attack}%` : null,
-  ].filter(Boolean);
-  return `${getFormationName(players)}${bits.length ? ` — ${bits.join(" · ")}` : ""}`;
+/**
+ * The legal note, exported so the page can place it last. It previously sat
+ * mid-report, ahead of the data notes and takeaways — the disclaimer arrived
+ * before the analysis it disclaims.
+ */
+export function ImportantNote() {
+  return (
+    <section className="panel p-5">
+      <h2 className="mono mb-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-text">
+        Important note
+      </h2>
+      <p className="text-[0.72rem] leading-relaxed text-muted">
+        PitchTerminal reports historical frequencies. It does not predict results, does not
+        price markets, and does not tell you what to stake. A published rate means only that
+        this pattern held at that frequency in the matches we counted, within the interval
+        shown. Rules that fall below our sample gate are marked, not hidden. Betting involves
+        risk of loss.
+      </p>
+    </section>
+  );
 }

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getBandBacktests } from "@/lib/queries";
+import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/lib/queries";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs } from "@/lib/queries";
@@ -7,7 +7,9 @@ import { Crest } from "@/components/Crest";
 import { StatCell, PickBadge } from "@/components/Primitives";
 import { OpportunityRiskMeter, BarMeter, VersusBar } from "@/components/Meters";
 import { ModuleReport, buildMatchReadings } from "@/components/ModuleReport";
-import { MatchReport } from "@/components/MatchReport";
+import { MatchReport, ImportantNote } from "@/components/MatchReport";
+import { PredictedXI } from "@/components/PredictedXI";
+import { KeyPlayerBattles } from "@/components/KeyPlayerBattles";
 import { InjuryPanel } from "@/components/InjuryPanel";
 import { currentTier } from "@/lib/tier";
 import { teamSlug } from "@/lib/slug";
@@ -51,7 +53,19 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
   // Modules are evaluated once and shared with <ModuleReport />, which passes
   // the readings on to <MatchReport />.
-  const bandBacktests = await getBandBacktests();
+  const [bandBacktests, playerImpacts] = await Promise.all([
+    getBandBacktests(),
+    getMatchPlayerImpact(m.id),
+  ]);
+
+  // Versatility only where player_versatility holds a row; absent players
+  // simply render no versatility line.
+  const versatility = await getPlayerVersatility([
+    ...homeLineup.map((p) => p.player_id),
+    ...awayLineup.map((p) => p.player_id),
+  ]);
+  const withVersatility = (rows: typeof homeLineup) =>
+    rows.map((p) => ({ ...p, versatility_score: versatility[p.player_id] ?? null }));
   const moduleReadings = buildMatchReadings(m, scoringProbs, null, bandBacktests);
 
   // ── Standalone sections (no tabs) ──
@@ -179,15 +193,26 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           <MatchReport
             match={m}
             readings={moduleReadings}
-            homeLineup={homeLineup}
-            awayLineup={awayLineup}
             viewer={currentTier()}
           />
         }
       />
 
-      {/* 4 — Unavailable players, when either side has records */}
+      {/* 4 — Predicted starting elevens */}
+      <PredictedXI
+        match={m}
+        homeLineup={withVersatility(homeLineup)}
+        awayLineup={withVersatility(awayLineup)}
+      />
+
+      {/* 5 — Key player battles */}
+      <KeyPlayerBattles match={m} impacts={playerImpacts} />
+
+      {/* 6 — Unavailable players, when either side has records */}
       <InjuryPanel match={m} />
+
+      {/* 7 — Final disclaimer, after every analysis section */}
+      <ImportantNote />
 
     </div>
   );
