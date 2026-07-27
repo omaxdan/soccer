@@ -131,6 +131,13 @@ export interface ModuleReading {
    * that duplication is how the match story ended up contradicting M1.
    */
   code?: string;
+  /**
+   * Set by redactReadings when this module is above the viewer's tier. The
+   * def survives, so a locked card can still state the question the module
+   * answers — the point is to show that intelligence exists, not to pretend
+   * it does not.
+   */
+  locked?: boolean;
 }
 
 // ── Registry ─────────────────────────────────────────────

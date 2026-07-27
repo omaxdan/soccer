@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAccessContext } from "@/lib/access";
+import { getAccessContext, getViewerIdentity } from "@/lib/access";
 import { MODULES } from "@/lib/modules";
 import { IconSupports } from "@/components/icons/ModuleIcons";
 
@@ -9,7 +9,9 @@ export const metadata = { title: "Subscription" };
 const FREE_MODULES = ["home_away", "travel", "league_goals", "form_gap", "confidence"];
 
 export default async function SubscriptionPage() {
-  const ctx = await getAccessContext();
+  const [ctx, identity] = await Promise.all([getAccessContext(), getViewerIdentity()]);
+  const currentPlan = (identity.plan ?? (identity.authenticated ? "free" : null));
+  const isPro = currentPlan === "pro";
   const free = MODULES.filter((m) => FREE_MODULES.includes(m.key));
 
   const plans = [
@@ -63,6 +65,43 @@ export default async function SubscriptionPage() {
           </p>
         )}
       </header>
+
+      {identity.authenticated && (
+        <section className="panel p-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="label-cap">Current plan</span>
+            <span
+              className="mono rounded px-2 py-0.5 text-[0.66rem] font-bold tracking-widest"
+              style={{
+                color: isPro ? "var(--amber)" : "var(--edge)",
+                background: `color-mix(in srgb, ${isPro ? "var(--amber)" : "var(--edge)"} 14%, transparent)`,
+              }}
+            >
+              {(currentPlan ?? "free").toUpperCase()}
+            </span>
+            {isPro && identity.subscriptionExpiresAt && (
+              <span className="mono text-[0.68rem] text-muted">
+                Active until{" "}
+                {new Date(identity.subscriptionExpiresAt).toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-[0.76rem] leading-relaxed text-muted">
+            {isPro
+              ? "$19 per month. All intelligence modules, full match reports and player intelligence."
+              : "Match discovery and the open modules. Pro adds the remaining evidence layer."}
+          </p>
+          <p className="mt-2 text-[0.7rem] leading-relaxed text-faint">
+            {isPro
+              ? "Billing management arrives with the payment provider."
+              : "Nothing is charged; the upgrade path is not connected yet."}
+          </p>
+        </section>
+      )}
 
       <div className="grid gap-3 lg:grid-cols-2">
         {plans.map((p) => (

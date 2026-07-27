@@ -25,6 +25,7 @@ import {
 import Link from "next/link";
 import type { MatchRow } from "@/lib/types";
 import { canSee, type Tier } from "@/lib/tier";
+import { LockedModuleCard, UpgradePrompt } from "./FeatureGate";
 import { IconUnverified, IconSupports, IconContradicts, IconNeutral, IconLock } from "./icons/ModuleIcons";
 
 // ── Formatting helpers ───────────────────────────────────
@@ -324,13 +325,27 @@ export function MatchReport({
     if (b?.sample != null && b.sample >= 200) return "Strong";
     return "Moderate";
   };
-  const scorecard = [...supports, ...contradicts].map((r) => ({
-    evidence: r.def.name,
-    direction: r.status === "contradicts" ? "Against" : pickName ?? "Lean",
-    directionColor: r.status === "contradicts" ? "var(--risk)" : "var(--edge)",
-    strength: strengthOf(r),
-    detail: r.headline,
-  }));
+  const scorecard = [...supports, ...contradicts].map((r) =>
+    r.locked
+      ? {
+          evidence: r.def.name,
+          direction: "PRO SIGNAL",
+          directionColor: "var(--amber)",
+          strength: "—",
+          detail: "Direction, strength, historical rate and sample on Pro",
+          locked: true,
+        }
+      : {
+          evidence: r.def.name,
+          direction: r.status === "contradicts" ? "Against" : pickName ?? "Lean",
+          directionColor: r.status === "contradicts" ? "var(--risk)" : "var(--edge)",
+          strength: strengthOf(r),
+          detail: r.headline,
+          locked: false,
+        }
+  );
+
+  const lockedReadings = readings.filter((r) => r.locked);
 
   // ── Market profiles ───────────────────────────────────────────────────────
   const profileFor = (label: string, keys: number[]) => {
@@ -493,6 +508,16 @@ export function MatchReport({
         </Section>
       )}
 
+      {lockedReadings.length > 0 && (
+        <Section title="Available on Pro">
+          <div className="grid gap-2.5 lg:grid-cols-2">
+            {lockedReadings.map((r) => (
+              <LockedModuleCard key={r.def.key} def={r.def} />
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* 6 — Historical market profiles */}
       {markets.length > 0 && (
         <Section title="Historical market profiles">
@@ -532,7 +557,12 @@ export function MatchReport({
               {neutral.map((r) => (
                 <tr key={r.def.key} className="border-b border-line last:border-0">
                   <td className="py-1.5 pr-3 text-muted">{r.def.name}</td>
-                  <td className="mono py-1.5 text-faint">{r.headline}</td>
+                  <td
+                    className="mono py-1.5"
+                    style={{ color: r.locked ? "var(--amber)" : "var(--faint)" }}
+                  >
+                    {r.locked ? "PRO SIGNAL" : r.headline}
+                  </td>
                 </tr>
               ))}
             </tbody>

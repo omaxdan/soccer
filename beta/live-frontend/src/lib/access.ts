@@ -207,12 +207,14 @@ export function redactReadings(
       ? r
       : {
           ...r,
-          headline: "Available on Pro",
+          locked: true,
+          // Every value stripped. The def stays so the card can name the
+          // question — a reader should learn the module exists and what it
+          // would tell them, not just meet a wall.
+          headline: r.def.question,
           rows: [],
           baseline: null,
-          verdict:
-            `${r.def.name} is part of the Pro intelligence set. Its reading is counted in ` +
-            `the consensus above; the detail is not shown on this tier.`,
+          verdict: "",
           code: undefined,
         }
   );
@@ -443,4 +445,35 @@ export function redactTeamInputs<
     withheld.push("Readiness Tracker");
   }
   return { input: out, withheld };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Board limits
+//
+// Applied on the SERVER, before entries are serialised — the capped rows never
+// reach the browser. Ranking is by consensus, so what a Free viewer sees is the
+// strongest intelligence of the day rather than an arbitrary slice.
+//
+// The cap is applied after evaluation because "highest intelligence" is a
+// property of the readings, and the readings need the fetch. The window is
+// already bounded to a few days, so this is a small set being ranked, not the
+// whole database being pulled to throw away.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BoardLimit {
+  /** Fixtures shown per day. null = unlimited. */
+  perDay: number | null;
+  /** Whether the "All days" view is offered. */
+  allowAllDays: boolean;
+}
+
+export function boardLimit(ctx: AccessContext): BoardLimit {
+  if (!ctx.subscriptionsEnabled || ctx.isAdmin) return { perDay: null, allowAllDays: true };
+  if (ctx.planRank > 0) return { perDay: null, allowAllDays: true };
+  // Anonymous sees fewer than a registered Free account: signing up is itself
+  // a step worth rewarding, and it costs nothing to grant.
+  return ctx.authenticated
+    ? { perDay: 5, allowAllDays: false }
+    : { perDay: 3, allowAllDays: false };
 }

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/lib/queries";
 import { getAccessContext, redactReadings } from "@/lib/access";
+import { UpgradePrompt } from "@/components/FeatureGate";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -237,6 +238,14 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           />
         }
       />
+
+      {/* Free viewers only: what the locked streams would add. */}
+      {moduleReadings.some((r) => r.locked) && (
+        <UpgradePrompt
+          moduleCount={MODULES.length}
+          lockedCount={moduleReadings.filter((r) => r.locked).length}
+        />
+      )}
 
       {/* 4 — Predicted starting elevens */}
       <PredictedXI

@@ -306,6 +306,7 @@ export function DateNav({
   total,
   basePath = "/matches",
   extraParams = {},
+  showAll = true,
 }: {
   days: DayOption[];
   active: string | null;
@@ -313,6 +314,12 @@ export function DateNav({
   basePath?: string;
   /** Carried through every chip so ?sort= and ?module= survive a date change. */
   extraParams?: Record<string, string>;
+  /**
+   * "All" is hidden when the board is limited: it would promise the whole
+   * fixture list and then deliver a capped one, which reads as a bug rather
+   * than a tier.
+   */
+  showAll?: boolean;
 }) {
   if (days.length === 0) return null;
   const hrefFor = (date?: string) => {
@@ -341,7 +348,7 @@ export function DateNav({
       aria-label="Match day"
       className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      {chip(hrefFor(), "All", total, active == null)}
+      {showAll && chip(hrefFor(), "All", total, active == null)}
       {days.map((d) => chip(hrefFor(d.key), d.label, d.count, active === d.key))}
     </nav>
   );
