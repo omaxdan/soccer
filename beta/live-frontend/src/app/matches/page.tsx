@@ -28,9 +28,9 @@ export default async function FixturesPage({
   const viewer = currentTier();
   const bandBacktests = await getBandBacktests();
 
-  // Same grid the board uses, grouped by match day instead of competition —
-  // this page's job is the schedule, so kickoff order is fixed rather than
-  // offered as a sort. No betting card is fetched: the card only ever back-
+  // Same grid AND the same grouping as the board — country then competition.
+  // The date strip is this page's day axis, so grouping is free to match the
+  // dashboard. No betting card is fetched: the card only ever back-
   // filled a missing form_index, and getBoard now carries team_intelligence
   // in full.
   const all = sortEntries(buildFeed(matches, [], bandBacktests), "kickoff");
@@ -72,7 +72,7 @@ export default async function FixturesPage({
         <FeedTable
           entries={entries}
           viewer={viewer}
-          groupBy="day"
+          groupBy="league"
           maxHeight="calc(100vh - 14rem)"
         />
       )}

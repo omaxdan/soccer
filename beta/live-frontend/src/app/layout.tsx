@@ -62,7 +62,6 @@ export default function RootLayout({
         <div className="mx-auto flex max-w-6xl gap-6 px-4 py-4 md:py-6">
           <aside className="hidden w-44 shrink-0 md:block">
             <SideNav />
-            <MethodNote />
           </aside>
           <main className="min-w-0 flex-1">{children}</main>
         </div>
@@ -73,13 +72,3 @@ export default function RootLayout({
   );
 }
 
-function MethodNote() {
-  return (
-    <div className="panel mt-6 p-3">
-      <p className="mono text-[0.6rem] leading-relaxed text-muted">
-        The data is the engine. The explanation is the product. PitchTerminal
-        translates the warehouse into a decision — never a raw stat dump.
-      </p>
-    </div>
-  );
-}

@@ -1082,6 +1082,8 @@ export interface TeamDirectoryRow {
   name: string;
   short_name: string | null;
   country: string | null;
+  /** Storage path the shared <Crest /> resolves; null falls back to initials. */
+  crest_storage_path: string | null;
   readiness: number | null;
   form: number | null;
   adjustedForm: number | null;
@@ -1104,7 +1106,7 @@ export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]>
     const ids = (intel as any[]).map((r) => r.team_id);
 
     const [teams, quality, dash] = await Promise.all([
-      client.from("teams").select("id, name, short_name, country").in("id", ids),
+      client.from("teams").select("id, name, short_name, country, crest_storage_path").in("id", ids),
       client
         .from("team_form_quality")
         .select("team_id, opponent_adjusted_form, volatility")
@@ -1132,6 +1134,7 @@ export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]>
           name: t.name,
           short_name: t.short_name ?? null,
           country: t.country ?? null,
+          crest_storage_path: t.crest_storage_path ?? null,
           readiness: r.readiness_score ?? null,
           form: r.form_index ?? null,
           adjustedForm: q?.opponent_adjusted_form ?? null,

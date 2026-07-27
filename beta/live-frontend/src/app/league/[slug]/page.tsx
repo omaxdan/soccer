@@ -74,8 +74,8 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
       {gap && (
         <Panel title="Model calibration">
           <div className="flex items-center justify-between">
-            <StatCell label="Hit rate" value={pct(gap.hit_rate_strict)} color={(gap.hit_rate_strict ?? 0) >= 0.55 ? "var(--edge)" : "var(--warn)"} />
-            <StatCell label="Lift vs baseline" value={gap.lift_over_baseline != null ? `+${Math.round(gap.lift_over_baseline * 100)}` : "—"} color="var(--edge)" />
+            <StatCell label="Hit rate" value={pct(gap.hit_rate_strict)} color={(gap.hit_rate_strict ?? 0) >= 55 ? "var(--edge)" : "var(--warn)"} />
+            <StatCell label="Lift vs baseline" value={gap.lift_over_baseline != null ? `${gap.lift_over_baseline > 0 ? "+" : ""}${Math.round(gap.lift_over_baseline)}%` : "—"} color="var(--edge)" />
             <StatCell label="Sample" value={`${gap.total_picks}`} sub="picks" />
           </div>
           <p className="mono mt-3 text-[0.65rem] text-muted">
@@ -247,15 +247,10 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
             <StatCell label="Strict hit rate" value={pct(gap.hit_rate_strict)} />
             <StatCell label="Lenient hit rate" value={pct(gap.hit_rate_lenient)} />
             <StatCell label="Baseline" value={pct(gap.baseline_rate)} />
-            <StatCell label="Edge (lift)" value={gap.lift_over_baseline != null ? `+${Math.round(gap.lift_over_baseline * 100)}%` : "—"} color="var(--edge)" />
+            <StatCell label="Edge (lift)" value={gap.lift_over_baseline != null ? `${gap.lift_over_baseline > 0 ? "+" : ""}${Math.round(gap.lift_over_baseline)}%` : "—"} color="var(--edge)" />
           </div>
         </Panel>
       ) : <Empty text="No market calibration data for this league yet." />}
-      <Panel title="Predictability">
-        <p className="text-[0.8rem] leading-relaxed text-muted">
-          {intel && (intel.avg_readiness ?? 0) >= 72 ? "Higher average readiness tends to make favourites more reliable here." : "Variable readiness raises upset potential — favourites are less dependable."}
-        </p>
-      </Panel>
     </div>
   );
 
@@ -271,6 +266,16 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
           </div>
         </div>
       </section>
+      {/* Predictability is a primary intelligence metric — it sat inside the
+          "More" tab, three clicks from view. Surfaced above the tabs. */}
+      <Panel title="Predictability">
+        <p className="text-[0.8rem] leading-relaxed text-muted">
+          {intel && (intel.avg_readiness ?? 0) >= 72
+            ? "Higher average readiness tends to make favourites more reliable here."
+            : "Variable readiness raises upset potential — favourites are less dependable."}
+        </p>
+      </Panel>
+
       <Tabs
         items={[
           { id: "standings", label: "Standings", content: standingsTab },

@@ -32,7 +32,13 @@ function groupLabel(e: FeedEntry, by: FeedGrouping): string {
       day: "numeric",
       month: "long",
     });
-  return e.match.competition ?? e.match.tournament?.name ?? "Other";
+  // Country prefixes the competition so the board reads as a hierarchy rather
+  // than a flat list of league names. Both /app and /matches call this, so the
+  // two cannot drift into separate organisation schemes.
+  const league = e.match.competition ?? e.match.tournament?.name ?? "Other";
+  const c = e.match.tournament?.country;
+  const country = typeof c === "string" ? c : (c as { name?: string } | null)?.name ?? null;
+  return country ? `${country} · ${league}` : league;
 }
 
 /** Fills a cell with a link to the fixture so the whole row is a target. */
@@ -61,14 +67,24 @@ function CellLink({
   );
 }
 
-function TeamLine({ team, side }: { team: MatchRow["home"]; side: "H" | "A" }) {
+/**
+ * Home above away is already the row's ordering, so the H/A letters were
+ * spending a column's worth of width restating it. The slot now carries the
+ * score where one exists, and a dash where the fixture is still ahead.
+ */
+function TeamLine({ team, score }: { team: MatchRow["home"]; score: number | null }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5">
       <Crest team={team} size={15} />
       <span className="mono truncate text-[0.7rem] font-semibold text-text md:text-[0.76rem]">
         {team.short_name || team.name}
       </span>
-      <span className="mono ml-auto shrink-0 text-[0.5rem] text-faint">{side}</span>
+      <span
+        className="mono tnum ml-auto shrink-0 text-[0.72rem] font-semibold"
+        style={{ color: score == null ? "var(--faint)" : "var(--text)" }}
+      >
+        {score ?? "–"}
+      </span>
     </span>
   );
 }
@@ -181,8 +197,8 @@ export function FeedTable({
                   <td className="min-w-[8rem] px-2 py-1.5 align-middle">
                     <CellLink href={href}>
                       <span className="flex flex-col gap-1">
-                        <TeamLine team={m.home} side="H" />
-                        <TeamLine team={m.away} side="A" />
+                        <TeamLine team={m.home} score={m.home_score ?? null} />
+                        <TeamLine team={m.away} score={m.away_score ?? null} />
                       </span>
                     </CellLink>
                   </td>

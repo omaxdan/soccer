@@ -54,8 +54,10 @@ export default async function LeaguesPage() {
           </p>
           <div className="space-y-2.5">
             {gaps.map((g) => {
-              const strict = g.hit_rate_strict != null ? g.hit_rate_strict * 100 : null;
-              const lift = g.lift_over_baseline != null ? g.lift_over_baseline * 100 : null;
+              // league_gap_summary stores these ready to display — 37.5 means
+              // 37.5%. Multiplying produced 3750% and a lift of -2500.
+              const strict = g.hit_rate_strict ?? null;
+              const lift = g.lift_over_baseline ?? null;
               return (
                 <div key={g.league_name} className="rounded-term border border-line p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -79,7 +81,7 @@ export default async function LeaguesPage() {
                       {g.total_picks} picks
                       {lift != null && (
                         <span className="ml-1" style={{ color: lift > 0 ? "var(--edge)" : "var(--risk)" }}>
-                          {lift > 0 ? "+" : ""}{Math.round(lift)}
+                          {lift > 0 ? "+" : ""}{Math.round(lift)}%
                         </span>
                       )}
                     </span>

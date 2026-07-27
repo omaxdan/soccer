@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTeamDirectory } from "@/lib/queries";
 import { teamSlug } from "@/lib/slug";
+import { Crest } from "@/components/Crest";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Teams" };
@@ -55,13 +56,18 @@ export default async function TeamsPage() {
               {sorted.map((t) => (
                 <tr key={t.id} className="border-t border-line transition-colors hover:bg-raised">
                   <td className="px-3 py-1.5">
-                    <Link href={`/team/${teamSlug(t)}`} className="block">
-                      <span className="mono truncate font-semibold text-text">
-                        {t.short_name || t.name}
+                    <Link href={`/team/${teamSlug(t)}`} className="flex items-center gap-2">
+                      <Crest team={t} size={20} />
+                      <span className="min-w-0">
+                        <span className="mono block truncate font-semibold text-text">
+                          {t.short_name || t.name}
+                        </span>
+                        {t.country && (
+                          <span className="mono block truncate text-[0.58rem] text-faint">
+                            {t.country}
+                          </span>
+                        )}
                       </span>
-                      {t.country && (
-                        <span className="mono ml-1.5 text-[0.58rem] text-faint">{t.country}</span>
-                      )}
                     </Link>
                   </td>
                   <td className="mono tnum px-2 py-1.5 text-right" style={{ color: tone(t.readiness) }}>
