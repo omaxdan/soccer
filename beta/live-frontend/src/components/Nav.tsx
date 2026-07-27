@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   IconBoard,
   IconModules,
@@ -16,6 +16,8 @@ import {
   IconCleanSheet,
   IconGate,
   IconLock,
+  IconStar,
+  IconModules as IconMore,
 } from "./icons/ModuleIcons";
 
 type Item = {
@@ -71,11 +73,22 @@ const GROUPS: Group[] = [
 ];
 
 /** The four that earn a place in a five-slot mobile bar. */
-const MOBILE: Item[] = [
-  GROUPS[0].items[0],
-  GROUPS[0].items[1],
-  GROUPS[1].items[0],
-  GROUPS[2].items[2],
+/**
+ * Mobile tabs, ordered by how often the action is actually taken rather than by
+ * mirroring the sidebar.
+ *
+ * The sidebar mirror put Module Library — a reference page read once — in a
+ * daily slot, while Watchlist, the one surface a returning user opens on
+ * purpose, had no route on a phone at all. The sidebar is `hidden md:flex`, so
+ * these tabs are the ONLY navigation below md: anything missing here is
+ * unreachable, which is why the fifth tab is a full menu rather than a fifth
+ * destination.
+ */
+const MOBILE_PRIMARY: Item[] = [
+  { href: "/app", label: "Today", Icon: IconBoard },
+  { href: "/matches", label: "Matches", Icon: IconFixtures },
+  { href: "/watchlist", label: "Saved", Icon: IconStar },
+  { href: "/leagues", label: "Leagues", Icon: IconGiantKiller },
 ];
 
 export interface NavIdentity {
@@ -120,23 +133,82 @@ function isActive(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-export function BottomNav(_props: { identity?: NavIdentity }) {
+export function BottomNav({
+  identity = { authenticated: false, isAdmin: false },
+}: {
+  identity?: NavIdentity;
+}) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // Close on navigation. Without this the sheet stays open over the page the
+  // user just chose, which reads as the tap having failed.
+  useEffect(() => setOpen(false), [pathname]);
+
+  // Everything not in the primary four, so no destination becomes unreachable
+  // on a phone.
+  const overflow: Group[] = [
+    { title: "Intelligence", items: [GROUPS[1].items[1], GROUPS[1].items[2]] },
+    { title: "Tools", items: GROUPS[2].items.filter((i) => i.href !== "/leagues") },
+    { title: "Account", items: accountItems(identity) },
+    ...(identity.isAdmin ? [adminGroup()] : []),
+  ];
+  const inOverflow = overflow.some((g) =>
+    g.items.some((i) => isActive(pathname, i.href))
+  );
+
   return (
     <nav
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-panel/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-4">
-        {MOBILE.map(({ href, label, Icon }) => {
+      {open && (
+        <div
+          id="mobile-more"
+          className="max-h-[60vh] overflow-y-auto border-b border-line px-3 py-3"
+        >
+          {overflow.map((group) => (
+            <div key={group.title} className="mb-3 last:mb-0">
+              <div className="label-cap mb-1">{group.title}</div>
+              <ul className="grid grid-cols-2 gap-1">
+                {group.items.map(({ href, label, Icon, stub }) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      className="flex items-center gap-2 rounded-term px-2 py-2 text-[0.74rem]"
+                      style={{
+                        color: isActive(pathname, href) ? "var(--text)" : "var(--muted)",
+                        background: isActive(pathname, href) ? "var(--raised)" : "transparent",
+                      }}
+                    >
+                      <span className="text-faint">
+                        <Icon size={14} />
+                      </span>
+                      <span className="truncate">{label}</span>
+                      {stub && (
+                        <span className="mono ml-auto text-[0.5rem] tracking-widest text-faint">
+                          SOON
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ul className="grid grid-cols-5">
+        {MOBILE_PRIMARY.map(({ href, label, Icon }) => {
           const active = isActive(pathname, href);
           return (
             <li key={href}>
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className="flex flex-col items-center gap-1 py-2.5"
+                className="flex min-h-[3rem] flex-col items-center justify-center gap-1 py-2"
                 style={{ color: active ? "var(--amber)" : "var(--muted)" }}
               >
                 <Icon size={18} />
@@ -145,6 +217,21 @@ export function BottomNav(_props: { identity?: NavIdentity }) {
             </li>
           );
         })}
+        <li>
+          {/* Label mirrors the summary above via the CSS sibling state, so the
+              fifth tab toggles the sheet without any JavaScript. */}
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="mobile-more"
+            onClick={() => setOpen((v) => !v)}
+            className="flex min-h-[3rem] w-full flex-col items-center justify-center gap-1 py-2"
+            style={{ color: open || inOverflow ? "var(--amber)" : "var(--muted)" }}
+          >
+            <IconMore size={18} />
+            <span className="mono text-[0.55rem] uppercase tracking-widest">More</span>
+          </button>
+        </li>
       </ul>
     </nav>
   );
