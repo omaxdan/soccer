@@ -74,13 +74,18 @@ function CellLink({
  */
 function TeamLine({ team, score }: { team: MatchRow["home"]; score: number | null }) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <Crest team={team} size={15} />
-      <span className="mono truncate text-[0.7rem] font-semibold text-text md:text-[0.76rem]">
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="shrink-0">
+        <Crest team={team} size={15} />
+      </span>
+      {/* min-w-0 on the FLEX ITEM, not just the container. A flex item will not
+          shrink below its content width without it, so `truncate` alone leaves
+          a long name pushing the score out of the cell. */}
+      <span className="mono min-w-0 flex-1 truncate whitespace-nowrap text-[0.7rem] font-semibold text-text md:text-[0.76rem]">
         {team.short_name || team.name}
       </span>
       <span
-        className="mono tnum ml-auto shrink-0 text-[0.72rem] font-semibold"
+        className="mono tnum w-5 shrink-0 pl-3 text-right text-[0.72rem] font-semibold tabular-nums"
         style={{ color: score == null ? "var(--faint)" : "var(--text)" }}
       >
         {score ?? "–"}
@@ -112,17 +117,25 @@ export function FeedTable({
 
   return (
     <div className="panel">
-      <table className="w-full border-collapse">
+      {/* table-fixed is what makes truncation possible at all: in an
+          auto-layout table the browser sizes columns to content, so a long
+          name widens its column and pushes the last one off-screen no matter
+          what overflow rules the cell carries. */}
+      <table className="w-full table-fixed border-collapse">
+        {/* Widths are declared here rather than on cells: a colgroup applies
+            before the first row is laid out, so nothing reflows once the names
+            arrive. Three columns at every width — no responsive column, which
+            a colgroup cannot express. */}
+        <colgroup>
+          <col className="w-[5rem] md:w-[5.5rem]" />
+          <col />
+          <col className="w-[6.5rem] md:w-[9rem]" />
+        </colgroup>
         <thead>
           <tr className="border-b border-line">
             <th className={head}>
               <span className="label-cap">Time</span>
             </th>
-            {groupBy === "day" && (
-              <th className={`${head} hidden md:table-cell`}>
-                <span className="label-cap">Competition</span>
-              </th>
-            )}
             <th className={head}>
               <span className="label-cap">Fixture</span>
             </th>
@@ -136,7 +149,7 @@ export function FeedTable({
           <tbody key={label}>
             <tr>
               <td
-                colSpan={groupBy === "day" ? 4 : 3}
+                colSpan={3}
                 className="mono border-y border-line bg-raised px-2 py-1 text-[0.6rem] uppercase tracking-[0.14em] text-muted"
               >
                 {label}
@@ -169,26 +182,21 @@ export function FeedTable({
                       href={href}
                       label={`${homeName} versus ${awayName}, ${k.day} ${k.time}`}
                     >
-                      <span className="mono block text-[0.62rem] text-faint">{k.day}</span>
-                      <span className="mono tnum block text-[0.74rem] text-text">{k.time}</span>
+                      <span className="mono block whitespace-nowrap text-[0.62rem] text-faint">{k.day}</span>
+                      <span className="mono tnum block whitespace-nowrap text-[0.74rem] text-text">{k.time}</span>
                     </CellLink>
                   </td>
 
-                  {groupBy === "day" && (
-                    <td className="hidden max-w-[10rem] px-2 py-2 align-middle md:table-cell">
-                      <CellLink href={href}>
-                        <span className="mono truncate text-[0.66rem] text-muted">
-                          {m.competition ?? m.tournament?.name ?? "—"}
-                        </span>
-                      </CellLink>
-                    </td>
-                  )}
-
-                  <td className="min-w-[8rem] px-2 py-1.5 align-middle">
+                  <td className="min-w-0 py-1.5 pl-2 pr-4 align-middle">
                     <CellLink href={href}>
                       <span className="flex flex-col gap-1">
                         <TeamLine team={m.home} score={m.home_score ?? null} />
                         <TeamLine team={m.away} score={m.away_score ?? null} />
+                        {groupBy === "day" && (
+                          <span className="mono truncate whitespace-nowrap text-[0.56rem] text-faint">
+                            {m.competition ?? m.tournament?.name ?? ""}
+                          </span>
+                        )}
                       </span>
                     </CellLink>
                   </td>
@@ -201,8 +209,9 @@ export function FeedTable({
                   <td className="px-2 py-2 align-middle">
                     <CellLink href={href}>
                       <span
-                        className="mono block truncate text-[0.76rem] font-semibold"
+                        className="mono block truncate whitespace-nowrap text-[0.76rem] font-semibold"
                         style={{ color: advantageName ? "var(--text)" : "var(--faint)" }}
+                        title={advantageName ?? undefined}
                       >
                         {advantageName ?? "No edge"}
                       </span>
