@@ -194,6 +194,8 @@ export function MatchReport({
     away: string;
     edge: string;
     edgeColor: string;
+    /** Shown on hover and marked with a dotted underline. */
+    hint?: string;
   }
   const verdictRows: VerdictRow[] = [];
   const addRow = (
@@ -201,7 +203,8 @@ export function MatchReport({
     h: number | null,
     a: number | null,
     fmt: (v: number) => string,
-    higherIsBetter = true
+    higherIsBetter = true,
+    hint?: string
   ) => {
     if (h == null || a == null) return;
     const level = Math.abs(h - a) < 0.05;
@@ -214,13 +217,44 @@ export function MatchReport({
       // metric. It is not an instruction.
       edge: level ? "Level" : homeAhead ? homeName : awayName,
       edgeColor: level ? "var(--muted)" : "var(--edge)",
+      hint,
     });
   };
+  // Ordered match expectation -> current condition -> quality of that form ->
+  // recovery. Opponent-adjusted form sits ABOVE raw form deliberately: it is
+  // the one that survives contact with a weak schedule, so a reader who stops
+  // reading partway down has seen the more honest of the two.
   addRow("Expected goals", num(i?.predicted_home_goals), num(i?.predicted_away_goals), (v) => v.toFixed(1));
   addRow("Win probability", num(i?.win_probability_home), num(i?.win_probability_away), (v) => `${Math.round(v)}%`);
   addRow("Readiness", num(i?.home_readiness), num(i?.away_readiness), (v) => `${Math.round(v)}`);
+  addRow(
+    "Opponent-adjusted form",
+    num(m.homeFormQuality?.opponent_adjusted_form),
+    num(m.awayFormQuality?.opponent_adjusted_form),
+    (v) => `${Math.round(v)}`,
+    true,
+    "Recent performance after accounting for the strength of opponents faced. A run of wins over weak sides scores lower here than the same run against strong ones."
+  );
+  addRow(
+    "Form rating",
+    num(m.homeIntel?.form_index),
+    num(m.awayIntel?.form_index),
+    (v) => v.toFixed(1),
+    true,
+    "Recent results on their own, with no adjustment for who they came against."
+  );
   addRow("Rest days", num(i?.home_rest_days), num(i?.away_rest_days), (v) => `${v}`);
-  addRow("Form rating", num(m.homeIntel?.form_index), num(m.awayIntel?.form_index), (v) => v.toFixed(1));
+  // Optional, and only when the column already holds a value: a harder
+  // schedule is credit, since it means the form above was earned against
+  // better opposition rather than inflated by a soft run.
+  addRow(
+    "Schedule strength",
+    num(m.homeFormQuality?.strength_of_schedule),
+    num(m.awayFormQuality?.strength_of_schedule),
+    (v) => `${Math.round(v)}`,
+    true,
+    "Average strength of opponents faced in the measured window. The higher figure indicates the tougher run, so its side's form was earned against better sides."
+  );
   {
     const hc = num(sp?.home_concedes_pct);
     const ac = num(sp?.away_concedes_pct);
@@ -345,7 +379,19 @@ export function MatchReport({
           <tbody>
             {verdictRows.map((r) => (
               <tr key={r.metric} className="border-b border-line last:border-0">
-                <td className="py-1.5 pr-3 text-muted">{r.metric}</td>
+                <td className="py-1.5 pr-3 text-muted">
+                  {r.hint ? (
+                    <span
+                      title={r.hint}
+                      className="cursor-help decoration-dotted underline-offset-2"
+                      style={{ textDecorationLine: "underline" }}
+                    >
+                      {r.metric}
+                    </span>
+                  ) : (
+                    r.metric
+                  )}
+                </td>
                 <td className="mono py-1.5 pr-3 text-text">{r.home}</td>
                 <td className="mono py-1.5 pr-3 text-text">{r.away}</td>
                 <td className="mono py-1.5" style={{ color: r.edgeColor }}>{r.edge}</td>

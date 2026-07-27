@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/lib/queries";
+import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs } from "@/lib/queries";
@@ -68,6 +69,24 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     rows.map((p) => ({ ...p, versatility_score: versatility[p.player_id] ?? null }));
   const moduleReadings = buildMatchReadings(m, scoringProbs, null, bandBacktests);
 
+  // Hero glance values, read off the same readings the report uses.
+  const heroTally = tally(moduleReadings);
+  const heroOverall = overallVerdict(heroTally);
+  const heroFiring = moduleReadings.filter((r) => r.status !== "inactive").length;
+  const heroSide = derivePickSide(m);
+  const heroPickName =
+    heroSide === "home" ? homeName : heroSide === "away" ? awayName : null;
+  const heroGap = i?.readiness_gap ?? null;
+  const heroGapName = heroGap == null ? null : heroGap > 0 ? homeName : awayName;
+  const heroSummary = heroPickName
+    ? `Historical evidence currently favours ${heroPickName}, on ${heroTally.supports} supporting ` +
+      `stream${heroTally.supports === 1 ? "" : "s"}` +
+      (heroTally.contradicts
+        ? ` against ${heroTally.contradicts} that run counter`
+        : "") +
+      `${i?.confidence_band ? `, with confidence limited by the ${i.confidence_band} calibration band` : ""}.`
+    : "No readiness gap separates these sides, so the evidence produces no directional lean.";
+
   // ── Standalone sections (no tabs) ──
   // Everything below used to be a tab body. The page is now one scroll:
   // hero, pick, modules, verdict, lineups, story.
@@ -130,45 +149,60 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           )}
           <Meta label="Countdown" value={k.rel} />
         </div>
-        {i?.predicted_home_goals != null && i?.predicted_away_goals != null && (
-              <div className="mono mt-1 text-[0.6rem] text-muted justify-center flex items-center gap-1 pt-2">
-                Expected Goals: {n1(i.predicted_home_goals)} – {n1(i.predicted_away_goals)}
+
+        {/* Four executive cards — the glance. Every metric that used to sit
+            here (expected goals, BTTS breakdown, winner market, adjusted form,
+            giant killer, readiness gap) now appears once, in the Instant
+            Verdict, rather than twice on one page. */}
+        <div className="mt-4 grid gap-2.5 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="panel p-3">
+            <div className="label-cap">Historical lean</div>
+            <div className="mono mt-0.5 truncate text-[0.95rem] font-semibold text-text">
+              {heroPickName ?? "No edge"}
+            </div>
+          </div>
+
+          <div className="panel p-3">
+            <div className="label-cap">Confidence</div>
+            <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+              {i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
+            </div>
+            {i?.confidence_band && (
+              <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
+                {i.confidence_band}
               </div>
             )}
-        {scoringProbs && <ScoringProbsCard probs={scoringProbs} homeName={homeName} awayName={awayName} />}
-        {(m.opportunity || m.risk) && (
-          <div className="mt-4 border-t border-line pt-3"><OpportunityRiskMeter opportunity={m.opportunity?.opportunity_score} risk={m.risk?.risk_score} /></div>
-        )}
-        {i && (
-          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-3 sm:grid-cols-3">
-            <StatCell
-              label="Readiness gap"
-              value={i.readiness_gap != null ? `${i.readiness_gap > 0 ? "+" : ""}${n0(i.readiness_gap)}` : "—"}
-              color={(i.readiness_gap ?? 0) !== 0 ? "var(--amber)" : undefined}
-            />
-            <StatCell
-              label="Confidence"
-              value={i.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
-              sub={i.confidence_band ?? ""}
-            />
-            <StatCell label="Predictability" value={pct(m.risk?.predictability_score)} />
-            <StatCell
-              label="Winner market"
-              value={<CompareValue home={m.homeBetting?.winner_market_score} away={m.awayBetting?.winner_market_score} />}
-              explain="winner_market_score"
-            />
-            <StatCell
-              label="Adjusted form"
-              value={<CompareValue home={m.homeFormQuality?.opponent_adjusted_form} away={m.awayFormQuality?.opponent_adjusted_form} />}
-              explain="opponent_adjusted_form"
-            />
-            <StatCell
-              label="Giant-killer"
-              value={<CompareValue home={m.homeFormQuality?.giant_killer_score} away={m.awayFormQuality?.giant_killer_score} />}
-              explain="giant_killer_score"
-            />
           </div>
-        )}
+
+          <div className="panel p-3">
+            <div className="label-cap">Evidence</div>
+            <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+              {heroFiring}
+              <span className="text-[0.7rem] text-faint">/{MODULES.length}</span>
+            </div>
+            <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
+              {heroOverall.label}
+            </div>
+          </div>
+
+          <div className="panel p-3">
+            <div className="label-cap">Readiness</div>
+            <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
+              {i?.home_readiness != null && i?.away_readiness != null
+                ? `${Math.round(i.home_readiness)} – ${Math.round(i.away_readiness)}`
+                : "—"}
+            </div>
+            {heroGap != null && heroGapName && (
+              <div className="mono text-[0.6rem] text-muted">
+                {heroGap > 0 ? "+" : ""}{Math.round(heroGap)} {heroGapName}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-3 border-t border-line pt-3 text-[0.75rem] leading-relaxed text-muted">
+          {heroSummary}
+        </p>
       </section>
 
       {!i && !m.opportunity && !m.risk && (

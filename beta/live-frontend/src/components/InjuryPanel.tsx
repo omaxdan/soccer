@@ -104,8 +104,13 @@ export function InjuryPanel({ match: m }: { match: MatchRow }) {
   const homeImpact = m.homeInjuryImpact ?? null;
   const awayImpact = m.awayInjuryImpact ?? null;
 
-  // Nothing known for either side — render nothing rather than an empty shell.
-  if (home.length === 0 && away.length === 0 && !homeImpact && !awayImpact) return null;
+  // Previously this returned null when both sides came back empty, which made
+  // the section vanish on most fixtures. That was over-cautious: the query DID
+  // run for both teams, so "no active injury records" is a true statement
+  // rather than a guess, and each card already says exactly that. The section
+  // only disappears now when the fixture itself has no intelligence at all.
+  const known = m.intel != null || home.length > 0 || away.length > 0 || homeImpact || awayImpact;
+  if (!known) return null;
 
   return (
     <section>
