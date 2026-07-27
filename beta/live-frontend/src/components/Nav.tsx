@@ -64,8 +64,8 @@ const GROUPS: Group[] = [
   {
     title: "Account",
     items: [
-      { href: "/pricing", label: "Subscription", Icon: IconGate },
-      { href: "/settings", label: "Settings", Icon: IconLock, stub: true },
+      { href: "/subscription", label: "Subscription", Icon: IconGate },
+      { href: "/settings", label: "Settings", Icon: IconLock },
     ],
   },
 ];
