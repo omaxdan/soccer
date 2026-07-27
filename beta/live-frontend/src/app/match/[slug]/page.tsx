@@ -173,7 +173,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
             ship on a page aimed at bettors. */}
         <div className="mt-4 grid gap-2.5 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="panel p-3">
-            <div className="label-cap">Historical lean</div>
+            <div className="label-cap">Historical advantage</div>
             <div className="mono mt-0.5 truncate text-[0.95rem] font-semibold text-text">
               {heroPickName ?? "No edge"}
             </div>
@@ -184,7 +184,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
           {heroFull ? (
             <div className="panel p-3">
-              <div className="label-cap">Confidence</div>
+              <div className="label-cap">Historical confidence</div>
               <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
                 {i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
               </div>

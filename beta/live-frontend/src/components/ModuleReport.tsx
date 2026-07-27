@@ -138,7 +138,7 @@ export function ModuleReport({
         </div>
         <div className="h-8 w-px bg-line" />
         <div>
-          <div className="label-cap">Pick side</div>
+          <div className="label-cap">Historical advantage</div>
           <div className="mono text-lg font-semibold text-text">
             {pickSide === "home"
               ? sides.homeName

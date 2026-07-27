@@ -15,7 +15,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
+import { tally, overallVerdict, derivePickSide } from "@/lib/modules";
 import type { MatchRow } from "@/lib/types";
 import type { Tier } from "@/lib/tier";
 import { Crest } from "./Crest";
@@ -93,12 +93,10 @@ export function FeedTable({
   entries,
   viewer: _viewer,
   groupBy = "league",
-  maxHeight = "calc(100vh - 11rem)",
 }: {
   entries: FeedEntry[];
   viewer: Tier;
   groupBy?: FeedGrouping;
-  maxHeight?: string;
 }) {
   const groups = new Map<string, FeedEntry[]>();
   for (const e of entries) {
@@ -106,20 +104,20 @@ export function FeedTable({
     groups.set(key, [...(groups.get(key) ?? []), e]);
   }
 
-  const head =
-    "sticky top-0 z-20 whitespace-nowrap bg-panel px-2 py-2 text-left font-normal";
+  // No sticky header and no internal scroll container: the board should read
+  // as a feed that flows with the page, not a spreadsheet with its own
+  // viewport. Removing the scroll container also removes the reason the header
+  // had to stick in the first place.
+  const head = "whitespace-nowrap px-2 py-2 text-left font-normal";
 
   return (
-    <div className="panel overflow-y-auto" style={{ maxHeight }}>
+    <div className="panel">
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-line">
             <th className={head}>
               <span className="label-cap">Time</span>
             </th>
-            {/* Competition is the group header when grouping by league, so it
-                only earns a column on the schedule view. Hidden on mobile
-                either way — it is the least load-bearing field here. */}
             {groupBy === "day" && (
               <th className={`${head} hidden md:table-cell`}>
                 <span className="label-cap">Competition</span>
@@ -128,14 +126,8 @@ export function FeedTable({
             <th className={head}>
               <span className="label-cap">Fixture</span>
             </th>
-            <th className={`${head} text-center`}>
-              <span className="label-cap">Modules</span>
-            </th>
             <th className={head}>
-              <span className="label-cap">Consensus</span>
-            </th>
-            <th className={head}>
-              <span className="label-cap">Pick side</span>
+              <span className="label-cap">Historical advantage</span>
             </th>
           </tr>
         </thead>
@@ -144,7 +136,7 @@ export function FeedTable({
           <tbody key={label}>
             <tr>
               <td
-                colSpan={groupBy === "day" ? 6 : 5}
+                colSpan={groupBy === "day" ? 4 : 3}
                 className="mono border-y border-line bg-raised px-2 py-1 text-[0.6rem] uppercase tracking-[0.14em] text-muted"
               >
                 {label}
@@ -155,11 +147,9 @@ export function FeedTable({
             {list.map((e) => {
               const m = e.match;
               const k = kickoff(m.date);
-              const t = tally(e.readings);
-              const overall = overallVerdict(t);
-              const firing = e.readings.filter((r) => r.status !== "inactive").length;
+              const overall = overallVerdict(tally(e.readings));
               const pickSide = derivePickSide(m);
-              const pickName =
+              const advantageName =
                 pickSide === "home"
                   ? m.home.short_name || m.home.name
                   : pickSide === "away"
@@ -203,43 +193,27 @@ export function FeedTable({
                     </CellLink>
                   </td>
 
-                  {/* How much intelligence exists for this fixture. */}
-                  <td className="px-2 py-2 text-center align-middle">
-                    <CellLink href={href}>
-                      <span className="mono tnum text-[0.78rem] font-semibold text-text">
-                        {firing}
-                        <span className="text-[0.62rem] text-faint">/{MODULES.length}</span>
-                      </span>
-                    </CellLink>
-                  </td>
-
-                  {/* How strongly it agrees. */}
+                  {/* Modules firing, the S/N/C counts and the consensus label
+                      used to be three columns. They exposed evaluator mechanics
+                      and made the board read as diagnostics; the strength
+                      classification carries the same meaning without them.
+                      The detail stays inside the match report. */}
                   <td className="px-2 py-2 align-middle">
                     <CellLink href={href}>
                       <span
-                        className="mono inline-block rounded px-1.5 py-0.5 text-[0.58rem] font-bold tracking-widest"
-                        style={{
-                          color: overall.color,
-                          background: `color-mix(in srgb, ${overall.color} 15%, transparent)`,
-                        }}
+                        className="mono block truncate text-[0.76rem] font-semibold"
+                        style={{ color: advantageName ? "var(--text)" : "var(--faint)" }}
                       >
-                        {overall.label}
+                        {advantageName ?? "No edge"}
                       </span>
-                      <span className="mono mt-0.5 block text-[0.55rem] text-faint">
-                        {t.supports}S {t.neutral}N {t.contradicts}C
-                      </span>
-                    </CellLink>
-                  </td>
-
-                  {/* Which side it favours. */}
-                  <td className="px-2 py-2 align-middle">
-                    <CellLink href={href}>
-                      <span
-                        className="mono block truncate text-[0.72rem] font-semibold"
-                        style={{ color: pickName ? "var(--text)" : "var(--faint)" }}
-                      >
-                        {pickName ?? "No edge"}
-                      </span>
+                      {advantageName && (
+                        <span
+                          className="mono mt-0.5 block text-[0.55rem] font-bold tracking-widest"
+                          style={{ color: overall.color }}
+                        >
+                          {overall.label}
+                        </span>
+                      )}
                     </CellLink>
                   </td>
                 </tr>

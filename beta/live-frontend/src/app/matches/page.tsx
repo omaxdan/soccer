@@ -105,7 +105,6 @@ export default async function FixturesPage({
           entries={entries}
           viewer={viewer}
           groupBy="league"
-          maxHeight="calc(100vh - 14rem)"
         />
       )}
 

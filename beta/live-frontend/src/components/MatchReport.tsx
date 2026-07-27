@@ -420,7 +420,7 @@ export function MatchReport({
 
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3 border-t border-line pt-3">
           <div>
-            <div className="label-cap">Historical lean</div>
+            <div className="label-cap">Historical advantage</div>
             <div className="mono text-[0.85rem] font-semibold text-text">{pickName ?? "No edge"}</div>
           </div>
           {i?.confidence_band && (
@@ -433,7 +433,7 @@ export function MatchReport({
           )}
           {i?.confidence_score != null && (
             <div>
-              <div className="label-cap">Confidence score</div>
+              <div className="label-cap">Historical confidence</div>
               <div className="mono tnum text-[0.85rem] text-text">{Math.round(i.confidence_score)}%</div>
             </div>
           )}
