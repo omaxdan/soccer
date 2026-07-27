@@ -58,8 +58,10 @@ export function kickoff(dateStr: string): { day: string; time: string; rel: stri
   const d = new Date(dateStr);
   const now = new Date();
   // ✅ Force en-GB locale on both server AND client
+  // Weekday removed: "Tue 28 Jul" wrapped the narrow date column across three
+  // lines, and the day name adds nothing a reader scanning a date-grouped board
+  // does not already know.
   const day = d.toLocaleDateString("en-GB", {
-    weekday: "short",
     day: "numeric",
     month: "short",
   });

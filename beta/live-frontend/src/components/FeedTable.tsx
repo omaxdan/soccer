@@ -22,6 +22,7 @@ import { Crest } from "./Crest";
 import { kickoff } from "@/lib/intel";
 import { matchSlug } from "@/lib/slug";
 import type { FeedEntry } from "./ModuleFeed";
+import { RowStar } from "./WatchToggle";
 
 export type FeedGrouping = "league" | "day";
 
@@ -98,10 +99,15 @@ export function FeedTable({
   entries,
   viewer: _viewer,
   groupBy = "league",
+  savedMatchIds,
+  authenticated = false,
 }: {
   entries: FeedEntry[];
   viewer: Tier;
   groupBy?: FeedGrouping;
+  /** Resolved once by the page — one read, not one per row. */
+  savedMatchIds?: Set<number>;
+  authenticated?: boolean;
 }) {
   const groups = new Map<string, FeedEntry[]>();
   for (const e of entries) {
@@ -127,12 +133,16 @@ export function FeedTable({
             arrive. Three columns at every width — no responsive column, which
             a colgroup cannot express. */}
         <colgroup>
-          <col className="w-[5rem] md:w-[5.5rem]" />
+          <col className="w-9" />
+          <col className="w-16 md:w-[5.5rem]" />
           <col />
-          <col className="w-[6.5rem] md:w-[9rem]" />
+          <col className="w-[4.5rem] md:w-[8rem]" />
         </colgroup>
         <thead>
           <tr className="border-b border-line">
+            <th className={`${head} px-1`}>
+              <span className="sr-only">Saved</span>
+            </th>
             <th className={head}>
               <span className="label-cap">Time</span>
             </th>
@@ -140,7 +150,9 @@ export function FeedTable({
               <span className="label-cap">Fixture</span>
             </th>
             <th className={head}>
-              <span className="label-cap">Historical advantage</span>
+              {/* "Historical advantage" overflowed even truncated. The meaning
+                  is unchanged; the column simply cannot carry the long form. */}
+              <span className="label-cap">Advantage</span>
             </th>
           </tr>
         </thead>
@@ -149,7 +161,7 @@ export function FeedTable({
           <tbody key={label}>
             <tr>
               <td
-                colSpan={3}
+                colSpan={4}
                 className="mono border-y border-line bg-raised px-2 py-1 text-[0.6rem] uppercase tracking-[0.14em] text-muted"
               >
                 {label}
@@ -177,6 +189,14 @@ export function FeedTable({
                   key={m.id}
                   className="border-t border-line transition-colors hover:bg-raised"
                 >
+                  <td className="px-0.5 py-2 align-middle">
+                    <RowStar
+                      matchId={m.id}
+                      initial={savedMatchIds?.has(m.id) ?? false}
+                      authenticated={authenticated}
+                    />
+                  </td>
+
                   <td className="px-2 py-2 align-middle">
                     <CellLink
                       href={href}

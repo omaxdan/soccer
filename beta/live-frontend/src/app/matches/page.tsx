@@ -7,6 +7,8 @@ import {
   dayKeyOf,
 } from "@/components/FeedTable";
 import { currentTier } from "@/lib/tier";
+import { getWatchedMatchIds } from "@/lib/preferences";
+import { getViewerIdentity } from "@/lib/access";
 import { getAccessContext, boardLimit } from "@/lib/access";
 import { UpgradePrompt } from "@/components/FeatureGate";
 import { tally, overallVerdict } from "@/lib/modules";
@@ -30,6 +32,10 @@ export default async function FixturesPage({
   ]);
   const viewer = currentTier();
   const access = await getAccessContext();
+  const [savedMatchIds, viewerIdentity] = await Promise.all([
+    getWatchedMatchIds(),
+    getViewerIdentity(),
+  ]);
   const bandBacktests = await getBandBacktests();
 
   // Same grid AND the same grouping as the board — country then competition.
@@ -105,6 +111,8 @@ export default async function FixturesPage({
           entries={entries}
           viewer={viewer}
           groupBy="league"
+          savedMatchIds={savedMatchIds}
+          authenticated={viewerIdentity.authenticated}
         />
       )}
 

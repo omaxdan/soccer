@@ -111,3 +111,25 @@ export async function toggleWatch(entityType: WatchEntity, entityId: number): Pr
   }
   revalidatePath("/", "layout");
 }
+
+
+/**
+ * Watched match ids in one read.
+ *
+ * isWatched() answers for a single entity, which is right on a match page and
+ * wrong for a board: twenty-four rows would mean twenty-four round trips before
+ * the first byte is sent.
+ */
+export async function getWatchedMatchIds(): Promise<Set<number>> {
+  const client = await supabaseServer();
+  if (!client) return new Set();
+  try {
+    const { data } = await client
+      .from("watchlists")
+      .select("entity_id")
+      .eq("entity_type", "match");
+    return new Set(((data as any[]) ?? []).map((r) => r.entity_id as number));
+  } catch {
+    return new Set();
+  }
+}

@@ -14,6 +14,8 @@ import {
 } from "@/components/ModuleFeed";
 import { MODULES, moduleFromSlug } from "@/lib/modules";
 import { currentTier } from "@/lib/tier";
+import { getWatchedMatchIds } from "@/lib/preferences";
+import { getViewerIdentity } from "@/lib/access";
 import { getAccessContext } from "@/lib/access";
 import { getFavouriteLeagueIds } from "@/lib/preferences";
 import {
@@ -40,6 +42,10 @@ export default async function DashboardPage({
   const bandBacktests = await getBandBacktests();
   const viewer = currentTier();
   const access = await getAccessContext();
+  const [savedMatchIds, viewerIdentity] = await Promise.all([
+    getWatchedMatchIds(),
+    getViewerIdentity(),
+  ]);
   // Favourite competitions sort ahead of the rest. Ordering only — nothing is
   // filtered out, so a favourite selection never hides intelligence.
   const favIds = new Set(await getFavouriteLeagueIds());
@@ -184,7 +190,13 @@ export default async function DashboardPage({
 
 
         <div className="mt-3">
-          <ModuleFeed entries={entries} viewer={viewer} sort={sort} />
+          <ModuleFeed
+            entries={entries}
+            viewer={viewer}
+            sort={sort}
+            savedMatchIds={savedMatchIds}
+            authenticated={viewerIdentity.authenticated}
+          />
         </div>
       </section>
     </div>

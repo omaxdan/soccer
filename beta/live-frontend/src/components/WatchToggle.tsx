@@ -105,3 +105,73 @@ export function FavouriteStar({
     </button>
   );
 }
+
+
+/**
+ * Compact star for a table row.
+ *
+ * The whole row is a link, so this must stop propagation AND prevent default —
+ * without preventDefault the click still activates the enclosing anchor and the
+ * board navigates away mid-toggle.
+ *
+ * Signed-out visitors get a link to sign in rather than a dead control.
+ */
+export function RowStar({
+  matchId,
+  initial,
+  authenticated,
+}: {
+  matchId: number;
+  initial: boolean;
+  authenticated: boolean;
+}) {
+  const [on, setOn] = useState(initial);
+  const [pending, start] = useTransition();
+
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  if (!authenticated) {
+    return (
+      <a
+        href="/login"
+        onClick={stop}
+        aria-label="Sign in to save matches"
+        title="Sign in to save matches"
+        className="flex h-8 w-8 items-center justify-center rounded-term text-faint transition-colors hover:text-amber"
+      >
+        <IconStar size={14} />
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      aria-pressed={on}
+      aria-label={on ? "Remove from saved matches" : "Save match"}
+      title={on ? "Saved" : "Save match"}
+      onClick={(e) => {
+        stop(e);
+        const next = !on;
+        setOn(next);
+        start(async () => {
+          try {
+            await toggleWatch("match", matchId);
+          } catch {
+            setOn(!next);
+          }
+        });
+      }}
+      // 32px box inside a 36px column: a comfortable target without widening
+      // the table.
+      className="flex h-8 w-8 items-center justify-center rounded-term transition-colors disabled:opacity-50"
+      style={{ color: on ? "var(--amber)" : "var(--faint)" }}
+    >
+      {on ? <IconStarFilled size={14} /> : <IconStar size={14} />}
+    </button>
+  );
+}

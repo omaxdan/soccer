@@ -149,10 +149,14 @@ export function ModuleFeed({
   entries,
   viewer,
   sort = "consensus",
+  savedMatchIds,
+  authenticated = false,
 }: {
   entries: FeedEntry[];
   viewer: Tier;
   sort?: FeedSort;
+  savedMatchIds?: Set<number>;
+  authenticated?: boolean;
 }) {
   if (entries.length === 0) {
     return (
@@ -166,7 +170,15 @@ export function ModuleFeed({
       </div>
     );
   }
-  return <FeedTable entries={sortEntries(entries, sort)} viewer={viewer} groupBy="league" />;
+  return (
+    <FeedTable
+      entries={sortEntries(entries, sort)}
+      viewer={viewer}
+      groupBy="league"
+      savedMatchIds={savedMatchIds}
+      authenticated={authenticated}
+    />
+  );
 }
 
 // ── Sort control ─────────────────────────────────────────
