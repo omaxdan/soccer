@@ -90,18 +90,29 @@ export interface NavIdentity {
  * nobody can open is noise.
  */
 function accountItems(identity: NavIdentity): Item[] {
-  const items: Item[] = [
+  return [
     { href: "/subscription", label: "Subscription", Icon: IconGate },
     { href: "/settings", label: "Settings", Icon: IconLock },
-  ];
-  if (identity.isAdmin)
-    items.push({ href: "/admin/settings", label: "Admin", Icon: IconConfidence });
-  items.push(
     identity.authenticated
       ? { href: "/logout", label: "Sign out", Icon: IconMethod }
-      : { href: "/login", label: "Sign in", Icon: IconMethod }
-  );
-  return items;
+      : { href: "/login", label: "Sign in", Icon: IconMethod },
+  ];
+}
+
+/**
+ * Platform controls, admins only. Kept as its own group rather than an extra
+ * Account row so the two never read as the same kind of thing — a user's plan
+ * and the platform's feature flags are different concerns.
+ */
+function adminGroup(): Group {
+  return {
+    title: "Admin",
+    items: [
+      { href: "/admin/settings", label: "Admin Settings", Icon: IconConfidence },
+      { href: "/admin/users", label: "Users", Icon: IconHomeAway },
+      { href: "/admin/settings#features", label: "Feature Flags", Icon: IconGate },
+    ],
+  };
 }
 
 function isActive(pathname: string, href: string) {
@@ -145,9 +156,12 @@ export function SideNav({
   identity?: NavIdentity;
 }) {
   const pathname = usePathname();
-  const groups = GROUPS.map((g) =>
-    g.title === "Account" ? { ...g, items: accountItems(identity) } : g
-  );
+  const groups = [
+    ...GROUPS.map((g) =>
+      g.title === "Account" ? { ...g, items: accountItems(identity) } : g
+    ),
+    ...(identity.isAdmin ? [adminGroup()] : []),
+  ];
   return (
     <nav
       aria-label="Primary"

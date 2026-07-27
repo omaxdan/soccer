@@ -1,29 +1,64 @@
 import Link from "next/link";
-import { getAccessContext } from "@/lib/access";
-import { db } from "@/lib/supabase";
-import { MODULES } from "@/lib/modules";
-import { FEATURE_BY_MODULE } from "@/lib/access";
-import { IconLock, IconGate, IconUnverified } from "@/components/icons/ModuleIcons";
+import { getViewerIdentity } from "@/lib/access";
+import { getLeagues } from "@/lib/queries";
+import { IconLock, IconUnverified, IconSupports } from "@/components/icons/ModuleIcons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
 
-async function featureMap(): Promise<Record<string, string>> {
-  const client = db();
-  if (!client) return {};
-  try {
-    const { data } = await client.from("feature_permissions").select("feature_key, required_plan");
-    const out: Record<string, string> = {};
-    for (const r of ((data as any[]) ?? [])) out[r.feature_key] = r.required_plan;
-    return out;
-  } catch {
-    return {};
-  }
-}
-
+/**
+ * Personal settings only.
+ *
+ * The subscription feature flag, the enable toggle and the feature-gate table
+ * used to live here. They are platform controls, not preferences, and showing
+ * a normal user a switch labelled "TESTING MODE · OFF" tells them about the
+ * business's internal state while giving them nothing they can act on. They
+ * now live behind /admin/settings.
+ */
 export default async function SettingsPage() {
-  const [ctx, perms] = await Promise.all([getAccessContext(), featureMap()]);
-  const on = ctx.subscriptionsEnabled;
+  const [identity, leagues] = await Promise.all([getViewerIdentity(), getLeagues()]);
+
+  if (!identity.authenticated) {
+    return (
+      <div className="panel mx-auto max-w-lg p-6 text-center">
+        <span className="text-faint">
+          <IconLock size={20} />
+        </span>
+        <h1 className="mono mt-2 text-[0.85rem] font-semibold uppercase tracking-[0.16em] text-text">
+          Sign in to manage settings
+        </h1>
+        <p className="mt-2 text-[0.76rem] leading-relaxed text-muted">
+          Accounts are optional while PitchTerminal is in open beta — every module is
+          currently available without one.
+        </p>
+        <div className="mt-4 flex justify-center gap-3">
+          <Link href="/login" className="mono text-[0.64rem] tracking-widest text-amber">
+            SIGN IN →
+          </Link>
+          <Link href="/app" className="mono text-[0.64rem] tracking-widest text-muted">
+            CONTINUE BROWSING →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const plan = (identity.plan ?? "free").toUpperCase();
+  const isPro = plan === "PRO";
+  const renewal = identity.subscriptionExpiresAt
+    ? new Date(identity.subscriptionExpiresAt).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+
+  const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line py-2 last:border-0">
+      <span className="label-cap">{label}</span>
+      <span className="mono text-[0.76rem] text-text">{value}</span>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -32,117 +67,129 @@ export default async function SettingsPage() {
         <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">Settings</h1>
       </header>
 
-      {/* Subscription system */}
+      {/* Account */}
       <section className="panel p-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="mono text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
-            Subscription system
-          </h2>
-          <span
-            className="mono rounded px-2 py-0.5 text-[0.6rem] font-bold tracking-widest"
-            style={{
-              color: on ? "var(--edge)" : "var(--warn)",
-              background: `color-mix(in srgb, ${on ? "var(--edge)" : "var(--warn)"} 14%, transparent)`,
-            }}
-          >
-            {on ? "ACTIVE" : "TESTING MODE · OFF"}
-          </span>
-        </div>
-
-        <p className="mt-3 text-[0.78rem] leading-relaxed text-muted">
-          {on
-            ? "Subscription system active. Free and Pro permissions are enforced."
-            : "All users currently have full access. Subscription rules are configured but inactive."}
-        </p>
-
-        <Link
-          href="/admin/settings"
-          className="mono mt-4 inline-block rounded-term px-3 py-2 text-[0.64rem] font-semibold tracking-widest"
-          style={{
-            color: "var(--amber)",
-            border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
-          }}
-        >
-          OPEN ADMIN CONTROLS →
-        </Link>
-        <p className="mt-2 text-[0.68rem] leading-relaxed text-faint">
-          The toggle lives behind an admin role. Sign in with an admin account to reach it.
-        </p>
+        <h2 className="mono mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+          Account
+        </h2>
+        <Row label="Name" value={identity.displayName ?? "—"} />
+        <Row label="Email" value={identity.email ?? "—"} />
+        <Row
+          label="Signed in with"
+          value={(identity.provider ?? "email").replace(/^\w/, (c) => c.toUpperCase())}
+        />
+        <Row
+          label="Status"
+          value={
+            <span style={{ color: "var(--edge)" }}>
+              Active{identity.isAdmin ? " · Admin" : ""}
+            </span>
+          }
+        />
       </section>
 
-      {/* Feature access overview */}
+      {/* Subscription */}
       <section className="panel p-5">
-        <h2 className="mono mb-3 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
-          <IconGate size={14} />
-          Feature access
+        <h2 className="mono mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+          Subscription
         </h2>
-        {Object.keys(perms).length === 0 ? (
-          <p className="text-[0.74rem] text-muted">
-            No permission rows found — migration 033 has not been applied to this database.
-          </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <span
+            className="mono rounded px-2 py-0.5 text-[0.62rem] font-bold tracking-widest"
+            style={{
+              color: isPro ? "var(--amber)" : "var(--edge)",
+              background: `color-mix(in srgb, ${isPro ? "var(--amber)" : "var(--edge)"} 14%, transparent)`,
+            }}
+          >
+            {plan}
+          </span>
+          {identity.subscriptionStatus && (
+            <span className="mono text-[0.66rem] text-muted">
+              {identity.subscriptionStatus.toUpperCase()}
+            </span>
+          )}
+        </div>
+
+        {isPro ? (
+          <>
+            <div className="mt-3">
+              <Row label="Price" value="$19 / month" />
+              <Row label="Renews" value={renewal ?? "—"} />
+            </div>
+            <p className="mt-3 text-[0.7rem] leading-relaxed text-faint">
+              Billing management and cancellation arrive with the payment provider. No card is
+              on file and nothing is being charged.
+            </p>
+          </>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[0.72rem]">
-              <thead>
-                <tr className="border-b border-line">
-                  <th className="label-cap py-1.5 pr-3 text-left font-normal">Feature</th>
-                  <th className="label-cap py-1.5 pr-3 text-left font-normal">Required tier</th>
-                  <th className="label-cap py-1.5 text-left font-normal">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {MODULES.map((mod) => {
-                  const key = FEATURE_BY_MODULE[mod.key];
-                  const tier = key ? perms[key] : undefined;
-                  const isPro = tier === "pro";
-                  return (
-                    <tr key={mod.key} className="border-b border-line last:border-0">
-                      <td className="py-1.5 pr-3 text-text">{mod.name}</td>
-                      <td className="mono py-1.5 pr-3" style={{ color: isPro ? "var(--amber)" : "var(--edge)" }}>
-                        {tier ? tier.toUpperCase() : "—"}
-                      </td>
-                      <td className="mono py-1.5 text-muted">
-                        {on ? (isPro ? "Enforced" : "Open") : "Open (beta)"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <p className="mt-3 text-[0.74rem] leading-relaxed text-muted">
+              You have the open modules and full match discovery. Pro adds the remaining
+              intelligence modules and the complete evidence breakdown.
+            </p>
+            <Link
+              href="/subscription"
+              className="mono mt-3 inline-block rounded-term px-3 py-2 text-[0.64rem] font-semibold tracking-widest"
+              style={{ color: "var(--ink)", background: "var(--amber)" }}
+            >
+              COMPARE PLANS →
+            </Link>
+          </>
         )}
       </section>
 
-      {/* Account */}
+      {/* Favourites */}
       <section className="panel p-5">
-        <h2 className="mono mb-2 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
-          <IconLock size={14} />
-          Account
+        <h2 className="mono mb-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+          Favourite leagues
         </h2>
         <p className="text-[0.74rem] leading-relaxed text-muted">
-          {ctx.authenticated
-            ? `Signed in as ${ctx.email ?? ctx.userId} · role ${ctx.role} · plan ${ctx.plan ?? "free"}.`
-            : "Not signed in. Accounts are optional while the platform is in beta."}
+          {leagues.length > 0
+            ? `${leagues.length} competitions are tracked. Selecting favourites will filter the board and fixtures to them.`
+            : "No competitions are currently tracked."}
         </p>
-        <div className="mt-3 flex flex-wrap gap-3">
-          {ctx.authenticated ? (
-            <Link href="/logout" className="mono text-[0.64rem] tracking-widest text-amber">
-              SIGN OUT →
-            </Link>
-          ) : (
-            <>
-              <Link href="/login" className="mono text-[0.64rem] tracking-widest text-amber">
-                SIGN IN →
-              </Link>
-              <Link href="/signup" className="mono text-[0.64rem] tracking-widest text-muted">
-                CREATE ACCOUNT →
-              </Link>
-            </>
-          )}
+        <p className="mono mt-2 flex items-center gap-1.5 text-[0.62rem]" style={{ color: "var(--warn)" }}>
+          <IconUnverified size={11} />
+          NOT YET SAVED
+        </p>
+        <p className="mt-1 text-[0.68rem] leading-relaxed text-faint">
+          There is no table to store a selection against yet — the same gap that keeps the
+          watchlist unbuilt. Showing toggles that silently forget would be worse than saying so.
+        </p>
+      </section>
+
+      {/* Notifications */}
+      <section className="panel p-5">
+        <h2 className="mono mb-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+          Notifications
+        </h2>
+        <p className="text-[0.74rem] leading-relaxed text-muted">
+          Alerts when a fixture&rsquo;s consensus shifts, or when a module changes direction
+          close to kickoff.
+        </p>
+        <p className="mono mt-2 flex items-center gap-1.5 text-[0.62rem]" style={{ color: "var(--warn)" }}>
+          <IconUnverified size={11} />
+          NOT YET AVAILABLE
+        </p>
+        <p className="mt-1 text-[0.68rem] leading-relaxed text-faint">
+          Needs a delivery channel and a record of what changed between runs. Neither exists.
+        </p>
+      </section>
+
+      {/* Actions */}
+      <section className="panel p-5">
+        <h2 className="mono mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+          Account actions
+        </h2>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link href="/logout" className="mono text-[0.66rem] tracking-widest" style={{ color: "var(--risk)" }}>
+            SIGN OUT →
+          </Link>
+          <span className="mono flex items-center gap-1.5 text-[0.64rem] text-faint">
+            <IconSupports size={11} />
+            Signed in as {identity.email}
+          </span>
         </div>
-        <Link href="/subscription" className="mono mt-3 inline-block text-[0.64rem] tracking-widest text-amber">
-          SEE PLANS →
-        </Link>
       </section>
     </div>
   );

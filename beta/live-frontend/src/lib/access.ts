@@ -235,6 +235,10 @@ export interface ViewerIdentity {
   avatarUrl: string | null;
   /** Plan slug for the tier badge. "free" when signed in with no subscription. */
   plan: string | null;
+  /** Descriptive only — never used to authorise. */
+  provider: string | null;
+  subscriptionStatus: string | null;
+  subscriptionExpiresAt: string | null;
 }
 
 export const ANON_IDENTITY: ViewerIdentity = {
@@ -244,6 +248,9 @@ export const ANON_IDENTITY: ViewerIdentity = {
   displayName: null,
   avatarUrl: null,
   plan: null,
+  provider: null,
+  subscriptionStatus: null,
+  subscriptionExpiresAt: null,
 };
 
 export async function getViewerIdentity(): Promise<ViewerIdentity> {
@@ -257,7 +264,7 @@ export async function getViewerIdentity(): Promise<ViewerIdentity> {
     const [profile, sub] = await Promise.all([
       client
         .from("user_profiles")
-        .select("role, display_name, avatar_url")
+        .select("role, display_name, avatar_url, provider")
         .eq("user_id", user.id)
         .maybeSingle(),
       client
@@ -279,10 +286,118 @@ export async function getViewerIdentity(): Promise<ViewerIdentity> {
       displayName: p?.display_name ?? null,
       avatarUrl: p?.avatar_url ?? null,
       plan: (live && row.plan?.slug) || "free",
+      provider: p?.provider ?? null,
+      subscriptionStatus: live ? row.status : null,
+      subscriptionExpiresAt: live ? row.expires_at ?? null : null,
     };
   } catch {
     // Signed in but the profile read failed — treat as a normal user rather
     // than hiding the session entirely.
     return { ...ANON_IDENTITY, authenticated: true, email: user.email, plan: "free" };
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin statistics
+//
+// Read through the SESSION client, so RLS decides what comes back. A non-admin
+// calling this gets their own rows and nothing else — the numbers are protected
+// by the policies from migration 033, not by the page choosing not to render.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PlatformStats {
+  users: number;
+  admins: number;
+  freeUsers: number;
+  proUsers: number;
+  activeSubscriptions: number;
+  plans: { slug: string; name: string; price: number; active: boolean }[];
+}
+
+export async function getPlatformStats(): Promise<PlatformStats | null> {
+  const client = await supabaseServer();
+  if (!client) return null;
+  try {
+    const [profiles, subs, plans] = await Promise.all([
+      client.from("user_profiles").select("user_id, role"),
+      client
+        .from("user_subscriptions")
+        .select("user_id, status, expires_at, plan:subscription_plans(slug)")
+        .eq("status", "active"),
+      client.from("subscription_plans").select("slug, name, price, active").order("rank"),
+    ]);
+
+    const rows = (profiles.data as any[]) ?? [];
+    const now = Date.now();
+    const live = ((subs.data as any[]) ?? []).filter(
+      (s) => !s.expires_at || new Date(s.expires_at).getTime() > now
+    );
+    const proIds = new Set(live.filter((s) => s.plan?.slug === "pro").map((s) => s.user_id));
+
+    return {
+      users: rows.length,
+      admins: rows.filter((r) => r.role === "admin").length,
+      proUsers: proIds.size,
+      // Everyone without a live Pro subscription is on Free — there is no
+      // third state, so this is a subtraction rather than another query.
+      freeUsers: Math.max(0, rows.length - proIds.size),
+      activeSubscriptions: live.length,
+      plans: ((plans.data as any[]) ?? []).map((p) => ({
+        slug: p.slug,
+        name: p.name,
+        price: Number(p.price ?? 0),
+        active: p.active !== false,
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export interface AdminUserRow {
+  userId: string;
+  displayName: string | null;
+  role: string;
+  provider: string | null;
+  plan: string;
+  status: string | null;
+  expiresAt: string | null;
+  lastLoginAt: string | null;
+}
+
+export async function getAdminUsers(limit = 200): Promise<AdminUserRow[]> {
+  const client = await supabaseServer();
+  if (!client) return [];
+  try {
+    const [profiles, subs] = await Promise.all([
+      client
+        .from("user_profiles")
+        .select("user_id, display_name, role, provider, last_login_at")
+        .order("created_at", { ascending: false })
+        .limit(limit),
+      client
+        .from("user_subscriptions")
+        .select("user_id, status, expires_at, plan:subscription_plans(slug)")
+        .eq("status", "active"),
+    ]);
+
+    const byUser = new Map(((subs.data as any[]) ?? []).map((s) => [s.user_id, s]));
+    return ((profiles.data as any[]) ?? []).map((p) => {
+      const s = byUser.get(p.user_id);
+      const live = s && (!s.expires_at || new Date(s.expires_at) > new Date());
+      return {
+        userId: p.user_id,
+        displayName: p.display_name ?? null,
+        role: p.role ?? "user",
+        provider: p.provider ?? null,
+        plan: (live && s.plan?.slug) || "free",
+        status: live ? s.status : null,
+        expiresAt: live ? s.expires_at ?? null : null,
+        lastLoginAt: p.last_login_at ?? null,
+      };
+    });
+  } catch {
+    return [];
   }
 }

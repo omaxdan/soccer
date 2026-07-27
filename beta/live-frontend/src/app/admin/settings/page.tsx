@@ -1,41 +1,18 @@
 import Link from "next/link";
-import { getAccessContext, FEATURE_BY_MODULE } from "@/lib/access";
+import { FEATURE_BY_MODULE, getPlatformStats } from "@/lib/access";
+import { requireAdmin } from "@/components/AdminGuard";
 import { MODULES } from "@/lib/modules";
 import { SubscriptionToggle } from "@/components/SubscriptionToggle";
-import { IconGate, IconLock, IconUnverified } from "@/components/icons/ModuleIcons";
+import { IconGate } from "@/components/icons/ModuleIcons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin settings" };
 
 export default async function AdminSettingsPage() {
-  const ctx = await getAccessContext();
-
-  // Route protection. RLS would reject the write regardless, but a non-admin
-  // should not see the control at all — and an anonymous visitor should be
-  // told to sign in rather than shown a denial.
-  if (!ctx.isAdmin) {
-    return (
-      <div className="panel mx-auto max-w-lg p-6 text-center">
-        <span className="text-faint">
-          <IconLock size={20} />
-        </span>
-        <h1 className="mono mt-2 text-[0.85rem] font-semibold uppercase tracking-[0.16em] text-text">
-          Access denied
-        </h1>
-        <p className="mt-2 text-[0.76rem] leading-relaxed text-muted">
-          {ctx.authenticated
-            ? "This area requires an admin role. Your account does not have one."
-            : "Sign in with an admin account to reach the subscription controls."}
-        </p>
-        <Link
-          href={ctx.authenticated ? "/app" : "/login"}
-          className="mono mt-4 inline-block text-[0.64rem] tracking-widest text-amber"
-        >
-          {ctx.authenticated ? "BACK TO DASHBOARD" : "SIGN IN"} →
-        </Link>
-      </div>
-    );
-  }
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard.ui;
+  const ctx = guard.ctx;
+  const stats = await getPlatformStats();
 
   const on = ctx.subscriptionsEnabled;
 
@@ -79,10 +56,55 @@ export default async function AdminSettingsPage() {
         </div>
       </section>
 
-      <section className="panel p-5">
+      {stats && (
+        <section className="panel p-5">
+          <h2 className="mono mb-3 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
+            Platform
+          </h2>
+          <dl className="flex flex-wrap gap-x-8 gap-y-3">
+            {[
+              ["Users", stats.users],
+              ["Admins", stats.admins],
+              ["Free", stats.freeUsers],
+              ["Pro", stats.proUsers],
+              ["Active subscriptions", stats.activeSubscriptions],
+            ].map(([label, value]) => (
+              <div key={String(label)}>
+                <dt className="label-cap">{label}</dt>
+                <dd className="mono tnum text-xl font-semibold text-text">
+                  {Number(value).toLocaleString()}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {stats.plans.length > 0 && (
+            <div className="mt-4 border-t border-line pt-3">
+              <h3 className="label-cap mb-1.5">Plans</h3>
+              <ul className="flex flex-wrap gap-x-6 gap-y-1">
+                {stats.plans.map((p) => (
+                  <li key={p.slug} className="mono text-[0.72rem] text-text">
+                    {p.name}
+                    <span className="ml-1.5 text-faint">
+                      {p.price > 0 ? `$${p.price}/mo` : "free"}
+                      {p.active ? "" : " · inactive"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <Link href="/admin/users" className="mono mt-3 inline-block text-[0.64rem] tracking-widest text-amber">
+            MANAGE USERS →
+          </Link>
+        </section>
+      )}
+
+      <section id="features" className="panel scroll-mt-20 p-5">
         <h2 className="mono mb-3 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           <IconGate size={14} />
-          Feature access
+          Feature flags
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[0.72rem]">
@@ -118,18 +140,6 @@ export default async function AdminSettingsPage() {
         </div>
       </section>
 
-      <section className="panel p-5">
-        <h2 className="mono mb-2 flex items-center gap-2 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
-          <IconUnverified size={14} />
-          Not built yet
-        </h2>
-        <p className="text-[0.74rem] leading-relaxed text-muted">
-          User subscription management — listing accounts with plan, status and expiry — needs
-          a payment provider to produce those rows. Until Phase 2.2 the only subscription
-          records would be ones an admin inserted by hand, which is not a list worth building
-          a screen for.
-        </p>
-      </section>
     </div>
   );
 }

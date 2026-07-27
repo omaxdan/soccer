@@ -53,15 +53,13 @@ export default async function SubscriptionPage() {
             ? `Your plan: ${(ctx.plan ?? "free").toUpperCase()}${ctx.isAdmin ? " · ADMIN" : ""}`
             : "Create an account to manage access."}
         </p>
+        {/* No feature-flag state here: what the platform's internal switch is
+            set to is not a user-facing fact. The same sentence is said in
+            product terms below instead. */}
         {!ctx.subscriptionsEnabled && (
-          <p
-            className="mono mt-3 inline-block rounded px-2 py-1 text-[0.6rem] tracking-widest"
-            style={{
-              color: "var(--warn)",
-              background: "color-mix(in srgb, var(--warn) 12%, transparent)",
-            }}
-          >
-            BETA — EVERY MODULE IS CURRENTLY OPEN TO EVERYONE
+          <p className="mt-2 text-[0.74rem] leading-relaxed text-muted">
+            Every module is currently available to everyone while PitchTerminal is in open
+            beta.
           </p>
         )}
       </header>
