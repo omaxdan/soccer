@@ -2,7 +2,6 @@ import { getBoard, getBandBacktests } from "@/lib/queries";
 import { buildFeed, sortEntries } from "@/components/ModuleFeed";
 import {
   FeedTable,
-  ColumnKey,
   DateNav,
   buildDayOptions,
   dayKeyOf,
@@ -64,7 +63,6 @@ export default async function FixturesPage({
 
       <DateNav days={dayOptions} active={activeDay} total={all.length} />
 
-      <ColumnKey />
 
       {entries.length === 0 ? (
         <div className="panel p-5 text-center">

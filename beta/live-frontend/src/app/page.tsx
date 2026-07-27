@@ -1,7 +1,6 @@
 import { getBoard, getBettingCard, getBandBacktests } from "@/lib/queries";
 import Link from "next/link";
 import {
-  ColumnKey,
   DateNav,
   buildDayOptions,
   dayKeyOf,
@@ -167,9 +166,6 @@ export default async function DashboardPage({
           extraParams={{ sort, ...(moduleParam ? { module: moduleParam } : {}) }}
         />
 
-        <div className="mt-3">
-          <ColumnKey />
-        </div>
 
         <div className="mt-3">
           <ModuleFeed entries={entries} viewer={viewer} sort={sort} />

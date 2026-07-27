@@ -14,6 +14,7 @@
 import React from "react";
 import {
   wilson,
+  buildMarketProfiles,
   tally,
   overallVerdict,
   derivePickSide,
@@ -362,6 +363,104 @@ export function MatchReport({
 
   const shownTakeaways = takeaways.slice(0, 6);
 
+  // ── Instant verdict rows ────────────────────────────────────────────────
+  // Each row compares two recorded values. `edge` names whichever side is
+  // higher on that metric — nothing is scored or forecast.
+  const verdictRow = (
+    metric: string,
+    h: number | null,
+    a: number | null,
+    fmt: (v: number) => string,
+    higherIsBetter = true
+  ) => {
+    if (h == null || a == null) return null;
+    const same = Math.abs(h - a) < 0.05;
+    const homeAhead = higherIsBetter ? h > a : h < a;
+    return {
+      metric,
+      home: fmt(h),
+      away: fmt(a),
+      edge: same ? null : homeAhead ? homeName : awayName,
+    };
+  };
+
+  const homeCsPct = num(sp?.home_concedes_pct) != null ? 100 - num(sp!.home_concedes_pct)! : null;
+  const awayCsPct = num(sp?.away_concedes_pct) != null ? 100 - num(sp!.away_concedes_pct)! : null;
+
+  const verdictRows = [
+    verdictRow("Expected goals", i?.predicted_home_goals ?? null, i?.predicted_away_goals ?? null, (v) => v.toFixed(1)),
+    verdictRow("Win probability", i?.win_probability_home ?? null, i?.win_probability_away ?? null, (v) => `${Math.round(v)}%`),
+    verdictRow("Readiness", i?.home_readiness ?? null, i?.away_readiness ?? null, (v) => `${Math.round(v)}`),
+    verdictRow("Rest days", i?.home_rest_days ?? null, i?.away_rest_days ?? null, (v) => `${v}d`),
+    verdictRow("Form rating", m.homeIntel?.form_index ?? null, m.awayIntel?.form_index ?? null, (v) => v.toFixed(1)),
+    verdictRow("Clean sheet rate", homeCsPct, awayCsPct, (v) => `${Math.round(v)}%`),
+  ].filter((r): r is { metric: string; home: string; away: string; edge: string | null } => r != null);
+
+  // ── Executive summary — assembled, never written per fixture ─────────────
+  const execParts: string[] = [];
+  if (pickName) {
+    execParts.push(
+      `Historical evidence currently leans toward ${pickName}` +
+        (i?.readiness_gap != null ? `, on a readiness gap of ${Math.abs(Math.round(i.readiness_gap))}` : "") +
+        "."
+    );
+  } else {
+    execParts.push("No side holds a readiness edge in this fixture.");
+  }
+  const edgeRows = verdictRows.filter((r) => r.edge === pickName);
+  if (edgeRows.length > 0)
+    execParts.push(
+      `That side also holds the stronger recorded profile on ${edgeRows
+        .map((r) => r.metric.toLowerCase())
+        .join(", ")}.`
+    );
+  if (supports.length > 0)
+    execParts.push(
+      `${supports.map((r) => r.def.name.toLowerCase()).join(", ")} align with the lean.`
+    );
+  if (contradicts.length > 0)
+    execParts.push(
+      `${contradicts.map((r) => r.def.name.toLowerCase()).join(" and ")} runs counter to it.`
+    );
+  if (i?.confidence_band)
+    execParts.push(
+      `Confidence calibration places the fixture in the ${i.confidence_band} band${
+        confidenceReading?.baseline
+          ? `, measured at ${fmtBaseline(confidenceReading.baseline)}`
+          : ""
+      }, so the reliability of this combination is ${
+        overall.label === "STRONG" ? "at the higher end of what has been recorded" : "below what a headline reading would suggest"
+      }.`
+    );
+  const execSummary = execParts.join(" ");
+
+  // ── Warning box ─────────────────────────────────────────────────────────
+  const warnings: string[] = [];
+  if (contradicts.length > 0)
+    warnings.push(
+      `${contradicts.map((r) => r.def.name).join(" and ")} contradict${
+        contradicts.length === 1 ? "s" : ""
+      } the lean, which caps consensus at ${overall.label} however many modules agree.`
+    );
+  const thinHere = readings.filter(
+    (r) => r.baseline?.sample != null && !r.baseline.pooled && (r.baseline.sample as number) < 10
+  );
+  if (thinHere.length > 0)
+    warnings.push(
+      `${thinHere.map((r) => `${r.def.name} (n=${r.baseline!.sample})`).join(", ")} rest on very small samples — suggestive rather than established.`
+    );
+  const wideHere = readings.filter((r) => isWide(r.baseline));
+  if (wideHere.length > 0)
+    warnings.push(
+      `${wideHere.map((r) => r.def.name).join(", ")} carry intervals wide enough that the headline rate overstates what is known.`
+    );
+  if (dormant.length > 0)
+    warnings.push(
+      `${dormant.length} of ${MODULES.length} modules could not fire, so the consensus rests on a partial picture.`
+    );
+
+  const marketProfiles = buildMarketProfiles(readings);
+
   return (
     <section
       id={MATCH_REPORT_ANCHOR}
@@ -397,7 +496,150 @@ export function MatchReport({
         )}
       </Section>
 
-      <Section title="What the historical data shows">
+      {/* ── Instant verdict — one row per metric, edge to whichever side
+              actually holds it. Every figure is a column already on the page. */}
+      <Section title="Instant verdict">
+        <table className="w-full border-collapse text-[0.72rem]">
+          <thead>
+            <tr className="border-b border-line">
+              <th className="label-cap py-1.5 pr-3 text-left font-normal">Metric</th>
+              <th className="label-cap py-1.5 pr-3 text-right font-normal">{homeName}</th>
+              <th className="label-cap py-1.5 pr-3 text-right font-normal">{awayName}</th>
+              <th className="label-cap py-1.5 text-right font-normal">Edge</th>
+            </tr>
+          </thead>
+          <tbody>
+            {verdictRows.map((r) => (
+              <tr key={r.metric} className="border-b border-line last:border-0">
+                <td className="py-1.5 pr-3 text-muted">{r.metric}</td>
+                <td className="mono tnum py-1.5 pr-3 text-right text-text">{r.home}</td>
+                <td className="mono tnum py-1.5 pr-3 text-right text-text">{r.away}</td>
+                <td
+                  className="mono py-1.5 text-right text-[0.66rem] font-semibold"
+                  style={{ color: r.edge ? "var(--edge)" : "var(--faint)" }}
+                >
+                  {r.edge ?? "Level"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-2 text-[0.64rem] leading-relaxed text-faint">
+          Edge names the side holding the stronger historical profile on that metric. It is a
+          comparison of recorded values, not a forecast.
+        </p>
+      </Section>
+
+      <Section title="Executive summary">
+        <p className="max-w-3xl text-[0.82rem] leading-relaxed text-text">{execSummary}</p>
+      </Section>
+
+      {/* ── Warning box — why confidence is reduced, in plain language. */}
+      {warnings.length > 0 && (
+        <section
+          className="mt-5 panel p-4"
+          style={{ borderColor: "color-mix(in srgb, var(--warn) 32%, var(--line))" }}
+        >
+          <h3
+            className="mono mb-2 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em]"
+            style={{ color: "var(--warn)" }}
+          >
+            <IconUnverified size={14} />
+            Where confidence is reduced
+          </h3>
+          <ul className="space-y-1.5">
+            {warnings.map((w) => (
+              <li key={w} className="text-[0.73rem] leading-relaxed text-muted">
+                {w}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Supporting and opposing evidence, grouped. */}
+      {(supports.length > 0 || contradicts.length > 0) && (
+        <Section title="Supporting and opposing evidence">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="panel p-3.5">
+              <h3 className="mono mb-2 text-[0.66rem] uppercase tracking-[0.14em]" style={{ color: "var(--edge)" }}>
+                Supports {pickName ?? "the lean"} ({supports.length})
+              </h3>
+              {supports.length === 0 ? (
+                <p className="text-[0.7rem] text-faint">No module supports the lean.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {supports.map((r) => (
+                    <li key={r.def.key} className="text-[0.72rem] leading-relaxed">
+                      <span className="mono font-semibold text-text">{r.def.name}</span>
+                      <span className="text-muted"> — {r.headline}</span>
+                      {r.baseline && (
+                        <span className="text-faint"> · {fmtBaseline(r.baseline)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="panel p-3.5">
+              <h3 className="mono mb-2 text-[0.66rem] uppercase tracking-[0.14em]" style={{ color: "var(--risk)" }}>
+                Opposing context ({contradicts.length})
+              </h3>
+              {contradicts.length === 0 ? (
+                <p className="text-[0.7rem] text-faint">No module runs counter to the lean.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {contradicts.map((r) => (
+                    <li key={r.def.key} className="text-[0.72rem] leading-relaxed">
+                      <span className="mono font-semibold text-text">{r.def.name}</span>
+                      <span className="text-muted"> — {r.headline}</span>
+                      {r.baseline && (
+                        <span className="text-faint"> · {fmtBaseline(r.baseline)}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* ── Market profiles — which market the evidence speaks to, not what to back. */}
+      <Section title="Historical market profiles">
+        <div className="panel divide-y divide-line">
+          {marketProfiles.map((mp) => (
+            <div key={mp.market} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-3">
+              <span className="mono w-40 shrink-0 text-[0.74rem] font-semibold text-text">
+                {mp.market}
+              </span>
+              <span
+                className="mono shrink-0 rounded px-1.5 py-0.5 text-[0.58rem] font-bold tracking-widest"
+                style={{ color: mp.color, background: `color-mix(in srgb, ${mp.color} 14%, transparent)` }}
+              >
+                {mp.alignment.toUpperCase()}
+              </span>
+              <span className="flex-1 text-[0.7rem] leading-relaxed text-muted">{mp.sentence}</span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[0.64rem] leading-relaxed text-faint">
+          Alignment describes how consistently the evidence speaks to each market profile. It is
+          not a view on price, and PitchTerminal does not say which market to take.
+        </p>
+      </Section>
+
+      {/* ── Neutral signals, grouped to one line. */}
+      {neutral.length > 0 && (
+        <Section title="Evaluated, no material effect">
+          <p className="text-[0.72rem] leading-relaxed text-muted">
+            {neutral.map((r) => r.def.name).join(", ")} produced readings that do not move this
+            fixture either way.
+          </p>
+        </Section>
+      )}
+
+      <Section title="Detailed module analysis">
         {supports.length === 0 && contradicts.length === 0 ? (
           <p className="text-[0.72rem] text-faint">
             No module produced a directional reading for this fixture.
