@@ -22,6 +22,17 @@ const BANDS = [
   { min: 0, color: "var(--risk)", label: "Low <60%" },
 ] as const;
 
+/**
+ * match_predicted_lineups.confidence is stored as a FRACTION (0.95, not 95).
+ * Math.round() on it returned 1, which rendered as "1%" for every player and
+ * an average of "1%" for the XI. Scaled here, tolerant of either convention in
+ * case the column is ever normalised.
+ */
+function asPct(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null;
+  return v <= 1 ? v * 100 : v;
+}
+
 function confColor(pct: number | null): string {
   if (pct == null) return "var(--faint)";
   return (BANDS.find((b) => pct >= b.min) ?? BANDS[2]).color;
@@ -35,7 +46,8 @@ const GROUPS: { key: "GK" | "DEF" | "MID" | "FWD"; label: string }[] = [
 ];
 
 function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
-  const pct = p.confidence != null ? Math.round(p.confidence) : null;
+  const raw = asPct(p.confidence);
+  const pct = raw != null ? Math.round(raw) : null;
   const color = confColor(pct);
   const name = p.player?.short_name || p.player?.name || `#${p.player_id}`;
   // Alternative positions come from players.secondary/tertiary_position — real
@@ -56,11 +68,9 @@ function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
             </span>
           )}
         </span>
-        {(alts.length > 0 || p.versatility_score != null) && (
+        {alts.length > 0 && (
           <span className="mono block truncate text-[0.56rem] text-faint">
-            {alts.join(" · ")}
-            {alts.length > 0 && p.versatility_score != null && " · "}
-            {p.versatility_score != null && `${Math.round(p.versatility_score)}% versatility`}
+            Also plays {alts.join(", ")}
           </span>
         )}
       </span>
@@ -85,7 +95,7 @@ function TeamXI({
   if (players.length === 0) return null;
 
   const confs = players
-    .map((p) => p.confidence)
+    .map((p) => asPct(p.confidence))
     .filter((c): c is number => c != null);
   const avg = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : null;
 
@@ -93,11 +103,6 @@ function TeamXI({
     .map((p) => p.matches_started)
     .filter((s): s is number => s != null)
     .reduce((a, b) => a + b, 0);
-
-  const vers = players
-    .map((p) => p.versatility_score)
-    .filter((v): v is number => v != null);
-  const avgVers = vers.length ? vers.reduce((a, b) => a + b, 0) / vers.length : null;
 
   return (
     <article className="panel p-4">
@@ -114,7 +119,7 @@ function TeamXI({
         <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
           {avg != null && (
             <div>
-              <dt className="label-cap">Avg confidence</dt>
+              <dt className="label-cap">Average XI confidence</dt>
               <dd
                 className="mono tnum text-[0.78rem] font-semibold"
                 style={{ color: confColor(avg) }}
@@ -125,19 +130,14 @@ function TeamXI({
           )}
           {starts > 0 && (
             <div>
-              <dt className="label-cap">Starts represented</dt>
+              <dt className="label-cap">Historical starts</dt>
               <dd className="mono tnum text-[0.78rem] text-text">{starts.toLocaleString()}</dd>
-            </div>
-          )}
-          {avgVers != null && (
-            <div>
-              <dt className="label-cap">Positional versatility</dt>
-              <dd className="mono tnum text-[0.78rem] text-text">{Math.round(avgVers)}%</dd>
             </div>
           )}
         </dl>
       </header>
 
+      {/* Formation first — it frames everything below it. */}
       {GROUPS.map(({ key, label }) => {
         const group = players.filter((p) => lineOf(p.position_code) === key);
         if (group.length === 0) return null;
@@ -146,7 +146,7 @@ function TeamXI({
             <div className="label-cap mb-1">{label}</div>
             <ul className="space-y-px">
               {[...group]
-                .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+                .sort((a, b) => (asPct(b.confidence) ?? 0) - (asPct(a.confidence) ?? 0))
                 .map((p) => (
                   <PlayerChip key={p.player_id} p={p} />
                 ))}
@@ -187,8 +187,8 @@ export function PredictedXI({
         Predicted lineups
       </h2>
       <p className="mb-3 text-[0.65rem] leading-relaxed text-faint">
-        From season starts, recent form, injury status and availability. Confidence is the
-        prediction&rsquo;s own, unchanged.
+        Each percentage is the likelihood that player starts, from season starts, recent form,
+        injury status and availability.
       </p>
       <div className="grid gap-3 lg:grid-cols-2">
         <TeamXI team={match.home} players={homeLineup} />

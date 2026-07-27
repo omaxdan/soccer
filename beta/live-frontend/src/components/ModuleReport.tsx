@@ -22,8 +22,7 @@ import {
   type MatchTeamSides,
 } from "@/lib/modules";
 import type { MatchRow, MatchScoringProbabilities, LeagueGapSummary } from "@/lib/types";
-import { ModuleVerdictSummary } from "./ModuleCard";
-import { IconGate, IconUnverified } from "./icons/ModuleIcons";
+import { IconGate } from "./icons/ModuleIcons";
 
 /** Team-scope context assembled from data getMatch already returns. */
 export function matchTeamSides(match: MatchRow): MatchTeamSides {
@@ -159,39 +158,6 @@ export function ModuleReport({
       {/* Full match report */}
       {report}
 
-      {/* Data gaps, after the report */}
-      {dormant.length > 0 && (
-        <section
-          className="panel p-4"
-          style={{ borderColor: "color-mix(in srgb, var(--warn) 28%, var(--line))" }}
-        >
-          <h2
-            className="mono mb-2.5 flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em]"
-            style={{ color: "var(--warn)" }}
-          >
-            <IconUnverified size={14} />
-            Did not fire ({dormant.length})
-          </h2>
-          <ul className="space-y-1.5">
-            {dormant.map((r) => (
-              <li key={r.def.key} className="flex items-start gap-2 text-[0.7rem] leading-relaxed">
-                <span className="mt-0.5 shrink-0" style={{ color: "var(--warn)" }}>
-                  <IconUnverified size={12} />
-                </span>
-                <span>
-                  <span className="mono font-semibold text-muted">
-                    M{r.def.n} {r.def.name}
-                  </span>
-                  <span className="text-faint"> — {r.headline}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Verdict summary */}
-      <ModuleVerdictSummary readings={readings} narrative={narrative(readings, match)} />
     </div>
   );
 }

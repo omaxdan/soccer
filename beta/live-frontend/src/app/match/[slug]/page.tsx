@@ -183,9 +183,9 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
       {/* 2 — Pick badge */}
       {pickBand}
 
-      {/* 3 — Module report: consensus bar, the full match report, data gaps,
-              then the verdict summary. Per-module cards were removed; the
-              report carries the same readings without duplicating them. */}
+      {/* 3 — Intelligence report: instant verdict, summary, confidence limits,
+              evidence scorecard, market profiles and neutral signals. Module
+              numbers are no longer surfaced anywhere. */}
       <ModuleReport
         match={m}
         readings={moduleReadings}

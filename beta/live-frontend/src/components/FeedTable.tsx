@@ -1,18 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// FeedTable — the board and fixtures list as a high-level intelligence board.
+// FeedTable — the board and the schedule, as a high-level intelligence summary.
 //
-// Was thirteen module columns per fixture, two rows deep, on a both-axis
-// scroller with sticky edges. That asked a reader to learn thirteen
-// abbreviations and scan a grid to answer one question. Now three fields:
-// how much intelligence exists, how strongly it agrees, and which side it
-// favours. The per-module breakdown lives on the match page.
+// Was thirteen module columns per fixture, which forced a reader to learn
+// internal abbreviations and could not fit a phone without horizontal scroll.
+// Now three fields: how much intelligence exists, how strongly it agrees, and
+// which side it favours. The per-module breakdown lives on the match page,
+// which is where someone who wants it is already going.
 //
-// One responsive grid rather than a table plus a mobile variant: the same
-// markup reads as aligned columns from md up and stacks into a card below it,
-// so there is nothing to keep in sync and no horizontal scroll at any width.
+// Nothing about the modules changed. tally() and overallVerdict() are the same
+// functions, over the same readings; this only stops rendering each one.
 //
-// No calculation changed. tally() and overallVerdict() are the same functions
-// the match page uses; derivePickSide() is unchanged.
+// One row per fixture, six columns, no horizontal scroll at 375px.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from "react";
@@ -37,119 +35,52 @@ function groupLabel(e: FeedEntry, by: FeedGrouping): string {
   return e.match.competition ?? e.match.tournament?.name ?? "Other";
 }
 
-/** Fraction of modules firing, used to shade the count. */
-function coverageColor(firing: number, total: number): string {
-  const r = firing / total;
-  if (r >= 0.8) return "var(--edge)";
-  if (r >= 0.5) return "var(--warn)";
-  return "var(--muted)";
-}
-
-function TeamLine({ team }: { team: MatchRow["home"] }) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <Crest team={team} size={18} />
-      <span className="mono truncate text-[0.76rem] font-semibold text-text">
-        {team.short_name || team.name}
-      </span>
-    </span>
-  );
-}
-
-function Field({
-  label,
+/** Fills a cell with a link to the fixture so the whole row is a target. */
+function CellLink({
+  href,
   children,
+  label,
   className = "",
 }: {
-  label: string;
+  href: string;
   children: React.ReactNode;
+  label?: string;
   className?: string;
 }) {
+  const hidden = label == null;
   return (
-    <span className={`flex flex-col gap-0.5 ${className}`}>
-      {/* Labels show on the stacked card and are redundant under the desktop
-          header row, so they hide from md up. */}
-      <span className="label-cap md:hidden">{label}</span>
+    <Link
+      href={href}
+      aria-label={label}
+      aria-hidden={hidden || undefined}
+      tabIndex={hidden ? -1 : undefined}
+      className={`block h-full w-full ${className}`}
+    >
       {children}
-    </span>
+    </Link>
   );
 }
 
-const ROW_GRID =
-  "grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-[4.5rem_minmax(0,1fr)_5.5rem_7rem_8rem] md:items-center md:gap-y-0";
-
-function FeedRow({ entry }: { entry: FeedEntry }) {
-  const m = entry.match;
-  const k = kickoff(m.date);
-  const t = tally(entry.readings);
-  const overall = overallVerdict(t);
-  const firing = entry.readings.filter((r) => r.status !== "inactive").length;
-  const pickSide = derivePickSide(m);
-
-  const pick =
-    pickSide === "home"
-      ? m.home.short_name || m.home.name
-      : pickSide === "away"
-        ? m.away.short_name || m.away.name
-        : t.firing === 0
-          ? "No edge"
-          : "Draw lean";
-
+function TeamLine({ team, side }: { team: MatchRow["home"]; side: "H" | "A" }) {
   return (
-    <Link
-      href={`/match/${matchSlug(m)}`}
-      className={`${ROW_GRID} border-t border-line px-3 py-3 transition-colors first:border-t-0 hover:bg-raised`}
-    >
-      <Field label="Kickoff" className="col-span-2 md:col-span-1">
-        <span className="mono text-[0.72rem] leading-tight">
-          <span className="tnum text-text">{k.time}</span>{" "}
-          <span className="text-faint">{k.day}</span>
-        </span>
-      </Field>
-
-      <Field label="Fixture" className="col-span-2 md:col-span-1">
-        <span className="flex min-w-0 flex-col gap-1">
-          <TeamLine team={m.home} />
-          <TeamLine team={m.away} />
-        </span>
-      </Field>
-
-      <Field label="Modules">
-        <span
-          className="mono tnum text-[0.78rem] font-semibold"
-          style={{ color: coverageColor(firing, MODULES.length) }}
-        >
-          {firing}
-          <span className="text-faint"> / {MODULES.length}</span>
-        </span>
-      </Field>
-
-      <Field label="Consensus">
-        <span
-          className="mono w-fit rounded px-1.5 py-0.5 text-[0.6rem] font-bold tracking-widest"
-          style={{
-            color: overall.color,
-            background: `color-mix(in srgb, ${overall.color} 14%, transparent)`,
-          }}
-        >
-          {overall.label}
-        </span>
-      </Field>
-
-      <Field label="Favours">
-        <span className="mono truncate text-[0.74rem] font-semibold text-text">{pick}</span>
-      </Field>
-    </Link>
+    <span className="flex min-w-0 items-center gap-1.5">
+      <Crest team={team} size={15} />
+      <span className="mono truncate text-[0.7rem] font-semibold text-text md:text-[0.76rem]">
+        {team.short_name || team.name}
+      </span>
+      <span className="mono ml-auto shrink-0 text-[0.5rem] text-faint">{side}</span>
+    </span>
   );
 }
 
 export function FeedTable({
   entries,
+  viewer: _viewer,
   groupBy = "league",
+  maxHeight = "calc(100vh - 11rem)",
 }: {
   entries: FeedEntry[];
-  /** Unused now the grid is self-sizing; kept so callers need not change. */
-  viewer?: Tier;
+  viewer: Tier;
   groupBy?: FeedGrouping;
   maxHeight?: string;
 }) {
@@ -159,38 +90,160 @@ export function FeedTable({
     groups.set(key, [...(groups.get(key) ?? []), e]);
   }
 
+  const head =
+    "sticky top-0 z-20 whitespace-nowrap bg-panel px-2 py-2 text-left font-normal";
+
   return (
-    <div className="space-y-4">
-      {[...groups.entries()].map(([label, list]) => (
-        <section key={label}>
-          <h3 className="mono mb-1.5 flex items-baseline gap-2 text-[0.62rem] uppercase tracking-[0.14em] text-muted">
-            {label}
-            <span className="tnum text-faint">{list.length}</span>
-          </h3>
+    <div className="panel overflow-y-auto" style={{ maxHeight }}>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-line">
+            <th className={head}>
+              <span className="label-cap">Time</span>
+            </th>
+            {/* Competition is the group header when grouping by league, so it
+                only earns a column on the schedule view. Hidden on mobile
+                either way — it is the least load-bearing field here. */}
+            {groupBy === "day" && (
+              <th className={`${head} hidden md:table-cell`}>
+                <span className="label-cap">Competition</span>
+              </th>
+            )}
+            <th className={head}>
+              <span className="label-cap">Fixture</span>
+            </th>
+            <th className={`${head} text-center`}>
+              <span className="label-cap">Modules</span>
+            </th>
+            <th className={head}>
+              <span className="label-cap">Consensus</span>
+            </th>
+            <th className={head}>
+              <span className="label-cap">Pick side</span>
+            </th>
+          </tr>
+        </thead>
 
-          {/* Header row, desktop only — the stacked card labels each field. */}
-          <div className={`${ROW_GRID} hidden px-3 pb-1 md:grid`}>
-            <span className="label-cap">Kickoff</span>
-            <span className="label-cap">Fixture</span>
-            <span className="label-cap">Modules</span>
-            <span className="label-cap">Consensus</span>
-            <span className="label-cap">Favours</span>
-          </div>
+        {[...groups.entries()].map(([label, list]) => (
+          <tbody key={label}>
+            <tr>
+              <td
+                colSpan={groupBy === "day" ? 6 : 5}
+                className="mono border-y border-line bg-raised px-2 py-1 text-[0.6rem] uppercase tracking-[0.14em] text-muted"
+              >
+                {label}
+                <span className="ml-2 tnum text-faint">{list.length}</span>
+              </td>
+            </tr>
 
-          <div className="panel divide-y divide-line">
-            {list.map((e) => (
-              <FeedRow key={e.match.id} entry={e} />
-            ))}
-          </div>
-        </section>
-      ))}
+            {list.map((e) => {
+              const m = e.match;
+              const k = kickoff(m.date);
+              const t = tally(e.readings);
+              const overall = overallVerdict(t);
+              const firing = e.readings.filter((r) => r.status !== "inactive").length;
+              const pickSide = derivePickSide(m);
+              const pickName =
+                pickSide === "home"
+                  ? m.home.short_name || m.home.name
+                  : pickSide === "away"
+                    ? m.away.short_name || m.away.name
+                    : null;
+              const href = `/match/${matchSlug(m)}`;
+              const homeName = m.home.short_name || m.home.name;
+              const awayName = m.away.short_name || m.away.name;
+
+              return (
+                <tr
+                  key={m.id}
+                  className="border-t border-line transition-colors hover:bg-raised"
+                >
+                  <td className="px-2 py-2 align-middle">
+                    <CellLink
+                      href={href}
+                      label={`${homeName} versus ${awayName}, ${k.day} ${k.time}`}
+                    >
+                      <span className="mono block text-[0.62rem] text-faint">{k.day}</span>
+                      <span className="mono tnum block text-[0.74rem] text-text">{k.time}</span>
+                    </CellLink>
+                  </td>
+
+                  {groupBy === "day" && (
+                    <td className="hidden max-w-[10rem] px-2 py-2 align-middle md:table-cell">
+                      <CellLink href={href}>
+                        <span className="mono truncate text-[0.66rem] text-muted">
+                          {m.competition ?? m.tournament?.name ?? "—"}
+                        </span>
+                      </CellLink>
+                    </td>
+                  )}
+
+                  <td className="min-w-[8rem] px-2 py-1.5 align-middle">
+                    <CellLink href={href}>
+                      <span className="flex flex-col gap-1">
+                        <TeamLine team={m.home} side="H" />
+                        <TeamLine team={m.away} side="A" />
+                      </span>
+                    </CellLink>
+                  </td>
+
+                  {/* How much intelligence exists for this fixture. */}
+                  <td className="px-2 py-2 text-center align-middle">
+                    <CellLink href={href}>
+                      <span className="mono tnum text-[0.78rem] font-semibold text-text">
+                        {firing}
+                        <span className="text-[0.62rem] text-faint">/{MODULES.length}</span>
+                      </span>
+                    </CellLink>
+                  </td>
+
+                  {/* How strongly it agrees. */}
+                  <td className="px-2 py-2 align-middle">
+                    <CellLink href={href}>
+                      <span
+                        className="mono inline-block rounded px-1.5 py-0.5 text-[0.58rem] font-bold tracking-widest"
+                        style={{
+                          color: overall.color,
+                          background: `color-mix(in srgb, ${overall.color} 15%, transparent)`,
+                        }}
+                      >
+                        {overall.label}
+                      </span>
+                      <span className="mono mt-0.5 block text-[0.55rem] text-faint">
+                        {t.supports}S {t.neutral}N {t.contradicts}C
+                      </span>
+                    </CellLink>
+                  </td>
+
+                  {/* Which side it favours. */}
+                  <td className="px-2 py-2 align-middle">
+                    <CellLink href={href}>
+                      <span
+                        className="mono block truncate text-[0.72rem] font-semibold"
+                        style={{ color: pickName ? "var(--text)" : "var(--faint)" }}
+                      >
+                        {pickName ?? "No edge"}
+                      </span>
+                    </CellLink>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        ))}
+      </table>
     </div>
   );
 }
 
 // ── Date navigation ──────────────────────────────────────
+// A strip rather than a dropdown: the days come from the fixtures actually
+// present, so it never offers an empty date, and changing the axis this page is
+// organised around should not need a menu opened first. Links, so it works
+// without JavaScript and is shareable.
 
 export interface DayOption {
+  /** YYYY-MM-DD, the value carried in ?date= */
   key: string;
   label: string;
   count: number;
@@ -242,6 +295,7 @@ export function DateNav({
   active: string | null;
   total: number;
   basePath?: string;
+  /** Carried through every chip so ?sort= and ?module= survive a date change. */
   extraParams?: Record<string, string>;
 }) {
   if (days.length === 0) return null;

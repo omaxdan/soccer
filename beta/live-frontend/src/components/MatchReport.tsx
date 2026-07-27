@@ -137,6 +137,18 @@ function StatusGlyph({ status }: { status: ModuleReading["status"] }) {
 
 export const MATCH_REPORT_ANCHOR = "match-report";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The report speaks football, not architecture.
+//
+// Module NAMES appear — "Rest Advantage" is a finding a reader can act on.
+// Module NUMBERS do not. Nobody needs to know that M8 fired; they need to know
+// the away side holds a form advantage. The modules stay the engine and stop
+// being the subject.
+//
+// Everything below is derived from the readings the page already computed. No
+// score is recalculated, and no sentence instructs anyone to stake anything.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function MatchReport({
   match: m,
   readings: allReadings,
@@ -146,13 +158,11 @@ export function MatchReport({
   readings: ModuleReading[];
   viewer: Tier;
 }) {
-  // The module cards used to carry tier gating; with those gone this report is
-  // the only surface showing per-module detail, so the gate moves here.
-  // Consensus is still computed across EVERY module — the tier decides how much
-  // working is shown, not whether the conclusion is correct.
   const readings = allReadings.filter((r) => canSee(r.def, viewer));
   const gated = allReadings.filter((r) => !canSee(r.def, viewer));
+
   const i = m.intel;
+  const sp = m.scoring;
   const homeName = m.home.short_name || m.home.name;
   const awayName = m.away.short_name || m.away.name;
   const pickSide = derivePickSide(m);
@@ -163,637 +173,332 @@ export function MatchReport({
   const supports = readings.filter((r) => r.status === "supports");
   const contradicts = readings.filter((r) => r.status === "contradicts");
   const neutral = readings.filter((r) => r.status === "neutral");
-  const dormant = readings.filter((r) => r.status === "inactive");
-  const teamModules = readings.filter((r) => r.def.scope === "team");
+  const dormant = allReadings.filter((r) => r.status === "inactive");
+  const firing = allReadings.filter((r) => r.status !== "inactive").length;
 
-  const finished = m.status === "finished" || (m.home_score != null && m.away_score != null);
-  const kickoff = new Date(m.date);
-  const dateLine = kickoff.toLocaleDateString("en-GB", {
+  const kickoffAt = new Date(m.date);
+  const dateLine = kickoffAt.toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 
-  // ── Snapshot rows — only what this fixture actually carries ─────────────
-  const snapshot: [string, React.ReactNode, React.ReactNode?][] = [];
-  if (finished && m.home_score != null && m.away_score != null) {
-    snapshot.push(["Observed score", m.home_score, m.away_score]);
-  } else {
-    snapshot.push([
-      "Kick-off",
-      kickoff.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-      "",
-    ]);
-  }
-  if (i?.predicted_home_goals != null && i?.predicted_away_goals != null)
-    snapshot.push([
-      "Expected goals (model estimate)",
-      i.predicted_home_goals.toFixed(1),
-      i.predicted_away_goals.toFixed(1),
-    ]);
-  if (i?.win_probability_home != null && i?.win_probability_away != null)
-    snapshot.push([
-      "Win probability",
-      pct(i.win_probability_home, 0),
-      pct(i.win_probability_away, 0),
-    ]);
-  if (m.home_form || m.away_form)
-    snapshot.push(["Form (last 5)", m.home_form ?? "—", m.away_form ?? "—"]);
-  const awayTrip = num(m.travel?.away_trip_km) ?? i?.away_travel_distance_km ?? null;
-  if (awayTrip != null) snapshot.push(["Travel distance", km(0), km(awayTrip)]);
-  if (i?.home_rest_days != null && i?.away_rest_days != null)
-    snapshot.push([
-      "Rest days",
-      `${i.home_rest_days} days`,
-      `${i.away_rest_days} days`,
-    ]);
-
   const confidenceReading = readings.find((r) => r.def.n === 10) ?? null;
-  const bandRate = confidenceReading?.baseline?.rate ?? null;
+  const bandBaseline = confidenceReading?.baseline ?? null;
 
-  // ── BTTS block — only when scoring probabilities are present ────────────
-  const sp = m.scoring;
-  const bttsRows: [string, React.ReactNode][] = [];
-  if (sp) {
-    const push = (label: string, v: unknown, sample?: unknown) => {
-      const n = num(v);
-      if (n == null) return;
-      const s = num(sample);
-      bttsRows.push([label, `${n.toFixed(0)}%${s != null ? ` (n=${s})` : ""}`]);
-    };
-    push(`${homeName} scores at home`, sp.home_scores_pct, sp.home_sample);
-    push(`${awayName} concedes away`, sp.away_concedes_pct, sp.away_concede_sample);
-    push(`${awayName} scores away`, sp.away_scores_pct, sp.away_sample);
-    push(`${homeName} concedes at home`, sp.home_concedes_pct, sp.home_concede_sample);
-    push(`${homeName} to score (combined)`, sp.home_to_score_pct);
-    push(`${awayName} to score (combined)`, sp.away_to_score_pct);
-    push("Both teams to score", sp.btts_pct);
-    push("Historical BTTS", sp.historical_btts_pct);
-    push("League BTTS", sp.league_btts_pct);
+  // ── Instant verdict ───────────────────────────────────────────────────────
+  interface VerdictRow {
+    metric: string;
+    home: string;
+    away: string;
+    edge: string;
+    edgeColor: string;
   }
-
-  // ── Takeaways ───────────────────────────────────────────────────────────
-  // Each answers three things: what the data shows, what it means, and what it
-  // implies for reading the rest of the report. Every figure is pulled from a
-  // reading — nothing is written per fixture, and none of these say what to
-  // stake. They describe where the evidence sits, not what to do about it.
-  const spread = (r: ModuleReading) =>
-    r.baseline ? Math.abs(r.baseline.rate - 50) : -1;
-  const strongest = supports.length
-    ? supports.reduce((a, b) => (spread(b) > spread(a) ? b : a))
-    : null;
-  const weakest = contradicts.length
-    ? contradicts.reduce((a, b) =>
-        (b.baseline?.rate ?? 100) < (a.baseline?.rate ?? 100) ? b : a
-      )
-    : null;
-
-  const side = pickName ?? "the favoured side";
-  const takeaways: { lead: string; body: string }[] = [];
-
-  // 1 — strongest supporting module
-  if (strongest) {
-    const b = strongest.baseline;
-    takeaways.push({
-      lead: `${strongest.def.name} is the strongest supporting signal`,
-      body:
-        `${strongest.headline}. ` +
-        (b ? `Across the matches counted, ${b.label} ${fmtBaseline(b)}. ` : "") +
-        `${strongest.verdict} It is the largest single contributor to the ${overall.label} reading toward ${side}` +
-        (b && isWide(b)
-          ? `, though its interval is wide enough that it carries less weight than the headline rate suggests.`
-          : `.`),
-    });
-  }
-
-  // 2 — strongest contradicting module
-  if (weakest) {
-    const b = weakest.baseline;
-    takeaways.push({
-      lead: `${weakest.def.name} flags a concern`,
-      body:
-        `${weakest.headline}. ` +
-        (b ? `Historical rate: ${fmtBaseline(b)}. ` : "") +
-        `${weakest.verdict} With ${t.supports} module${t.supports === 1 ? "" : "s"} supporting and ` +
-        `${t.contradicts} against, consensus is held at ${overall.label} — a disagreement caps it ` +
-        `however many modules agree.`,
-    });
-  }
-
-  // 3 — rest, or failing that travel, with the threshold spelled out
-  const restGap =
-    i?.home_rest_days != null && i?.away_rest_days != null
-      ? i.home_rest_days - i.away_rest_days
-      : null;
-  const restReading = readings.find((r) => r.def.n === 6) ?? null;
-  const travelProfile = m.travel?.travel_profile ?? null;
-  if (restGap != null && Math.abs(restGap) >= 4) {
-    const ahead = restGap > 0 ? homeName : awayName;
-    takeaways.push({
-      lead: `Rest gap clears the four-day threshold`,
-      body:
-        `${ahead} has ${Math.abs(restGap)} extra days (${i?.home_rest_days}d vs ${i?.away_rest_days}d). ` +
-        `Four days is where rest starts to register in the record; below that the effect sits inside the noise. ` +
-        (restReading?.baseline
-          ? `Historical rate in this scenario: ${fmtBaseline(restReading.baseline)}.`
-          : ""),
-    });
-  } else if (travelProfile && travelProfile !== "NO_TRAVEL_EDGE") {
-    const travelReading = readings.find((r) => r.def.n === 5) ?? null;
-    takeaways.push({
-      lead: `Travel load is uneven`,
-      body:
-        `Profile: ${travelProfile.replace(/_/g, " ").toLowerCase()}. ` +
-        `${travelReading?.verdict ?? ""} Single-trip distance alone moves the away win rate by under three ` +
-        `points across every band, so this reads as a cumulative-load signal rather than a distance one.`,
-    });
-  }
-
-  // 4 — thin samples, named rather than buried
-  const thin = readings.filter(
-    (r) => r.baseline?.sample != null && !r.baseline.pooled && (r.baseline.sample as number) < 10
-  );
-  if (thin.length > 0) {
-    const widths = thin.map((r) => {
-      const b = r.baseline!;
-      const [lo, hi] = wilson(b.rate, b.sample as number);
-      return Math.round(hi - lo);
-    });
-    takeaways.push({
-      lead: `${thin.map((r) => r.def.name).join(" and ")} rest on very small samples`,
-      body:
-        `${thin.map((r) => `${r.def.name} n=${r.baseline!.sample}`).join(", ")}. ` +
-        (Math.min(...widths) === Math.max(...widths)
-          ? `Each interval spans about ${widths[0]} percentage points`
-          : `Their intervals span ${Math.min(...widths)}–${Math.max(...widths)} percentage points`) +
-        ` — wider than the effect they claim to measure. These are context rather than signals: the pattern ` +
-        `may well hold, but this many matches cannot show it either way.`,
-    });
-  }
-
-  // 5 — data quality
-  const firingCount = allReadings.filter((r) => r.status !== "inactive").length;
-  takeaways.push({
-    lead: `${firingCount} of ${MODULES.length} modules firing`,
-    body:
-      dormant.length > 0
-        ? `${dormant.map((r) => r.def.name).join(", ")} could not fire for this fixture. The consensus ` +
-          `above rests on ${firingCount} modules, not the full ${MODULES.length}.`
-        : `Every module produced a reading for this fixture.`,
-  });
-
-  // 6 — BTTS context, when scoring probabilities exist
-  const bttsPct = num(sp?.btts_pct);
-  const leagueBtts = num(sp?.league_btts_pct);
-  if (bttsPct != null && takeaways.length < 6) {
-    takeaways.push({
-      lead: `Both teams to score sits at ${bttsPct.toFixed(0)}%`,
-      body:
-        (sp?.btts_verdict ? `${sp.btts_verdict}. ` : "") +
-        (leagueBtts != null
-          ? `That is ${
-              bttsPct > leagueBtts ? "above" : bttsPct < leagueBtts ? "below" : "level with"
-            } the league rate of ${leagueBtts.toFixed(1)}%. `
-          : "") +
-        `It is built from each side's scoring and conceding rates in the samples listed above, so it ` +
-        `inherits their sample sizes.`,
-    });
-  }
-
-  const shownTakeaways = takeaways.slice(0, 6);
-
-  // ── Instant verdict rows ────────────────────────────────────────────────
-  // Each row compares two recorded values. `edge` names whichever side is
-  // higher on that metric — nothing is scored or forecast.
-  const verdictRow = (
+  const verdictRows: VerdictRow[] = [];
+  const addRow = (
     metric: string,
     h: number | null,
     a: number | null,
     fmt: (v: number) => string,
     higherIsBetter = true
   ) => {
-    if (h == null || a == null) return null;
-    const same = Math.abs(h - a) < 0.05;
+    if (h == null || a == null) return;
+    const level = Math.abs(h - a) < 0.05;
     const homeAhead = higherIsBetter ? h > a : h < a;
-    return {
+    verdictRows.push({
       metric,
       home: fmt(h),
       away: fmt(a),
-      edge: same ? null : homeAhead ? homeName : awayName,
-    };
+      // "Edge" names which side holds the stronger historical profile on that
+      // metric. It is not an instruction.
+      edge: level ? "Level" : homeAhead ? homeName : awayName,
+      edgeColor: level ? "var(--muted)" : "var(--edge)",
+    });
   };
-
-  const homeCsPct = num(sp?.home_concedes_pct) != null ? 100 - num(sp!.home_concedes_pct)! : null;
-  const awayCsPct = num(sp?.away_concedes_pct) != null ? 100 - num(sp!.away_concedes_pct)! : null;
-
-  const verdictRows = [
-    verdictRow("Expected goals", i?.predicted_home_goals ?? null, i?.predicted_away_goals ?? null, (v) => v.toFixed(1)),
-    verdictRow("Win probability", i?.win_probability_home ?? null, i?.win_probability_away ?? null, (v) => `${Math.round(v)}%`),
-    verdictRow("Readiness", i?.home_readiness ?? null, i?.away_readiness ?? null, (v) => `${Math.round(v)}`),
-    verdictRow("Rest days", i?.home_rest_days ?? null, i?.away_rest_days ?? null, (v) => `${v}d`),
-    verdictRow("Form rating", m.homeIntel?.form_index ?? null, m.awayIntel?.form_index ?? null, (v) => v.toFixed(1)),
-    verdictRow("Clean sheet rate", homeCsPct, awayCsPct, (v) => `${Math.round(v)}%`),
-  ].filter((r): r is { metric: string; home: string; away: string; edge: string | null } => r != null);
-
-  // ── Executive summary — assembled, never written per fixture ─────────────
-  const execParts: string[] = [];
-  if (pickName) {
-    execParts.push(
-      `Historical evidence currently leans toward ${pickName}` +
-        (i?.readiness_gap != null ? `, on a readiness gap of ${Math.abs(Math.round(i.readiness_gap))}` : "") +
-        "."
-    );
-  } else {
-    execParts.push("No side holds a readiness edge in this fixture.");
+  addRow("Expected goals", num(i?.predicted_home_goals), num(i?.predicted_away_goals), (v) => v.toFixed(1));
+  addRow("Win probability", num(i?.win_probability_home), num(i?.win_probability_away), (v) => `${Math.round(v)}%`);
+  addRow("Readiness", num(i?.home_readiness), num(i?.away_readiness), (v) => `${Math.round(v)}`);
+  addRow("Rest days", num(i?.home_rest_days), num(i?.away_rest_days), (v) => `${v}`);
+  addRow("Form rating", num(m.homeIntel?.form_index), num(m.awayIntel?.form_index), (v) => v.toFixed(1));
+  {
+    const hc = num(sp?.home_concedes_pct);
+    const ac = num(sp?.away_concedes_pct);
+    if (hc != null && ac != null) addRow("Clean sheet rate", 100 - hc, 100 - ac, (v) => `${Math.round(v)}%`);
   }
-  const edgeRows = verdictRows.filter((r) => r.edge === pickName);
-  if (edgeRows.length > 0)
-    execParts.push(
-      `That side also holds the stronger recorded profile on ${edgeRows
-        .map((r) => r.metric.toLowerCase())
-        .join(", ")}.`
+
+  // ── Executive summary — the story, not the metric list ────────────────────
+  const execSummary = (() => {
+    if (!pickName)
+      return "No readiness gap separates these sides, so the evidence produces no directional lean for this fixture.";
+
+    const advantages = verdictRows.filter((r) => r.edge === pickName).map((r) => r.metric.toLowerCase());
+    const side = pickSide === "home" ? "home" : "away";
+
+    const parts = [`Historical evidence currently favours ${pickName}.`];
+    if (advantages.length > 0)
+      parts.push(
+        `The ${side} side enters with advantages in ${
+          advantages.length > 2
+            ? `${advantages.slice(0, -1).join(", ")} and ${advantages[advantages.length - 1]}`
+            : advantages.join(" and ")
+        }.`
+      );
+    parts.push(
+      supports.length > 0
+        ? `${supports.length} independent evidence stream${supports.length === 1 ? "" : "s"} support${supports.length === 1 ? "s" : ""} that profile${
+            contradicts.length ? `, while ${contradicts.length} run${contradicts.length === 1 ? "s" : ""} counter to it` : ""
+          }.`
+        : "No evidence stream currently supports that lean."
     );
-  if (supports.length > 0)
-    execParts.push(
-      `${supports.map((r) => r.def.name.toLowerCase()).join(", ")} align with the lean.`
-    );
-  if (contradicts.length > 0)
-    execParts.push(
-      `${contradicts.map((r) => r.def.name.toLowerCase()).join(" and ")} runs counter to it.`
-    );
-  if (i?.confidence_band)
-    execParts.push(
-      `Confidence calibration places the fixture in the ${i.confidence_band} band${
-        confidenceReading?.baseline
-          ? `, measured at ${fmtBaseline(confidenceReading.baseline)}`
-          : ""
-      }, so the reliability of this combination is ${
-        overall.label === "STRONG" ? "at the higher end of what has been recorded" : "below what a headline reading would suggest"
+    if (i?.confidence_band)
+      parts.push(
+        `Confidence remains capped by the ${i.confidence_band} calibration band${
+          bandBaseline ? `, measured at ${bandBaseline.rate.toFixed(1)}% across ${bandBaseline.sample?.toLocaleString()} pre-kickoff matches` : ""
+        }.`
+      );
+    return parts.slice(0, 4).join(" ");
+  })();
+
+  // ── Why confidence is limited ─────────────────────────────────────────────
+  const limits: string[] = [];
+  if (i?.confidence_band && ["Risky", "Avoid"].includes(i.confidence_band))
+    limits.push(
+      `Confidence calibration falls within the ${i.confidence_band} band${
+        bandBaseline ? `, which has held at ${bandBaseline.rate.toFixed(1)}% historically` : ""
       }.`
     );
-  const execSummary = execParts.join(" ");
-
-  // ── Warning box ─────────────────────────────────────────────────────────
-  const warnings: string[] = [];
+  for (const r of readings) {
+    const b = r.baseline;
+    if (b?.sample != null && !b.pooled && b.sample < 10)
+      limits.push(`${r.def.name} rests on only ${b.sample} matches.`);
+  }
   if (contradicts.length > 0)
-    warnings.push(
-      `${contradicts.map((r) => r.def.name).join(" and ")} contradict${
-        contradicts.length === 1 ? "s" : ""
-      } the lean, which caps consensus at ${overall.label} however many modules agree.`
-    );
-  const thinHere = readings.filter(
-    (r) => r.baseline?.sample != null && !r.baseline.pooled && (r.baseline.sample as number) < 10
-  );
-  if (thinHere.length > 0)
-    warnings.push(
-      `${thinHere.map((r) => `${r.def.name} (n=${r.baseline!.sample})`).join(", ")} rest on very small samples — suggestive rather than established.`
-    );
-  const wideHere = readings.filter((r) => isWide(r.baseline));
-  if (wideHere.length > 0)
-    warnings.push(
-      `${wideHere.map((r) => r.def.name).join(", ")} carry intervals wide enough that the headline rate overstates what is known.`
+    limits.push(
+      `${contradicts.map((r) => r.def.name).join(" and ")} contradict${contradicts.length === 1 ? "s" : ""} the lean.`
     );
   if (dormant.length > 0)
-    warnings.push(
-      `${dormant.length} of ${MODULES.length} modules could not fire, so the consensus rests on a partial picture.`
-    );
+    limits.push(`Only ${firing} of ${MODULES.length} evidence streams contributed to this fixture.`);
+  if (gated.length > 0)
+    limits.push(`${gated.length} stream${gated.length === 1 ? "" : "s"} are not available on this tier.`);
 
-  const marketProfiles = buildMarketProfiles(readings);
+  // ── Evidence scorecard ────────────────────────────────────────────────────
+  const strengthOf = (r: ModuleReading): string => {
+    const b = r.baseline;
+    if (b?.sample != null && !b.pooled && b.sample < 10) return "Small sample";
+    if (r.status === "contradicts") return i?.confidence_band ?? "Against";
+    if (b?.sample != null && b.sample >= 200) return "Strong";
+    return "Moderate";
+  };
+  const scorecard = [...supports, ...contradicts].map((r) => ({
+    evidence: r.def.name,
+    direction: r.status === "contradicts" ? "Against" : pickName ?? "Lean",
+    directionColor: r.status === "contradicts" ? "var(--risk)" : "var(--edge)",
+    strength: strengthOf(r),
+    detail: r.headline,
+  }));
+
+  // ── Market profiles ───────────────────────────────────────────────────────
+  const profileFor = (label: string, keys: number[]) => {
+    const rel = readings.filter((r) => keys.includes(r.def.n) && r.status !== "inactive");
+    if (rel.length === 0) return null;
+    const sup = rel.filter((r) => r.status === "supports");
+    const con = rel.filter((r) => r.status === "contradicts");
+    const stars = con.length > sup.length ? 1 : Math.min(4, Math.max(1, sup.length + 1));
+    return {
+      label,
+      stars,
+      drivers: (sup.length ? sup : rel).map((r) => r.def.name),
+      caveat: con.length ? `${con.map((r) => r.def.name).join(" and ")} limits certainty.` : null,
+    };
+  };
+  const markets = [
+    profileFor("Match winner", [1, 2, 8, 10, 6]),
+    profileFor("Draw no bet", [3, 10]),
+    profileFor("Goals", [7, 9, 13]),
+    profileFor("Both teams to score", [9, 12, 7]),
+  ].filter((x): x is NonNullable<typeof x> => x !== null);
 
   return (
-    <section
-      id={MATCH_REPORT_ANCHOR}
-      className="panel scroll-mt-20 p-5"
-      aria-label="Match report"
-    >
-      {/* Header */}
+    <section id={MATCH_REPORT_ANCHOR} className="panel scroll-mt-20 p-5" aria-label="Match report">
       <header className="border-b border-line pb-3">
         <h2 className="mono text-[0.9rem] font-semibold tracking-tight text-text">
-          Match report: {homeName} vs {awayName}
+          {homeName} vs {awayName}
         </h2>
         <p className="mono mt-1 text-[0.66rem] text-muted">
           {m.competition ?? m.tournament?.name ?? "—"} · {dateLine}
           {m.venue ? ` · ${m.venue}` : ""}
         </p>
-        <p className="mt-1.5 text-[0.66rem] leading-relaxed" style={{ color: "var(--warn)" }}>
-          Historical pattern report — not a prediction. Betting involves risk of loss.
-        </p>
       </header>
 
-      <Section title="Historical pattern snapshot">
-        <KeyValueTable rows={snapshot} headers={["", homeName, awayName]} />
-        {pickName && (
-          <p className="mt-2 text-[0.7rem] text-muted">
-            Pattern observed toward <span className="mono text-text">{pickName}</span>
-            {i?.confidence_score != null && (
-              <>
-                {" "}· historical confidence {Math.round(i.confidence_score)}%
-                {i.confidence_band ? ` (${i.confidence_band} band)` : ""}
-              </>
-            )}
-          </p>
-        )}
-      </Section>
-
-      {/* ── Instant verdict — one row per metric, edge to whichever side
-              actually holds it. Every figure is a column already on the page. */}
+      {/* 2 — Instant verdict */}
       <Section title="Instant verdict">
         <table className="w-full border-collapse text-[0.72rem]">
           <thead>
             <tr className="border-b border-line">
               <th className="label-cap py-1.5 pr-3 text-left font-normal">Metric</th>
-              <th className="label-cap py-1.5 pr-3 text-right font-normal">{homeName}</th>
-              <th className="label-cap py-1.5 pr-3 text-right font-normal">{awayName}</th>
-              <th className="label-cap py-1.5 text-right font-normal">Edge</th>
+              <th className="label-cap py-1.5 pr-3 text-left font-normal">{homeName}</th>
+              <th className="label-cap py-1.5 pr-3 text-left font-normal">{awayName}</th>
+              <th className="label-cap py-1.5 text-left font-normal">Edge</th>
             </tr>
           </thead>
           <tbody>
             {verdictRows.map((r) => (
               <tr key={r.metric} className="border-b border-line last:border-0">
                 <td className="py-1.5 pr-3 text-muted">{r.metric}</td>
-                <td className="mono tnum py-1.5 pr-3 text-right text-text">{r.home}</td>
-                <td className="mono tnum py-1.5 pr-3 text-right text-text">{r.away}</td>
-                <td
-                  className="mono py-1.5 text-right text-[0.66rem] font-semibold"
-                  style={{ color: r.edge ? "var(--edge)" : "var(--faint)" }}
-                >
-                  {r.edge ?? "Level"}
-                </td>
+                <td className="mono py-1.5 pr-3 text-text">{r.home}</td>
+                <td className="mono py-1.5 pr-3 text-text">{r.away}</td>
+                <td className="mono py-1.5" style={{ color: r.edgeColor }}>{r.edge}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-[0.64rem] leading-relaxed text-faint">
-          Edge names the side holding the stronger historical profile on that metric. It is a
-          comparison of recorded values, not a forecast.
-        </p>
+
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3 border-t border-line pt-3">
+          <div>
+            <div className="label-cap">Historical lean</div>
+            <div className="mono text-[0.85rem] font-semibold text-text">{pickName ?? "No edge"}</div>
+          </div>
+          {i?.confidence_band && (
+            <div>
+              <div className="label-cap">Calibration band</div>
+              <div className="mono text-[0.85rem] font-semibold" style={{ color: overall.color }}>
+                {i.confidence_band}
+              </div>
+            </div>
+          )}
+          {i?.confidence_score != null && (
+            <div>
+              <div className="label-cap">Confidence score</div>
+              <div className="mono tnum text-[0.85rem] text-text">{Math.round(i.confidence_score)}%</div>
+            </div>
+          )}
+          {bandBaseline && (
+            <div>
+              <div className="label-cap">Observed hit rate</div>
+              <div className="mono tnum text-[0.85rem] text-text">
+                {bandBaseline.rate.toFixed(1)}%
+                <span className="ml-1 text-[0.6rem] text-faint">
+                  n={bandBaseline.sample?.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+          <div>
+            <div className="label-cap">Evidence streams</div>
+            <div className="mono tnum text-[0.85rem] text-text">
+              {firing}<span className="text-[0.65rem] text-faint">/{MODULES.length}</span>
+            </div>
+          </div>
+          <div>
+            <div className="label-cap">Consensus</div>
+            <div className="mono text-[0.85rem] font-semibold" style={{ color: overall.color }}>
+              {overall.label}
+              <span className="ml-1.5 text-[0.6rem] font-normal text-faint">
+                {t.supports}S {t.neutral}N {t.contradicts}C
+              </span>
+            </div>
+          </div>
+        </div>
       </Section>
 
+      {/* 3 — Executive summary */}
       <Section title="Executive summary">
         <p className="max-w-3xl text-[0.82rem] leading-relaxed text-text">{execSummary}</p>
       </Section>
 
-      {/* ── Warning box — why confidence is reduced, in plain language. */}
-      {warnings.length > 0 && (
-        <section
-          className="mt-5 panel p-4"
-          style={{ borderColor: "color-mix(in srgb, var(--warn) 32%, var(--line))" }}
-        >
-          <h3
-            className="mono mb-2 flex items-center gap-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em]"
-            style={{ color: "var(--warn)" }}
-          >
-            <IconUnverified size={14} />
-            Where confidence is reduced
-          </h3>
-          <ul className="space-y-1.5">
-            {warnings.map((w) => (
-              <li key={w} className="text-[0.73rem] leading-relaxed text-muted">
-                {w}
+      {/* 4 — Why confidence is limited */}
+      {limits.length > 0 && (
+        <Section title="Why confidence is limited">
+          <ul className="space-y-1">
+            {limits.map((l) => (
+              <li key={l} className="flex gap-2 text-[0.74rem] leading-relaxed text-muted">
+                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: "var(--warn)" }} />
+                {l}
               </li>
             ))}
           </ul>
-        </section>
-      )}
-
-      {/* ── Supporting and opposing evidence, grouped. */}
-      {(supports.length > 0 || contradicts.length > 0) && (
-        <Section title="Supporting and opposing evidence">
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="panel p-3.5">
-              <h3 className="mono mb-2 text-[0.66rem] uppercase tracking-[0.14em]" style={{ color: "var(--edge)" }}>
-                Supports {pickName ?? "the lean"} ({supports.length})
-              </h3>
-              {supports.length === 0 ? (
-                <p className="text-[0.7rem] text-faint">No module supports the lean.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {supports.map((r) => (
-                    <li key={r.def.key} className="text-[0.72rem] leading-relaxed">
-                      <span className="mono font-semibold text-text">{r.def.name}</span>
-                      <span className="text-muted"> — {r.headline}</span>
-                      {r.baseline && (
-                        <span className="text-faint"> · {fmtBaseline(r.baseline)}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="panel p-3.5">
-              <h3 className="mono mb-2 text-[0.66rem] uppercase tracking-[0.14em]" style={{ color: "var(--risk)" }}>
-                Opposing context ({contradicts.length})
-              </h3>
-              {contradicts.length === 0 ? (
-                <p className="text-[0.7rem] text-faint">No module runs counter to the lean.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {contradicts.map((r) => (
-                    <li key={r.def.key} className="text-[0.72rem] leading-relaxed">
-                      <span className="mono font-semibold text-text">{r.def.name}</span>
-                      <span className="text-muted"> — {r.headline}</span>
-                      {r.baseline && (
-                        <span className="text-faint"> · {fmtBaseline(r.baseline)}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
         </Section>
       )}
 
-      {/* ── Market profiles — which market the evidence speaks to, not what to back. */}
-      <Section title="Historical market profiles">
-        <div className="panel divide-y divide-line">
-          {marketProfiles.map((mp) => (
-            <div key={mp.market} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-3">
-              <span className="mono w-40 shrink-0 text-[0.74rem] font-semibold text-text">
-                {mp.market}
-              </span>
-              <span
-                className="mono shrink-0 rounded px-1.5 py-0.5 text-[0.58rem] font-bold tracking-widest"
-                style={{ color: mp.color, background: `color-mix(in srgb, ${mp.color} 14%, transparent)` }}
-              >
-                {mp.alignment.toUpperCase()}
-              </span>
-              <span className="flex-1 text-[0.7rem] leading-relaxed text-muted">{mp.sentence}</span>
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-[0.64rem] leading-relaxed text-faint">
-          Alignment describes how consistently the evidence speaks to each market profile. It is
-          not a view on price, and PitchTerminal does not say which market to take.
-        </p>
-      </Section>
-
-      {/* ── Neutral signals, grouped to one line. */}
-      {neutral.length > 0 && (
-        <Section title="Evaluated, no material effect">
-          <p className="text-[0.72rem] leading-relaxed text-muted">
-            {neutral.map((r) => r.def.name).join(", ")} produced readings that do not move this
-            fixture either way.
-          </p>
+      {/* 5 — Evidence scorecard */}
+      {scorecard.length > 0 && (
+        <Section title="Evidence scorecard">
+          <table className="w-full border-collapse text-[0.72rem]">
+            <thead>
+              <tr className="border-b border-line">
+                <th className="label-cap py-1.5 pr-3 text-left font-normal">Evidence</th>
+                <th className="label-cap py-1.5 pr-3 text-left font-normal">Direction</th>
+                <th className="label-cap py-1.5 pr-3 text-left font-normal">Strength</th>
+                <th className="label-cap hidden py-1.5 text-left font-normal sm:table-cell">Observed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scorecard.map((r) => (
+                <tr key={r.evidence} className="border-b border-line last:border-0">
+                  <td className="py-1.5 pr-3 text-text">{r.evidence}</td>
+                  <td className="mono py-1.5 pr-3" style={{ color: r.directionColor }}>{r.direction}</td>
+                  <td className="mono py-1.5 pr-3 text-muted">{r.strength}</td>
+                  <td className="mono hidden py-1.5 text-faint sm:table-cell">{r.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Section>
       )}
 
-      <Section title="Detailed module analysis">
-        {supports.length === 0 && contradicts.length === 0 ? (
-          <p className="text-[0.72rem] text-faint">
-            No module produced a directional reading for this fixture.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {[...supports, ...contradicts].map((r) => (
-              <div key={r.def.key} className="border-l-2 pl-3" style={{
-                borderColor: r.status === "supports" ? "var(--edge)" : "var(--risk)",
-              }}>
-                <div className="mono flex items-center gap-1.5 text-[0.72rem] font-semibold text-text">
-                  <StatusGlyph status={r.status} />
-                  {r.def.name} (Module {r.def.n}) —{" "}
-                  {r.status === "supports" ? "supports" : "contradicts"}
-                  {pickName ? ` ${pickName}` : " the pick"}
+      {/* 6 — Historical market profiles */}
+      {markets.length > 0 && (
+        <Section title="Historical market profiles">
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {markets.map((mk) => (
+              <article key={mk.label} className="panel p-3.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="mono text-[0.76rem] font-semibold text-text">{mk.label}</h3>
+                  <span className="mono text-[0.72rem]" style={{ color: "var(--amber)" }}>
+                    {"\u2605".repeat(mk.stars)}
+                    <span className="text-faint">{"\u2606".repeat(4 - mk.stars)}</span>
+                  </span>
                 </div>
-                <dl className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
-                  {r.rows.map((row) => (
-                    <div key={row.label} className="flex justify-between gap-2 text-[0.68rem]">
-                      <dt className="text-muted">{row.label}</dt>
-                      <dd className="mono text-text">{row.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {r.baseline && (
-                  <p className="mt-1 text-[0.68rem] text-muted">
-                    Historical rate: {fmtBaseline(r.baseline)}
-                    {r.baseline.provenance === "unreplayed" && (
-                      <span style={{ color: "var(--warn)" }}> · unreplayed</span>
-                    )}
+                <p className="mt-1.5 text-[0.68rem] leading-relaxed text-muted">
+                  Driven by {mk.drivers.join(", ")}.
+                </p>
+                {mk.caveat && (
+                  <p className="mt-1 text-[0.66rem] leading-relaxed" style={{ color: "var(--warn)" }}>
+                    {mk.caveat}
                   </p>
                 )}
-                <p className="mt-0.5 text-[0.68rem] text-faint">
-                  Interpretation: {r.verdict}
-                </p>
-              </div>
+              </article>
             ))}
           </div>
-        )}
-        {neutral.length > 0 && (
-          <p className="mt-3 text-[0.68rem] leading-relaxed text-faint">
-            Neutral ({neutral.length}):{" "}
-            {neutral.map((r) => `${r.def.name} (M${r.def.n})`).join(", ")} — no clear edge
-            detected.
+          <p className="mt-2 text-[0.64rem] leading-relaxed text-faint">
+            Where the historical evidence aligns. Whether a market is worth taking depends on
+            both sides and the price, which this page does not assess.
           </p>
-        )}
-      </Section>
-
-      <Section title="Module summary">
-        <KeyValueTable
-          headers={["Module", "Finding", "Observed pattern"]}
-          rows={readings
-            .filter((r) => r.status !== "inactive")
-            .map((r) => [
-              r.def.name,
-              <span key="f" className="inline-flex items-center gap-1.5">
-                <StatusGlyph status={r.status} />
-                {r.status === "supports"
-                  ? `Supports${pickName ? ` ${pickName}` : ""}`
-                  : r.status === "contradicts"
-                    ? `Contradicts${pickName ? ` ${pickName}` : ""}`
-                    : "Neutral"}
-                {r.def.scope === "team" && (
-                  <span className="text-faint"> · context</span>
-                )}
-              </span>,
-              <>
-                {r.headline}
-                {r.baseline && (
-                  <span className="text-muted"> · {fmtBaseline(r.baseline)}</span>
-                )}
-              </>,
-            ])}
-        />
-        <p className="mt-2 text-[0.7rem] text-muted">
-          Consensus:{" "}
-          <span className="mono font-semibold" style={{ color: overall.color }}>
-            {overall.label}
-          </span>{" "}
-          — {t.supports} support, {t.neutral} neutral, {t.contradicts} contradict.
-        </p>
-      </Section>
-
-      {bttsRows.length > 0 && (
-        <Section title="Both teams to score">
-          <KeyValueTable headers={["Factor", "Rate"]} rows={bttsRows} />
         </Section>
       )}
 
-      <Section title="Data notes">
-        <KeyValueTable
-          headers={["Module", "Status"]}
-          rows={[
-            ...dormant.map(
-              (r) => [r.def.name, r.headline] as [string, React.ReactNode]
-            ),
-            ...(teamModules.length
-              ? ([
-                  [
-                    `Team modules (${teamModules.map((r) => `M${r.def.n}`).join(", ")})`,
-                    "Counted toward consensus, reported as context",
-                  ],
-                ] as [string, React.ReactNode][])
-              : []),
-          ]}
-        />
-      </Section>
-
-      <Section title="Key takeaways">
-        <ol className="space-y-2.5">
-          {shownTakeaways.map((k, idx) => (
-            <li key={k.lead} className="flex gap-2.5 text-[0.72rem] leading-relaxed">
-              <span className="mono shrink-0 tnum text-faint">{idx + 1}.</span>
-              <span>
-                <span className="mono font-semibold text-text">{k.lead}</span>
-                <span className="text-muted"> — {k.body}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      {gated.length > 0 && (
-        <p className="mt-4 flex items-start gap-2 text-[0.68rem] leading-relaxed text-muted">
-          <span className="mt-0.5 text-faint">
-            <IconLock size={12} />
-          </span>
-          <span>
-            {gated.length} module{gated.length === 1 ? "" : "s"} (
-            {gated.map((r) => `M${r.def.n}`).join(", ")}) are counted in the consensus above
-            but their detail is not shown on this tier.{" "}
-            <Link href="/pricing" className="text-amber underline underline-offset-2">
-              See plans
-            </Link>
-            .
-          </span>
-        </p>
+      {/* 7 — Neutral signals */}
+      {neutral.length > 0 && (
+        <Section title="Neutral signals">
+          <table className="w-full border-collapse text-[0.72rem]">
+            <tbody>
+              {neutral.map((r) => (
+                <tr key={r.def.key} className="border-b border-line last:border-0">
+                  <td className="py-1.5 pr-3 text-muted">{r.def.name}</td>
+                  <td className="mono py-1.5 text-faint">{r.headline}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
       )}
-
-      <p className="mt-4 flex items-start gap-2 border-t border-line pt-3 text-[0.64rem] text-faint">
-        <span className="mt-px" style={{ color: "var(--warn)" }}>
-          <IconUnverified size={12} />
-        </span>
-        Rates marked unreplayed come from an analysis that scored finished matches using
-        current team form. The counts are real; the rates await the point-in-time replay.
-      </p>
     </section>
   );
 }
 
 /**
- * The legal note, exported so the page can place it last. It previously sat
- * mid-report, ahead of the data notes and takeaways — the disclaimer arrived
- * before the analysis it disclaims.
+ * The legal note, exported so the page can place it last.
  */
 export function ImportantNote() {
   return (
