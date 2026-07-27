@@ -1,4 +1,5 @@
 import React from "react";
+import { IconHomeAway, IconSupports } from "./icons/ModuleIcons";
 import { Explain } from "./Explain";
 import type { GlossaryKey } from "@/lib/glossary";
 
@@ -70,7 +71,11 @@ export function PickBadge({
       style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)` }}
       title={isBanker ? "Form Index Pick — Banker" : "Form Index Pick — Strong"}
     >
-      <span aria-hidden>{isBanker ? "🏠" : "✅"}</span>
+      {/* Was an emoji pair. The icon set is stroke SVG inheriting currentColor,
+          so these take the badge's own colour instead of the platform's. */}
+      <span aria-hidden="true" className="inline-flex">
+        {isBanker ? <IconHomeAway size={10} /> : <IconSupports size={10} />}
+      </span>
       {!compact && tier}
     </span>
   );

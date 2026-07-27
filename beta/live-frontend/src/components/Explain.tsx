@@ -1,4 +1,5 @@
 "use client";
+import { IconContradicts, IconSupports } from "./icons/ModuleIcons";
 
 import { useState } from "react";
 import { GLOSSARY, type GlossaryKey } from "@/lib/glossary";
@@ -72,7 +73,9 @@ export function EvidenceDisclosure({
           <ul className="space-y-1">
             {lines.map((l, i) => (
               <li key={i} className="flex items-start gap-1.5 text-[0.7rem] leading-snug">
-                <span className={l.positive === false ? "text-risk" : "text-edge"}>{l.positive === false ? "✗" : "✓"}</span>
+                <span className={l.positive === false ? "text-risk" : "text-edge"} aria-hidden="true">
+                  {l.positive === false ? <IconContradicts size={10} /> : <IconSupports size={10} />}
+                </span>
                 <span className="text-muted">{l.text}</span>
               </li>
             ))}

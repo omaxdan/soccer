@@ -103,7 +103,7 @@ export function MatchCard({
             <span className="text-cool">{Math.round(wp[2])}</span> A
           </span>
           {lean && lean.pick !== "No clear market edge" && (
-            <span className="ml-auto truncate text-amber">➜ {lean.pick}</span>
+            <span className="ml-auto truncate text-amber">{lean.pick}</span>
           )}
         </div>
       )}
