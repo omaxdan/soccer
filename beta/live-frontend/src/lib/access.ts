@@ -217,3 +217,44 @@ export function redactReadings(
         }
   );
 }
+
+
+/**
+ * Just enough to render the shell: is anyone signed in, and are they an admin.
+ *
+ * Deliberately NOT getAccessContext(). The layout wraps every route, and the
+ * full context costs five reads (flag, permissions, plans, profile,
+ * subscription) to answer a question the nav asks with two. Pages that need
+ * the whole thing still call getAccessContext() themselves.
+ */
+export interface ViewerIdentity {
+  authenticated: boolean;
+  email: string | null;
+  isAdmin: boolean;
+}
+
+export const ANON_IDENTITY: ViewerIdentity = {
+  authenticated: false,
+  email: null,
+  isAdmin: false,
+};
+
+export async function getViewerIdentity(): Promise<ViewerIdentity> {
+  const user = await getSessionUser();
+  if (!user) return ANON_IDENTITY;
+  try {
+    const client = await supabaseServer();
+    if (!client) return { authenticated: true, email: user.email, isAdmin: false };
+    const { data } = await client
+      .from("user_profiles").select("role").eq("user_id", user.id).maybeSingle();
+    return {
+      authenticated: true,
+      email: user.email,
+      isAdmin: (data as any)?.role === "admin",
+    };
+  } catch {
+    // Signed in but the profile read failed — treat as a normal user rather
+    // than hiding the session entirely.
+    return { authenticated: true, email: user.email, isAdmin: false };
+  }
+}

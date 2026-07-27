@@ -66,7 +66,6 @@ const GROUPS: Group[] = [
     items: [
       { href: "/subscription", label: "Subscription", Icon: IconGate },
       { href: "/settings", label: "Settings", Icon: IconLock },
-      { href: "/login", label: "Sign in", Icon: IconMethod },
     ],
   },
 ];
@@ -79,12 +78,38 @@ const MOBILE: Item[] = [
   GROUPS[2].items[2],
 ];
 
+export interface NavIdentity {
+  authenticated: boolean;
+  isAdmin: boolean;
+}
+
+/**
+ * The account row depends on the session, so it is built per render rather
+ * than living in the static GROUPS table. Admin controls only appear for an
+ * admin — the route rejects everyone else anyway, but advertising a door
+ * nobody can open is noise.
+ */
+function accountItems(identity: NavIdentity): Item[] {
+  const items: Item[] = [
+    { href: "/subscription", label: "Subscription", Icon: IconGate },
+    { href: "/settings", label: "Settings", Icon: IconLock },
+  ];
+  if (identity.isAdmin)
+    items.push({ href: "/admin/settings", label: "Admin", Icon: IconConfidence });
+  items.push(
+    identity.authenticated
+      ? { href: "/logout", label: "Sign out", Icon: IconMethod }
+      : { href: "/login", label: "Sign in", Icon: IconMethod }
+  );
+  return items;
+}
+
 function isActive(pathname: string, href: string) {
   if (href === "/app") return pathname === "/app";
   return pathname.startsWith(href);
 }
 
-export function BottomNav() {
+export function BottomNav(_props: { identity?: NavIdentity }) {
   const pathname = usePathname();
   return (
     <nav
@@ -114,14 +139,21 @@ export function BottomNav() {
   );
 }
 
-export function SideNav() {
+export function SideNav({
+  identity = { authenticated: false, isAdmin: false },
+}: {
+  identity?: NavIdentity;
+}) {
   const pathname = usePathname();
+  const groups = GROUPS.map((g) =>
+    g.title === "Account" ? { ...g, items: accountItems(identity) } : g
+  );
   return (
     <nav
       aria-label="Primary"
       className="hidden md:sticky md:top-16 md:flex md:flex-col md:gap-4"
     >
-      {GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.title}>
           <div className="label-cap mb-1 px-3">{group.title}</div>
           <ul className="flex flex-col gap-0.5">

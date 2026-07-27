@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { BottomNav, SideNav } from "@/components/Nav";
+import { getViewerIdentity } from "@/lib/access";
 import { StatusDot } from "@/components/StatusDot";
 import { LIVE } from "@/lib/supabase";
 
@@ -22,11 +23,12 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const identity = await getViewerIdentity();
   return (
     <html lang="en">
       <head>
@@ -61,12 +63,12 @@ export default function RootLayout({
 
         <div className="mx-auto flex max-w-6xl gap-6 px-4 py-4 md:py-6">
           <aside className="hidden w-44 shrink-0 md:block">
-            <SideNav />
+            <SideNav identity={identity} />
           </aside>
           <main className="min-w-0 flex-1">{children}</main>
         </div>
 
-        <BottomNav />
+        <BottomNav identity={identity} />
       </body>
     </html>
   );
