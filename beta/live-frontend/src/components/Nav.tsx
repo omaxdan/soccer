@@ -41,7 +41,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/app", label: "Dashboard", Icon: IconBoard },
       { href: "/matches", label: "Match Board", Icon: IconFixtures },
-      { href: "/watchlist", label: "Watchlist", Icon: IconCleanSheet, stub: true },
+      { href: "/watchlist", label: "Watchlist", Icon: IconCleanSheet },
     ],
   },
   {

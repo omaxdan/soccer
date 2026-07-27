@@ -15,6 +15,7 @@ import {
 import { MODULES, moduleFromSlug } from "@/lib/modules";
 import { currentTier } from "@/lib/tier";
 import { getAccessContext } from "@/lib/access";
+import { getFavouriteLeagueIds } from "@/lib/preferences";
 import {
   IconConfidence,
   IconModules,
@@ -39,6 +40,9 @@ export default async function DashboardPage({
   const bandBacktests = await getBandBacktests();
   const viewer = currentTier();
   const access = await getAccessContext();
+  // Favourite competitions sort ahead of the rest. Ordering only — nothing is
+  // filtered out, so a favourite selection never hides intelligence.
+  const favIds = new Set(await getFavouriteLeagueIds());
 
   // ?module=m5 — set by the VIEW ACTIVATIONS links in the module directory.
   const focus = moduleFromSlug(moduleParam);
@@ -50,7 +54,17 @@ export default async function DashboardPage({
   const dayFiltered = activeDay
     ? allEntries.filter((e) => dayKeyOf(e.match.date) === activeDay)
     : allEntries;
-  const entries = filterFeed(dayFiltered, focus?.key ?? null);
+  const filtered = filterFeed(dayFiltered, focus?.key ?? null);
+  // Favourites sort ahead of everything else. Ordering only — nothing is
+  // removed, so a favourite selection can never hide intelligence from the
+  // person who set it.
+  const entries = favIds.size
+    ? [...filtered].sort(
+        (a, b) =>
+          Number(favIds.has(b.match.tournament?.id ?? -1)) -
+          Number(favIds.has(a.match.tournament?.id ?? -1))
+      )
+    : filtered;
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",

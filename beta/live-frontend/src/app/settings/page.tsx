@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getViewerIdentity } from "@/lib/access";
 import { getLeagues } from "@/lib/queries";
+import { getFavouriteLeagueIds } from "@/lib/preferences";
+import { FavouriteLeagues } from "@/components/FavouriteLeagues";
 import { IconLock, IconUnverified, IconSupports } from "@/components/icons/ModuleIcons";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +18,11 @@ export const metadata = { title: "Settings" };
  * now live behind /admin/settings.
  */
 export default async function SettingsPage() {
-  const [identity, leagues] = await Promise.all([getViewerIdentity(), getLeagues()]);
+  const [identity, leagues, favIds] = await Promise.all([
+    getViewerIdentity(),
+    getLeagues(),
+    getFavouriteLeagueIds(),
+  ]);
 
   if (!identity.authenticated) {
     return (
@@ -143,19 +149,19 @@ export default async function SettingsPage() {
         <h2 className="mono mb-1 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-text">
           Favourite leagues
         </h2>
-        <p className="text-[0.74rem] leading-relaxed text-muted">
-          {leagues.length > 0
-            ? `${leagues.length} competitions are tracked. Selecting favourites will filter the board and fixtures to them.`
-            : "No competitions are currently tracked."}
-        </p>
-        <p className="mono mt-2 flex items-center gap-1.5 text-[0.62rem]" style={{ color: "var(--warn)" }}>
-          <IconUnverified size={11} />
-          NOT YET SAVED
-        </p>
-        <p className="mt-1 text-[0.68rem] leading-relaxed text-faint">
-          There is no table to store a selection against yet — the same gap that keeps the
-          watchlist unbuilt. Showing toggles that silently forget would be worse than saying so.
-        </p>
+        <FavouriteLeagues
+          leagues={leagues
+            .filter((l) => l.tournament)
+            .map((l) => ({
+              id: l.tournament_id,
+              name: l.tournament!.name,
+              country:
+                typeof l.tournament!.country === "string"
+                  ? l.tournament!.country
+                  : (l.tournament!.country as { name?: string } | null)?.name ?? null,
+            }))}
+          initial={favIds}
+        />
       </section>
 
       {/* Notifications */}

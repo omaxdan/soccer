@@ -1,3 +1,4 @@
+import { getFavouriteLeagueIds } from "@/lib/preferences";
 import { getLeagues, getLeagueGap } from "@/lib/queries";
 import { BarMeter } from "@/components/Meters";
 import { Collapsible } from "@/components/Collapsible";
@@ -10,11 +11,21 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Leagues" };
 
 export default async function LeaguesPage() {
-  const [leagues, gaps] = await Promise.all([getLeagues(), getLeagueGap()]);
+  const [leagues, gaps, favIds] = await Promise.all([
+    getLeagues(),
+    getLeagueGap(),
+    getFavouriteLeagueIds(),
+  ]);
+  const favourites = new Set(favIds);
+  // Favourites float to the top; everything else keeps its existing order.
+  const ordered = [...leagues].sort(
+    (a, b) =>
+      Number(favourites.has(b.tournament_id)) - Number(favourites.has(a.tournament_id))
+  );
 
   const gapByName = new Map(gaps.map((g) => [g.league_name.toLowerCase(), g]));
 
-  const cards: LeagueCard[] = leagues.map((l) => {
+  const cards: LeagueCard[] = ordered.map((l) => {
     const name = l.tournament?.name ?? `League ${l.tournament_id}`;
     const gap = gapByName.get(name.toLowerCase());
     return {

@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/lib/queries";
 import { getAccessContext, redactReadings, canAccessFeature } from "@/lib/access";
 import { UpgradePrompt } from "@/components/FeatureGate";
+import { WatchToggle } from "@/components/WatchToggle";
+import { isWatched } from "@/lib/preferences";
+import { getViewerIdentity } from "@/lib/access";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -76,6 +79,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   // Calibration module's own tier, so hero, verdict and scorecard cannot
   // disagree about who sees what.
   const heroFull = canAccessFeature(access, "CONFIDENCE_CALIBRATION");
+  const [watching, viewer] = await Promise.all([isWatched("match", m.id), getViewerIdentity()]);
   const moduleReadings = redactReadings(
     buildMatchReadings(m, scoringProbs, null, bandBacktests),
     access
@@ -269,8 +273,16 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         </div>
       )}
 
-      {/* 2 — Pick badge */}
-      {pickBand}
+      {/* 2 — Pick badge and watch control */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">{pickBand}</div>
+        <WatchToggle
+          entityType="match"
+          entityId={m.id}
+          initial={watching}
+          authenticated={viewer.authenticated}
+        />
+      </div>
 
       {/* 3 — Intelligence report: instant verdict, summary, confidence limits,
               evidence scorecard, market profiles and neutral signals. Module

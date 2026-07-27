@@ -285,3 +285,24 @@ export const IconMethod = (p: IconProps) => (
     <path d="M7.5 15h9" />
   </Svg>
 );
+
+
+export const IconStar = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z" />
+  </Svg>
+);
+
+export const IconStarFilled = (p: IconProps) => (
+  <svg
+    width={p.size ?? 18}
+    height={p.size ?? 18}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={`shrink-0 ${p.className ?? ""}`}
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z" />
+  </svg>
+);
