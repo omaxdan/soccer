@@ -106,7 +106,7 @@ export async function getBoard(
   // were already computed above. Without these the dashboard cannot evaluate
   // modules 1-4, 11 or 12 at all, so the module filter reports 0 for them
   // however the predicate is written.
-  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring, travel, weatherRows] = await Promise.all([
+  const [intel, opp, risk, tIntel, tFormQ, tVenue, htIntel, scoring, travel, weatherRows, resultRows] = await Promise.all([
     client.from("match_intelligence").select("*").in("match_id", ids),
     client.from("match_opportunity").select("*").in("match_id", ids),
     client.from("match_risk_intelligence").select("*").in("match_id", ids),
@@ -117,6 +117,9 @@ export async function getBoard(
     client.from("mv_match_scoring_probabilities").select("*").in("match_id", ids),
     client.from("mv_module_travel").select("*").in("match_id", ids),
     client.from("match_weather").select("*").in("match_id", ids),
+    // match_results is what getMatch reads for the detail hero. The board did
+    // not fetch it at all, so every finished fixture rendered a dash.
+    client.from("match_results").select("match_id, home_score, away_score").in("match_id", ids),
   ]);
 
   const iMap = indexBy(intel.data, "match_id");
@@ -129,6 +132,7 @@ export async function getBoard(
   const spMap = indexBy(scoring.data, "match_id");
   const tvMap = indexBy(travel.data, "match_id");
   const wMap = indexBy(weatherRows.data, "match_id");
+  const resMap = indexBy(resultRows.data, "match_id");
 
   const rows: MatchRow[] = matches.map((m: any) => ({
     id: m.id, external_match_id: m.external_match_id, date: m.date,
@@ -150,6 +154,8 @@ export async function getBoard(
     scoring: (spMap[m.id] as any) ?? null,
     travel: (tvMap[m.id] as any) ?? null,
     weather: (wMap[m.id] as any) ?? null,
+    home_score: (resMap[m.id] as any)?.home_score ?? null,
+    away_score: (resMap[m.id] as any)?.away_score ?? null,
   }));
   return sortBoard(rows);
 }
