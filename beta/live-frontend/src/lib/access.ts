@@ -1,4 +1,5 @@
 import { db } from "./supabase";
+import { supabaseServer, getSessionUser } from "./supabase/server";
 import type { ModuleDef } from "./modules";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,67 +39,131 @@ export const FEATURE_BY_MODULE: Record<string, FeatureKey> = {
 };
 
 export interface AccessContext {
-  /** False = beta mode: everything is open and no viewer is consulted. */
-  subscriptionsEnabled: boolean;
+  userId: string | null;
+  authenticated: boolean;
+  email: string | null;
+  role: "user" | "admin" | null;
+  isAdmin: boolean;
   /** Plan slug of the current viewer, or null when nobody is signed in. */
   plan: string | null;
-  isAdmin: boolean;
+  planRank: number;
+  subscriptionActive: boolean;
+  /** False = beta mode: everything is open and no viewer is consulted. */
+  subscriptionsEnabled: boolean;
   /** feature_key -> required plan slug, straight from the database. */
   required: Record<string, string>;
   /** Plan slug -> rank, so a new tier needs no code change. */
   rank: Record<string, number>;
-  /**
-   * True when the flag is on but the app cannot identify anyone — the
-   * misconfiguration described in migration 033. Surfaced rather than silently
-   * treated as "everyone is Free".
-   */
-  enabledWithoutAuth: boolean;
+  /** Resolved access per feature, so callers need no second round trip. */
+  features: Record<string, boolean>;
 }
 
-export const BETA_ACCESS: AccessContext = {
-  subscriptionsEnabled: false,
-  plan: null,
+const EMPTY: AccessContext = {
+  userId: null,
+  authenticated: false,
+  email: null,
+  role: null,
   isAdmin: false,
+  plan: null,
+  planRank: 0,
+  subscriptionActive: false,
+  subscriptionsEnabled: false,
   required: {},
   rank: {},
-  enabledWithoutAuth: false,
+  features: {},
 };
+
+export const BETA_ACCESS: AccessContext = EMPTY;
 
 /**
  * Resolved once per request and passed down. There is no session in the app
  * yet, so `plan` is always null and `isAdmin` always false; both are read from
  * the context the moment auth is wired, with no call site changing.
  */
+/**
+ * Resolved once per request and passed down.
+ *
+ * The identity lookup runs whether or not subscriptions are enabled, because
+ * /settings and /subscription need to know who is signed in even in beta. Only
+ * the ACCESS DECISION is short-circuited by the flag.
+ */
 export async function getAccessContext(): Promise<AccessContext> {
   const client = db();
-  if (!client) return BETA_ACCESS;
+  if (!client) return EMPTY;
+
+  const user = await getSessionUser();
+  let role: "user" | "admin" | null = null;
+  let plan: string | null = null;
+  let subscriptionActive = false;
+
+  if (user) {
+    const authed = await supabaseServer();
+    if (authed) {
+      try {
+        const [profile, sub] = await Promise.all([
+          authed.from("user_profiles").select("role").eq("user_id", user.id).maybeSingle(),
+          authed
+            .from("user_subscriptions")
+            .select("status, expires_at, plan:subscription_plans(slug)")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .maybeSingle(),
+        ]);
+        role = ((profile.data as any)?.role as "user" | "admin") ?? "user";
+        const row = sub.data as any;
+        if (row) {
+          const live = !row.expires_at || new Date(row.expires_at) > new Date();
+          if (live) {
+            subscriptionActive = true;
+            plan = row.plan?.slug ?? null;
+          }
+        }
+        // A signed-in user with no subscription row is on Free, not on nothing.
+        if (!plan) plan = "free";
+      } catch {
+        role = "user";
+        plan = "free";
+      }
+    }
+  }
+
+  let subscriptionsEnabled = false;
+  const required: Record<string, string> = {};
+  const rank: Record<string, number> = {};
   try {
     const [flag, perms, plans] = await Promise.all([
       client.from("platform_settings").select("value").eq("key", "subscriptions_enabled").maybeSingle(),
       client.from("feature_permissions").select("feature_key, required_plan"),
       client.from("subscription_plans").select("slug, rank"),
     ]);
-
-    const enabled = (flag.data as any)?.value === "true";
-    if (!enabled) return BETA_ACCESS;
-
-    const required: Record<string, string> = {};
+    subscriptionsEnabled = (flag.data as any)?.value === "true";
     for (const r of ((perms.data as any[]) ?? [])) required[r.feature_key] = r.required_plan;
-    const rank: Record<string, number> = {};
     for (const p of ((plans.data as any[]) ?? [])) rank[p.slug] = p.rank ?? 0;
-
-    return {
-      subscriptionsEnabled: true,
-      plan: null,
-      isAdmin: false,
-      required,
-      rank,
-      enabledWithoutAuth: true,
-    };
   } catch {
-    // A failed read must not lock the platform. Beta mode is the safe default.
-    return BETA_ACCESS;
+    // A failed settings read must not lock the platform. Beta is the safe
+    // default, and it is what the app already does today.
+    subscriptionsEnabled = false;
   }
+
+  const isAdmin = role === "admin";
+  const ctx: AccessContext = {
+    userId: user?.id ?? null,
+    authenticated: Boolean(user),
+    email: user?.email ?? null,
+    role,
+    isAdmin,
+    plan,
+    planRank: plan ? rank[plan] ?? 0 : 0,
+    subscriptionActive,
+    subscriptionsEnabled,
+    required,
+    rank,
+    features: {},
+  };
+
+  // Precompute every feature so call sites never round-trip again.
+  for (const key of Object.keys(required)) ctx.features[key] = canAccessFeature(ctx, key);
+  return ctx;
 }
 
 export function canAccessFeature(ctx: AccessContext, feature: FeatureKey | string): boolean {
@@ -108,12 +173,47 @@ export function canAccessFeature(ctx: AccessContext, feature: FeatureKey | strin
   // Unregistered feature stays open — otherwise every new module ships
   // invisible until someone remembers to seed a row for it.
   if (!required) return true;
-  const need = ctx.rank[required] ?? 0;
-  const have = ctx.plan ? ctx.rank[ctx.plan] ?? 0 : 0;
-  return have >= need;
+  return ctx.planRank >= (ctx.rank[required] ?? 0);
 }
 
 export function canAccessModule(ctx: AccessContext, def: ModuleDef): boolean {
   const key = FEATURE_BY_MODULE[def.key];
   return key ? canAccessFeature(ctx, key) : true;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enforcement
+//
+// Hiding a card in the UI is not enforcement: the reading is still in the HTML
+// payload the server sent. redactReadings() strips the content BEFORE it
+// leaves the server, so a locked module ships its name and status and nothing
+// else — no numbers, no baseline, no verdict.
+//
+// The consensus is deliberately computed from the FULL set upstream of this.
+// A Free viewer gets the same verdict a Pro viewer does; the tier decides how
+// much working is shown, not whether the conclusion is right.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { ModuleReading } from "./modules";
+
+export function redactReadings(
+  readings: ModuleReading[],
+  ctx: AccessContext
+): ModuleReading[] {
+  if (!ctx.subscriptionsEnabled || ctx.isAdmin) return readings;
+  return readings.map((r) =>
+    canAccessModule(ctx, r.def)
+      ? r
+      : {
+          ...r,
+          headline: "Available on Pro",
+          rows: [],
+          baseline: null,
+          verdict:
+            `${r.def.name} is part of the Pro intelligence set. Its reading is counted in ` +
+            `the consensus above; the detail is not shown on this tier.`,
+          code: undefined,
+        }
+  );
 }

@@ -48,6 +48,11 @@ export default async function SubscriptionPage() {
         <p className="mt-2 max-w-2xl text-[0.82rem] leading-relaxed text-muted">
           Access to intelligence depth. Basic football information stays open.
         </p>
+        <p className="mono mt-3 text-[0.68rem] text-muted">
+          {ctx.authenticated
+            ? `Your plan: ${(ctx.plan ?? "free").toUpperCase()}${ctx.isAdmin ? " · ADMIN" : ""}`
+            : "Create an account to manage access."}
+        </p>
         {!ctx.subscriptionsEnabled && (
           <p
             className="mono mt-3 inline-block rounded px-2 py-1 text-[0.6rem] tracking-widest"

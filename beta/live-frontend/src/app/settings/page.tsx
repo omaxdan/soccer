@@ -55,39 +55,19 @@ export default async function SettingsPage() {
             : "All users currently have full access. Subscription rules are configured but inactive."}
         </p>
 
-        {/* The toggle is intentionally absent. Explaining why is more useful
-            than rendering a control that cannot safely do anything yet. */}
-        <div
-          className="mt-4 flex items-start gap-2.5 rounded-term p-3"
+        <Link
+          href="/admin/settings"
+          className="mono mt-4 inline-block rounded-term px-3 py-2 text-[0.64rem] font-semibold tracking-widest"
           style={{
-            border: "1px solid color-mix(in srgb, var(--warn) 30%, transparent)",
-            background: "color-mix(in srgb, var(--warn) 6%, transparent)",
+            color: "var(--amber)",
+            border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
           }}
         >
-          <span className="mt-0.5 shrink-0" style={{ color: "var(--warn)" }}>
-            <IconUnverified size={15} />
-          </span>
-          <div>
-            <p className="mono text-[0.68rem] font-semibold" style={{ color: "var(--warn)" }}>
-              No toggle here yet, deliberately
-            </p>
-            <p className="mt-1 text-[0.72rem] leading-relaxed text-muted">
-              The platform has no authentication: no Supabase Auth session, no{" "}
-              <span className="mono">auth.uid()</span> on any request. While the flag is off
-              that is harmless, because the access service never asks who you are. Switch it on
-              and every visitor resolves to Free with no way to sign in — including whoever
-              needs to switch it back.
-            </p>
-            <p className="mt-1.5 text-[0.72rem] leading-relaxed text-muted">
-              Flip it in SQL once auth exists and an admin account is promoted:
-            </p>
-            <pre className="mono mt-1.5 overflow-x-auto rounded bg-raised p-2 text-[0.62rem] text-text">
-{`UPDATE platform_settings
-   SET value = 'true', updated_at = now()
- WHERE key = 'subscriptions_enabled';`}
-            </pre>
-          </div>
-        </div>
+          OPEN ADMIN CONTROLS →
+        </Link>
+        <p className="mt-2 text-[0.68rem] leading-relaxed text-faint">
+          The toggle lives behind an admin role. Sign in with an admin account to reach it.
+        </p>
       </section>
 
       {/* Feature access overview */}
@@ -140,9 +120,26 @@ export default async function SettingsPage() {
           Account
         </h2>
         <p className="text-[0.74rem] leading-relaxed text-muted">
-          Sign-in is not built. Once Supabase Auth is wired, promote the first admin with the
-          statement in migration 033 — no password ever appears in SQL.
+          {ctx.authenticated
+            ? `Signed in as ${ctx.email ?? ctx.userId} · role ${ctx.role} · plan ${ctx.plan ?? "free"}.`
+            : "Not signed in. Accounts are optional while the platform is in beta."}
         </p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          {ctx.authenticated ? (
+            <Link href="/logout" className="mono text-[0.64rem] tracking-widest text-amber">
+              SIGN OUT →
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="mono text-[0.64rem] tracking-widest text-amber">
+                SIGN IN →
+              </Link>
+              <Link href="/signup" className="mono text-[0.64rem] tracking-widest text-muted">
+                CREATE ACCOUNT →
+              </Link>
+            </>
+          )}
+        </div>
         <Link href="/subscription" className="mono mt-3 inline-block text-[0.64rem] tracking-widest text-amber">
           SEE PLANS →
         </Link>

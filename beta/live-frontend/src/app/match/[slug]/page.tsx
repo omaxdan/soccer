@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/lib/queries";
+import { getAccessContext, redactReadings } from "@/lib/access";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -67,7 +68,12 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   ]);
   const withVersatility = (rows: typeof homeLineup) =>
     rows.map((p) => ({ ...p, versatility_score: versatility[p.player_id] ?? null }));
-  const moduleReadings = buildMatchReadings(m, scoringProbs, null, bandBacktests);
+  // Redacted server-side: a locked module's numbers never reach the client.
+  const access = await getAccessContext();
+  const moduleReadings = redactReadings(
+    buildMatchReadings(m, scoringProbs, null, bandBacktests),
+    access
+  );
 
   // Hero glance values, read off the same readings the report uses.
   const heroTally = tally(moduleReadings);

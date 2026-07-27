@@ -40,7 +40,7 @@ INSERT INTO public.platform_settings (key, value, description)
 VALUES (
   'subscriptions_enabled',
   'false',
-  'Controls whether subscription restrictions are active. FALSE = beta mode, everyone has full access. Do not set true until Supabase Auth is wired into the frontend: with no session, auth.uid() is NULL, every visitor resolves to Free, and nobody can sign in to turn it back off.'
+  'Controls whether subscription restrictions are active. FALSE = beta mode, everyone has full access. Phase 2.1 wired Supabase Auth, so this is now safe to flip — but only from /admin/settings, which refuses to enable unless an admin account exists to turn it back off.'
 )
 ON CONFLICT (key) DO NOTHING;
 
