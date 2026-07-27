@@ -14,6 +14,7 @@ import {
 } from "@/components/ModuleFeed";
 import { MODULES, moduleFromSlug } from "@/lib/modules";
 import { currentTier } from "@/lib/tier";
+import { getAccessContext } from "@/lib/access";
 import {
   IconConfidence,
   IconModules,
@@ -37,11 +38,12 @@ export default async function DashboardPage({
   ]);
   const bandBacktests = await getBandBacktests();
   const viewer = currentTier();
+  const access = await getAccessContext();
 
   // ?module=m5 — set by the VIEW ACTIVATIONS links in the module directory.
   const focus = moduleFromSlug(moduleParam);
   const sort = parseSort(sortParam);
-  const allEntries = buildFeed(matches, bettingCard.singles, bandBacktests);
+  const allEntries = buildFeed(matches, bettingCard.singles, bandBacktests, access);
   const dayOptions = buildDayOptions(allEntries);
   const activeDay =
     dateParam && dayOptions.some((d) => d.key === dateParam) ? dateParam : null;

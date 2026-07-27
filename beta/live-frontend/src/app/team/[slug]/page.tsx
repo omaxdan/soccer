@@ -23,6 +23,8 @@ import {
   DangerZone,
   TacticalIdentity,
 } from "@/components/TeamBrief";
+import { getAccessContext, redactTeamInputs } from "@/lib/access";
+import { LockedFeature } from "@/components/FeatureGate";
 import {
   buildSummary,
   buildBadges,
@@ -58,8 +60,10 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
     strengthDashboard, strengthRatings, playingStyle, strengths, weaknesses, tacticalVariations, transferIntel, injuries,
   } = await getTeamIntel(team.id);
 
-  // Everything the brief needs, from the single fetch above. No new queries.
-  const brief: TeamBriefInput = {
+  // Premium streams are nulled BEFORE the brief is derived, so a locked
+  // metric never reaches a sentence, a pillar or a risk item.
+  const access = await getAccessContext();
+  const rawBrief: TeamBriefInput = {
     teamName: team.short_name || team.name,
     intel: intel ?? null,
     formQuality: formQuality ?? null,
@@ -70,6 +74,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
     dashboard: (strengthDashboard as any) ?? null,
     style: (playingStyle as any) ?? null,
   };
+  const { input: brief, withheld } = redactTeamInputs(rawBrief, access);
   const [upcoming, seasonStats, difficulty, keyPlayers, recentForm, standing, bettingCard] = await Promise.all([
     getTeamUpcoming(team.id),
     getTeamSeasonStats(team.id),
@@ -381,6 +386,13 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
 
       {/* ── 5 Danger zone ───────────────────────────────── */}
       <DangerZone risks={buildRisks(brief)} />
+
+      {withheld.length > 0 && (
+        <LockedFeature
+          title={`${withheld.length} more intelligence streams`}
+          summary={`${withheld.join(", ")} — volatility, schedule quality and week-over-week form, with their sample sizes and intervals.`}
+        />
+      )}
 
       {/* ── 6-8 Detail, below the decision ──────────────── */}
       <Collapsible title="Recent form and momentum">{momentumTab}</Collapsible>

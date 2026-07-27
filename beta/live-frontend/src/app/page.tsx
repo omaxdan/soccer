@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getBoard, getBettingCard, getBandBacktests } from "@/lib/queries";
 import { buildFeed } from "@/components/ModuleFeed";
+import { getAccessContext } from "@/lib/access";
 import { MODULES, tally, overallVerdict, derivePickSide } from "@/lib/modules";
 import { matchSlug } from "@/lib/slug";
 import { kickoff } from "@/lib/intel";
@@ -23,7 +24,8 @@ export default async function LandingPage() {
     getBettingCard(),
     getBandBacktests(),
   ]);
-  const preview = buildFeed(matches, card.singles, bands).slice(0, 3);
+  const access = await getAccessContext();
+  const preview = buildFeed(matches, card.singles, bands, access).slice(0, 3);
 
   return (
     <div className="space-y-6">

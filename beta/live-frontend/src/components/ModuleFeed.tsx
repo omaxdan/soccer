@@ -23,6 +23,7 @@ import {
 } from "@/lib/modules";
 import type { MatchRow, BankerSingle } from "@/lib/types";
 import type { Tier } from "@/lib/tier";
+import { redactReadings, BETA_ACCESS, type AccessContext } from "@/lib/access";
 import { FeedTable } from "./FeedTable";
 
 // ── Sorting ──────────────────────────────────────────────
@@ -71,10 +72,17 @@ export interface FeedEntry {
   readings: ModuleReading[];
 }
 
+/**
+ * `access` is redacted at BUILD time, not at render. A FeedEntry carries every
+ * module's reading, and those entries are serialised into the RSC payload — so
+ * a component that simply declines to draw a Pro module still ships its numbers
+ * to the browser. Stripping here means they never leave the server.
+ */
 export function buildFeed(
   matches: MatchRow[],
   singles: BankerSingle[],
-  bandBacktests?: Record<string, { rate: number; sample: number; isCalibrated: boolean }> | null
+  bandBacktests?: Record<string, { rate: number; sample: number; isCalibrated: boolean }> | null,
+  access: AccessContext = BETA_ACCESS
 ): FeedEntry[] {
   const byMatch = new Map(singles.map((s) => [s.match_id, s]));
   return matches.map((match) => {
@@ -99,7 +107,8 @@ export function buildFeed(
     };
     return {
       match: m,
-      readings: evaluateAllMatchModules(
+      readings: redactReadings(
+        evaluateAllMatchModules(
         {
           match: m,
           pickSide,
@@ -107,7 +116,9 @@ export function buildFeed(
           travel: m.travel ?? null,
           bandBacktests: bandBacktests ?? null,
         },
-        sides
+          sides
+        ),
+        access
       ),
     };
   });

@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { getAccessContext, canAccessFeature } from "@/lib/access";
+import { LockedFeature } from "@/components/FeatureGate";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getLeagueBySlug, getLeagueTeams, getLeagueStandings, getFixtureDifficultyMap } from "@/lib/queries";
@@ -29,7 +31,16 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const league = await getLeagueBySlug(slug);
   if (!league) notFound();
-  const { tournament, intel, gap } = league;
+  const { tournament, intel, gap: rawGap } = league;
+
+  // Model calibration — hit rate, lift and the strict/lenient split — is the
+  // evidence layer Confidence Calibration is built on, so it follows that
+  // module's tier. Basic league information (teams, standings, goal
+  // environment) stays open: the product gates intelligence depth, not
+  // football facts.
+  const access = await getAccessContext();
+  const calibrationVisible = canAccessFeature(access, "CONFIDENCE_CALIBRATION");
+  const gap = calibrationVisible ? rawGap : null;
   const [teams, table] = await Promise.all([
     getLeagueTeams(tournament.id),
     getLeagueStandings(tournament.id),
@@ -250,7 +261,14 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
             <StatCell label="Edge (lift)" value={gap.lift_over_baseline != null ? `${gap.lift_over_baseline > 0 ? "+" : ""}${Math.round(gap.lift_over_baseline)}%` : "—"} color="var(--edge)" />
           </div>
         </Panel>
-      ) : <Empty text="No market calibration data for this league yet." />}
+      ) : calibrationVisible ? (
+        <Empty text="No market calibration data for this league yet." />
+      ) : (
+        <LockedFeature
+          title="Model calibration"
+          summary="Hit rate, lift over baseline and the strict/lenient split for this competition, with sample sizes."
+        />
+      )}
     </div>
   );
 

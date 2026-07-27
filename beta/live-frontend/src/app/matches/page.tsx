@@ -7,6 +7,7 @@ import {
   dayKeyOf,
 } from "@/components/FeedTable";
 import { currentTier } from "@/lib/tier";
+import { getAccessContext } from "@/lib/access";
 import { MODULES } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export default async function FixturesPage({
     getBoard(300, { daysBack: 3, daysForward: 3 }),
   ]);
   const viewer = currentTier();
+  const access = await getAccessContext();
   const bandBacktests = await getBandBacktests();
 
   // Same grid AND the same grouping as the board — country then competition.
@@ -33,7 +35,7 @@ export default async function FixturesPage({
   // dashboard. No betting card is fetched: the card only ever back-
   // filled a missing form_index, and getBoard now carries team_intelligence
   // in full.
-  const all = sortEntries(buildFeed(matches, [], bandBacktests), "kickoff");
+  const all = sortEntries(buildFeed(matches, [], bandBacktests, access), "kickoff");
   const dayOptions = buildDayOptions(all);
   // Only honour ?date= when that day actually has fixtures, so a stale link
   // shows the full schedule rather than an empty table.

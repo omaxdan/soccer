@@ -401,3 +401,46 @@ export async function getAdminUsers(limit = 200): Promise<AdminUserRow[]> {
     return [];
   }
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Team brief redaction
+//
+// The brief derives its summary, insights, pillars and danger zone FROM the
+// metric tables. Redacting the finished output would mean the premium numbers
+// had already been read and interpolated into sentences; nulling the INPUT
+// means they are never available to the derivation at all, so no wording can
+// leak one by accident.
+//
+// Module ownership:
+//   venue         Home/Away Split          FREE
+//   formQuality   Consistency, Giant Killer PRO
+//   momentum      Readiness Tracker         PRO
+//   intel         team identity and form    open — basic football information,
+//                 which the product deliberately does not gate
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TeamBriefRedaction<T> {
+  input: T;
+  /** Names of the streams withheld, for an honest upgrade prompt. */
+  withheld: string[];
+}
+
+export function redactTeamInputs<
+  T extends { formQuality: unknown; momentum: unknown; betting: unknown }
+>(input: T, ctx: AccessContext): TeamBriefRedaction<T> {
+  if (!ctx.subscriptionsEnabled || ctx.isAdmin) return { input, withheld: [] };
+
+  const withheld: string[] = [];
+  const out = { ...input };
+
+  if (!canAccessFeature(ctx, "CONSISTENCY_INDEX") || !canAccessFeature(ctx, "GIANT_KILLER_INDEX")) {
+    out.formQuality = null;
+    withheld.push("Consistency Index", "Giant Killer Index");
+  }
+  if (!canAccessFeature(ctx, "READINESS_TRACKER")) {
+    out.momentum = null;
+    withheld.push("Readiness Tracker");
+  }
+  return { input: out, withheld };
+}
