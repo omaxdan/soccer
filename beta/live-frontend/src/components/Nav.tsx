@@ -4,21 +4,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import {
-  IconBoard,
-  IconModules,
-  IconFixtures,
-  IconMethod,
-  IconConfidence,
-  IconHomeAway,
-  IconGiantKiller,
-  IconReadiness,
-  IconTravel,
-  IconCleanSheet,
-  IconGate,
-  IconLock,
-  IconStar,
-  IconModules as IconMore,
-} from "./icons/ModuleIcons";
+  NavToday,
+  NavMatches,
+  NavSaved,
+  NavLeagues,
+  NavTeams,
+  NavUsers,
+  NavPlayers,
+  NavSearch,
+  NavTrends,
+  NavModules,
+  NavMethod,
+  NavSubscription,
+  NavSettings,
+  NavSignIn,
+  NavSignOut,
+  NavAdmin,
+  NavFlags,
+  NavMore,
+} from "./icons/NavIcons";
 
 type Item = {
   href: string;
@@ -41,33 +45,33 @@ const GROUPS: Group[] = [
   {
     title: "Main",
     items: [
-      { href: "/app", label: "Dashboard", Icon: IconBoard },
-      { href: "/matches", label: "Match Board", Icon: IconFixtures },
-      { href: "/watchlist", label: "Watchlist", Icon: IconCleanSheet },
+      { href: "/app", label: "Dashboard", Icon: NavToday },
+      { href: "/matches", label: "Match Board", Icon: NavMatches },
+      { href: "/watchlist", label: "Watchlist", Icon: NavSaved },
     ],
   },
   {
     title: "Intelligence",
     items: [
-      { href: "/leagues", label: "Leagues", Icon: IconGiantKiller },
-      { href: "/teams", label: "Teams", Icon: IconHomeAway },
-      { href: "/players", label: "Players", Icon: IconReadiness, stub: true },
+      { href: "/leagues", label: "Leagues", Icon: NavLeagues },
+      { href: "/teams", label: "Teams", Icon: NavTeams },
+      { href: "/players", label: "Players", Icon: NavPlayers, stub: true },
     ],
   },
   {
     title: "Tools",
     items: [
-      { href: "/search", label: "Search", Icon: IconTravel, stub: true },
-      { href: "/trends", label: "Trends", Icon: IconConfidence },
-      { href: "/modules", label: "Module Library", Icon: IconModules },
-      { href: "/method", label: "Method", Icon: IconMethod },
+      { href: "/search", label: "Search", Icon: NavSearch, stub: true },
+      { href: "/trends", label: "Trends", Icon: NavTrends },
+      { href: "/modules", label: "Module Library", Icon: NavModules },
+      { href: "/method", label: "Method", Icon: NavMethod },
     ],
   },
   {
     title: "Account",
     items: [
-      { href: "/subscription", label: "Subscription", Icon: IconGate },
-      { href: "/settings", label: "Settings", Icon: IconLock },
+      { href: "/subscription", label: "Subscription", Icon: NavSubscription },
+      { href: "/settings", label: "Settings", Icon: NavSettings },
     ],
   },
 ];
@@ -85,10 +89,10 @@ const GROUPS: Group[] = [
  * destination.
  */
 const MOBILE_PRIMARY: Item[] = [
-  { href: "/app", label: "Today", Icon: IconBoard },
-  { href: "/matches", label: "Matches", Icon: IconFixtures },
-  { href: "/watchlist", label: "Saved", Icon: IconStar },
-  { href: "/leagues", label: "Leagues", Icon: IconGiantKiller },
+  { href: "/app", label: "Today", Icon: NavToday },
+  { href: "/matches", label: "Matches", Icon: NavMatches },
+  { href: "/watchlist", label: "Saved", Icon: NavSaved },
+  { href: "/leagues", label: "Leagues", Icon: NavLeagues },
 ];
 
 export interface NavIdentity {
@@ -104,11 +108,11 @@ export interface NavIdentity {
  */
 function accountItems(identity: NavIdentity): Item[] {
   return [
-    { href: "/subscription", label: "Subscription", Icon: IconGate },
-    { href: "/settings", label: "Settings", Icon: IconLock },
+    { href: "/subscription", label: "Subscription", Icon: NavSubscription },
+    { href: "/settings", label: "Settings", Icon: NavSettings },
     identity.authenticated
-      ? { href: "/logout", label: "Sign out", Icon: IconMethod }
-      : { href: "/login", label: "Sign in", Icon: IconMethod },
+      ? { href: "/logout", label: "Sign out", Icon: NavSignOut }
+      : { href: "/login", label: "Sign in", Icon: NavSignIn },
   ];
 }
 
@@ -121,9 +125,9 @@ function adminGroup(): Group {
   return {
     title: "Admin",
     items: [
-      { href: "/admin/settings", label: "Admin Settings", Icon: IconConfidence },
-      { href: "/admin/users", label: "Users", Icon: IconHomeAway },
-      { href: "/admin/settings#features", label: "Feature Flags", Icon: IconGate },
+      { href: "/admin/settings", label: "Admin Settings", Icon: NavAdmin },
+      { href: "/admin/users", label: "Users", Icon: NavUsers },
+      { href: "/admin/settings#features", label: "Feature Flags", Icon: NavFlags },
     ],
   };
 }
@@ -185,9 +189,9 @@ export function BottomNav({
                       <span className="text-faint">
                         <Icon size={14} />
                       </span>
-                      <span className="truncate">{label}</span>
+                      <span className="min-w-0 flex-1 truncate">{label}</span>
                       {stub && (
-                        <span className="mono ml-auto text-[0.5rem] tracking-widest text-faint">
+                        <span className="mono shrink-0 text-[0.5rem] tracking-widest text-faint">
                           SOON
                         </span>
                       )}
@@ -228,7 +232,7 @@ export function BottomNav({
             className="flex min-h-[3rem] w-full flex-col items-center justify-center gap-1 py-2"
             style={{ color: open || inOverflow ? "var(--amber)" : "var(--muted)" }}
           >
-            <IconMore size={18} />
+            <NavMore size={18} />
             <span className="mono text-[0.55rem] uppercase tracking-widest">More</span>
           </button>
         </li>
