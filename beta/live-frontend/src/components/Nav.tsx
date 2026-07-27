@@ -8,23 +8,78 @@ import {
   IconModules,
   IconFixtures,
   IconMethod,
+  IconConfidence,
+  IconHomeAway,
+  IconGiantKiller,
+  IconReadiness,
+  IconTravel,
+  IconCleanSheet,
+  IconGate,
+  IconLock,
 } from "./icons/ModuleIcons";
 
 type Item = {
   href: string;
   label: string;
   Icon: (p: { size?: number; className?: string }) => React.ReactElement;
+  /** Structure only for now — marked so the UI does not overpromise. */
+  stub?: boolean;
 };
 
-const items: Item[] = [
-  { href: "/", label: "Feed", Icon: IconBoard },
-  { href: "/modules", label: "Modules", Icon: IconModules },
-  { href: "/matches", label: "Fixtures", Icon: IconFixtures },
-  { href: "/method", label: "Method", Icon: IconMethod },
+type Group = { title: string; items: Item[] };
+
+/**
+ * Four groups, matching how the product is actually used: what to look at now,
+ * what to look it up in, what to explore with, and account.
+ *
+ * Icons are the existing stroke SVG set — no emoji, consistent with the rest
+ * of the terminal.
+ */
+const GROUPS: Group[] = [
+  {
+    title: "Main",
+    items: [
+      { href: "/app", label: "Dashboard", Icon: IconBoard },
+      { href: "/matches", label: "Match Board", Icon: IconFixtures },
+      { href: "/watchlist", label: "Watchlist", Icon: IconCleanSheet, stub: true },
+    ],
+  },
+  {
+    title: "Intelligence",
+    items: [
+      { href: "/leagues", label: "Leagues", Icon: IconGiantKiller },
+      { href: "/teams", label: "Teams", Icon: IconHomeAway },
+      { href: "/players", label: "Players", Icon: IconReadiness, stub: true },
+    ],
+  },
+  {
+    title: "Tools",
+    items: [
+      { href: "/search", label: "Search", Icon: IconTravel, stub: true },
+      { href: "/trends", label: "Trends", Icon: IconConfidence },
+      { href: "/modules", label: "Module Library", Icon: IconModules },
+      { href: "/method", label: "Method", Icon: IconMethod },
+    ],
+  },
+  {
+    title: "Account",
+    items: [
+      { href: "/pricing", label: "Subscription", Icon: IconGate },
+      { href: "/settings", label: "Settings", Icon: IconLock, stub: true },
+    ],
+  },
+];
+
+/** The four that earn a place in a five-slot mobile bar. */
+const MOBILE: Item[] = [
+  GROUPS[0].items[0],
+  GROUPS[0].items[1],
+  GROUPS[1].items[0],
+  GROUPS[2].items[2],
 ];
 
 function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/app") return pathname === "/app";
   return pathname.startsWith(href);
 }
 
@@ -37,7 +92,7 @@ export function BottomNav() {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="grid grid-cols-4">
-        {items.map(({ href, label, Icon }) => {
+        {MOBILE.map(({ href, label, Icon }) => {
           const active = isActive(pathname, href);
           return (
             <li key={href}>
@@ -48,7 +103,7 @@ export function BottomNav() {
                 style={{ color: active ? "var(--amber)" : "var(--muted)" }}
               >
                 <Icon size={18} />
-                <span className="mono text-[0.6rem] uppercase tracking-widest">{label}</span>
+                <span className="mono text-[0.55rem] uppercase tracking-widest">{label}</span>
               </Link>
             </li>
           );
@@ -61,38 +116,43 @@ export function BottomNav() {
 export function SideNav() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Primary" className="hidden md:sticky md:top-16 md:flex md:flex-col md:gap-1">
-      {items.map(({ href, label, Icon }) => {
-        const active = isActive(pathname, href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className="flex items-center gap-3 rounded-term px-3 py-2 text-sm transition-colors hover:bg-raised"
-            style={{
-              color: active ? "var(--text)" : "var(--muted)",
-              background: active ? "var(--raised)" : "transparent",
-            }}
-          >
-            <span style={{ color: active ? "var(--amber)" : "var(--faint)" }}>
-              <Icon size={17} />
-            </span>
-            <span className="tracking-tight">{label}</span>
-          </Link>
-        );
-      })}
-
-      <Link
-        href="/pricing"
-        className="mono mt-3 rounded-term px-3 py-2 text-center text-[0.62rem] font-semibold tracking-widest transition-colors"
-        style={{
-          color: "var(--amber)",
-          border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
-        }}
-      >
-        PRICING
-      </Link>
+    <nav
+      aria-label="Primary"
+      className="hidden md:sticky md:top-16 md:flex md:flex-col md:gap-4"
+    >
+      {GROUPS.map((group) => (
+        <div key={group.title}>
+          <div className="label-cap mb-1 px-3">{group.title}</div>
+          <ul className="flex flex-col gap-0.5">
+            {group.items.map(({ href, label, Icon, stub }) => {
+              const active = isActive(pathname, href);
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    aria-current={active ? "page" : undefined}
+                    className="flex items-center gap-2.5 rounded-term px-3 py-1.5 text-[0.8rem] transition-colors hover:bg-raised"
+                    style={{
+                      color: active ? "var(--text)" : "var(--muted)",
+                      background: active ? "var(--raised)" : "transparent",
+                    }}
+                  >
+                    <span style={{ color: active ? "var(--amber)" : "var(--faint)" }}>
+                      <Icon size={15} />
+                    </span>
+                    <span className="tracking-tight">{label}</span>
+                    {stub && (
+                      <span className="mono ml-auto text-[0.5rem] tracking-widest text-faint">
+                        SOON
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </nav>
   );
 }

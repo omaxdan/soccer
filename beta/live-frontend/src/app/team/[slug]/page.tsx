@@ -343,7 +343,7 @@ export default async function TeamHub({ params }: { params: Promise<{ slug: stri
 
   return (
     <div className="space-y-4">
-      <Link href="/" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
+      <Link href="/app" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
       <section className="panel p-5">
         <div className="flex items-center gap-3">
           <Crest team={team} size={48} />

@@ -170,7 +170,7 @@ export function SortControl({
   moduleParam?: string;
 }) {
   const href = (s: FeedSort) =>
-    `/?sort=${s}${moduleParam ? `&module=${moduleParam}` : ""}`;
+    `/app?sort=${s}${moduleParam ? `&module=${moduleParam}` : ""}`;
   const label = SORT_OPTIONS.find((o) => o.key === current)?.label ?? "Consensus";
   return (
     <details className="relative">

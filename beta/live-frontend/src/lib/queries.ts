@@ -1068,3 +1068,82 @@ export async function getPlayerVersatility(
     return {};
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Discovery
+//
+// One read per page, over tables the platform already maintains. Nothing is
+// generated: a team with no intelligence row simply carries nulls and the page
+// shows them as unavailable rather than inventing a value.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TeamDirectoryRow {
+  id: number;
+  name: string;
+  short_name: string | null;
+  country: string | null;
+  readiness: number | null;
+  form: number | null;
+  adjustedForm: number | null;
+  attack: number | null;
+  defence: number | null;
+  volatility: number | null;
+  restDays: number | null;
+  travelFatigue: number | null;
+}
+
+export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]> {
+  const client = db();
+  if (!client) return [];
+  try {
+    const { data: intel } = await client
+      .from("team_intelligence")
+      .select("team_id, readiness_score, form_index, rest_days_avg, travel_fatigue_score")
+      .limit(limit);
+    if (!intel || intel.length === 0) return [];
+    const ids = (intel as any[]).map((r) => r.team_id);
+
+    const [teams, quality, dash] = await Promise.all([
+      client.from("teams").select("id, name, short_name, country").in("id", ids),
+      client
+        .from("team_form_quality")
+        .select("team_id, opponent_adjusted_form, volatility")
+        .in("team_id", ids),
+      client
+        .from("team_strength_dashboard")
+        .select("team_id, attack_rating, defense_rating")
+        .in("team_id", ids),
+    ]);
+
+    const byId = <T extends { team_id?: number; id?: number }>(rows: T[] | null, key: "team_id" | "id") =>
+      new Map((rows ?? []).map((r) => [(r as any)[key] as number, r]));
+    const tMap = byId((teams.data as any[]) ?? [], "id");
+    const qMap = byId((quality.data as any[]) ?? [], "team_id");
+    const dMap = byId((dash.data as any[]) ?? [], "team_id");
+
+    return (intel as any[])
+      .map((r) => {
+        const t = tMap.get(r.team_id) as any;
+        if (!t) return null;
+        const q = qMap.get(r.team_id) as any;
+        const d = dMap.get(r.team_id) as any;
+        return {
+          id: t.id,
+          name: t.name,
+          short_name: t.short_name ?? null,
+          country: t.country ?? null,
+          readiness: r.readiness_score ?? null,
+          form: r.form_index ?? null,
+          adjustedForm: q?.opponent_adjusted_form ?? null,
+          attack: d?.attack_rating ?? null,
+          defence: d?.defense_rating ?? null,
+          volatility: q?.volatility ?? null,
+          restDays: r.rest_days_avg ?? null,
+          travelFatigue: r.travel_fatigue_score ?? null,
+        } as TeamDirectoryRow;
+      })
+      .filter((r): r is TeamDirectoryRow => r !== null);
+  } catch {
+    return [];
+  }
+}

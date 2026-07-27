@@ -145,7 +145,7 @@ export default async function ModuleDirectory() {
               <div className="mt-auto pt-3">
                 {unlocked ? (
                   <Link
-                    href={`/?module=${moduleSlug(def)}`}
+                    href={`/app?module=${moduleSlug(def)}`}
                     className="mono inline-flex items-center gap-1.5 text-[0.62rem] tracking-widest text-amber transition-opacity hover:opacity-75"
                   >
                     VIEW ACTIVATIONS

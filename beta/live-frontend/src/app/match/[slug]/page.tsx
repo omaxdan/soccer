@@ -118,7 +118,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
   return (
     <div className="space-y-4">
-      <Link href="/" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
+      <Link href="/app" className="mono inline-flex items-center gap-1 text-[0.65rem] text-muted hover:text-text">← Board</Link>
 
       {/* Hero */}
       <section className="panel p-5">
