@@ -262,19 +262,37 @@ export function placeLineup(players: PredictedLineupPlayer[]): {
 } {
   const formation = getFormationName(players);
 
-  if (players.length > 0 && players.every(hasStoredCoords)) {
-    const placed = players.map((player) => ({
-      player,
-      x: Number(player.x) / 100,
-      y: Number(player.y) / 100,
-      line: lineOfPlayer(player),
-    }));
-    return { placed, formation };
+  // Per-player, not all-or-nothing.
+  //
+  // This previously required players.every(hasStoredCoords), so ONE null
+  // coordinate anywhere in the eleven dropped the whole team to template
+  // geometry — a partially populated engine run rendered identically to no
+  // engine run at all, which is the hardest kind of failure to notice.
+  //
+  // Stored coordinates are now used wherever they exist. Anyone missing them
+  // is placed by the fallback geometry below, so a mixed row draws the real
+  // shape for the players the engine reached and a sensible approximation for
+  // the rest.
+  const stored: PlacedPlayer[] = [];
+  const needsFallback: PredictedLineupPlayer[] = [];
+  for (const player of players) {
+    if (hasStoredCoords(player)) {
+      stored.push({
+        player,
+        x: Number(player.x) / 100,
+        y: Number(player.y) / 100,
+        line: lineOfPlayer(player),
+      });
+    } else {
+      needsFallback.push(player);
+    }
   }
+  if (needsFallback.length === 0) return { placed: stored, formation };
 
-  // Fallback: derive geometry from position codes (pre-025 rows).
+  // Fallback geometry for whoever the engine did not place (pre-025 rows, or a
+  // partial run).
   const byZone = new Map<PlacementZone, PredictedLineupPlayer[]>();
-  for (const p of players) {
+  for (const p of needsFallback) {
     const z = placementZoneOf(p.position_code);
     if (!byZone.has(z)) byZone.set(z, []);
     byZone.get(z)!.push(p);
@@ -284,7 +302,7 @@ export function placeLineup(players: PredictedLineupPlayer[]): {
     list.sort((a, b) => (a.rank_in_position ?? 0) - (b.rank_in_position ?? 0));
   }
 
-  const placed: PlacedPlayer[] = [];
+  const placed: PlacedPlayer[] = [...stored];
   for (const [zone, list] of byZone) {
     const xs = xsFor(zone, list.length);
     list.forEach((player, i) => {
