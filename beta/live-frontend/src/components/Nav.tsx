@@ -55,13 +55,13 @@ const GROUPS: Group[] = [
     items: [
       { href: "/leagues", label: "Leagues", Icon: NavLeagues },
       { href: "/teams", label: "Teams", Icon: NavTeams },
-      { href: "/players", label: "Players", Icon: NavPlayers, stub: true },
+      { href: "/players", label: "Players", Icon: NavPlayers },
     ],
   },
   {
     title: "Tools",
     items: [
-      { href: "/search", label: "Search", Icon: NavSearch, stub: true },
+      { href: "/search", label: "Search", Icon: NavSearch },
       { href: "/trends", label: "Trends", Icon: NavTrends },
       { href: "/modules", label: "Module Library", Icon: NavModules },
       { href: "/method", label: "Method", Icon: NavMethod },

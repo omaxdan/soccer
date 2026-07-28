@@ -59,6 +59,18 @@ export default async function RootLayout({
             <div className="ml-auto">
               <StatusDot live={LIVE} />
             </div>
+            <form action="/search" method="get" className="hidden min-w-0 flex-1 justify-end md:flex">
+              <label className="relative w-full max-w-[14rem]">
+                <span className="sr-only">Search</span>
+                <input
+                  name="q"
+                  type="search"
+                  placeholder="Search"
+                  autoComplete="off"
+                  className="mono w-full rounded-term border border-line bg-raised px-2.5 py-1 text-[0.7rem] text-text outline-none focus:border-amber"
+                />
+              </label>
+            </form>
             <AccountMenu identity={identity} />
           </div>
         </header>

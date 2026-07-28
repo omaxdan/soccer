@@ -1156,3 +1156,146 @@ export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]>
     return [];
   }
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Players and search
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PlayerDirectoryRow {
+  id: number;
+  name: string;
+  short_name: string | null;
+  jersey_number: number | null;
+  position: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  team_crest: string | null;
+  injured: boolean;
+}
+
+/** One batched read. Ordering is by team so the list reads as squads. */
+export async function getPlayerDirectory(limit = 500): Promise<PlayerDirectoryRow[]> {
+  const client = db();
+  if (!client) return [];
+  try {
+    const { data, error } = await client
+      .from("players")
+      .select(
+        "id, name, short_name, jersey_number, primary_position, position, current_injury, team_id, team:teams(id, name, crest_storage_path)"
+      )
+      .not("team_id", "is", null)
+      .order("team_id")
+      .limit(limit);
+    if (error || !data) return [];
+    return (data as any[]).map((p) => ({
+      id: p.id,
+      name: p.name,
+      short_name: p.short_name ?? null,
+      jersey_number: p.jersey_number ?? null,
+      position: p.primary_position ?? p.position ?? null,
+      team_id: p.team_id ?? null,
+      team_name: p.team?.name ?? null,
+      team_crest: p.team?.crest_storage_path ?? null,
+      injured: Boolean(p.current_injury),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export interface PlayerDetail {
+  id: number;
+  name: string;
+  short_name: string | null;
+  jersey_number: number | null;
+  position: string | null;
+  secondary_position: string | null;
+  team: { id: number; name: string; crest_storage_path?: string | null } | null;
+  injury: { reason: string | null; status: string | null; expectedReturnDays: number | null } | null;
+  intelligence: Record<string, unknown> | null;
+  season: Record<string, unknown> | null;
+  versatility: number | null;
+}
+
+export async function getPlayerById(id: number): Promise<PlayerDetail | null> {
+  const client = db();
+  if (!client) return null;
+  try {
+    const { data: p } = await client
+      .from("players")
+      .select(
+        "id, name, short_name, jersey_number, primary_position, secondary_position, position, current_injury, injury_reason, injury_status, injury_expected_return_days, team:teams(id, name, crest_storage_path)"
+      )
+      .eq("id", id)
+      .maybeSingle();
+    if (!p) return null;
+
+    // Each of these is optional; a player with no intelligence row is still a
+    // player, so nothing here is allowed to fail the page.
+    const [intel, season, vers] = await Promise.all([
+      client.from("player_intelligence").select("*").eq("player_id", id).maybeSingle(),
+      client
+        .from("player_season_statistics")
+        .select("*")
+        .eq("player_id", id)
+        .order("season_external_id", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      client.from("player_versatility").select("versatility_score").eq("player_id", id).maybeSingle(),
+    ]);
+
+    const row = p as any;
+    return {
+      id: row.id,
+      name: row.name,
+      short_name: row.short_name ?? null,
+      jersey_number: row.jersey_number ?? null,
+      position: row.primary_position ?? row.position ?? null,
+      secondary_position: row.secondary_position ?? null,
+      team: row.team ?? null,
+      injury: row.current_injury
+        ? {
+            reason: row.injury_reason ?? null,
+            status: row.injury_status ?? null,
+            expectedReturnDays: row.injury_expected_return_days ?? null,
+          }
+        : null,
+      intelligence: (intel.data as any) ?? null,
+      season: (season.data as any) ?? null,
+      versatility: (vers.data as any)?.versatility_score ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export interface SearchHit {
+  entityType: "team" | "league" | "player" | "match";
+  entityId: number;
+  title: string;
+  subtitle: string;
+  score: number;
+}
+
+/** Ranked search via the global_search function from migration 036. */
+export async function globalSearch(q: string, limit = 20): Promise<SearchHit[]> {
+  const client = db();
+  if (!client || q.trim().length < 2) return [];
+  try {
+    const { data, error } = await client.rpc("global_search", {
+      q: q.trim(),
+      max_results: limit,
+    });
+    if (error || !data) return [];
+    return (data as any[]).map((r) => ({
+      entityType: r.entity_type,
+      entityId: r.entity_id,
+      title: r.title,
+      subtitle: r.subtitle ?? "",
+      score: Number(r.score ?? 0),
+    }));
+  } catch {
+    return [];
+  }
+}

@@ -22,6 +22,10 @@ export function teamSlug(t: Pick<TeamLite, "id" | "name">): string {
   return `${slugify(t.name)}-${t.id}`;
 }
 
+export function playerSlug(p: { id: number; name: string }): string {
+  return `${slugify(p.name)}-${p.id}`;
+}
+
 export function leagueSlug(t: Pick<TournamentLite, "id" | "name">): string {
   return `${slugify(t.name)}-${t.id}`;
 }
