@@ -1479,3 +1479,129 @@ CREATE TABLE public.match_half_time_intelligence (
   CONSTRAINT match_half_time_intelligence_pkey PRIMARY KEY (id),
   CONSTRAINT match_half_time_intelligence_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id)
 );
+CREATE TABLE public.platform_settings (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  key text NOT NULL UNIQUE,
+  value text NOT NULL,
+  description text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT platform_settings_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.subscription_plans (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name text NOT NULL,
+  slug text NOT NULL UNIQUE,
+  description text,
+  price numeric NOT NULL DEFAULT 0,
+  billing_interval text NOT NULL DEFAULT 'month'::text CHECK (billing_interval = ANY (ARRAY['month'::text, 'year'::text, 'once'::text])),
+  active boolean NOT NULL DEFAULT true,
+  rank integer NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT subscription_plans_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_profiles (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL UNIQUE,
+  display_name text,
+  role text NOT NULL DEFAULT 'user'::text CHECK (role = ANY (ARRAY['user'::text, 'admin'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  avatar_url text,
+  provider text,
+  last_login_at timestamp with time zone,
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.user_subscriptions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL,
+  plan_id bigint NOT NULL,
+  status text NOT NULL DEFAULT 'active'::text CHECK (status = ANY (ARRAY['trialing'::text, 'active'::text, 'past_due'::text, 'cancelled'::text, 'expired'::text])),
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  expires_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  provider text NOT NULL DEFAULT 'manual'::text,
+  stripe_subscription_id text,
+  current_period_start timestamp with time zone,
+  current_period_end timestamp with time zone,
+  cancel_at_period_end boolean NOT NULL DEFAULT false,
+  CONSTRAINT user_subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id)
+);
+CREATE TABLE public.feature_permissions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  feature_key text NOT NULL UNIQUE,
+  feature_name text NOT NULL,
+  required_plan text NOT NULL,
+  description text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT feature_permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT feature_permissions_required_plan_fkey FOREIGN KEY (required_plan) REFERENCES public.subscription_plans(slug)
+);
+CREATE TABLE public.user_favourite_leagues (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL,
+  tournament_id bigint NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_favourite_leagues_pkey PRIMARY KEY (id),
+  CONSTRAINT user_favourite_leagues_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT user_favourite_leagues_tournament_id_fkey FOREIGN KEY (tournament_id) REFERENCES public.tournaments(id)
+);
+CREATE TABLE public.watchlists (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL,
+  entity_type text NOT NULL CHECK (entity_type = ANY (ARRAY['match'::text, 'team'::text, 'league'::text])),
+  entity_id bigint NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT watchlists_pkey PRIMARY KEY (id),
+  CONSTRAINT watchlists_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.notification_preferences (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL UNIQUE,
+  email_notifications boolean NOT NULL DEFAULT false,
+  push_notifications boolean NOT NULL DEFAULT false,
+  friday_briefing boolean NOT NULL DEFAULT true,
+  consensus_changes boolean NOT NULL DEFAULT true,
+  module_changes boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notification_preferences_pkey PRIMARY KEY (id),
+  CONSTRAINT notification_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.notifications (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL,
+  type text NOT NULL,
+  title text NOT NULL,
+  message text,
+  entity_type text CHECK (entity_type IS NULL OR (entity_type = ANY (ARRAY['match'::text, 'team'::text, 'league'::text]))),
+  entity_id bigint,
+  read_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.subscription_events (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL,
+  event_type text NOT NULL CHECK (event_type = ANY (ARRAY['created'::text, 'upgraded'::text, 'downgraded'::text, 'renewed'::text, 'cancelled'::text, 'expired'::text, 'payment_failed'::text, 'reactivated'::text])),
+  old_plan text,
+  new_plan text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT subscription_events_pkey PRIMARY KEY (id),
+  CONSTRAINT subscription_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.customers (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id uuid NOT NULL UNIQUE,
+  stripe_customer_id text UNIQUE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT customers_pkey PRIMARY KEY (id),
+  CONSTRAINT customers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);

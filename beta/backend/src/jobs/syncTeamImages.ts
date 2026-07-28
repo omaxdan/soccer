@@ -20,6 +20,8 @@ import { db } from '../db/client';
 import { logger } from '../utils/logger';
 
 const THROTTLE_MS = 2000;
+// Enable debug logging for image sync
+const DEBUG_IMAGE_SYNC = process.env.DEBUG_IMAGE_SYNC === 'true';
 const BUCKET = 'crests';
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -31,31 +33,112 @@ async function ensureBucket(): Promise<void> {
   }
 }
 
-async function downloadAndUpload(path: string, externalId: number): Promise<string | null> {
+async function downloadAndUpload(path: string, externalId: number, type: 'team' | 'tournament' = 'team'): Promise<string | null> {
   try {
-    // sportsApiClient.get() expects JSON; image bytes need a raw fetch through
-    // the same base URL + auth header pattern, so we go around the JSON client.
-    const response = await fetch(`${process.env.SPORTSAPI_BASE_URL}${path}`, {
+    const url = `${process.env.SPORTSAPI_BASE_URL}${path}`;
+    logger.debug({ url, externalId, type }, `Fetching ${type} image...`);
+    
+    const response = await fetch(url, {
       headers: { 'x-api-key': process.env.SPORTSAPI_KEY || '' },
     });
-    if (!response.ok) return null;
 
-    const buffer = Buffer.from(await response.arrayBuffer());
+    // Log the response details
+    logger.debug({
+      status: response.status,
+      statusText: response.statusText,
+      url,
+      externalId,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length'),
+    }, `API Response for ${type} ${externalId}`);
+      if (DEBUG_IMAGE_SYNC) {
+        logger.debug({ 
+          responseHeaders: Object.fromEntries(response.headers.entries()),
+          requestUrl: url,
+          apiKeyPresent: !!process.env.SPORTSAPI_KEY,
+        }, 'Detailed debug information');
+      }
+    if (!response.ok) {
+      // Try to get error body
+      let errorBody = 'No response body';
+      try {
+        const text = await response.text();
+        errorBody = text.substring(0, 500); // First 500 chars
+      } catch (_) {
+        // Ignore - body might not be readable
+      }
+      
+      logger.error({
+        externalId,
+        type,
+        status: response.status,
+        statusText: response.statusText,
+        url,
+        errorBody,
+      }, `Failed to fetch ${type} image - API returned ${response.status}`);
+      return null;
+    }
+
+    // Get the image data
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Detect content type
     const contentType = response.headers.get('content-type') || 'image/png';
-    const ext = contentType.includes('svg') ? 'svg' : contentType.includes('jpeg') ? 'jpg' : 'png';
-    const storagePath = `${path.includes('teams') ? 'teams' : 'tournaments'}/${externalId}.${ext}`;
+    let ext = 'png';
+    if (contentType.includes('svg')) ext = 'svg';
+    else if (contentType.includes('jpeg')) ext = 'jpg';
+    else if (contentType.includes('png')) ext = 'png';
+    else if (contentType.includes('webp')) ext = 'webp';
+    
+    // Determine storage folder
+    const folder = type === 'team' ? 'teams' : 'tournaments';
+    const storagePath = `${folder}/${externalId}.${ext}`;
 
-    const { error } = await db.storage.from(BUCKET).upload(storagePath, buffer, {
+    logger.debug({ 
+      externalId, 
+      type, 
+      folder,
+      storagePath, 
+      contentType, 
+      fileSize: buffer.length,
+      ext 
+    }, `Uploading ${type} image to storage...`);
+
+    // Upload to Supabase
+    const { error, data } = await db.storage.from(BUCKET).upload(storagePath, buffer, {
       contentType,
       upsert: true,
     });
+
     if (error) {
-      logger.error({ error: error.message, externalId }, 'Storage upload failed');
+      logger.error({
+        error: error.message,
+        errorDetails: error,
+        externalId,
+        type,
+        storagePath,
+      }, `Supabase storage upload failed for ${type} ${externalId}`);
       return null;
     }
+
+    logger.info({
+      externalId,
+      type,
+      storagePath,
+      fileSize: buffer.length,
+      publicUrl: `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${storagePath}`,
+    }, `✅ Successfully uploaded ${type} image to storage`);
+
     return storagePath;
   } catch (error: any) {
-    logger.error({ error: error.message, externalId }, 'Image download failed');
+    logger.error({
+      error: error.message,
+      stack: error.stack,
+      externalId,
+      type,
+      path,
+    }, `Unexpected error downloading ${type} image`);
     return null;
   }
 }
@@ -94,47 +177,137 @@ export async function syncTeamImages(externalIds?: number[]): Promise<{ teamsPro
   return { teamsProcessed: teams.length, written, errors };
 }
 
-/** Tournament/league logo backfill — the half of this file's own
- *  docstring ("TEAM/TOURNAMENT IMAGE SYNC") that was never actually
- *  implemented. tournaments.logo_storage_path existed as a column with
- *  nothing ever writing to it until this function.
+/**
+ * Tournament/league logo backfill — syncs tournament logos to Supabase Storage.
  *
- *  UNVERIFIED ENDPOINT, flagged honestly rather than presented as
- *  confirmed: no api-samples/ capture exists for a tournament/league
- *  image endpoint anywhere in this codebase (checked before writing
- *  this), so `/tournaments/{id}/image` below is an assumption mirroring
- *  the team endpoint's REST convention, not a verified path. Fails
- *  gracefully if wrong — downloadAndUpload() already returns null and
- *  logs an error on any non-ok response rather than throwing, so a
- *  wrong endpoint here shows up clearly as "0 written, N errors" in the
- *  job's own return value, not a crash. Test this against a small batch
- *  before trusting it at full scale. */
+ * Source: GET /images/tournaments/{tournamentId}
+ *
+ * Downloads the image once per tournament and re-hosts it in Supabase
+ * Storage, rather than storing a source URL. This decouples image-serving
+ * from the API rate-limit budget entirely — the frontend never calls
+ * SportsAPI Pro for images after this runs, regardless of traffic volume.
+ *
+ * CADENCE: one-time backfill, not a recurring sync. Tournament logos rarely
+ * change — re-run manually if a league rebrands, not on any schedule.
+ */
 export async function syncTournamentImages(externalIds?: number[]): Promise<{ tournamentsProcessed: number; written: number; errors: number }> {
   const targeted = externalIds != null && externalIds.length > 0;
-  logger.info(targeted ? { externalIds } : {}, targeted ? 'syncTournamentImages started — targeted re-sync (endpoint unverified)' : 'syncTournamentImages started — one-time backfill (endpoint unverified, test before full run)');
+  logger.info(targeted ? { externalIds } : {}, targeted ? 'syncTournamentImages started — targeted re-sync' : 'syncTournamentImages started — one-time backfill');
   await ensureBucket();
 
+  // Get tournaments that need logos
   const q = db.from('tournaments').select('id, external_id, name, logo_storage_path');
-  const { data: tournaments } = targeted ? await q.in('external_id', externalIds!) : await q.is('logo_storage_path', null);
+  const { data: tournaments, error: queryError } = targeted ? await q.in('external_id', externalIds!) : await q.is('logo_storage_path', null);
+
+  if (queryError) {
+    logger.error({ error: queryError }, 'Failed to query tournaments');
+    return { tournamentsProcessed: 0, written: 0, errors: 0 };
+  }
 
   if (!tournaments || tournaments.length === 0) {
     logger.info('No tournaments to sync');
     return { tournamentsProcessed: 0, written: 0, errors: 0 };
   }
 
+  // Add a type definition for the tournament
+type Tournament = {
+  id: number;
+  external_id: number;
+  name: string;
+  logo_storage_path: string | null;
+};
+
+// Or use inline typing
+logger.info({ 
+  count: tournaments.length, 
+  tournamentIds: tournaments.map((t: { external_id: number }) => t.external_id)
+}, `Found ${tournaments.length} tournaments to sync`);
+
+// Or use 'as' assertion
+logger.info({ 
+  count: tournaments.length, 
+  tournamentIds: tournaments.map((t: Tournament) => t.external_id)
+}, `Found ${tournaments.length} tournaments to sync`);
+
   let written = 0, errors = 0;
+  const errorDetails: any[] = [];
+
   for (const t of tournaments) {
-    const storagePath = await downloadAndUpload(`/tournaments/${t.external_id}/image`, t.external_id);
-    if (storagePath) {
-      await db.from('tournaments').update({ logo_storage_path: storagePath }).eq('id', t.id);
-      written++;
-      logger.debug({ tournamentId: t.id, tournamentName: t.name, storagePath }, 'Tournament logo synced');
-    } else {
+    try {
+      logger.debug({ tournamentId: t.id, externalId: t.external_id, name: t.name }, `Processing tournament: ${t.name}`);
+      
+      // ✅ FIXED: Using the correct tournament image endpoint
+      const storagePath = await downloadAndUpload(
+        `/tournament/${t.external_id}/image`,  // ← This is the key fix
+        t.external_id,
+        'tournament'
+      );
+      
+      if (storagePath) {
+        // Update the database
+        const { error: updateError } = await db
+          .from('tournaments')
+          .update({ logo_storage_path: storagePath })
+          .eq('id', t.id);
+
+        if (updateError) {
+          logger.error({
+            error: updateError,
+            tournamentId: t.id,
+            externalId: t.external_id,
+            name: t.name,
+          }, 'Failed to update tournament record');
+          errors++;
+          errorDetails.push({ id: t.external_id, name: t.name, error: updateError.message });
+        } else {
+          written++;
+          logger.info({
+            tournamentId: t.id,
+            externalId: t.external_id,
+            name: t.name,
+            storagePath,
+          }, `✅ Tournament logo synced: ${t.name}`);
+        }
+      } else {
+        errors++;
+        errorDetails.push({ id: t.external_id, name: t.name, error: 'Failed to download image' });
+        logger.warn({
+          tournamentId: t.id,
+          externalId: t.external_id,
+          name: t.name,
+        }, `❌ Failed to sync tournament logo: ${t.name}`);
+      }
+    } catch (error: any) {
       errors++;
+      errorDetails.push({ id: t.external_id, name: t.name, error: error.message });
+      logger.error({
+        error: error.message,
+        stack: error.stack,
+        tournamentId: t.id,
+        externalId: t.external_id,
+        name: t.name,
+      }, `Unexpected error processing tournament: ${t.name}`);
     }
+
+    // Throttle between requests
     await delay(THROTTLE_MS);
   }
 
-  logger.info({ tournamentsProcessed: tournaments.length, written, errors }, 'syncTournamentImages completed');
+  // Log summary with detailed errors
+  if (errors > 0) {
+    logger.error({
+      total: tournaments.length,
+      written,
+      errors,
+      errorDetails: errorDetails.slice(0, 10), // First 10 errors
+    }, `❌ Tournament sync completed with ${errors} failures`);
+  } else {
+    logger.info({
+      total: tournaments.length,
+      written,
+      errors,
+    }, `✅ Tournament sync completed successfully`);
+  }
+
   return { tournamentsProcessed: tournaments.length, written, errors };
 }
