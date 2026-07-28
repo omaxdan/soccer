@@ -25,8 +25,8 @@ import {
 import Link from "next/link";
 import type { MatchRow } from "@/lib/types";
 import { canSee, type Tier } from "@/lib/tier";
-import { LockedModuleCard, UpgradePrompt, ProTeaser, LockedRow } from "./FeatureGate";
-import { IconUnverified, IconSupports, IconContradicts, IconNeutral, IconLock } from "./icons/ModuleIcons";
+import { LockedModuleCard, ProTeaser, LockedRow } from "./FeatureGate";
+import { IconSupports, IconContradicts, IconNeutral } from "./icons/ModuleIcons";
 
 // ── Formatting helpers ───────────────────────────────────
 
@@ -189,12 +189,23 @@ export function MatchReport({
   const bandBaseline = confidenceReading?.baseline ?? null;
 
   // ── Instant verdict ───────────────────────────────────────────────────────
+  //
+  // The comparison used to end in an "Edge" column naming the stronger side in
+  // words. It is gone — the home/away values themselves now carry the
+  // comparison, bolded and accent-coloured on whichever side is stronger, so
+  // the table reads as a comparison at a glance instead of a value column plus
+  // a verdict column repeating the same fact.
+  //
+  // higherIsBetter is a per-row flag, not an assumption: travel distance below
+  // passes false, since less travel is the stronger profile there. Nothing in
+  // this table hardcodes "higher wins".
   interface VerdictRow {
     metric: string;
     home: string;
     away: string;
-    edge: string;
-    edgeColor: string;
+    /** True only when this side is strictly ahead — never both, per row. */
+    homeWins: boolean;
+    awayWins: boolean;
     /** Shown on hover and marked with a dotted underline. */
     hint?: string;
   }
@@ -214,10 +225,8 @@ export function MatchReport({
       metric,
       home: fmt(h),
       away: fmt(a),
-      // "Edge" names which side holds the stronger historical profile on that
-      // metric. It is not an instruction.
-      edge: level ? "Level" : homeAhead ? homeName : awayName,
-      edgeColor: level ? "var(--muted)" : "var(--edge)",
+      homeWins: !level && homeAhead,
+      awayWins: !level && !homeAhead,
       hint,
     });
   };
@@ -267,7 +276,9 @@ export function MatchReport({
     if (!pickName)
       return "No readiness gap separates these sides, so the evidence produces no directional lean for this fixture.";
 
-    const advantages = verdictRows.filter((r) => r.edge === pickName).map((r) => r.metric.toLowerCase());
+    const advantages = verdictRows
+      .filter((r) => (pickSide === "home" ? r.homeWins : r.awayWins))
+      .map((r) => r.metric.toLowerCase());
     const side = pickSide === "home" ? "home" : "away";
 
     const parts = [`Historical evidence currently favours ${pickName}.`];
@@ -390,8 +401,7 @@ export function MatchReport({
             <tr className="border-b border-line">
               <th className="label-cap py-1.5 pr-3 text-left font-normal">Metric</th>
               <th className="label-cap py-1.5 pr-3 text-left font-normal">{homeName}</th>
-              <th className="label-cap py-1.5 pr-3 text-left font-normal">{awayName}</th>
-              <th className="label-cap py-1.5 text-left font-normal">Edge</th>
+              <th className="label-cap py-1.5 text-left font-normal">{awayName}</th>
             </tr>
           </thead>
           <tbody>
@@ -410,9 +420,24 @@ export function MatchReport({
                     r.metric
                   )}
                 </td>
-                <td className="mono py-1.5 pr-3 text-text">{r.home}</td>
-                <td className="mono py-1.5 pr-3 text-text">{r.away}</td>
-                <td className="mono py-1.5" style={{ color: r.edgeColor }}>{r.edge}</td>
+                <td
+                  className="mono py-1.5 pr-3"
+                  style={{
+                    color: r.homeWins ? "var(--edge)" : "var(--text)",
+                    fontWeight: r.homeWins ? 700 : 400,
+                  }}
+                >
+                  {r.home}
+                </td>
+                <td
+                  className="mono py-1.5"
+                  style={{
+                    color: r.awayWins ? "var(--edge)" : "var(--text)",
+                    fontWeight: r.awayWins ? 700 : 400,
+                  }}
+                >
+                  {r.away}
+                </td>
               </tr>
             ))}
           </tbody>

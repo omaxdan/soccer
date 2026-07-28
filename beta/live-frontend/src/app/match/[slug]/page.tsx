@@ -15,7 +15,6 @@ import { OpportunityRiskMeter, BarMeter, VersusBar } from "@/components/Meters";
 import { ModuleReport, buildMatchReadings } from "@/components/ModuleReport";
 import { MatchReport, ImportantNote } from "@/components/MatchReport";
 import { PredictedXI } from "@/components/PredictedXI";
-import { PitchLineup } from "@/components/Pitch";
 import { KeyPlayerBattles } from "@/components/KeyPlayerBattles";
 import { InjuryPanel } from "@/components/InjuryPanel";
 import { currentTier } from "@/lib/tier";
@@ -315,19 +314,6 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
         awayLineup={withVersatility(awayLineup)}
       />
 
-      {/* The pitch view, restored.
-          Every coordinate, chip and versatility badge the lineup engine
-          produces is drawn here — placeLineup() is called from nowhere else, so
-          while this was unmounted the whole of migration 037's x/y output
-          rendered to nothing and the section looked untouched.
-          PredictedXI above answers "who starts and how likely"; this answers
-          "what shape", which a list cannot show. */}
-      {(homeLineup.length > 0 || awayLineup.length > 0) && (
-        <section className="grid gap-3 lg:grid-cols-2">
-          <PitchLineup team={m.home} players={withVersatility(homeLineup)} />
-          <PitchLineup team={m.away} players={withVersatility(awayLineup)} />
-        </section>
-      )}
 
       {/* 5 — Key player battles */}
       <KeyPlayerBattles match={m} impacts={playerImpacts} />
