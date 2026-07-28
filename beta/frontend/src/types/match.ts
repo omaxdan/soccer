@@ -12,9 +12,39 @@ export interface MatchPlayer {
 export interface PredictedLineupPlayer {
   team_id: number;
   player_id: number;
+  /**
+   * Tactical slot assigned by the backend lineup engine ('RB', 'RCB', 'LCM',
+   * 'LW', ...) since migration 025. Rows written before that hold a broad
+   * G/D/M/F letter instead — use positionZone() from lib/insights rather than
+   * comparing this field directly.
+   */
   position_code: string;
+  /** Broad zone: 'G' | 'D' | 'M' | 'F'. Null on pre-025 rows. */
+  position_group?: string | null;
+  /** Same value as position_code, under an unambiguous name. */
+  tactical_position?: string | null;
+  /** The player's own natural position, which may differ from the slot. */
+  natural_position?: string | null;
+  /** Formation the engine selected for this team in this match, e.g. '4-2-3-1'. */
+  formation?: string | null;
+  /** Render order across the XI, 1..11 (1 = GK). Not a depth-chart rank. */
+  lineup_order?: number | null;
+  /** Pitch coordinates, 0-100. x: 0 = left touchline. y: 0 = opponent goal. */
+  x?: number | null;
+  y?: number | null;
+  /** Slot role label, e.g. 'centre-back'. */
+  role?: string | null;
+  /** 0-100 selection score, normalized within the squad. */
+  weighted_score?: number | null;
+  /** 0-1 fit of this player to this slot. */
+  suitability?: number | null;
+  is_captain?: boolean | null;
+  is_vice_captain?: boolean | null;
+  /** Depth-chart rank within the position family (CB 1, CB 2, CM 1, ...). */
   rank_in_position: number;
   matches_started: number;
+  minutes_played?: number | null;
+  /** 0-1. */
   confidence: number;
   players: MatchPlayer;
 }

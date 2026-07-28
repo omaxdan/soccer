@@ -454,13 +454,52 @@ export interface PositionDepth {
 export interface PredictedLineupPlayer {
   team_id: number;
   player_id: number;
+  /**
+   * The TACTICAL slot the backend lineup engine assigned for this fixture —
+   * 'GK', 'RB', 'RCB', 'LCM', 'LW', 'ST' — since migration 025. It used to be
+   * a broad G/D/M/F letter, and rows written before the engine ran still hold
+   * one, so never read this by its first character: 'RB' starts with 'R' and
+   * 'LCB' with 'L'. Use lineOf() / placementZoneOf() from lib/formation.
+   */
   position_code: string | null;
+  /** Broad zone of the slot: 'G' | 'D' | 'M' | 'F'. Null on pre-025 rows. */
+  position_group?: string | null;
+  /** Same value as position_code, under an unambiguous name. */
+  tactical_position?: string | null;
+  /**
+   * The player's OWN natural position (normalized primary_position), which may
+   * differ from the slot he was assigned. A central midfielder deployed as a
+   * holding midfielder has natural_position 'CM', tactical_position 'DM'.
+   */
+  natural_position?: string | null;
   secondary_position?: string | null;
   tertiary_position?: string | null;
+  /** Formation the engine selected for this team in this fixture, e.g. '4-2-3-1'. */
+  formation?: string | null;
+  /** Render order across the XI, 1..11 (1 = GK). NOT a depth-chart rank. */
+  lineup_order?: number | null;
+  /**
+   * Pitch coordinates for the assigned slot, 0-100, precomputed per formation.
+   *   x: 0 = left touchline, 100 = right touchline
+   *   y: 0 = opponent goal line, 100 = own goal line (a GK sits near 95)
+   * The same orientation this app's pitch view uses, just on a 0-100 scale.
+   */
+  x?: number | null;
+  y?: number | null;
+  /** Slot role label, e.g. 'centre-back', 'holding midfielder'. */
+  role?: string | null;
+  /** 0-100 selection score, normalized within the squad. */
+  weighted_score?: number | null;
+  /** 0-1 fit of this player to this slot. 1.00 = natural position. */
+  suitability?: number | null;
+  is_captain?: boolean | null;
+  is_vice_captain?: boolean | null;
+  /** Depth-chart rank within the position family: CB 1, CB 2, CM 1, CM 2... */
   rank_in_position: number | null;
   confidence: number | null;
   /** Season starts behind this prediction — a column on match_predicted_lineups. */
   matches_started?: number | null;
+  minutes_played?: number | null;
   versatility_score?: number | null;
   shirt_number?: number | null;
   player?: PlayerLite;

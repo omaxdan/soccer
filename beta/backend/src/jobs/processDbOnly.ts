@@ -6,6 +6,22 @@ import { computeMatchSignals, MatchSignalInput } from '../lib/signalLogic';
 // (appends .order('id') — deterministic paging; the old local version
 // paginated unordered, which has no stability guarantee in Postgres).
 import { fetchAllRows } from '../db/fetchAllRows';
+// Shared lineup engine — processStartingXIStrength builds its best-available
+// XI from the same formation slots, compatibility matrix and optimizer that
+// processPredictedLineups uses, so the two can never disagree about what a
+// lineup is. See src/lib/lineups/index.ts.
+import {
+  FORBIDDEN,
+  getFormation,
+  groupFromBroadLetter,
+  maximumWeightAssignment,
+  normalizePosition,
+  positionSuitability,
+  REFERENCE_FORMATION,
+  SLOT_BASE_BY_CODE,
+  type CanonicalPosition,
+  type Formation,
+} from '../lib/lineups';
 
 /**
  * DB-ONLY PROCESSORS
@@ -3045,453 +3061,14 @@ export async function processPlayerIntelligence(): Promise<{
   }
 }
 
-// ─── DERIVED "LIKELY XI" — zero-API-cost predicted lineup ───────────────────
-
-/**
- * Computes a predicted starting XI for upcoming matches — entirely DB-only,
- * zero API calls. No confirmed-lineups or predicted-lineups endpoint is
- * used anywhere in this design (neither fit the rate-limit budget — see
- * prior analysis). Instead:
- *
- *   1. Primary signal: player_season_statistics.matches_started — ranks
- *      players within each position bucket by how often they've actually
- *      started this season. This is a better signal than a single recent
- *      confirmed lineup, since it reflects the manager's pattern across
- *      the whole season, not one match's selection.
- *   2. Availability filter: excludes anyone with players.current_injury = true,
- *      or who transferred OUT of this team since the season-stats snapshot
- *      (player_transfers, to_team_id != this team, most recent transfer).
- *   3. Position bucketing: uses players.position (G/D/M/F) to group, then
- *      takes the top N per bucket based on a standard formation shape
- *      (1 GK, 4 DEF, 4 MID, 2 FWD — close enough for "likely XI" purposes;
- *      exact tactical formation isn't knowable without lineup data).
- *
- * confidence field: 0-100, derived from how decisively matches_started
- * separates this player from the next-best option at their position —
- * a player with 18 starts vs the next-best's 2 gets high confidence;
- * two players both around 8-10 starts each get lower confidence (genuine
- * rotation, less predictable).
- */
-// ─── PREDICTED LINEUPS ───────────────────────────────────────────────────────
-
-/**
- * Computes predicted starting XI for upcoming matches — entirely DB-only,
- * zero API calls.
- *
- * Ranking signals, in priority order: matches_started, appearances,
- * average rating (total_rating/count_rating), minutes_played. Excludes
- * players who are currently injured (current_injury flag, or an active
- * row in player_injuries with status 'out'/'doubtful' or an expected
- * return date), and players who've transferred to a different team since
- * their season-stats snapshot. Respects a fixed 1-4-4-2 formation.
- * Upserts (onConflict: match_id,player_id) after clearing any stale
- * lineup rows for the matches being processed.
- */
-export async function processPredictedLineups(): Promise<{
-  matchesProcessed: number;
-  playersWritten: number;
-  error?: string;
-}> {
-  logger.info('processPredictedLineups started — DB only, zero API calls');
-
-  try {
-    // ── 1. Get upcoming matches (next 7 days) ────────────────────────────
-    const now = new Date().toISOString();
-    const weekOut = new Date(Date.now() + 7 * 86400000).toISOString();
-
-    const matches = await fetchAllRows(
-      db
-        .from('matches')
-        .select('id, home_team_id, away_team_id, date')
-        .eq('status', 'scheduled')
-        .gte('date', now)
-        .lte('date', weekOut)
-    );
-
-    if (!matches || matches.length === 0) {
-      logger.info('No upcoming matches in next 7 days');
-      return { matchesProcessed: 0, playersWritten: 0 };
-    }
-
-    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
-    logger.info({ matchCount: matches.length, teamCount: teamIds.length }, 'Processing predicted lineups');
-
-    // ── 2. Get player season statistics (ranking signal) ──────────────────
-    // Uses fetchAllRows because player_season_statistics has 10,000+ rows
-    const seasonStats = await fetchAllRows(
-      db.from('player_season_statistics')
-        .select('player_id, team_id, season_external_id, matches_started, appearances, minutes_played, total_rating, count_rating, goals, assists')
-        .in('team_id', teamIds)
-    );
-
-    if (seasonStats.length === 0) {
-      logger.warn('No season statistics found for teams — run sync:player-stats first');
-      return { matchesProcessed: 0, playersWritten: 0 };
-    }
-
-    // Build player stats map — one row per player, MOST RECENT SEASON ONLY.
-    //
-    // player_season_statistics upserts on (player_id, season_external_id) —
-    // see syncSeasonStatistics.ts — meaning a player genuinely accumulates
-    // a SEPARATE row per season as this platform covers more seasons over
-    // time (not just one row that gets overwritten). An earlier version of
-    // this function summed matches_started/minutes_played/etc. across
-    // EVERY row returned per player with no season filter at all, which
-    // would silently mix current-season form with stale prior-season
-    // numbers once historical seasons started accumulating — inflating
-    // matches_started and diluting avg_rating for anyone with more than
-    // one season on record. Fixed to keep only the row with the highest
-    // season_external_id per player, matching the "higher external_id =
-    // more recent season" convention already used elsewhere in this
-    // codebase (see resolveTeamSeasonContext in syncSeasonStatistics.ts).
-    const statsMap = new Map<number, any>();
-    for (const stat of seasonStats) {
-      const existing = statsMap.get(stat.player_id);
-      if (existing && existing.season_external_id >= (stat.season_external_id ?? 0)) {
-        continue; // existing row is from an equal-or-more-recent season — keep it
-      }
-      statsMap.set(stat.player_id, {
-        team_id: stat.team_id,
-        season_external_id: stat.season_external_id ?? 0,
-        matches_started: stat.matches_started || 0,
-        appearances: stat.appearances || 0,
-        minutes_played: stat.minutes_played || 0,
-        total_rating: stat.total_rating || 0,
-        count_rating: stat.count_rating || 0,
-        goals: stat.goals || 0,
-        assists: stat.assists || 0,
-      });
-    }
-
-    // ── 3. Get players with position and injury status ────────────────────
-    const players = await fetchAllRows(
-      db.from('players')
-        .select('id, team_id, position, primary_position, current_injury, injury_status, injury_reason, injury_return_days')
-        .in('team_id', teamIds)
-    );
-
-    const playerMap = new Map<number, any>();
-    for (const p of players) {
-      playerMap.set(p.id, p);
-    }
-
-    // ── 4. Get active injuries from player_injuries table ──────────────────
-    // This gives us more detailed injury info than the current_injury boolean
-    //
-    // Was `.in('player_id', [...statsMap.keys()])` — statsMap can hold
-    // thousands of player IDs (one per season_external_id row across every
-    // team in scope), which serialized into a URL long enough that the
-    // gateway rejected it outright with a bare "Bad Request" (no
-    // details/hint — this is a gateway-level rejection before it reaches
-    // PostgREST, unlike the match_travel_intelligence case which surfaced
-    // as UND_ERR_HEADERS_OVERFLOW). player_injuries is only ~259 rows
-    // total (see Table Rows.txt) — cheaper to fetch unfiltered and look up
-    // in-memory, same fix as match-intelligence:travelRows.
-    let injuries: any[] = [];
-    try {
-      injuries = await fetchAllRows(
-      db
-        .from('player_injuries')
-        .select('player_id, injury_reason, injury_status, expected_return_days, days_out, injury_severity_score')
-        .eq('active', true)
-      );
-    } catch (e: any) {
-      logger.warn({ error: e.message }, 'Failed to fetch player_injuries — continuing degraded');
-    }
-
-    const injuryMap = new Map<number, any>();
-    for (const inj of injuries || []) {
-      injuryMap.set(inj.player_id, inj);
-    }
-
-    // ── 5. Get recent transfers to exclude players who left ────────────────
-    const yearAgo = new Date();
-    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-
-    let transfers: any[] = [];
-    try {
-      transfers = await fetchAllRows(
-        db
-          .from('player_transfers')
-          .select('player_id, to_team_id, from_team_id, transfer_date')
-          .gte('transfer_date', yearAgo.toISOString().split('T')[0])
-          .order('transfer_date', { ascending: false })
-      );
-    } catch (e: any) {
-      logger.warn({ error: e.message }, 'Failed to fetch transfers — continuing degraded');
-    }
-
-    // Get latest team per player (if they transferred)
-    const latestTeamMap = new Map<number, number>();
-    for (const t of transfers || []) {
-      if (t.to_team_id && !latestTeamMap.has(t.player_id)) {
-        latestTeamMap.set(t.player_id, t.to_team_id);
-      }
-    }
-
-    // ── 6. Build per-team rosters with position intelligence ──────────────
-    // V2 (audit upgrade): two fixes over the broad-letter version —
-    //
-    //  a) POSITION INTELLIGENCE: the old version bucketed by the broad
-    //     `position` letter only, so a player like position='D',
-    //     primary_position='RW' (real case: Park Kyu-Min, team 299) was
-    //     selected into the BACK FOUR while actually a winger — and
-    //     fullbacks vs centre-backs were indistinguishable, so a lineup
-    //     could field four centre-backs and no fullback with full
-    //     confidence. Now primary_position (SofaScore code) both overrides
-    //     the broad group when they disagree AND drives sub-slot quotas
-    //     within the group (D: 1 right + 2 central + 1 left; M: 2 wide +
-    //     2 central). Players without primary_position stay eligible for
-    //     any sub-slot of their broad group, so sparse-data teams degrade
-    //     to exactly the old behaviour.
-    //
-    //  b) WEIGHTED RANKING replaces lexicographic tiers: 9 starts with an
-    //     8.1 rating no longer always loses to 10 starts at 5.9. Score =
-    //     50% starts + 20% appearances + 20% avg rating + 10% goal
-    //     contributions, with starts/apps normalized against the team's
-    //     own maximum (scale-free across leagues at different season
-    //     stages). Starts keeps primacy: it is the direct trusted-starter
-    //     signal, while appearances counts 5-minute cameos equally.
-
-    const FORMATION: Record<string, number> = { G: 1, D: 4, M: 4, F: 2 };
-
-    // Sub-slot quotas within each broad group (sums equal FORMATION counts)
-    const SUB_SLOTS: Record<string, Record<string, number>> = {
-      G: { ANY: 1 },
-      D: { R: 1, C: 2, L: 1 },
-      M: { W: 2, C: 2 },
-      F: { ANY: 2 },
-    };
-
-    // Broad group from primary_position — overrides the coarse letter when
-    // they disagree. Wingers slot as wide midfielders in the 4-4-2 frame.
-    const groupOf = (primary: string | null, broadLetter: string): string => {
-      const p = (primary || '').toUpperCase();
-      if (p === 'GK' || p === 'G') return 'G';
-      if (['DR', 'RB', 'RWB', 'DL', 'LB', 'LWB', 'DC', 'CB', 'SW'].includes(p)) return 'D';
-      if (['DM', 'MC', 'CM', 'AM', 'CAM', 'CDM', 'MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'M';
-      if (['ST', 'CF', 'FW'].includes(p)) return 'F';
-      return ['G', 'D', 'M', 'F'].includes(broadLetter) ? broadLetter : 'M';
-    };
-
-    const subSlotOf = (primary: string | null): string => {
-      const p = (primary || '').toUpperCase();
-      if (['DR', 'RB', 'RWB'].includes(p)) return 'R';
-      if (['DL', 'LB', 'LWB'].includes(p)) return 'L';
-      if (['DC', 'CB', 'SW', 'DM', 'MC', 'CM', 'AM', 'CAM', 'CDM'].includes(p)) return 'C';
-      if (['MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'W';
-      return 'ANY'; // unknown → eligible for any sub-slot in its group
-    };
-
-    const teamRosters = new Map<number, Map<string, any[]>>();
-
-    for (const [playerId, stats] of statsMap) {
-      const player = playerMap.get(playerId);
-      if (!player) continue;
-
-      // ── Availability (unchanged from v1) ───────────────────────────────
-      if (player.current_injury) continue;
-      const injury = injuryMap.get(playerId);
-      if (injury) {
-        if (injury.injury_status === 'out' || injury.injury_status === 'doubtful') continue;
-        if (injury.expected_return_days && injury.expected_return_days > 0) continue;
-      }
-      const latestTeam = latestTeamMap.get(playerId);
-      if (latestTeam && latestTeam !== player.team_id) continue;
-      if (latestTeam && latestTeam !== stats.team_id) continue;
-
-      const group = groupOf(player.primary_position ?? null, player.position || 'M');
-
-      if (!teamRosters.has(stats.team_id)) teamRosters.set(stats.team_id, new Map());
-      const posMap = teamRosters.get(stats.team_id)!;
-      if (!posMap.has(group)) posMap.set(group, []);
-
-      let avgRating = 0;
-      if (stats.count_rating > 0 && stats.total_rating > 0) {
-        avgRating = stats.total_rating / stats.count_rating;
-      }
-
-      posMap.get(group)!.push({
-        playerId,
-        teamId: stats.team_id,
-        matchesStarted: stats.matches_started || 0,
-        appearances: stats.appearances || 0,
-        minutesPlayed: stats.minutes_played || 0,
-        avgRating,
-        totalRating: stats.total_rating || 0,
-        countRating: stats.count_rating || 0,
-        goals: stats.goals || 0,
-        assists: stats.assists || 0,
-        position: group,
-        subSlot: subSlotOf(player.primary_position ?? null),
-        injuryStatus: injury?.injury_status || null,
-        weightedScore: 0, // filled once team maxima are known (next pass)
-      });
-    }
-
-    // Second pass: per-team normalization → weighted score
-    for (const posMap of teamRosters.values()) {
-      const all: any[] = ([] as any[]).concat(...[...posMap.values()]);
-      const maxStarts = Math.max(1, ...all.map((c: any) => c.matchesStarted));
-      const maxApps   = Math.max(1, ...all.map((c: any) => c.appearances));
-      for (const c of all) {
-        const startsNorm  = c.matchesStarted / maxStarts;
-        const appsNorm    = c.appearances / maxApps;
-        const ratingNorm  = Math.min(1, c.avgRating / 10);        // SofaScore scale 0-10
-        const contribNorm = Math.min(1, (c.goals + c.assists) / 10);
-        c.weightedScore =
-          50 * startsNorm + 20 * appsNorm + 20 * ratingNorm + 10 * contribNorm;
-      }
-    }
-
-    // ── 7. Select starting XI for each match (sub-slot aware) ─────────────
-    const rows: any[] = [];
-
-    for (const match of matches) {
-      for (const teamId of [match.home_team_id, match.away_team_id]) {
-        const posMap = teamRosters.get(teamId);
-        if (!posMap) {
-          logger.warn({ teamId, matchId: match.id }, 'No players found for team');
-          continue;
-        }
-
-        for (const [pos, count] of Object.entries(FORMATION)) {
-          const pool = (posMap.get(pos) || [])
-            .filter((c: any) => c.matchesStarted > 0 || c.appearances > 0)
-            .sort((a: any, b: any) =>
-              b.weightedScore !== a.weightedScore
-                ? b.weightedScore - a.weightedScore
-                : b.minutesPlayed - a.minutesPlayed
-            );
-
-          // Sub-slot pass: each quota takes the best-scored matching
-          // specialist (ANY-slot players are wildcards); any shortfall is
-          // filled from the remaining pool by score — which reduces to the
-          // old behaviour exactly when no primary_position data exists.
-          const picked: any[] = [];
-          const taken = new Set<number>();
-          for (const [slot, quota] of Object.entries(SUB_SLOTS[pos])) {
-            let filled = 0;
-            for (const c of pool) {
-              if (filled >= quota) break;
-              if (taken.has(c.playerId)) continue;
-              if (slot !== 'ANY' && c.subSlot !== slot && c.subSlot !== 'ANY') continue;
-              picked.push(c); taken.add(c.playerId); filled++;
-            }
-          }
-          for (const c of pool) {
-            if (picked.length >= count) break;
-            if (!taken.has(c.playerId)) { picked.push(c); taken.add(c.playerId); }
-          }
-
-          const top = picked
-            .slice(0, count)
-            .sort((a: any, b: any) => b.weightedScore - a.weightedScore);
-          const bench = pool.filter((c: any) => !taken.has(c.playerId));
-
-          top.forEach((c: any, index: number) => {
-            const next = top[index + 1] ?? bench[0];
-
-            // ── Confidence (framework unchanged from v1) ─────────────────
-            // 1. Starts gap vs next player (50% weight)
-            // 2. Rating gap vs next player (20% weight)
-            // 3. Appearance count (20% weight)
-            // 4. Position-specific bonus (10% weight)
-            const startsGap = next ? c.matchesStarted - next.matchesStarted : c.matchesStarted || 1;
-            const ratingGap = next ? c.avgRating - next.avgRating : 0;
-            const appearanceFactor = Math.min(1, c.appearances / 20);
-
-            let confidence = 50;
-            confidence += Math.min(40, startsGap * 4); // Starts gap: max +40
-            confidence += Math.min(15, ratingGap * 3); // Rating gap: max +15
-            confidence += appearanceFactor * 15;       // Experience: max +15
-            confidence += c.matchesStarted > 10 ? 10 : 0; // Established starter: +10
-
-            if (pos === 'G' && c.matchesStarted > 5) {
-              confidence += 5;  // Keepers more stable
-            } else if (pos === 'F' && index > 0) {
-              confidence -= 5;  // 2nd forward less certain
-            }
-
-            confidence = Math.min(100, Math.max(0, Math.round(confidence)));
-
-            rows.push({
-              match_id: match.id,
-              team_id: teamId,
-              player_id: c.playerId,
-              position_code: pos,
-              rank_in_position: index + 1,
-              matches_started: c.matchesStarted,
-              confidence: confidence / 100, // Store as 0-1 for consistency
-              calculated_at: new Date().toISOString(),
-            });
-          });
-
-          // ── Log if position has fewer players than needed ──────────────
-          if (top.length < count) {
-            logger.warn({
-              teamId,
-              position: pos,
-              needed: count,
-              available: top.length,
-              matchId: match.id,
-            }, 'Not enough players for position — formation may be incomplete');
-          }
-        }
-      }
-    }
-
-    // ── 8. Batch upsert ────────────────────────────────────────────────────
-    if (rows.length === 0) {
-      logger.warn('No lineups generated — check player data and injury status');
-      return { matchesProcessed: 0, playersWritten: 0 };
-    }
-
-    // Delete existing lineups for these matches (clean slate)
-    const matchIds = [...new Set(rows.map((r: any) => r.match_id))];
-    const { error: delErr } = await db
-      .from('match_predicted_lineups')
-      .delete()
-      .in('match_id', matchIds);
-
-    if (delErr) {
-      logger.warn({ error: delErr.message }, 'Failed to delete existing lineups — continuing with upsert');
-    }
-
-    // Upsert in chunks
-    const chunkSize = 500;
-    let written = 0;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize);
-      const { error } = await db
-        .from('match_predicted_lineups')
-        .upsert(chunk, { onConflict: 'match_id,player_id' });
-      if (error) {
-        logger.error({ error: error.message, chunk: i }, 'Failed to upsert lineups');
-        throw error;
-      }
-      written += chunk.length;
-    }
-
-    // ── 9. Log summary ─────────────────────────────────────────────────────
-    const matchesProcessed = new Set(rows.map((r: any) => r.match_id)).size;
-    const teamsProcessed = new Set(rows.map((r: any) => r.team_id)).size;
-
-    logger.info({
-      matchesProcessed,
-      teamsProcessed,
-      playersWritten: written,
-      totalLineups: rows.length,
-      avgPerMatch: Math.round(rows.length / matchesProcessed),
-    }, 'processPredictedLineups completed');
-
-    return { matchesProcessed, playersWritten: written };
-
-  } catch (error: any) {
-    logger.error({ error: error.message, stack: error.stack }, 'processPredictedLineups failed');
-    return { matchesProcessed: 0, playersWritten: 0, error: error.message };
-  }
-}
+// ─── PREDICTED LINEUPS — moved out of this file ─────────────────────────────
+//
+// The v1 predicted-lineup writer lived here as a single ~400-line function.
+// It has been replaced by the engine in src/lib/lineups + the orchestration
+// job in src/jobs/processPredictedLineups.ts. Re-exported from here so every
+// existing import site (cli.ts and friends) keeps working unchanged.
+export { processPredictedLineups } from './processPredictedLineups';
+export type { PredictedLineupOptions, PredictedLineupResult } from './processPredictedLineups';
 
 // ─── STARTING XI STRENGTH — Projected XI vs Best-Available XI ───────────────
 /**
@@ -3505,45 +3082,58 @@ export async function processPredictedLineups(): Promise<{
  * design brief): shown as an independent overlay on match_intelligence,
  * home_xi_strength / away_xi_strength, alongside readiness_gap.
  *
+ * SHARED FORMATION LOGIC (v2)
+ * The projected XI and the best-available XI are now built from the SAME
+ * formation — the one processPredictedLineups() actually chose for that team
+ * in that fixture, read back from the stored rows — and the same slot
+ * definitions, compatibility matrix and optimizer out of src/lib/lineups.
+ * Previously both sides were forced through a hardcoded 1-4-4-2 with its own
+ * private copy of the position classifier, so the two engines could (and did)
+ * disagree about what a lineup even was. There is now exactly one definition
+ * of a formation slot in this codebase.
+ *
  * Method:
  *   1. player_strength_score per player (this function, written to
  *      player_intelligence): 40% avg rating + 30% appearances (normalized
  *      to team max) + 15% goal contribution + 15% position-importance
- *      multiplier (reuses the GK/CB/CM/AM/ST weights below, min-max
- *      normalized to 0-100 — documented simplification: the same
- *      multiplier set does double duty as both the "importance" input
- *      here and the absence-penalty in step 3, since both express the
- *      same underlying idea and inventing a second unvalidated number
- *      for one of them would be worse, not better).
- *   2. Best-XI score: for each team, the highest-scoring AVAILABLE
- *      (non-injured) player per sub-slot, using the exact sub-slot
- *      machinery already built for processPredictedLineups (1-4-4-2,
- *      D: R/C/C/L, M: W/W/C/C) — kept identical on purpose so the ratio
- *      compares like-for-like formations rather than two different shapes.
- *   3. Projected-XI score: the stored match_predicted_lineups XI for this
- *      match, position-weighted the same way.
- *   4. xi_strength = (projected / best) × 100, clamped 0-100. NULL when
- *      no predicted lineup exists for that match yet (graceful — matches
- *      processPredictedLineups' own 7-day horizon).
+ *      multiplier (the same multiplier set does double duty as the
+ *      absence-penalty weight below, since both express the same underlying
+ *      idea and inventing a second unvalidated number for one of them would
+ *      be worse, not better).
+ *   2. Best-XI score: the optimizer's maximum-weight assignment of AVAILABLE
+ *      players to that fixture's chosen formation.
+ *   3. Projected-XI score: the stored match_predicted_lineups XI, weighted by
+ *      the suitability the engine recorded for each assignment.
+ *   4. xi_strength = (projected / best) × 100, clamped 0-100. NULL when no
+ *      predicted lineup exists for that match yet (graceful — matches
+ *      processPredictedLineups' own horizon).
  */
 
-// Position-importance / absence-penalty multipliers — per the design
-// brief's own numbers. Positions not explicitly given a multiplier there
-// (fullback/winger slots) default to 1.0, flagged as a filled gap, not a
-// verified figure — revisit once there's a reason to differentiate them.
-function xiMultiplier(group: string, subSlot: string): number {
-  if (group === 'G') return 1.25;
-  if (group === 'D' && subSlot === 'C') return 1.10;
-  if (group === 'M' && subSlot === 'C') return 1.15; // CM
-  if (group === 'M' && subSlot === 'W') return 1.20; // treated as AM/wide creative per brief's AM=1.20
-  if (group === 'F') return 1.25; // ST
-  return 1.00; // fullbacks and unlisted slots — documented default, not a verified weight
+// Position-importance / absence-penalty multipliers, keyed by canonical
+// position. The values come from the design brief, which specifies GK 1.25,
+// CB 1.10, CM 1.15, AM 1.20 and ST 1.25; positions the brief does not name
+// keep the 1.00 default it implies. The wide-midfield/winger group inherits
+// AM's 1.20 on the brief's own "wide creative" reasoning, and DM inherits CM's
+// 1.15 — both carried over unchanged from the v1 sub-slot table so xi_strength
+// values stay comparable across the rewrite. Flagged as filled gaps, not
+// independently verified figures.
+const XI_POSITION_MULTIPLIERS: Record<CanonicalPosition, number> = {
+  GK: 1.25,
+  CB: 1.10,
+  RB: 1.00, LB: 1.00, RWB: 1.00, LWB: 1.00,
+  DM: 1.15, CM: 1.15, AM: 1.15,
+  RM: 1.20, LM: 1.20, RW: 1.20, LW: 1.20,
+  ST: 1.25,
+};
+
+function xiMultiplier(position: CanonicalPosition | null): number {
+  return position ? XI_POSITION_MULTIPLIERS[position] : 1.00;
 }
-// Normalized 0-100 version of the same multipliers for the player_strength
-// "position importance" component (min 1.00 -> 0, max 1.25 -> 100).
-function xiImportanceScore(group: string, subSlot: string): number {
-  const m = xiMultiplier(group, subSlot);
-  return Math.round(((m - 1.00) / 0.25) * 100);
+
+/** Normalized 0-100 version of the same multipliers for the player_strength
+ *  "position importance" component (min 1.00 -> 0, max 1.25 -> 100). */
+function xiImportanceScore(position: CanonicalPosition | null): number {
+  return Math.round(((xiMultiplier(position) - 1.00) / 0.25) * 100);
 }
 
 export async function processStartingXIStrength(): Promise<{
@@ -3586,67 +3176,71 @@ export async function processStartingXIStrength(): Promise<{
       statsMap.set(s.player_id, s);
     }
 
-    // ── 3. Players (position, availability) ────────────────────────────
+    // ── 3. Players (positions, availability) ───────────────────────────────
     const players = await fetchAllRows(
       db.from('players')
-        .select('id, team_id, position, primary_position, current_injury')
+        .select('id, team_id, position, primary_position, secondary_position, tertiary_position, current_injury')
         .in('team_id', teamIds)
     );
     const playerMap = new Map<number, any>(players.map((p: any) => [p.id, p]));
 
-    // ── 4. Reuse the exact position-group / sub-slot classifier from
-    //    processPredictedLineups so Best-XI and Projected-XI compare the
-    //    same formation shape.
-    const FORMATION: Record<string, number> = { G: 1, D: 4, M: 4, F: 2 };
-    const SUB_SLOTS: Record<string, Record<string, number>> = {
-      G: { ANY: 1 }, D: { R: 1, C: 2, L: 1 }, M: { W: 2, C: 2 }, F: { ANY: 2 },
-    };
-    const groupOf = (primary: string | null, broadLetter: string): string => {
-      const p = (primary || '').toUpperCase();
-      if (p === 'GK' || p === 'G') return 'G';
-      if (['DR', 'RB', 'RWB', 'DL', 'LB', 'LWB', 'DC', 'CB', 'SW'].includes(p)) return 'D';
-      if (['DM', 'MC', 'CM', 'AM', 'CAM', 'CDM', 'MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'M';
-      if (['ST', 'CF', 'FW'].includes(p)) return 'F';
-      return ['G', 'D', 'M', 'F'].includes(broadLetter) ? broadLetter : 'M';
-    };
-    const subSlotOf = (primary: string | null): string => {
-      const p = (primary || '').toUpperCase();
-      if (['DR', 'RB', 'RWB'].includes(p)) return 'R';
-      if (['DL', 'LB', 'LWB'].includes(p)) return 'L';
-      if (['DC', 'CB', 'SW', 'DM', 'MC', 'CM', 'AM', 'CAM', 'CDM'].includes(p)) return 'C';
-      if (['MR', 'ML', 'RM', 'LM', 'RW', 'LW'].includes(p)) return 'W';
-      return 'ANY';
-    };
+    // ── 4. player_strength_score per player, per team ──────────────────────
+    //    Position handling comes from the shared engine — normalizePosition()
+    //    folds SofaScore's DR/DC/MC notation into the same canonical
+    //    vocabulary the lineup optimizer uses.
+    interface StrengthEntry {
+      playerId: number;
+      teamId: number;
+      positions: (CanonicalPosition | null)[];
+      broadPosition: string | null;
+      naturalPosition: CanonicalPosition | null;
+      available: boolean;
+      appearances: number;
+      avgRating: number;
+      goals: number;
+      assists: number;
+      playerStrengthScore: number;
+    }
 
-    // ── 5. player_strength_score per player, per team (only for teams in
-    //    scope this run — cheap, and keeps player_intelligence current for
-    //    every player who could plausibly appear this week).
-    const rosterByTeam = new Map<number, any[]>();
+    const rosterByTeam = new Map<number, StrengthEntry[]>();
     for (const [playerId, stat] of statsMap) {
       const player = playerMap.get(playerId);
       if (!player) continue;
-      const group = groupOf(player.primary_position ?? null, player.position || 'M');
-      const subSlot = subSlotOf(player.primary_position ?? null);
+
+      const positions = [
+        normalizePosition(player.primary_position),
+        normalizePosition(player.secondary_position),
+        normalizePosition(player.tertiary_position),
+      ];
+      const naturalPosition = positions.find((p) => p != null) ?? null;
 
       const avgRating = (stat.count_rating > 0 && stat.total_rating > 0)
         ? stat.total_rating / stat.count_rating : 0;
+
       if (!rosterByTeam.has(stat.team_id)) rosterByTeam.set(stat.team_id, []);
       rosterByTeam.get(stat.team_id)!.push({
-        playerId, teamId: stat.team_id, group, subSlot,
-        avgRating, appearances: stat.appearances || 0,
-        goals: stat.goals || 0, assists: stat.assists || 0,
+        playerId,
+        teamId: stat.team_id,
+        positions,
+        broadPosition: player.position ?? null,
+        naturalPosition,
         available: !player.current_injury,
+        appearances: stat.appearances || 0,
+        avgRating,
+        goals: stat.goals || 0,
+        assists: stat.assists || 0,
+        playerStrengthScore: 0,
       });
     }
 
     const playerStrengthRows: any[] = [];
     for (const roster of rosterByTeam.values()) {
-      const maxApps = Math.max(1, ...roster.map((r: any) => r.appearances));
+      const maxApps = Math.max(1, ...roster.map((r) => r.appearances));
       for (const r of roster) {
         const ratingNorm = Math.min(100, Math.max(0, ((r.avgRating - 5.0) / 3.5) * 100));
         const appsNorm = (r.appearances / maxApps) * 100;
         const contribNorm = Math.min(100, (r.goals + r.assists) * 10); // 10+ G/A -> saturates at 100
-        const importance = xiImportanceScore(r.group, r.subSlot);
+        const importance = xiImportanceScore(r.naturalPosition);
         r.playerStrengthScore = Math.round(
           ratingNorm * 0.40 + appsNorm * 0.30 + contribNorm * 0.15 + importance * 0.15
         );
@@ -3663,43 +3257,13 @@ export async function processStartingXIStrength(): Promise<{
       if (error) logger.warn({ error: error.message }, 'player_strength_score upsert chunk failed — continuing');
     }
 
-    // ── 6. Best-XI score per team: highest playerStrengthScore per
-    //    sub-slot, AVAILABLE players only.
-    const bestXIByTeam = new Map<number, number>();
-    for (const [teamId, roster] of rosterByTeam) {
-      const available = roster.filter((r: any) => r.available);
-      let total = 0;
-      for (const [group, quota] of Object.entries(FORMATION)) {
-        const pool = available.filter((r: any) => r.group === group)
-          .sort((a: any, b: any) => b.playerStrengthScore - a.playerStrengthScore);
-        const picked: any[] = [];
-        const taken = new Set<number>();
-        for (const [slot, n] of Object.entries(SUB_SLOTS[group])) {
-          let filled = 0;
-          for (const c of pool) {
-            if (filled >= n) break;
-            if (taken.has(c.playerId)) continue;
-            if (slot !== 'ANY' && c.subSlot !== slot && c.subSlot !== 'ANY') continue;
-            picked.push(c); taken.add(c.playerId); filled++;
-          }
-        }
-        for (const c of pool) {
-          if (picked.length >= quota) break;
-          if (!taken.has(c.playerId)) { picked.push(c); taken.add(c.playerId); }
-        }
-        for (const c of picked.slice(0, quota)) {
-          total += c.playerStrengthScore * xiMultiplier(c.group, c.subSlot);
-        }
-      }
-      bestXIByTeam.set(teamId, total);
-    }
-
-    // ── 7. Projected-XI score per team per match, from the STORED
-    //    match_predicted_lineups (already computed by processPredictedLineups
-    //    — this function runs after it in the pipeline, see cli.ts L5.7).
+    // ── 5. Stored predicted XI per (match, team) ───────────────────────────
+    //    suitability and tactical_position come straight off the rows written
+    //    by processPredictedLineups, so the projected side never re-derives
+    //    anything the engine already decided.
     const predictedLineups = await fetchAllRows(
       db.from('match_predicted_lineups')
-        .select('match_id, team_id, player_id, position_code')
+        .select('match_id, team_id, player_id, position_code, tactical_position, formation, suitability')
         .in('match_id', matches.map((m: any) => m.id))
     );
     const strengthByPlayer = new Map<number, number>(
@@ -3712,25 +3276,68 @@ export async function processStartingXIStrength(): Promise<{
       lineupsByMatchTeam.get(key)!.push(pl);
     }
 
-    // ── 8. xi_strength = projected / best × 100, write to match_intelligence
+    /** Best-available XI under a given formation, via the shared optimizer.
+     *  Cached per (team, formation) — a team playing twice in the window with
+     *  the same predicted shape solves the assignment once. */
+    const bestXICache = new Map<string, number>();
+    const bestXIScore = (teamId: number, formation: Formation): number => {
+      const cacheKey = `${teamId}:${formation.name}`;
+      const cached = bestXICache.get(cacheKey);
+      if (cached !== undefined) return cached;
+
+      const available = (rosterByTeam.get(teamId) ?? []).filter((r) => r.available);
+      let total = 0;
+
+      if (available.length >= formation.slots.length) {
+        const matrix = formation.slots.map((slot) =>
+          available.map((r) => {
+            const s = positionSuitability(slot.base, r.positions, groupFromBroadLetter(r.broadPosition));
+            if (s <= 0) return FORBIDDEN;
+            return r.playerStrengthScore * s * s * xiMultiplier(slot.base);
+          })
+        );
+        const assignment = maximumWeightAssignment(matrix);
+        for (let i = 0; i < assignment.length; i++) {
+          const col = assignment[i];
+          if (col < 0) continue;
+          const cell = matrix[i][col];
+          if (Number.isFinite(cell)) total += cell;
+        }
+      }
+
+      bestXICache.set(cacheKey, total);
+      return total;
+    };
+
+    // ── 6. xi_strength = projected / best × 100, write to match_intelligence
     let rowsWritten = 0;
     for (const match of matches) {
       const updates: any = {};
       for (const [side, teamId] of [['home', match.home_team_id], ['away', match.away_team_id]] as const) {
         const lineup = lineupsByMatchTeam.get(`${match.id}:${teamId}`);
-        const bestXI = bestXIByTeam.get(teamId);
-        if (!lineup || lineup.length === 0 || !bestXI || bestXI === 0) continue;
+        if (!lineup || lineup.length === 0) continue;
+
+        // Compare against the same shape the engine predicted. Rows written
+        // before migration 025 carry no formation, so fall back to the
+        // reference formation rather than skipping the match outright.
+        const formation =
+          getFormation(lineup[0].formation ?? '') ?? REFERENCE_FORMATION;
+
+        const best = bestXIScore(teamId, formation);
+        if (!best) continue;
 
         let projected = 0;
         for (const pl of lineup) {
           const score = strengthByPlayer.get(pl.player_id) ?? 0;
-          const player = playerMap.get(pl.player_id);
-          const group = groupOf(player?.primary_position ?? null, player?.position || pl.position_code);
-          const subSlot = subSlotOf(player?.primary_position ?? null);
-          projected += score * xiMultiplier(group, subSlot);
+          const slotCode = pl.tactical_position ?? pl.position_code ?? '';
+          const base = SLOT_BASE_BY_CODE.get(slotCode) ?? null;
+          // Pre-025 rows have no stored suitability; treat them as natural
+          // fits, which is what the v1 engine implicitly assumed.
+          const suitability = pl.suitability != null ? Number(pl.suitability) : 1;
+          projected += score * suitability * suitability * xiMultiplier(base);
         }
-        const xiStrength = Math.round(Math.min(100, Math.max(0, (projected / bestXI) * 100)));
-        updates[`${side}_xi_strength`] = xiStrength;
+
+        updates[`${side}_xi_strength`] = Math.round(Math.min(100, Math.max(0, (projected / best) * 100)));
       }
       if (Object.keys(updates).length === 0) continue;
 

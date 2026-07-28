@@ -939,28 +939,51 @@ export async function getMatchWithLineups(id: number): Promise<MatchWithLineups 
   // ── Get lineups with position data ──────────────────────────────────────
   const { data: lineups } = await supabase
     .from('match_predicted_lineups')
+    // Everything the pitch view needs is precomputed by the backend lineup
+    // engine (migration 025): the formation, the tactical slot, the player's
+    // natural position, pitch coordinates, render order and the raw score /
+    // suitability behind the pick. The frontend renders these — it does not
+    // infer formations or positions.
     .select(`
-      team_id, 
-      player_id, 
-      position_code, 
+      team_id,
+      player_id,
+      position_code,
+      position_group,
+      tactical_position,
+      natural_position,
+      formation,
+      lineup_order,
+      role,
+      x,
+      y,
+      weighted_score,
+      suitability,
+      is_captain,
+      is_vice_captain,
       rank_in_position,
-      matches_started, 
+      matches_started,
+      minutes_played,
       confidence,
       calculated_at,
       players:player_id (
-        id, 
-        name, 
+        id,
+        name,
         short_name,
-        position, 
+        position,
         position_detailed,
         primary_position,
         secondary_position,
         tertiary_position,
-        jersey_number, 
+        jersey_number,
         current_injury
       )
     `)
     .eq('match_id', id)
+    // lineup_order is the render order (1=GK, 2=RB, ...); rank_in_position is
+    // a depth-chart rank within a position family and is NOT an ordering for
+    // the XI as a whole. Legacy rows have a null lineup_order, so it is kept
+    // as the secondary sort.
+    .order('lineup_order', { ascending: true, nullsFirst: false })
     .order('rank_in_position', { ascending: true });
 
   // ── Build the result with all properties ────────────────────────────────

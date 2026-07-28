@@ -19,6 +19,7 @@
 
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
+import { zoneOfPositionCode } from '../lib/lineups';
 
 const READINESS_FORMULA_VERSION = 'v1';
 
@@ -47,22 +48,27 @@ function derivePick(homeReadiness: number, awayReadiness: number): { pick: Pick;
 }
 
 /** Average per-player predicted-lineup confidence within each position area,
- *  → department confidence. match_predicted_lineups stores a coarse
- *  position_code (G/D/M/F) + a per-player confidence; department confidence
- *  is the mean confidence of that team's predicted-XI players in each area,
- *  across BOTH teams (a single per-match figure per department). Returns null
- *  for a department with no players (e.g. no predicted lineup that night) —
- *  never 0, which would be a fabricated signal. */
+ *  → department confidence: the mean confidence of that team's predicted-XI
+ *  players in each area, across BOTH teams (a single per-match figure per
+ *  department). Returns null for a department with no players (e.g. no
+ *  predicted lineup that night) — never 0, which would be a fabricated signal.
+ *
+ *  Zone comes from match_predicted_lineups.position_group. Before migration
+ *  025 the broad letter lived in position_code, and this function read it with
+ *  a prefix match — which now MUST NOT be used, because position_code carries
+ *  the tactical slot: 'RB' starts with 'R' and 'LCB' with 'L', so every
+ *  full-back and half the centre-backs would silently drop out of the defence
+ *  bucket. zoneOfPositionCode() handles the legacy rows. */
 function deriveDepartmentConfidence(
-  rows: Array<{ position_code: string | null; confidence: number | null }>,
+  rows: Array<{ position_code: string | null; position_group?: string | null; confidence: number | null }>,
 ): { defense: number | null; midfield: number | null; attack: number | null } {
   const buckets: Record<'defense' | 'midfield' | 'attack', number[]> = { defense: [], midfield: [], attack: [] };
   for (const r of rows) {
     if (r.confidence == null) continue;
-    const code = (r.position_code ?? '').toUpperCase();
-    if (code.startsWith('G') || code.startsWith('D')) buckets.defense.push(r.confidence);
-    else if (code.startsWith('M')) buckets.midfield.push(r.confidence);
-    else if (code.startsWith('F')) buckets.attack.push(r.confidence);
+    const zone = r.position_group ?? zoneOfPositionCode(r.position_code);
+    if (zone === 'G' || zone === 'D') buckets.defense.push(r.confidence);
+    else if (zone === 'M') buckets.midfield.push(r.confidence);
+    else if (zone === 'F') buckets.attack.push(r.confidence);
   }
   const avg = (a: number[]) => (a.length === 0 ? null : Math.round((a.reduce((s, x) => s + x, 0) / a.length) * 10) / 10);
   return { defense: avg(buckets.defense), midfield: avg(buckets.midfield), attack: avg(buckets.attack) };
@@ -109,15 +115,15 @@ export async function archiveReadinessSnapshot(): Promise<{ candidates: number; 
     return !alreadySnapshotted.has(m.id) && mi?.home_readiness != null && mi?.away_readiness != null;
   });
 
-  const lineupByMatch = new Map<number, Array<{ position_code: string | null; confidence: number | null }>>();
+  const lineupByMatch = new Map<number, Array<{ position_code: string | null; position_group: string | null; confidence: number | null }>>();
   if (toWrite.length > 0) {
     const { data: lineups } = await db
       .from('match_predicted_lineups')
-      .select('match_id, position_code, confidence')
+      .select('match_id, position_code, position_group, confidence')
       .in('match_id', toWrite.map((m: any) => m.id));
     for (const l of lineups ?? []) {
       if (!lineupByMatch.has(l.match_id)) lineupByMatch.set(l.match_id, []);
-      lineupByMatch.get(l.match_id)!.push({ position_code: l.position_code, confidence: l.confidence });
+      lineupByMatch.get(l.match_id)!.push({ position_code: l.position_code, position_group: l.position_group, confidence: l.confidence });
     }
   }
 
@@ -214,15 +220,15 @@ export async function archiveReadinessSnapshotForDate(dateStr: string): Promise<
   });
 
   // Department confidence from predicted lineups
-  const lineupByMatch = new Map<number, Array<{ position_code: string | null; confidence: number | null }>>();
+  const lineupByMatch = new Map<number, Array<{ position_code: string | null; position_group: string | null; confidence: number | null }>>();
   if (toWrite.length > 0) {
     const { data: lineups } = await db
       .from('match_predicted_lineups')
-      .select('match_id, position_code, confidence')
+      .select('match_id, position_code, position_group, confidence')
       .in('match_id', toWrite.map((m: any) => m.id));
     for (const l of lineups ?? []) {
       if (!lineupByMatch.has(l.match_id)) lineupByMatch.set(l.match_id, []);
-      lineupByMatch.get(l.match_id)!.push({ position_code: l.position_code, confidence: l.confidence });
+      lineupByMatch.get(l.match_id)!.push({ position_code: l.position_code, position_group: l.position_group, confidence: l.confidence });
     }
   }
 

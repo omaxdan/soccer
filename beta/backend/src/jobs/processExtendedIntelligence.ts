@@ -51,6 +51,30 @@
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { fetchAllRows } from '../db/fetchAllRows';
+import { normalizePosition, zoneOfPositionCode } from '../lib/lineups';
+
+// ─── POSITION CODES FROM match_predicted_lineups (migration 025) ────────────
+//
+// position_code used to be a broad G/D/M/F letter. It now carries the TACTICAL
+// slot the lineup engine assigned ('RCB', 'RCM', 'LW', ...), with the broad
+// letter moved to position_group. Every read of a lineup row's position in
+// this file goes through these two helpers so the change is expressed once.
+//
+// Note this makes several checks below work for the first time: code such as
+// `uniquePositions.has('DM')` could never match a G/D/M/F letter, so those
+// branches were silently dead under v1.
+
+/** Canonical position of a predicted-lineup row ('RCB' -> 'CB'). */
+function lineupPosition(row: any): string {
+  return normalizePosition(row?.tactical_position ?? row?.position_code) ?? 'CM';
+}
+
+/** Broad zone of a predicted-lineup row, preferring the stored column. */
+function lineupZone(row: any): 'G' | 'D' | 'M' | 'F' {
+  const stored = row?.position_group;
+  if (stored === 'G' || stored === 'D' || stored === 'M' || stored === 'F') return stored;
+  return zoneOfPositionCode(row?.tactical_position ?? row?.position_code) ?? 'M';
+}
 
 const WEEK_MS = 7 * 86400000;
 function upcomingWindow() {
@@ -1106,7 +1130,7 @@ export async function processPlayerMatchImpact(opts?: {
     // ─── 3. Fetch lineups ─────────────────────────────────────────────────────
     const lineups = await fetchAllRows(
       db.from('match_predicted_lineups')
-        .select('match_id, team_id, player_id, position_code, rank_in_position, confidence, players:player_id(id, name, position, primary_position, secondary_position, tertiary_position, market_value, current_injury)')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position, confidence, players:player_id(id, name, position, primary_position, secondary_position, tertiary_position, market_value, current_injury)')
         .in('match_id', matchIds)
         .order('team_id', { ascending: true })
         .order('rank_in_position', { ascending: true }),
@@ -1205,12 +1229,12 @@ export async function processPlayerMatchImpact(opts?: {
           const assistsPerApp = (stats?.assists || 0) / appearances;
           const assistThreat = Math.min(100, Math.round(assistsPerApp * 50 + (intel.assist_share_pct || 0) * 0.5));
 
-          const isDefender = ['G', 'D', 'GK', 'DC', 'DR', 'DL'].includes(lineup.position_code || '');
+          const isDefender = ['G', 'D'].includes(lineupZone(lineup));
           const defensiveContribution = isDefender
             ? Math.min(100, Math.round(formRating * 0.6 + fatigueAdjusted * 0.4))
             : Math.min(100, Math.round(formRating * 0.3 + fatigueAdjusted * 0.2 + 30));
 
-          const isCreative = ['M', 'AM', 'CM', 'LM', 'RM', 'LW', 'RW'].includes(lineup.position_code || '');
+          const isCreative = ['M', 'AM', 'CM', 'LM', 'RM', 'LW', 'RW'].includes(lineupPosition(lineup));
           const creativityScore = isCreative
             ? Math.min(100, Math.round(formRating * 0.5 + assistThreat * 0.5))
             : Math.min(100, Math.round(formRating * 0.3 + 20));
@@ -1259,7 +1283,7 @@ export async function processPlayerMatchImpact(opts?: {
             matchup_advantage: Math.round(matchupAdvantage),
             matchup_disadvantage: Math.round(-matchupAdvantage),
             impact_band: impactBand,
-            expected_contribution: expectedContribution(impactBand, lineup.position_code),
+            expected_contribution: expectedContribution(impactBand, lineupPosition(lineup)),
             calculated_at: new Date().toISOString(),
           });
         }
@@ -1681,7 +1705,7 @@ export async function processTeamVersatility(): Promise<{
       db
         .from('match_predicted_lineups')
         .select(
-          'match_id, team_id, player_id, position_code, players:player_id(id, primary_position, secondary_position, tertiary_position)'
+          'match_id, team_id, player_id, position_code, position_group, tactical_position, formation, players:player_id(id, primary_position, secondary_position, tertiary_position)'
         )
         .in('match_id', matchIds)
     );
@@ -1737,7 +1761,7 @@ export async function processTeamVersatility(): Promise<{
         if (positions.length >= 2) versatileCount++;
         if (zones.size >= 2) multiZoneCount++;
 
-        const pos = lineup.position_code || 'M';
+        const pos = lineupPosition(lineup);
         positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
       }
 
@@ -1889,7 +1913,7 @@ export async function processFormationMatchup(): Promise<{
       db
         .from('match_predicted_lineups')
         .select(
-          'match_id, team_id, player_id, position_code, confidence, players:player_id(id, name)'
+          'match_id, team_id, player_id, position_code, position_group, tactical_position, formation, confidence, players:player_id(id, name)'
         )
         .in('match_id', matchIds)
         .order('rank_in_position', { ascending: true })
@@ -2099,11 +2123,21 @@ function detectFormation(positionCounts: Map<string, number>): string {
   return `${defs}-${mids}-${atts}?`;
 }
 
-// F2: Formation detection from raw lineup (used by matchup processor)
+// F2: Formation from a stored predicted lineup.
+//
+// Since migration 025 the lineup engine WRITES the formation it selected, so
+// there is nothing to detect — reading the stored value is both correct and
+// free. detectFormation() below stays as the fallback for rows written before
+// 025 (and for any caller holding position counts rather than lineup rows),
+// but it is no longer a second, competing definition of what shape a team is
+// playing.
 function detectFormationFromLineup(lineup: any[]): string {
+  const stored = lineup.find((l) => l?.formation)?.formation;
+  if (stored) return stored;
+
   const positionCounts = new Map<string, number>();
   for (const l of lineup) {
-    const pos = l.position_code || 'M';
+    const pos = lineupPosition(l);
     positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
   }
   return detectFormation(positionCounts);
@@ -2189,12 +2223,9 @@ function mapToZonesWithStrength(
   strengthMap: Map<number, number>
 ): any[] {
   return lineup.map((l) => {
-    const pos = l.position_code || 'M';
-    let zone = 'MID';
-    if (pos === 'GK' || pos === 'G') zone = 'GK';
-    else if (['LB', 'CB', 'RB', 'LWB', 'RWB', 'D', 'SW'].includes(pos))
-      zone = 'DEF';
-    else if (['LW', 'RW', 'ST', 'CF', 'F'].includes(pos)) zone = 'ATT';
+    const pos = lineupPosition(l);
+    const group = lineupZone(l);
+    const zone = group === 'G' ? 'GK' : group === 'D' ? 'DEF' : group === 'F' ? 'ATT' : 'MID';
 
     // F5: Use actual player strength, default to 50 if unknown
     const quality = strengthMap.get(l.player_id) ?? 50;
@@ -2292,7 +2323,7 @@ export async function processPositionAdaptability(): Promise<{ matchesProcessed:
 
     const lineups = await fetchAllRows(
       db.from('match_predicted_lineups')
-        .select('match_id, team_id, player_id, position_code, players:player_id(id, primary_position, secondary_position, tertiary_position)')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, players:player_id(id, primary_position, secondary_position, tertiary_position)')
         .in('match_id', matchIds)
     );
     if (!lineups || lineups.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
@@ -2399,7 +2430,7 @@ export async function processTacticalFlexibility(): Promise<{ matchesProcessed: 
 
     const lineups = await fetchAllRows(
       db.from('match_predicted_lineups')
-        .select('match_id, team_id, player_id, position_code, players:player_id(id, primary_position, secondary_position, tertiary_position)')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, players:player_id(id, primary_position, secondary_position, tertiary_position)')
         .in('match_id', matchIds)
     );
     if (!lineups || lineups.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
@@ -2423,7 +2454,7 @@ export async function processTacticalFlexibility(): Promise<{ matchesProcessed: 
       const matchId = Number(matchIdStr), teamId = Number(teamIdStr);
       const intel = intelMap.get(teamId), betting = bettingMap.get(teamId);
 
-      const positions = matchLineups.map(l => l.position_code || 'M');
+      const positions = matchLineups.map(l => lineupPosition(l));
       const uniquePositions = new Set(positions);
       let systemCount = 1;
       if (uniquePositions.has('LW') && uniquePositions.has('RW')) systemCount++;
@@ -3262,7 +3293,7 @@ export async function processMatchKeyBattles(opts?: {
     // ─── 2. Fetch lineups ─────────────────────────────────────────────────────
     const lineups = await fetchAllRows(
       db.from('match_predicted_lineups')
-        .select('match_id, team_id, player_id, position_code, rank_in_position, players:player_id(id, name)')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position, players:player_id(id, name)')
         .in('match_id', matchIds),
       500,
       'id'
@@ -3317,7 +3348,7 @@ export async function processMatchKeyBattles(opts?: {
         if (homeLineup.length === 0 || awayLineup.length === 0) continue;
 
         const best = (lineup: any[], group: string) =>
-          lineup.filter((p: any) => p.position_code === group)
+          lineup.filter((p: any) => lineupZone(p) === group)
             .sort((a: any, b: any) => 
               (impactMap.get(`${match.id}:${b.player_id}`) ?? 0) - 
               (impactMap.get(`${match.id}:${a.player_id}`) ?? 0)
@@ -3401,7 +3432,7 @@ export async function processMatchPositionalMatchups(): Promise<{ matchesProcess
     const matchIds = matches.map((m: any) => m.id);
 
     const lineups = await fetchAllRows(
-      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, rank_in_position').in('match_id', matchIds)
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position').in('match_id', matchIds)
     );
     const impacts = await fetchAllRows(db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds));
     const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
@@ -3422,8 +3453,8 @@ export async function processMatchPositionalMatchups(): Promise<{ matchesProcess
       // Broad position groups (see processPredictedLineups) — G/D/M/F, rank
       // 1 within each group is the primary starter for that grid row.
       for (const group of ['G', 'D', 'M', 'F']) {
-        const hp = homeLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
-        const ap = awayLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
+        const hp = homeLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
+        const ap = awayLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
         if (!hp && !ap) continue;
 
         const hScore = hp ? (impactMap.get(`${match.id}:${hp.player_id}`) ?? 50) : null;
@@ -3463,7 +3494,7 @@ export async function processMatchTacticalAdvantages(): Promise<{ matchesProcess
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
     const lineups = await fetchAllRows(
-      db.from('match_predicted_lineups').select('match_id, team_id, position_code').in('match_id', matchIds)
+      db.from('match_predicted_lineups').select('match_id, team_id, position_code, position_group, tactical_position, formation').in('match_id', matchIds)
     );
     const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, readiness_score').in('team_id', teamIds));
     const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
@@ -3481,13 +3512,18 @@ export async function processMatchTacticalAdvantages(): Promise<{ matchesProcess
       const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
       if (homeLineup.length === 0 || awayLineup.length === 0) continue;
 
-      const count = (lineup: any[], group: string) => lineup.filter((p: any) => p.position_code === group).length;
+      const count = (lineup: any[], group: string) => lineup.filter((p: any) => lineupZone(p) === group).length;
 
-      // WIDTH: broad-position data can't distinguish wide vs central mids
-      // (see processPredictedLineups' documented sub-slot limitation), so
-      // this uses M-group headcount as a coarse proxy, not true wing counts.
-      const homeWidth = count(homeLineup, 'M');
-      const awayWidth = count(awayLineup, 'M');
+      // WIDTH: a real wide-player count since migration 025. The lineup engine
+      // now assigns explicit tactical slots, so full-backs, wing-backs, wide
+      // midfielders and wingers are all directly identifiable — this used to
+      // be approximated by total midfield headcount because the stored
+      // position was only a G/D/M/F letter.
+      const WIDE_POSITIONS = ['RB', 'LB', 'RWB', 'LWB', 'RM', 'LM', 'RW', 'LW'];
+      const countWide = (lineup: any[]) =>
+        lineup.filter((p: any) => WIDE_POSITIONS.includes(lineupPosition(p))).length;
+      const homeWidth = countWide(homeLineup);
+      const awayWidth = countWide(awayLineup);
       const homeCentral = count(homeLineup, 'D') + count(homeLineup, 'M');
       const awayCentral = count(awayLineup, 'D') + count(awayLineup, 'M');
       const homeReadiness = intelMap.get(match.home_team_id)?.readiness_score ?? 50;
@@ -3495,9 +3531,9 @@ export async function processMatchTacticalAdvantages(): Promise<{ matchesProcess
 
       const advantages: Array<{ type: string; desc: string; h: number; a: number; notes: string }> = [
         {
-          type: 'WIDTH', desc: 'Wide-position headcount (coarse proxy — see file note)',
+          type: 'WIDTH', desc: 'Wide-position headcount',
           h: Math.min(100, homeWidth * 20), a: Math.min(100, awayWidth * 20),
-          notes: 'Approximated from broad midfield headcount; this pipeline does not yet distinguish wide from central mids.',
+          notes: 'Full-backs, wing-backs, wide midfielders and wingers in the predicted XI.',
         },
         {
           type: 'CENTRAL_CONTROL', desc: 'Central zone (defence + midfield) headcount',
@@ -3543,7 +3579,7 @@ export async function processPlayerMatchup(): Promise<{ matchesProcessed: number
     const matchIds = matches.map((m: any) => m.id);
 
     const lineups = await fetchAllRows(
-      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, rank_in_position').in('match_id', matchIds)
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position').in('match_id', matchIds)
     );
     const impacts = await fetchAllRows(db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds));
     const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
@@ -3564,8 +3600,8 @@ export async function processPlayerMatchup(): Promise<{ matchesProcessed: number
       // Same-group players ranked by rank_in_position, paired 1st-vs-1st,
       // 2nd-vs-2nd, etc. within each broad group.
       for (const group of ['G', 'D', 'M', 'F']) {
-        const hGroup = homeLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
-        const aGroup = awayLineup.filter((p: any) => p.position_code === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
+        const hGroup = homeLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
+        const aGroup = awayLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
         for (let i = 0; i < Math.min(hGroup.length, aGroup.length); i++) {
           const hp = hGroup[i], ap = aGroup[i];
           const hScore = impactMap.get(`${match.id}:${hp.player_id}`) ?? 50;
@@ -4013,7 +4049,7 @@ export async function processTeamTacticalVariations(): Promise<{
     const lineups = await fetchAllRows(
       db
         .from('match_predicted_lineups')
-        .select('match_id, team_id, position_code')
+        .select('match_id, team_id, position_code, position_group, tactical_position, formation')
         .in('match_id', matchIds)
     );
     if (!lineups || lineups.length === 0)
@@ -4054,7 +4090,7 @@ export async function processTeamTacticalVariations(): Promise<{
       // ✅ FIX: Build positionCounts Map before calling detectFormation
       const positionCounts = new Map<string, number>();
       for (const l of teamLineup) {
-        const pos = l.position_code || 'M';
+        const pos = lineupPosition(l);
         positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
       }
       const formation = detectFormation(positionCounts);
@@ -4063,7 +4099,7 @@ export async function processTeamTacticalVariations(): Promise<{
       byTeam.get(teamId)!.push({
         matchId,
         formation,
-        positions: teamLineup.map((l: any) => l.position_code || 'M'),
+        positions: teamLineup.map((l: any) => lineupPosition(l)),
       });
     }
 
@@ -4267,7 +4303,7 @@ export async function processFormationAnalysis(): Promise<{
     const lineups = await fetchAllRows(
       db
         .from('match_predicted_lineups')
-        .select('match_id, team_id, position_code, confidence')
+        .select('match_id, team_id, position_code, position_group, tactical_position, formation, confidence')
         .in('match_id', matchIds)
     );
     if (!lineups || lineups.length === 0)
@@ -4288,7 +4324,7 @@ export async function processFormationAnalysis(): Promise<{
       // ✅ FIX: Build positionCounts Map before calling detectFormation
       const positionCounts = new Map<string, number>();
       for (const l of teamLineup) {
-        const pos = l.position_code || 'M';
+        const pos = lineupPosition(l);
         positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
       }
       const primary = detectFormation(positionCounts);

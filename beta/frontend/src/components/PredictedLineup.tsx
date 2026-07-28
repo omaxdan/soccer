@@ -4,13 +4,24 @@
 
 import { COLORS , withAlpha } from '@/design/tokens';
 import { getCrestUrl } from '@/lib/images';
-import { deriveFormation } from '@/lib/insights';
+import { deriveFormation, positionZone } from '@/lib/insights';
 
 // ─── Interface ──────────────────────────────────────────────────────────────
 interface LineupPlayer {
   player_id: number;
   team_id: number;
+  /** Tactical slot since migration 025 ('RB', 'RCB', 'LW'); a G/D/M/F letter on older rows. */
   position_code: string;
+  /** Broad zone written by the lineup engine. Null on pre-025 rows. */
+  position_group?: string | null;
+  /** Same value as position_code, under an unambiguous name. */
+  tactical_position?: string | null;
+  /** Formation the backend engine selected. Null on pre-025 rows. */
+  formation?: string | null;
+  natural_position?: string | null;
+  lineup_order?: number | null;
+  is_captain?: boolean | null;
+  is_vice_captain?: boolean | null;
   rank_in_position: number;
   matches_started: number;
   confidence: number;
@@ -52,10 +63,15 @@ interface PredictedLineupProps {
 
 // Get position label - use position_detailed first, then fallback
 function getPositionLabel(player: LineupPlayer): string {
+  // The tactical slot the engine actually assigned is the most informative
+  // label: it says where this player is expected to play in THIS match, which
+  // position_detailed (the player's general position list) cannot.
+  const tactical = player.tactical_position;
+  if (tactical) return tactical;
+
   const detailed = player.players?.position_detailed;
   const primary = player.players?.primary_position;
-  
-  // Use position_detailed if available (e.g., "DC", "MC", "ST")
+
   if (detailed) return detailed;
   if (primary) return primary;
   return player.players?.position || '?';
@@ -75,29 +91,25 @@ function getVersatility(player: LineupPlayer): string | null {
 }
 
 // Get color based on position group
-function getPositionColor(positionCode: string): string {
+// Colour by zone, resolved through the shared position map so tactical slot
+// codes ('RCB', 'LCM') colour the same as the broad letters they replaced.
+function getPositionColor(positionCode: string, positionGroup?: string | null): string {
   const map: Record<string, string> = {
-    'G': COLORS.green,
-    'GK': COLORS.green,
-    'D': COLORS.blue,
-    'DEF': COLORS.blue,
-    'M': COLORS.amber,
-    'MID': COLORS.amber,
-    'F': COLORS.red,
-    'FWD': COLORS.red,
+    GK: COLORS.green,
+    DEF: COLORS.blue,
+    MID: COLORS.amber,
+    FWD: COLORS.red,
   };
-  return map[positionCode] || COLORS.muted;
+  const zone = positionZone(positionCode, positionGroup);
+  return (zone && map[zone]) || COLORS.muted;
 }
 
-// Normalize position code (G→GK, D→DEF, M→MID, F→FWD)
-function normalizePositionCode(code: string): string {
-  const map: Record<string, string> = {
-    'G': 'GK',
-    'D': 'DEF',
-    'M': 'MID',
-    'F': 'FWD',
-  };
-  return map[code] || code;
+// Zone bucket for the four rows of the lineup card. Delegates to the single
+// shared position map in lib/insights so tactical slot codes ('RCB', 'LCM')
+// and legacy broad letters ('D', 'M') both resolve correctly — the old local
+// map only understood the letters and would have left every v2 row ungrouped.
+function normalizePositionCode(player: { position_code: string; position_group?: string | null }): string {
+  return positionZone(player.position_code, player.position_group) ?? player.position_code;
 }
 
 // Get color based on confidence
@@ -125,7 +137,7 @@ function PlayerBadge({ player }: { player: LineupPlayer }) {
   const jerseyNumber = playerData?.jersey_number || '—';
   const positionLabel = getPositionLabel(player);
   const versatility = getVersatility(player);
-  const positionColor = getPositionColor(player.position_code);
+  const positionColor = getPositionColor(player.position_code, player.position_group);
   
   return (
     <div style={{
@@ -233,26 +245,29 @@ export function PredictedLineup({ homeTeam, awayTeam, lineups }: PredictedLineup
   }
 
   const renderTeamLineup = (team: typeof homeTeam, players: LineupPlayer[]) => {
-    // Normalize position codes
+    // Normalize to the four display zones
     const normalizedPlayers = players.map(p => ({
       ...p,
-      position_code: normalizePositionCode(p.position_code),
+      position_code: normalizePositionCode(p),
     }));
 
-    // Group by position
+    // Group by zone
     const gk = normalizedPlayers.filter(p => p.position_code === 'GK');
     const def = normalizedPlayers.filter(p => p.position_code === 'DEF');
     const mid = normalizedPlayers.filter(p => p.position_code === 'MID');
     const fwd = normalizedPlayers.filter(p => p.position_code === 'FWD');
 
-    // Real formation from each player's own detailed position (DC/DM/AM/
-    // ST etc — the ORIGINAL, un-normalized position_code before the
-    // GK/DEF/MID/FWD grouping above), not a hardcoded "4-4-2" regardless
-    // of the actual predicted shape.
-    const formation = deriveFormation(players.map(p => ({
-      slotCode: p.position_code,
-      detailedPosition: p.players?.primary_position ?? p.players?.position_detailed ?? null,
-    })));
+    // Formation comes from the backend engine, which selects it by scoring
+    // every candidate shape against the available squad and stores the winner
+    // on each row. deriveFormation() remains only as the fallback for rows
+    // written before migration 025 — the frontend does not infer shapes.
+    const formation =
+      players.find(p => p.formation)?.formation ??
+      deriveFormation(players.map(p => ({
+        slotCode: p.position_code,
+        zone: p.position_group,
+        detailedPosition: p.players?.primary_position ?? p.players?.position_detailed ?? null,
+      })));
 
     // ─── Format player with confidence ──────────────────────────────────────
     const formatPlayerWithConfidence = (p: LineupPlayer) => {

@@ -320,22 +320,34 @@ export async function getLineups(matchId: number): Promise<PredictedLineupPlayer
     if (!m) return [];
     return enrichLineup([...(M.MOCK_LINEUPS[m.home.id] ?? []), ...(M.MOCK_LINEUPS[m.away.id] ?? [])]);
   }
-  // FIX: secondary_position/tertiary_position/shirt_number were being
-  // selected directly off match_predicted_lineups, which has no such
-  // columns (only id, match_id, team_id, player_id, position_code,
-  // rank_in_position, matches_started, confidence, calculated_at — verified
-  // against the live schema). PostgREST errored, the error was discarded,
-  // and `data` came back null — which .map(...) ?? [] silently turned into
-  // an empty array, rendering as "not published yet" despite 5,572 real
-  // rows existing. Positions come from players.secondary_position/
-  // tertiary_position; there is no shirt_number anywhere (players has
-  // jersey_number) — mapped onto the same field name the UI expects.
+  // Since migration 025 the backend lineup engine precomputes everything the
+  // pitch view needs — the formation, the tactical slot, the player's natural
+  // position, pitch coordinates, render order, and the score/suitability
+  // behind the pick. All of it is selected here so nothing has to be inferred
+  // client-side. Rows written before the engine ran carry NULLs in the new
+  // columns; lib/formation.ts falls back to its own geometry for those.
+  //
+  // Historical note kept because it explains the shape of this function:
+  // secondary_position/tertiary_position/shirt_number were once selected
+  // directly off match_predicted_lineups, which has no such columns.
+  // PostgREST errored, the error was discarded, and `data` came back null —
+  // which .map(...) ?? [] silently turned into an empty array, rendering as
+  // "not published yet" despite thousands of real rows existing. Those three
+  // still come from players (jersey_number mapped onto shirt_number).
   const { data, error } = await client
     .from("match_predicted_lineups")
-    .select(`team_id, player_id, position_code, rank_in_position, confidence, matches_started,
+    .select(`team_id, player_id, position_code, position_group, tactical_position,
+             natural_position, formation, lineup_order, x, y, role,
+             weighted_score, suitability, is_captain, is_vice_captain,
+             rank_in_position, confidence, matches_started, minutes_played,
              player:players(id, name, short_name, position, secondary_position, tertiary_position, jersey_number, current_injury, injury_status, injury_reason, injury_return_days, market_value)`)
     .eq("match_id", matchId)
     .order("team_id", { ascending: true })
+    // lineup_order is the render order (1 = GK, 2 = RB, ...). rank_in_position
+    // is a depth-chart rank WITHIN a position family and is not an ordering
+    // for the XI as a whole; it stays as the fallback for pre-025 rows, which
+    // have a null lineup_order.
+    .order("lineup_order", { ascending: true, nullsFirst: false })
     .order("rank_in_position", { ascending: true });
 
   if (error) {
@@ -348,11 +360,24 @@ export async function getLineups(matchId: number): Promise<PredictedLineupPlayer
     team_id: r.team_id,
     player_id: r.player_id,
     position_code: r.position_code,
+    position_group: r.position_group ?? null,
+    tactical_position: r.tactical_position ?? null,
+    natural_position: r.natural_position ?? null,
+    formation: r.formation ?? null,
+    lineup_order: r.lineup_order ?? null,
+    x: r.x ?? null,
+    y: r.y ?? null,
+    role: r.role ?? null,
+    weighted_score: r.weighted_score ?? null,
+    suitability: r.suitability ?? null,
+    is_captain: r.is_captain ?? null,
+    is_vice_captain: r.is_vice_captain ?? null,
     secondary_position: r.player?.secondary_position ?? null,
     tertiary_position: r.player?.tertiary_position ?? null,
     rank_in_position: r.rank_in_position,
     confidence: r.confidence,
     matches_started: r.matches_started ?? null,
+    minutes_played: r.minutes_played ?? null,
     shirt_number: r.player?.jersey_number ?? null,
     player: r.player,
   }));

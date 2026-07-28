@@ -1,9 +1,27 @@
 import type { PredictedLineupPlayer } from "./types";
 
-// Dynamic formation geometry — no hardcoded formations. Players are bucketed
-// into lines from their position code, then distributed across coordinate
-// templates. Coordinates are normalized 0..1 on a portrait pitch where the
-// goalkeeper sits at the bottom (y≈0.94) and attackers at the top (y≈0.12).
+// ─────────────────────────────────────────────────────────────────────────────
+// Pitch geometry and lineup classification.
+//
+// Since backend migration 025 the lineup engine (beta/backend/src/lib/lineups)
+// precomputes and stores everything this file used to infer: the formation
+// name, the tactical slot per player, the broad zone, and exact pitch
+// coordinates per formation slot. This module now READS those values and only
+// falls back to its own geometry for rows written before the engine ran.
+//
+// Two things follow from that, and they are the whole point of the change:
+//
+//  1. A lineup is drawn where the engine put it, not where a client-side
+//     lookup table guesses. A 4-2-3-1's two banks, a back three's wing-backs
+//     and a 4-3-3's lone holding midfielder all render as the shape the
+//     backend actually selected.
+//  2. The formation LABEL and the DRAWN shape can no longer disagree, because
+//     both come from the same stored row.
+//
+// Coordinates are normalized 0..1 on a portrait pitch: x 0 = left touchline,
+// y 0.94 = own goal (goalkeeper), y ≈0.12 = attacking third. The backend uses
+// the identical orientation on a 0-100 scale, so conversion is a divide by 100.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type PitchZone =
   | "GK" | "CB" | "LB" | "RB" | "DM" | "CM" | "AM" | "LW" | "RW" | "ST";
@@ -15,47 +33,109 @@ export interface PlacedPlayer {
   line: "GK" | "DEF" | "MID" | "FWD";
 }
 
-const FWD_CODES = new Set(["F", "A", "S", "W", "CF", "SS"]); // forwards / attackers / strikers / wingers / second striker
+// ─── Code vocabulary ─────────────────────────────────────────────────────────
+//
+// One table covering every notation that can reach this app:
+//   - tactical slots written by the engine   GK RB RCB LCB LB RWB LWB
+//                                            DM RDM LDM CM RCM LCM AM RM LM
+//                                            RW LW ST RST LST
+//   - SofaScore squad codes on players.*     DR DC DL MC MR ML DM AM RW LW ST
+//   - legacy broad letters on pre-025 rows   G D M F
+//
+// Reading a code by its first character — which this file used to do — is
+// specifically wrong for the tactical vocabulary: 'RB' would classify as a
+// midfielder, 'LCB' as a midfielder, 'DM' as a defender.
+const LINE_FROM_CODE: Record<string, "GK" | "DEF" | "MID" | "FWD"> = {
+  // goalkeeper
+  G: "GK", GK: "GK",
+  // defence
+  D: "DEF", SW: "DEF",
+  RB: "DEF", DR: "DEF", RWB: "DEF",
+  LB: "DEF", DL: "DEF", LWB: "DEF",
+  CB: "DEF", DC: "DEF", RCB: "DEF", LCB: "DEF",
+  // midfield
+  M: "MID",
+  DM: "MID", CDM: "MID", RDM: "MID", LDM: "MID",
+  CM: "MID", MC: "MID", RCM: "MID", LCM: "MID",
+  AM: "MID", CAM: "MID",
+  RM: "MID", MR: "MID", LM: "MID", ML: "MID",
+  // attack
+  F: "FWD", A: "FWD", S: "FWD",
+  RW: "FWD", LW: "FWD",
+  ST: "FWD", CF: "FWD", SS: "FWD", RST: "FWD", LST: "FWD",
+};
 
-export function lineOf(code: string | null): "GK" | "DEF" | "MID" | "FWD" {
-  const c = (code ?? "").charAt(0).toUpperCase();
-  if (c === "G") return "GK";
-  if (c === "D") return "DEF";
-  if (c === "M") return "MID";
-  if (FWD_CODES.has(c)) return "FWD";
-  return "MID";
+/** Broad zone letter written by the engine -> display line. */
+const LINE_FROM_GROUP: Record<string, "GK" | "DEF" | "MID" | "FWD"> = {
+  G: "GK", D: "DEF", M: "MID", F: "FWD",
+};
+
+/**
+ * Display line for a position code, preferring the engine's stored
+ * position_group when the caller has one.
+ *
+ * The group is authoritative where it exists because it is a property of the
+ * FORMATION, not of the position: the wide players in a 4-2-3-1 are wingers
+ * positionally but belong to the midfield band, which is exactly what makes
+ * the shape a 4-2-3-1 rather than a 4-2-4.
+ */
+export function lineOf(code: string | null, group?: string | null): "GK" | "DEF" | "MID" | "FWD" {
+  if (group) {
+    const fromGroup = LINE_FROM_GROUP[group.toUpperCase()];
+    if (fromGroup) return fromGroup;
+  }
+  return LINE_FROM_CODE[(code ?? "").toUpperCase()] ?? "MID";
 }
 
-// Named formation detection — ported from the backend's detectFormation()
-// (beta/backend/src/jobs/processExtendedIntelligence.ts) so the frontend
-// labels a lineup exactly the way the backend already does. Classification
-// runs on the exact position_code per player, not a coarse GK/DEF/MID/FWD
-// line count — that distinction matters: a flat 4-5-1 and a real 4-2-3-1
-// (2 DM + 3 AM = 5 "mid-line" players either way) only come apart once you
-// count DM/AM/wide-forward codes separately, which line-counting can't do.
-const DEF_CODES = new Set(["LB", "CB", "RB", "LWB", "RWB", "D", "SW"]);
-const MID_CODES = new Set(["LM", "CM", "RM", "DM", "AM", "M"]);
-const ATT_CODES = new Set(["LW", "RW", "ST", "CF", "F"]);
+/** Convenience for lineup rows, which carry both fields. */
+export function lineOfPlayer(p: PredictedLineupPlayer): "GK" | "DEF" | "MID" | "FWD" {
+  return lineOf(p.position_code, p.position_group);
+}
+
+/**
+ * The player's own natural position, for versatility and squad-coverage
+ * questions — which are about what a player IS, not where he is being played
+ * this weekend. Falls back to the slot code, which on pre-025 rows is the
+ * broad letter and on newer rows is at least a defensible approximation.
+ */
+export function naturalPositionOf(p: PredictedLineupPlayer): string | null {
+  return p.natural_position ?? p.position_code ?? null;
+}
+
+// ─── Formation name ──────────────────────────────────────────────────────────
+
+const DEF_CODES = new Set(["LB", "CB", "RB", "LWB", "RWB", "D", "SW", "DR", "DC", "DL", "RCB", "LCB"]);
+const MID_CODES = new Set(["LM", "CM", "RM", "DM", "AM", "M", "MC", "MR", "ML", "RCM", "LCM", "RDM", "LDM"]);
+const ATT_CODES = new Set(["LW", "RW", "ST", "CF", "F", "RST", "LST"]);
 
 function countByCodes(players: PredictedLineupPlayer[], codes: Set<string>): number {
   return players.filter((p) => codes.has((p.position_code ?? "").toUpperCase())).length;
 }
 
-// Named formation detection from a lineup — recognizes the common shapes,
-// falls back to the raw def-mid-fwd string for anything else.
+/**
+ * Formation name for a lineup.
+ *
+ * The engine scores every candidate shape against the available squad and
+ * stores the winner on each row, so the stored value is read first — there is
+ * nothing left to detect, and detecting it again could only ever disagree.
+ *
+ * The heuristic below survives as the fallback for rows written before
+ * migration 025, where the only positional information stored was a broad
+ * G/D/M/F letter. It is deliberately unchanged, including its documented
+ * ambiguity between a flat 4-5-1 and a real 4-2-3-1.
+ */
 export function getFormationName(players: PredictedLineupPlayer[]): string {
+  const stored = players.find((p) => p.formation)?.formation;
+  if (stored) return stored;
+
   const defs = countByCodes(players, DEF_CODES);
   const mids = countByCodes(players, MID_CODES);
   const atts = countByCodes(players, ATT_CODES);
-  const dms = countByCodes(players, new Set(["DM"]));
+  const dms = countByCodes(players, new Set(["DM", "RDM", "LDM"]));
   const ams = countByCodes(players, new Set(["AM"]));
 
-  // Refinements ahead of the ported backend rules below: the backend's raw
-  // defs/mids/atts counts assume a 4-2-3-1's advanced "3" and a 4-1-4-1's
-  // flat "4" are coded with forward-bucket codes (LW/RW/ST) — real data
-  // often codes them as AM/CM instead, which the counts alone can't tell
-  // apart from a 4-3-3 or 4-5-1. A DM count is a much less ambiguous
-  // signal for these two specific required shapes, so it's checked first.
+  // A DM count is a much less ambiguous signal than raw band counts for these
+  // two specific shapes, so it is checked first.
   if (defs === 4 && dms === 2 && ams >= 1 && mids - dms <= 3) return "4-2-3-1";
   if (defs === 4 && dms === 1 && mids - dms === 4) return "4-1-4-1";
 
@@ -71,38 +151,46 @@ export function getFormationName(players: PredictedLineupPlayer[]): string {
   return `${defs}-${mids}-${atts}`;
 }
 
-// Position flexibility for a single lineup player: primary + alternates and
-// a simple 50-90 score that rewards having secondary/tertiary cover.
+// ─── Per-player flexibility ──────────────────────────────────────────────────
+
+/**
+ * Position flexibility for a single lineup player: his natural position plus
+ * the alternates he is listed for, and a simple 50-90 score rewarding cover.
+ *
+ * `primary` is the player's NATURAL position, not the slot he is filling this
+ * match — listing a centre-midfielder's primary as "DM" because he is being
+ * deployed there would double-count the deployment as versatility.
+ */
 export function getPositionFlexibility(player: PredictedLineupPlayer): {
   primary: string;
   alternatives: string[];
   flexibilityScore: number;
 } {
-  const primary = player.position_code || "M";
+  const primary = naturalPositionOf(player) || "M";
   const alternatives = [player.secondary_position, player.tertiary_position].filter(Boolean) as string[];
   const flexibilityScore = Math.min(100, 50 + alternatives.length * 20);
   return { primary, alternatives, flexibilityScore };
 }
 
-// ── Realistic role placement ──────────────────────────────────────────────
-// Placement zone — finer-grained than the GK/DEF/MID/FWD line, used only to
-// pick a realistic (x, y) on the pitch. Kept local to this file (separate
-// from the ZONE_FROM_CODE table below used by coverage()) so tuning where a
-// role is DRAWN never changes what coverage() counts as a team's positional
-// depth.
+// ─── Placement ───────────────────────────────────────────────────────────────
+//
+// Fallback geometry for rows with no stored coordinates. Kept separate from
+// the ZONE_FROM_CODE table further down (used by coverage()) so tuning where a
+// role is DRAWN never changes what coverage() counts as positional depth.
+
 type PlacementZone = "GK" | "LB" | "CB" | "RB" | "DM" | "CM" | "AM" | "LW" | "RW" | "ST";
 
 const PLACEMENT_ZONE_FROM_CODE: Record<string, PlacementZone> = {
   G: "GK", GK: "GK",
   DL: "LB", LB: "LB", LWB: "LB",
   DR: "RB", RB: "RB", RWB: "RB",
-  DC: "CB", CB: "CB", D: "CB", SW: "CB",
-  DM: "DM", MD: "DM", CDM: "DM",
-  MC: "CM", M: "CM", CM: "CM", LM: "CM", RM: "CM",
+  DC: "CB", CB: "CB", D: "CB", SW: "CB", RCB: "CB", LCB: "CB",
+  DM: "DM", MD: "DM", CDM: "DM", RDM: "DM", LDM: "DM",
+  MC: "CM", M: "CM", CM: "CM", LM: "CM", RM: "CM", RCM: "CM", LCM: "CM",
   AM: "AM", MA: "AM", CAM: "AM",
   ML: "LW", LW: "LW",
   MR: "RW", RW: "RW",
-  ST: "ST", F: "ST", A: "ST", S: "ST", CF: "ST", SS: "ST",
+  ST: "ST", F: "ST", A: "ST", S: "ST", CF: "ST", SS: "ST", RST: "ST", LST: "ST",
 };
 
 function placementZoneOf(code: string | null): PlacementZone {
@@ -117,8 +205,7 @@ const ZONE_TO_LINE: Record<PlacementZone, "GK" | "DEF" | "MID" | "FWD"> = {
 };
 
 // y (depth) per zone — portrait pitch, GK at bottom (0.94), attackers top.
-// DM sits deeper than CM, AM sits higher than CM, so a split midfield (e.g.
-// 4-2-3-1's 2 DM + 3 AM) actually reads as two banks, not one flat line.
+// DM sits deeper than CM, AM higher, so a split midfield reads as two banks.
 const ZONE_Y: Record<PlacementZone, number> = {
   GK: 0.94,
   LB: 0.70, CB: 0.74, RB: 0.70,
@@ -126,10 +213,9 @@ const ZONE_Y: Record<PlacementZone, number> = {
   LW: 0.16, RW: 0.16, ST: 0.13,
 };
 
-// x positions per zone, keyed by how many players share that zone this
-// lineup — inset well short of the touchlines/corner flags (unlike the old
-// flat 0.12..0.88 line spread) so wingers sit near the edge of the penalty
-// box and central roles stay in the middle third, matching real shape.
+// x positions per zone, keyed by how many players share that zone this lineup
+// — inset well short of the touchlines so wingers sit near the edge of the
+// penalty box and central roles stay in the middle third.
 const ZONE_X: Record<PlacementZone, number[][]> = {
   GK:  [[0.5]],
   LB:  [[0.14]],
@@ -153,10 +239,40 @@ function xsFor(zone: PlacementZone, count: number): number[] {
   return Array.from({ length: count }, (_, i) => lo + ((hi - lo) * i) / Math.max(1, count - 1));
 }
 
+/** True when the engine stored real coordinates for this row. */
+function hasStoredCoords(p: PredictedLineupPlayer): boolean {
+  return (
+    p.x != null && p.y != null &&
+    Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))
+  );
+}
+
+/**
+ * Places an XI on the pitch.
+ *
+ * Uses the engine's stored per-slot coordinates when every player has them —
+ * the formation was chosen as a whole, so mixing stored positions with
+ * fallback-template positions would draw a shape that is neither. A single
+ * missing coordinate drops the whole team back to the zone templates, which
+ * is the correct all-or-nothing behaviour.
+ */
 export function placeLineup(players: PredictedLineupPlayer[]): {
   placed: PlacedPlayer[];
   formation: string;
 } {
+  const formation = getFormationName(players);
+
+  if (players.length > 0 && players.every(hasStoredCoords)) {
+    const placed = players.map((player) => ({
+      player,
+      x: Number(player.x) / 100,
+      y: Number(player.y) / 100,
+      line: lineOfPlayer(player),
+    }));
+    return { placed, formation };
+  }
+
+  // Fallback: derive geometry from position codes (pre-025 rows).
   const byZone = new Map<PlacementZone, PredictedLineupPlayer[]>();
   for (const p of players) {
     const z = placementZoneOf(p.position_code);
@@ -176,16 +292,16 @@ export function placeLineup(players: PredictedLineupPlayer[]): {
     });
   }
 
-  const formation = getFormationName(players);
-
   return { placed, formation };
 }
 
-// Unit confidence: average predicted-lineup confidence per line.
+// ─── Unit confidence ─────────────────────────────────────────────────────────
+
+/** Average predicted-lineup confidence per line. */
 export function unitConfidence(players: PredictedLineupPlayer[]) {
   const acc: Record<string, number[]> = { GK: [], DEF: [], MID: [], FWD: [] };
   for (const p of players) {
-    const ln = lineOf(p.position_code);
+    const ln = lineOfPlayer(p);
     if (p.confidence != null) acc[ln].push(p.confidence * (p.confidence <= 1 ? 100 : 1));
   }
   const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
@@ -197,28 +313,35 @@ export function unitConfidence(players: PredictedLineupPlayer[]) {
   };
 }
 
-// Versatility badge, e.g. "AM/MC/RW" from primary + secondary + tertiary.
+// ─── Versatility ─────────────────────────────────────────────────────────────
+
+/**
+ * Versatility badge, e.g. "AM/MC/RW" — the positions the player can play.
+ *
+ * Built from his NATURAL position plus his listed alternates. Using the
+ * tactical slot here would report a centre-midfielder fielded at DM as
+ * "DM/MC/AM" and count the deployment itself as versatility.
+ */
 export function versatilityBadge(p: PredictedLineupPlayer): string {
-  const parts = [p.position_code, p.secondary_position, p.tertiary_position]
+  const parts = [naturalPositionOf(p), p.secondary_position, p.tertiary_position]
     .filter(Boolean)
     .map((c) => (c as string).toUpperCase());
   return Array.from(new Set(parts)).join("/");
 }
 
 // Positional coverage across a squad: how many players can cover each zone,
-// counting primary/secondary/tertiary positions. Precompute this in the
-// warehouse (team_positional_coverage) for production; derived here for demo.
+// counting primary/secondary/tertiary positions.
 const ZONE_FROM_CODE: Record<string, PitchZone> = {
   G: "GK", GK: "GK",
-  DC: "CB", CB: "CB", D: "CB",
+  DC: "CB", CB: "CB", D: "CB", RCB: "CB", LCB: "CB", SW: "CB",
   DL: "LB", LB: "LB", LWB: "LB",
   DR: "RB", RB: "RB", RWB: "RB",
-  DM: "DM", MD: "DM", CDM: "DM",
-  MC: "CM", M: "CM", CM: "CM",
+  DM: "DM", MD: "DM", CDM: "DM", RDM: "DM", LDM: "DM",
+  MC: "CM", M: "CM", CM: "CM", RCM: "CM", LCM: "CM",
   AM: "AM", MA: "AM", CAM: "AM",
   ML: "LW", LW: "LW", LM: "LW",
   MR: "RW", RW: "RW", RM: "RW",
-  ST: "ST", F: "ST", A: "ST", S: "ST", CF: "ST", SS: "ST",
+  ST: "ST", F: "ST", A: "ST", S: "ST", CF: "ST", SS: "ST", RST: "ST", LST: "ST",
 };
 
 function zoneOf(code: string | null | undefined): PitchZone | null {
@@ -246,8 +369,10 @@ export function coverage(players: PredictedLineupPlayer[]): {
 } {
   const counts = new Map<PitchZone, number>();
   for (const p of players) {
+    // Natural position, not the assigned slot — coverage asks what the squad
+    // CAN field, which is independent of this weekend's team sheet.
     const zs = new Set(
-      [p.position_code, p.secondary_position, p.tertiary_position]
+      [naturalPositionOf(p), p.secondary_position, p.tertiary_position]
         .map(zoneOf)
         .filter(Boolean) as PitchZone[]
     );

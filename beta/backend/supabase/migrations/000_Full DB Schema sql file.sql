@@ -606,7 +606,22 @@ CREATE TABLE public.match_predicted_lineups (
   matches_started integer,
   confidence numeric,
   calculated_at timestamp with time zone DEFAULT now(),
+  formation text,
+  position_group text,
+  lineup_order smallint,
+  natural_position text,
+  tactical_position text,
+  x numeric,
+  y numeric,
+  role text,
+  suitability numeric,
+  weighted_score numeric,
+  minutes_played integer,
+  recent_starts_score numeric,
+  is_captain boolean DEFAULT false,
+  is_vice_captain boolean DEFAULT false,
   CONSTRAINT match_predicted_lineups_pkey PRIMARY KEY (id),
+  CONSTRAINT match_predicted_lineups_unique UNIQUE (match_id, team_id, player_id),
   CONSTRAINT match_predicted_lineups_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id),
   CONSTRAINT match_predicted_lineups_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id),
   CONSTRAINT match_predicted_lineups_player_id_fkey FOREIGN KEY (player_id) REFERENCES public.players(id)
@@ -1604,4 +1619,16 @@ CREATE TABLE public.customers (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT customers_pkey PRIMARY KEY (id),
   CONSTRAINT customers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.match_predicted_formations (
+  match_id bigint NOT NULL,
+  team_id bigint NOT NULL,
+  formation text,
+  confidence numeric,
+  formation_score numeric,
+  out_of_position_count smallint,
+  calculated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT match_predicted_formations_pkey PRIMARY KEY (match_id, team_id),
+  CONSTRAINT match_predicted_formations_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.matches(id),
+  CONSTRAINT match_predicted_formations_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id)
 );

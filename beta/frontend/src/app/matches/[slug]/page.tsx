@@ -389,13 +389,20 @@ export default function MatchPage() {
   // PredictedLineup — no new query. ────────────────────────────────────
   const toFormationPlayers = (lineup: any[]) => (lineup ?? []).map((p: any) => ({
     slotCode: p.position_code,
+    zone: p.position_group,
     detailedPosition: p.players?.primary_position ?? p.players?.position_detailed ?? null,
   }));
-  const homeFormation = deriveFormation(toFormationPlayers(homeLineup));
-  const awayFormation = deriveFormation(toFormationPlayers(awayLineup));
+  // The backend lineup engine selects and stores the formation (migration
+  // 025), so it is read, not derived. deriveFormation() stays as the fallback
+  // for rows written before that.
+  const storedFormation = (lineup: any[]) =>
+    (lineup ?? []).find((p: any) => p.formation)?.formation ?? null;
+  const homeFormation = storedFormation(homeLineup) ?? deriveFormation(toFormationPlayers(homeLineup));
+  const awayFormation = storedFormation(awayLineup) ?? deriveFormation(toFormationPlayers(awayLineup));
 
   const toVersatilityPlayers = (lineup: any[]) => (lineup ?? []).map((p: any) => ({
     slotCode: p.position_code,
+    zone: p.position_group,
     positions: [p.players?.primary_position, p.players?.secondary_position, p.players?.tertiary_position],
   }));
   const homeAreaVersatility = deriveAreaVersatility(toVersatilityPlayers(homeLineup));

@@ -220,8 +220,54 @@ export function deriveMatchRisk(confidence: number | null, readinessGapAbs: numb
 // three came out exactly right; the ambiguity only shows up on genuinely
 // hybrid shapes where no single notation is unambiguously "correct".
 export interface FormationPlayer {
-  slotCode: string; // match_predicted_lineups.position_code (G/D/M/F)
+  slotCode: string; // match_predicted_lineups.position_code
   detailedPosition: string | null; // players.primary_position, falls back to position_detailed
+  /** match_predicted_lineups.position_group — present since migration 025. */
+  zone?: string | null;
+}
+
+// ─── POSITION ZONE — one place that knows what a stored position code means ──
+//
+// match_predicted_lineups.position_code changed meaning in migration 025: it
+// used to be a broad G/D/M/F letter and now carries the tactical slot the
+// backend lineup engine assigned ('RB', 'RCB', 'LCM', 'LW', ...). The broad
+// letter moved to its own position_group column.
+//
+// Every zone check in this app goes through here so both shapes keep working:
+// rows written by the new engine, and historical rows still holding a letter.
+// Reading the raw code with a prefix test is specifically WRONG now — 'RB'
+// starts with 'R', 'LCB' with 'L'.
+const ZONE_BY_CODE: Record<string, 'GK' | 'DEF' | 'MID' | 'FWD'> = {
+  // Broad letters (legacy rows) and their normalized forms
+  G: 'GK', GK: 'GK',
+  D: 'DEF', DEF: 'DEF',
+  M: 'MID', MID: 'MID',
+  F: 'FWD', FWD: 'FWD',
+  // Tactical slots written by the engine
+  RB: 'DEF', LB: 'DEF', CB: 'DEF', RCB: 'DEF', LCB: 'DEF', RWB: 'DEF', LWB: 'DEF',
+  DM: 'MID', RDM: 'MID', LDM: 'MID', CM: 'MID', RCM: 'MID', LCM: 'MID',
+  AM: 'MID', RM: 'MID', LM: 'MID',
+  RW: 'FWD', LW: 'FWD', ST: 'FWD', RST: 'FWD', LST: 'FWD', CF: 'FWD',
+  // Raw squad-sync codes, for callers passing players.primary_position
+  DR: 'DEF', DC: 'DEF', DL: 'DEF', SW: 'DEF',
+  MC: 'MID', MR: 'MID', ML: 'MID',
+};
+
+/**
+ * Broad zone of a stored position code, preferring an explicit position_group
+ * when the caller has one. Returns null for anything unrecognized rather than
+ * guessing a zone.
+ */
+export function positionZone(
+  code: string | null | undefined,
+  group?: string | null,
+): 'GK' | 'DEF' | 'MID' | 'FWD' | null {
+  if (group) {
+    const fromGroup = ZONE_BY_CODE[group.toUpperCase()];
+    if (fromGroup) return fromGroup;
+  }
+  if (!code) return null;
+  return ZONE_BY_CODE[code.toUpperCase()] ?? null;
 }
 
 function classifyDetailedPosition(pos: string | null): 'DEF' | 'DM' | 'AM' | 'FWD' | null {
@@ -234,7 +280,7 @@ function classifyDetailedPosition(pos: string | null): 'DEF' | 'DM' | 'AM' | 'FW
 }
 
 export function deriveFormation(players: FormationPlayer[]): string | null {
-  const outfield = players.filter(p => p.slotCode !== 'G' && p.slotCode !== 'GK');
+  const outfield = players.filter(p => positionZone(p.slotCode, p.zone) !== 'GK');
   if (outfield.length === 0) return null;
 
   const counts = { DEF: 0, DM: 0, AM: 0, FWD: 0 };
@@ -268,21 +314,17 @@ export function deriveFormation(players: FormationPlayer[]): string | null {
 // a real, grounded signal — distinct from (not a replacement for) actual
 // ball-control percentage, which this platform has no data for at all.
 export interface AreaVersatilityPlayer {
-  slotCode: string; // match_predicted_lineups.position_code (G/D/M/F)
+  slotCode: string; // match_predicted_lineups.position_code
   positions: (string | null)[]; // [primary_position, secondary_position, tertiary_position]
+  /** match_predicted_lineups.position_group — present since migration 025. */
+  zone?: string | null;
 }
 
 export function deriveAreaVersatility(players: AreaVersatilityPlayer[]): { DEF: number | null; MID: number | null; FWD: number | null } {
-  const groupOf = (slot: string): 'DEF' | 'MID' | 'FWD' | null => {
-    if (slot === 'D') return 'DEF';
-    if (slot === 'M') return 'MID';
-    if (slot === 'F') return 'FWD';
-    return null;
-  };
   const buckets: Record<'DEF' | 'MID' | 'FWD', boolean[]> = { DEF: [], MID: [], FWD: [] };
   for (const p of players) {
-    const group = groupOf(p.slotCode);
-    if (!group) continue;
+    const group = positionZone(p.slotCode, p.zone);
+    if (!group || group === 'GK') continue;
     const isVersatile = p.positions.filter(Boolean).length > 1;
     buckets[group].push(isVersatile);
   }
