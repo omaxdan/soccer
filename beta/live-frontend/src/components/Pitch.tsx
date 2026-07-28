@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { PredictedLineupPlayer, TeamLite } from "@/lib/types";
-import { placeLineup, unitConfidence, versatilityBadge } from "@/lib/formation";
+import { placeLineup, unitConfidence, versatilityBadge, naturalPositionOf } from "@/lib/formation";
 
 const LINE_COLOR: Record<string, string> = {
   GK: "var(--amber)",
@@ -14,6 +14,35 @@ const LINE_COLOR: Record<string, string> = {
 function lastName(name: string): string {
   const parts = name.trim().split(/\s+/);
   return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+}
+
+/**
+ * Position chips for the selected player: where he is being PLAYED first, then
+ * where he normally plays and what else he covers.
+ *
+ * The engine stores the tactical slot and the natural position separately, so
+ * the two are no longer conflated into one "primary" chip — a centre-midfielder
+ * deployed at DM now reads as exactly that. Built as an explicit list rather
+ * than by filtering an array and keying labels off the index, which mislabelled
+ * every chip whenever the first entry happened to be missing.
+ */
+function positionChips(p: PredictedLineupPlayer): { code: string; label: string }[] {
+  const chips: { code: string; label: string }[] = [];
+  const seen = new Set<string>();
+
+  const push = (raw: string | null | undefined, label: string) => {
+    const code = (raw ?? "").trim().toUpperCase();
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    chips.push({ code, label });
+  };
+
+  push(p.tactical_position ?? p.position_code, p.role ?? "playing here");
+  push(naturalPositionOf(p), "natural");
+  push(p.secondary_position, "secondary");
+  push(p.tertiary_position, "tertiary");
+
+  return chips;
 }
 
 export function PitchLineup({
@@ -123,23 +152,28 @@ export function PitchLineup({
                 : ""}
             </span>
           </div>
+          {/* Where he is being PLAYED, then where he normally plays and what
+              else he covers. The engine stores both, so the two are no longer
+              conflated into one "primary" chip — a centre-midfielder deployed
+              at DM now reads as exactly that.
+
+              Chips are built as an explicit list rather than filtering an
+              array and keying off the index, which mislabelled every chip
+              whenever the first entry was missing. */}
           <div className="mono mt-2 flex flex-wrap gap-1.5 text-[0.6rem]">
-            {[selected.position_code, selected.secondary_position, selected.tertiary_position]
-              .filter(Boolean)
-              .map((c, idx) => (
-                <span
-                  key={idx}
-                  className="rounded px-1.5 py-0.5"
-                  style={{
-                    color: idx === 0 ? "var(--amber)" : "var(--muted)",
-                    background: idx === 0 ? "var(--amber-dim)" : "var(--ink)",
-                    border: "1px solid var(--line)",
-                  }}
-                >
-                  {(c as string).toUpperCase()}
-                  {idx === 0 ? " · primary" : idx === 1 ? " · secondary" : " · tertiary"}
-                </span>
-              ))}
+            {positionChips(selected).map(({ code, label }, idx) => (
+              <span
+                key={`${code}-${label}`}
+                className="rounded px-1.5 py-0.5"
+                style={{
+                  color: idx === 0 ? "var(--amber)" : "var(--muted)",
+                  background: idx === 0 ? "var(--amber-dim)" : "var(--ink)",
+                  border: "1px solid var(--line)",
+                }}
+              >
+                {code} · {label}
+              </span>
+            ))}
           </div>
           {selected.player?.intelligence?.importance_score != null && (
             <div className="mono mt-2 flex gap-3 text-[0.6rem] text-muted">

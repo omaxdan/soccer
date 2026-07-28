@@ -1,6 +1,6 @@
 import { Crest } from "./Crest";
 import { positionLabel, money } from "@/lib/intel";
-import { placeLineup } from "@/lib/formation";
+import { placeLineup, lineOfPlayer } from "@/lib/formation";
 import type { PredictedLineupPlayer, TeamLite } from "@/lib/types";
 
 const LINE_LABEL: Record<"GK" | "DEF" | "MID" | "FWD", string> = {
@@ -57,8 +57,11 @@ export function TeamLineup({
                   key={p.player_id}
                   className="flex items-center gap-2 rounded px-2 py-1.5 odd:bg-raised/40"
                 >
+                  {/* Zone letter, resolved through the shared classifier —
+                      the old first-character read broke on tactical slot
+                      codes ('RCB' rendered as 'R', 'DM' as 'D'). */}
                   <span className="mono w-6 shrink-0 text-[0.6rem] text-faint">
-                    {(p.position_code ?? "").charAt(0)}
+                    {lineOfPlayer(p).charAt(0)}
                   </span>
                   <span className="truncate text-[0.8rem]">
                     {p.player?.name ?? `#${p.player_id}`}

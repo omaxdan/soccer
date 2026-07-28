@@ -12,7 +12,7 @@
 
 import React from "react";
 import type { MatchRow, PredictedLineupPlayer } from "@/lib/types";
-import { getFormationName, lineOf } from "@/lib/formation";
+import { getFormationName, lineOfPlayer, naturalPositionOf } from "@/lib/formation";
 import { Crest } from "./Crest";
 
 /** Shared thresholds — the legend below renders from this same table. */
@@ -54,6 +54,15 @@ function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
   // columns, so an absent one simply renders nothing.
   const alts = [p.secondary_position, p.tertiary_position].filter(Boolean) as string[];
 
+  // The engine stores both where a player is being PLAYED (the tactical slot,
+  // shown in the right-hand column) and where he normally plays. When they
+  // differ, that is a real selection call worth surfacing rather than hiding
+  // behind a single position label.
+  const natural = naturalPositionOf(p);
+  const slot = p.tactical_position ?? p.position_code;
+  const outOfPosition =
+    natural != null && slot != null && natural.toUpperCase() !== slot.toUpperCase();
+
   return (
     <li className="flex items-center gap-2 rounded-term px-2 py-1.5 odd:bg-raised/40">
       <span className="mono tnum w-6 shrink-0 text-right text-[0.62rem] text-faint">
@@ -62,19 +71,38 @@ function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
       <span className="min-w-0 flex-1">
         <span className="mono block truncate text-[0.74rem] font-semibold text-text">
           {name}
+          {p.is_captain && (
+            <span
+              className="ml-1.5 rounded px-1 text-[0.5rem] font-bold tracking-wide"
+              style={{ color: "var(--amber)", background: "var(--amber-dim)" }}
+              title="Captain"
+            >
+              C
+            </span>
+          )}
+          {p.is_vice_captain && (
+            <span className="ml-1.5 text-[0.5rem] font-bold tracking-wide text-faint" title="Vice-captain">
+              VC
+            </span>
+          )}
           {p.player?.current_injury && (
             <span className="ml-1.5 text-[0.55rem]" style={{ color: "var(--risk)" }}>
               DOUBT
             </span>
           )}
         </span>
-        {alts.length > 0 && (
+        {outOfPosition && (
+          <span className="mono block truncate text-[0.56rem]" style={{ color: "var(--warn)" }}>
+            Natural {natural} · played out of position
+          </span>
+        )}
+        {!outOfPosition && alts.length > 0 && (
           <span className="mono block truncate text-[0.56rem] text-faint">
             Also plays {alts.join(", ")}
           </span>
         )}
       </span>
-      <span className="mono w-9 shrink-0 text-[0.6rem] text-muted">{p.position_code ?? "—"}</span>
+      <span className="mono w-9 shrink-0 text-[0.6rem] text-muted">{slot ?? "—"}</span>
       <span
         className="mono tnum w-10 shrink-0 text-right text-[0.7rem] font-semibold"
         style={{ color }}
@@ -139,7 +167,7 @@ function TeamXI({
 
       {/* Formation first — it frames everything below it. */}
       {GROUPS.map(({ key, label }) => {
-        const group = players.filter((p) => lineOf(p.position_code) === key);
+        const group = players.filter((p) => lineOfPlayer(p) === key);
         if (group.length === 0) return null;
         return (
           <div key={key} className="mt-2.5">
