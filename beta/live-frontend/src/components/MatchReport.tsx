@@ -14,7 +14,6 @@
 import React from "react";
 import {
   wilson,
-  buildMarketProfiles,
   tally,
   overallVerdict,
   derivePickSide,
@@ -361,27 +360,6 @@ export function MatchReport({
   // consensus in one section and withhold it in the next.
   const full = lockedReadings.length === 0;
 
-  // ── Market profiles ───────────────────────────────────────────────────────
-  const profileFor = (label: string, keys: number[]) => {
-    const rel = readings.filter((r) => keys.includes(r.def.n) && r.status !== "inactive");
-    if (rel.length === 0) return null;
-    const sup = rel.filter((r) => r.status === "supports");
-    const con = rel.filter((r) => r.status === "contradicts");
-    const stars = con.length > sup.length ? 1 : Math.min(4, Math.max(1, sup.length + 1));
-    return {
-      label,
-      stars,
-      drivers: (sup.length ? sup : rel).map((r) => r.def.name),
-      caveat: con.length ? `${con.map((r) => r.def.name).join(" and ")} limits certainty.` : null,
-    };
-  };
-  const markets = [
-    profileFor("Match winner", [1, 2, 8, 10, 6]),
-    profileFor("Draw no bet", [3, 10]),
-    profileFor("Goals", [7, 9, 13]),
-    profileFor("Both teams to score", [9, 12, 7]),
-  ].filter((x): x is NonNullable<typeof x> => x !== null);
-
   return (
     <section id={MATCH_REPORT_ANCHOR} className="panel scroll-mt-20 p-4" aria-label="Match report">
       <header className="border-b border-line pb-3">
@@ -610,50 +588,7 @@ export function MatchReport({
         </Section>
       )}
 
-      {/* 6 — Historical market profiles */}
-      {!full && (
-        <Section title="Historical market profiles">
-          <p className="text-[0.76rem] leading-relaxed text-muted">
-            Which market profiles this fixture&rsquo;s history aligns with, how strongly, and
-            which evidence streams drive each one.
-          </p>
-          <p className="mono mt-2 text-[0.62rem] tracking-widest" style={{ color: "var(--amber)" }}>
-            AVAILABLE ON PRO
-          </p>
-        </Section>
-      )}
-
-      {full && markets.length > 0 && (
-        <Section title="Historical market profiles">
-          <div className="grid gap-2.5 sm:grid-cols-2">
-            {markets.map((mk) => (
-              <article key={mk.label} className="panel p-3.5">
-                <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="mono text-[0.76rem] font-semibold text-text">{mk.label}</h3>
-                  <span className="mono text-[0.72rem]" style={{ color: "var(--amber)" }}>
-                    {"\u2605".repeat(mk.stars)}
-                    <span className="text-faint">{"\u2606".repeat(4 - mk.stars)}</span>
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[0.68rem] leading-relaxed text-muted">
-                  Driven by {mk.drivers.join(", ")}.
-                </p>
-                {mk.caveat && (
-                  <p className="mt-1 text-[0.66rem] leading-relaxed" style={{ color: "var(--warn)" }}>
-                    {mk.caveat}
-                  </p>
-                )}
-              </article>
-            ))}
-          </div>
-          <p className="mt-2 text-[0.64rem] leading-relaxed text-faint">
-            Where the historical evidence aligns. Whether a market is worth taking depends on
-            both sides and the price, which this page does not assess.
-          </p>
-        </Section>
-      )}
-
-      {/* 7 — Neutral signals */}
+      {/* 6 — Neutral signals */}
       {neutral.length > 0 && (
         <Section title="Neutral signals">
           <table className="w-full border-collapse text-[0.72rem]">
