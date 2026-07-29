@@ -127,6 +127,8 @@ function adminGroup(): Group {
     items: [
       { href: "/admin/settings", label: "Admin Settings", Icon: NavAdmin },
       { href: "/admin/users", label: "Users", Icon: NavUsers },
+      { href: "/admin/subscriptions", label: "Subscriptions", Icon: NavSubscription },
+      { href: "/admin/usage", label: "Usage", Icon: NavTrends, stub: true },
       { href: "/admin/settings#features", label: "Feature Flags", Icon: NavFlags },
     ],
   };

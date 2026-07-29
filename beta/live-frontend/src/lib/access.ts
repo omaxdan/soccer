@@ -357,53 +357,9 @@ export async function getPlatformStats(): Promise<PlatformStats | null> {
   }
 }
 
-export interface AdminUserRow {
-  userId: string;
-  displayName: string | null;
-  role: string;
-  provider: string | null;
-  plan: string;
-  status: string | null;
-  expiresAt: string | null;
-  lastLoginAt: string | null;
-}
-
-export async function getAdminUsers(limit = 200): Promise<AdminUserRow[]> {
-  const client = await supabaseServer();
-  if (!client) return [];
-  try {
-    const [profiles, subs] = await Promise.all([
-      client
-        .from("user_profiles")
-        .select("user_id, display_name, role, provider, last_login_at")
-        .order("created_at", { ascending: false })
-        .limit(limit),
-      client
-        .from("user_subscriptions")
-        .select("user_id, status, expires_at, plan:subscription_plans(slug)")
-        .eq("status", "active"),
-    ]);
-
-    const byUser = new Map(((subs.data as any[]) ?? []).map((s) => [s.user_id, s]));
-    return ((profiles.data as any[]) ?? []).map((p) => {
-      const s = byUser.get(p.user_id);
-      const live = s && (!s.expires_at || new Date(s.expires_at) > new Date());
-      return {
-        userId: p.user_id,
-        displayName: p.display_name ?? null,
-        role: p.role ?? "user",
-        provider: p.provider ?? null,
-        plan: (live && s.plan?.slug) || "free",
-        status: live ? s.status : null,
-        expiresAt: live ? s.expires_at ?? null : null,
-        lastLoginAt: p.last_login_at ?? null,
-      };
-    });
-  } catch {
-    return [];
-  }
-}
-
+// AdminUserRow / getAdminUsers moved to lib/admin.ts as listUsers(), which
+// adds search, filtering and real pagination — this file's job is gating,
+// not the admin CRUD surface, which outgrew a single function here.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Team brief redaction
