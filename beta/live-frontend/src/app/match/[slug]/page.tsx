@@ -8,7 +8,18 @@ import { getViewerIdentity } from "@/lib/access";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs } from "@/lib/queries";
+import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs, getTeamIntel } from "@/lib/queries";
+import { redactTeamInputs } from "@/lib/access";
+import type { TeamBriefInput } from "@/lib/teamBrief";
+import {
+  buildAttackDefenceMatchup, buildMomentumComparison, buildVolatilityComparison,
+  buildSustainabilityComparison, buildComparativeRisk, buildVenueDependenceComparison,
+  buildEdgeSummary, buildMatchNarrative,
+} from "@/lib/matchCompare";
+import {
+  TeamMatchup, AttackDefenceCard, MomentumCard, VolatilityCard, SustainabilityCard,
+  ComparativeRiskCard, VenueDependenceCard, EdgeSummaryCard, MatchNarrativeCard,
+} from "@/components/TeamMatchup";
 import { Crest } from "@/components/Crest";
 import { StatCell, PickBadge } from "@/components/Primitives";
 import { OpportunityRiskMeter, BarMeter, VersusBar } from "@/components/Meters";
@@ -59,9 +70,16 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
 
   // Modules are evaluated once and shared with <ModuleReport />, which passes
   // the readings on to <MatchReport />.
-  const [bandBacktests, playerImpacts] = await Promise.all([
+  const [bandBacktests, playerImpacts, homeTeamIntel, awayTeamIntel] = await Promise.all([
     getBandBacktests(),
     getMatchPlayerImpact(m.id),
+    // Same function the team page calls, for the same reason: it is the one
+    // place attack/defence rating, momentum, volatility and sustainability
+    // are fetched anywhere in the app. Calling it twice here — rather than
+    // writing new match-page-specific queries — is the reuse the head-to-head
+    // section below is built on.
+    getTeamIntel(m.home.id),
+    getTeamIntel(m.away.id),
   ]);
 
   // Versatility only where player_versatility holds a row; absent players
@@ -74,6 +92,48 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
     rows.map((p) => ({ ...p, versatility_score: versatility[p.player_id] ?? null }));
   // Redacted server-side: a locked module's numbers never reach the client.
   const access = await getAccessContext();
+
+  // Same TeamBriefInput shape, same field mapping, same redactTeamInputs call
+  // as app/team/[slug]/page.tsx — so a Pro-gated metric that is hidden on a
+  // team's own page cannot leak through the comparison built from it here.
+  const homeBrief: TeamBriefInput = {
+    teamName: homeName,
+    intel: homeTeamIntel.intel ?? null,
+    formQuality: homeTeamIntel.formQuality ?? null,
+    venue: homeTeamIntel.venue ?? null,
+    momentum: homeTeamIntel.momentum ?? null,
+    betting: (homeTeamIntel.betting as any) ?? null,
+    goalDep: (homeTeamIntel.goalDep as any) ?? null,
+    dashboard: (homeTeamIntel.strengthDashboard as any) ?? null,
+    style: (homeTeamIntel.playingStyle as any) ?? null,
+  };
+  const awayBrief: TeamBriefInput = {
+    teamName: awayName,
+    intel: awayTeamIntel.intel ?? null,
+    formQuality: awayTeamIntel.formQuality ?? null,
+    venue: awayTeamIntel.venue ?? null,
+    momentum: awayTeamIntel.momentum ?? null,
+    betting: (awayTeamIntel.betting as any) ?? null,
+    goalDep: (awayTeamIntel.goalDep as any) ?? null,
+    dashboard: (awayTeamIntel.strengthDashboard as any) ?? null,
+    style: (awayTeamIntel.playingStyle as any) ?? null,
+  };
+  const { input: homeBriefSafe } = redactTeamInputs(homeBrief, access);
+  const { input: awayBriefSafe } = redactTeamInputs(awayBrief, access);
+
+  // Every value below already exists — buildPillars/buildRisks are the exact
+  // functions the team page renders; classifyTrend/classifyConsistency/
+  // classifyFixtureVenue are the exact functions the module system already
+  // calls elsewhere. Nothing here recomputes a metric; matchCompare.ts only
+  // compares values these functions already produced.
+  const attackDefence = buildAttackDefenceMatchup(homeBriefSafe, awayBriefSafe);
+  const momentumCompare = buildMomentumComparison(homeBriefSafe, awayBriefSafe);
+  const volatilityCompare = buildVolatilityComparison(homeBriefSafe, awayBriefSafe);
+  const sustainabilityCompare = buildSustainabilityComparison(homeBriefSafe, awayBriefSafe);
+  const comparativeRisk = buildComparativeRisk(homeBriefSafe, awayBriefSafe);
+  const venueCompare = buildVenueDependenceComparison(homeBriefSafe, awayBriefSafe);
+  const edgeSummary = buildEdgeSummary(homeBriefSafe, awayBriefSafe);
+  const narrative = buildMatchNarrative(homeBriefSafe, awayBriefSafe, edgeSummary, attackDefence);
 
   // One flag for the whole page: the calibrated layer follows the Confidence
   // Calibration module's own tier, so hero, verdict and scorecard cannot
@@ -306,6 +366,22 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           lockedCount={moduleReadings.filter((r) => r.locked).length}
         />
       )}
+
+      {/* 3.5 — Head-to-head: transforms the same team intelligence each
+              team's own page shows into comparative intelligence. Nothing
+              here repeats Expected Goals / Win Probability / Readiness /
+              Confidence / Consensus / the Executive Summary above — those
+              stay exactly where they are. */}
+      <TeamMatchup>
+        <AttackDefenceCard matchup={attackDefence} homeName={homeName} awayName={awayName} />
+        <MomentumCard momentum={momentumCompare} homeName={homeName} awayName={awayName} />
+        <VolatilityCard volatility={volatilityCompare} homeName={homeName} awayName={awayName} />
+        <SustainabilityCard sustainability={sustainabilityCompare} homeName={homeName} awayName={awayName} />
+        <ComparativeRiskCard risk={comparativeRisk} homeName={homeName} awayName={awayName} />
+        <VenueDependenceCard venue={venueCompare} homeName={homeName} awayName={awayName} />
+        <EdgeSummaryCard edges={edgeSummary} homeName={homeName} awayName={awayName} />
+        <MatchNarrativeCard narrative={narrative} />
+      </TeamMatchup>
 
       {/* 4 — Predicted starting elevens */}
       <PredictedXI
