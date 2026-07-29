@@ -540,10 +540,76 @@ export async function addNote(targetUserId: string, note: string, flag?: string)
   return { ok: true };
 }
 
-/**
- * CSV, built server-side from the same listUsers() query — no separate export
- * pipeline, no separate data shape to keep in sync with the table.
- */
+// ── Confidence band analytics (read-only) ───────────────────────────────────
+//
+// This page must never calculate a statistic itself — every number here was
+// already computed by the shared engine in beta/backend/src/lib/confidenceBand.ts
+// and written by jobs/archiveReadinessHistory.ts / jobs/backtestConfidenceBands.ts.
+// These functions are SELECT * equivalents, nothing more.
+
+export interface LeagueBandCell {
+  leagueName: string;
+  band: string;
+  totalPicks: number;
+  hitRateStrict: number | null;
+  hitRateLenient: number | null;
+  baselineRate: number | null;
+  liftOverBaseline: number | null;
+  versatilityCoverage: number | null;
+}
+
+export interface LeagueBandSummaryRow {
+  leagueName: string;
+  totalPicks: number;
+  hitRateStrict: number | null;
+  liftOverBaseline: number | null;
+  bandStatus: string | null;
+  meetsSampleGate: boolean;
+}
+
+export async function getLeagueBandCells(): Promise<LeagueBandCell[]> {
+  const client = await supabaseServer();
+  if (!client) return [];
+  try {
+    const { data } = await client
+      .from("league_gap_analytics")
+      .select("league_name, gap_tier, total_picks, hit_rate_strict, hit_rate_lenient, baseline_rate, lift_over_baseline, versatility_coverage")
+      .order("total_picks", { ascending: false });
+    return ((data as any[]) ?? []).map((r) => ({
+      leagueName: r.league_name,
+      band: r.gap_tier, // column name predates the migration; now holds Elite/Strong/Moderate/Risky/Avoid
+      totalPicks: r.total_picks,
+      hitRateStrict: r.hit_rate_strict,
+      hitRateLenient: r.hit_rate_lenient,
+      baselineRate: r.baseline_rate,
+      liftOverBaseline: r.lift_over_baseline,
+      versatilityCoverage: r.versatility_coverage,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getLeagueBandSummary(): Promise<LeagueBandSummaryRow[]> {
+  const client = await supabaseServer();
+  if (!client) return [];
+  try {
+    const { data } = await client
+      .from("league_gap_summary")
+      .select("league_name, total_picks, hit_rate_strict, lift_over_baseline, band_status, meets_sample_gate")
+      .order("total_picks", { ascending: false });
+    return ((data as any[]) ?? []).map((r) => ({
+      leagueName: r.league_name,
+      totalPicks: r.total_picks,
+      hitRateStrict: r.hit_rate_strict,
+      liftOverBaseline: r.lift_over_baseline,
+      bandStatus: r.band_status,
+      meetsSampleGate: r.meets_sample_gate,
+    }));
+  } catch {
+    return [];
+  }
+}
 export async function exportUsersCsv(filters: UserListFilters = {}): Promise<string> {
   const actor = await requireActor();
   if ("error" in actor) return "";

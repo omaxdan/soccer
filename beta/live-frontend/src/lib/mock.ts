@@ -384,9 +384,9 @@ export const MOCK_LEAGUE_INTEL: LeagueIntelligence[] = [
 ];
 
 export const MOCK_LEAGUE_GAP: LeagueGapSummary[] = [
-  { league_name: "Brasileirão Série B", total_picks: 214, hit_rate_strict: 0.58, hit_rate_lenient: 0.71, lift_over_baseline: 0.12, baseline_rate: 0.46, readiness_status: "calibrated", meets_sample_gate: true },
-  { league_name: "Brasileirão Série C", total_picks: 168, hit_rate_strict: 0.54, hit_rate_lenient: 0.67, lift_over_baseline: 0.08, baseline_rate: 0.46, readiness_status: "calibrated", meets_sample_gate: true },
-  { league_name: "Eredivisie", total_picks: 92, hit_rate_strict: 0.61, hit_rate_lenient: 0.73, lift_over_baseline: 0.15, baseline_rate: 0.46, readiness_status: "monitoring", meets_sample_gate: false },
+  { league_name: "Brasileirão Série B", total_picks: 214, hit_rate_strict: 0.58, hit_rate_lenient: 0.71, lift_over_baseline: 12, baseline_rate: 0.46, band_status: "consistent", meets_sample_gate: true },
+  { league_name: "Brasileirão Série C", total_picks: 168, hit_rate_strict: 0.54, hit_rate_lenient: 0.67, lift_over_baseline: 8, baseline_rate: 0.46, band_status: "consistent", meets_sample_gate: true },
+  { league_name: "Eredivisie", total_picks: 92, hit_rate_strict: 0.61, hit_rate_lenient: 0.73, lift_over_baseline: 15, baseline_rate: 0.46, band_status: "insufficient", meets_sample_gate: false },
 ];
 
 // ── Season statistics (raw) for the performance engine ───

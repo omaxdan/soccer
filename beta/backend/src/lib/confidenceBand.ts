@@ -197,3 +197,200 @@ export function wilson(hits: number, n: number, z = 1.96): [number, number] {
     Math.min(100, ((centre + spread) / denom) * 100),
   ];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED HISTORICAL SCORING PIPELINE
+//
+// The one place a readiness_history row becomes a scored, banded outcome, and
+// the one place a group of them becomes a hit-rate/lift/interval statistic.
+// Before this existed, jobs/archiveReadinessHistory.ts walked
+// readiness_history with its own derivePick()/DRAW_GAP_BAND and its own
+// tier-bucketing, while jobs/backtestConfidenceBands.ts walked the SAME table
+// with the real derivePick()/bandFor()/wilson() and a different lift formula.
+// Both are now callers of scoreHistoricalRows() + summariseHistoricalRows().
+//
+//   readiness_history
+//         │
+//         ▼
+//   scoreHistoricalRows()   — one row in, one ScoredHistoryRow out, or a
+//                              recorded rejection. Nothing downstream ever
+//                              re-derives a pick or a band from raw columns.
+//         │
+//         ▼
+//   summariseHistoricalRows(rows, groupKey, options)
+//         │
+//         ├─ groupKey = r => r.band                       → platform stats
+//         └─ groupKey = r => `${r.leagueName}::${r.band}`  → league × band cells
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** What a caller selects from readiness_history before handing rows here. */
+export interface RawFrozenRow {
+  matchId: number;
+  leagueName: string;
+  snapshotAt: string | null;
+  matchDate: string | null;
+  confidencePct: number | null;
+  predictedGap: number | null;
+  predictedPick: string | null;
+  finalOutcome: string | null;
+  pickCorrectStrict: boolean | null;
+  pickCorrectLenient: boolean | null;
+  /** Optional — not every league/tier has this tracked. Absence means "not available", never zero. */
+  squadVersatility: number | null;
+}
+
+export interface ScoredHistoryRow {
+  matchId: number;
+  leagueName: string;
+  band: ConfidenceBand;
+  score: number;
+  predictedGap: number;
+  pick: Pick;
+  outcome: Pick;
+  strict: boolean;
+  lenient: boolean;
+  squadVersatility: number | null;
+}
+
+export interface ScoreRejections {
+  /** snapshot_at missing/null, match_date missing/null, or snapshot_at >= match_date. */
+  notPreKickoff: number;
+  /** Result not yet linked, or a required column is null. */
+  missingFields: number;
+  /** confidence_pct present but out of bandFor()'s domain (should not occur; recorded, not assumed impossible). */
+  noBand: number;
+}
+
+/**
+ * Turns raw readiness_history rows into scored, banded outcomes.
+ *
+ * The defensive `snapshot_at < match_date` re-check — previously only inside
+ * backtestConfidenceBands.ts's FROZEN mode — runs here unconditionally, so
+ * every caller of this function gets it, including the league aggregation
+ * that previously trusted the table's write-time contract without re-
+ * verifying it. A row failing this is dropped and counted, never assumed
+ * valid because it "should" be.
+ */
+export function scoreHistoricalRows(
+  rows: RawFrozenRow[]
+): { scored: ScoredHistoryRow[]; rejected: ScoreRejections } {
+  const scored: ScoredHistoryRow[] = [];
+  const rejected: ScoreRejections = { notPreKickoff: 0, missingFields: 0, noBand: 0 };
+
+  for (const r of rows) {
+    const snapTs = r.snapshotAt ? new Date(r.snapshotAt).getTime() : null;
+    const kickTs = r.matchDate ? new Date(r.matchDate).getTime() : null;
+    if (snapTs == null || kickTs == null || snapTs >= kickTs) {
+      rejected.notPreKickoff++;
+      continue;
+    }
+    if (
+      r.confidencePct == null || r.predictedGap == null || !r.predictedPick ||
+      !r.finalOutcome || r.pickCorrectStrict == null || r.pickCorrectLenient == null
+    ) {
+      rejected.missingFields++;
+      continue;
+    }
+    const band = bandFor(Number(r.confidencePct));
+    if (!band) {
+      rejected.noBand++;
+      continue;
+    }
+    scored.push({
+      matchId: r.matchId,
+      leagueName: r.leagueName,
+      band,
+      score: Number(r.confidencePct),
+      predictedGap: Number(r.predictedGap),
+      pick: r.predictedPick as Pick,
+      outcome: r.finalOutcome as Pick,
+      strict: r.pickCorrectStrict === true,
+      lenient: r.pickCorrectLenient === true,
+      squadVersatility: r.squadVersatility,
+    });
+  }
+  return { scored, rejected };
+}
+
+export interface GroupStat {
+  /** Whatever groupKey() returned for this group — the caller parses it back. */
+  key: string;
+  n: number;
+  hits: number;
+  rate: number;
+  rateLenient: number;
+  ciLow: number;
+  ciHigh: number;
+  baseline: number;
+  /** Internal only. Never persisted or displayed — see liftPct. */
+  liftRatio: number;
+  /**
+   * (liftRatio - 1) * 100, e.g. rate 48% over baseline 40% -> ratio 1.20 ->
+   * liftPct +20. This, not liftRatio, is what league_gap_analytics/summary
+   * store: an explicit product decision that the public meaning of
+   * lift_over_baseline (a signed percentage) must not change even though the
+   * statistic computed internally is now a ratio. signal_backtests.lift is
+   * untouched by this — it has no frontend consumer today and keeps storing
+   * the ratio it always has.
+   */
+  liftPct: number;
+  calibrated: boolean;
+}
+
+/**
+ * Generic over any row shape carrying at least strict/lenient — the function
+ * only ever reads those two fields plus whatever groupKey()/baselineOf()
+ * themselves choose to read from a row, which the caller supplies. This is
+ * what lets archiveReadinessHistory.ts's richer ScoredHistoryRow (leagueName,
+ * predictedGap, squadVersatility) and backtestConfidenceBands.ts's narrower
+ * Scored (no league — RECONSTRUCTED/CURRENT populations are not built from
+ * readiness_history) share the exact same aggregation function without
+ * forcing an artificial shape match between two genuinely different row
+ * types that happen to both need "group, count hits, Wilson, lift".
+ */
+export interface HitRow {
+  strict: boolean;
+  lenient: boolean;
+}
+
+export function summariseHistoricalRows<T extends HitRow>(
+  rows: T[],
+  groupKey: (r: T) => string,
+  options: {
+    minSample: number;
+    minLift: number;
+    baselineOf: (representative: T, allRows: T[]) => number;
+  }
+): GroupStat[] {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) {
+    const key = groupKey(r);
+    const list = groups.get(key);
+    if (list) list.push(r);
+    else groups.set(key, [r]);
+  }
+
+  const out: GroupStat[] = [];
+  for (const [key, group] of groups) {
+    const n = group.length;
+    const hits = group.filter(r => r.strict).length;
+    const rate = n > 0 ? hits / n : 0;
+    const [ciLow, ciHigh] = wilson(hits, n);
+    const baseline = options.baselineOf(group[0], rows);
+    const liftRatio = baseline > 0 ? rate / baseline : 0;
+    out.push({
+      key, n, hits, rate,
+      rateLenient: n > 0 ? group.filter(r => r.lenient).length / n : 0,
+      ciLow, ciHigh, baseline, liftRatio,
+      liftPct: Math.round((liftRatio - 1) * 1000) / 10,
+      calibrated: n >= options.minSample && liftRatio >= options.minLift,
+    });
+  }
+  return out;
+}
+
+/** Strict hit-rate over an arbitrary pool of already-scored rows. Used to build baselineOf callbacks. */
+export function strictRate(rows: HitRow[]): number {
+  if (rows.length === 0) return 0;
+  return rows.filter(r => r.strict).length / rows.length;
+}

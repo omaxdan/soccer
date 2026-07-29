@@ -2,8 +2,9 @@ import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { fetchAllRows } from '../db/fetchAllRows';
 import {
-  bandFor, derivePick, outcomeOf, wilson, computeConfidenceScore,
+  bandFor, derivePick, outcomeOf, computeConfidenceScore,
   BAND_ORDER, ARCHIVABLE_COMPONENTS, ARCHIVABLE_WEIGHT, TOTAL_WEIGHT,
+  scoreHistoricalRows, summariseHistoricalRows, strictRate,
   type ConfidenceBand, type Pick, type ComponentKey,
 } from '../lib/confidenceBand';
 
@@ -118,20 +119,36 @@ interface BandStat {
   calibrated: boolean;
 }
 
+/**
+ * Adapter over the shared engine, not a second implementation of it.
+ *
+ * summariseHistoricalRows() returns GroupStat[] keyed by a generic string and
+ * exposing liftPct (the percentage form) alongside liftRatio (internal only,
+ * never persisted per the product decision that lift_over_baseline's public
+ * meaning must not change). This file's BandStat shape and every downstream
+ * consumer of it (agreement checks, monotonic-pair checks, the signal_backtests
+ * persist step) is UNCHANGED — signal_backtests.lift has always stored the
+ * ratio and has no frontend consumer today (confirmed before this migration),
+ * so there was no reason to touch its contract. Only the computation this
+ * function used to duplicate — grouping, Wilson interval, lift, the
+ * calibration gate — now runs once, shared with the league aggregation.
+ */
 function summarise(rows: Scored[]): BandStat[] {
-  const baseline = rows.length > 0 ? rows.filter(r => r.strict).length / rows.length : 0;
+  const baseline = strictRate(rows);
+  const stats = summariseHistoricalRows(rows, r => r.band, {
+    minSample: MIN_SAMPLE,
+    minLift: MIN_LIFT,
+    baselineOf: () => baseline,
+  });
+  const byBand = new Map(stats.map(s => [s.key as ConfidenceBand, s]));
   return BAND_ORDER.map(band => {
-    const inBand = rows.filter(r => r.band === band);
-    const n = inBand.length;
-    const hits = inBand.filter(r => r.strict).length;
-    const rate = n > 0 ? hits / n : 0;
-    const [ciLow, ciHigh] = wilson(hits, n);
-    const lift = baseline > 0 ? rate / baseline : 0;
+    const s = byBand.get(band);
+    if (!s) return { band, n: 0, hits: 0, rate: 0, rateLenient: 0, ciLow: 0, ciHigh: 0, baseline, lift: 0, calibrated: false };
     return {
-      band, n, hits, rate,
-      rateLenient: n > 0 ? inBand.filter(r => r.lenient).length / n : 0,
-      ciLow, ciHigh, baseline, lift,
-      calibrated: n >= MIN_SAMPLE && lift >= MIN_LIFT,
+      band, n: s.n, hits: s.hits, rate: s.rate, rateLenient: s.rateLenient,
+      ciLow: s.ciLow, ciHigh: s.ciHigh, baseline: s.baseline,
+      lift: s.liftRatio, // signal_backtests.lift stays a ratio — see note above
+      calibrated: s.calibrated,
     };
   });
 }
@@ -198,7 +215,7 @@ export async function backtestConfidenceBands() {
     ),
     fetchAllRows<any>(
       db.from('readiness_history')
-        .select('match_id, snapshot_at, match_date, confidence_pct, predicted_pick, home_readiness, away_readiness, final_outcome, pick_correct_strict, pick_correct_lenient, result_linked_at')
+        .select('match_id, league_name, snapshot_at, match_date, confidence_pct, predicted_pick, predicted_gap, home_readiness, away_readiness, final_outcome, pick_correct_strict, pick_correct_lenient, result_linked_at, squad_versatility')
         .not('result_linked_at', 'is', null)
     ),
     fetchAllRows<any>(
@@ -294,23 +311,29 @@ export async function backtestConfidenceBands() {
     void kickTs;
   }
 
-  // -- MODE FROZEN ----------------------------------------------------------
-  const frozen: Scored[] = [];
-  let frozenRejectedNotPreKickoff = 0;
-  for (const r of readyHist) {
-    const snapTs = r.snapshot_at ? new Date(r.snapshot_at).getTime() : null;
-    const kickTs = r.match_date ? new Date(r.match_date).getTime() : null;
-    if (snapTs == null || kickTs == null || snapTs >= kickTs) { frozenRejectedNotPreKickoff++; continue; }
-    if (r.confidence_pct == null || !r.predicted_pick || !r.final_outcome) continue;
-    const band = bandFor(Number(r.confidence_pct));
-    if (!band) continue;
-    frozen.push({
-      matchId: r.match_id, band, score: Number(r.confidence_pct),
-      pick: r.predicted_pick as Pick, outcome: r.final_outcome as Pick,
-      strict: r.pick_correct_strict === true,
-      lenient: r.pick_correct_lenient === true,
-    });
-  }
+  // -- MODE FROZEN ------------------------------------------------------------
+  // Was a manual loop re-deriving band/pick/hit from readiness_history —
+  // exactly what scoreHistoricalRows() now does once, shared with
+  // archiveReadinessHistory.ts's league aggregation. The defensive
+  // snapshot_at < match_date check that used to live only here is now inside
+  // the shared function, so it applies identically everywhere readiness_history
+  // is scored.
+  const { scored: frozen, rejected: frozenScoreRejections } = scoreHistoricalRows(
+    readyHist.map((r: any) => ({
+      matchId: r.match_id,
+      leagueName: r.league_name,
+      snapshotAt: r.snapshot_at,
+      matchDate: r.match_date,
+      confidencePct: r.confidence_pct,
+      predictedGap: r.predicted_gap,
+      predictedPick: r.predicted_pick,
+      finalOutcome: r.final_outcome,
+      pickCorrectStrict: r.pick_correct_strict,
+      pickCorrectLenient: r.pick_correct_lenient,
+      squadVersatility: r.squad_versatility,
+    }))
+  );
+  const frozenRejectedNotPreKickoff = frozenScoreRejections.notPreKickoff;
 
   // -- MODE CURRENT ---------------------------------------------------------
   const current: Scored[] = [];
@@ -475,6 +498,11 @@ export async function backtestConfidenceBands() {
     hit_rate: Math.round(s.rate * 10000) / 10000,
     baseline_rate: Math.round(s.baseline * 10000) / 10000,
     lift: Math.round(s.lift * 1000) / 1000,
+    // Already computed inside summarise() -> summariseHistoricalRows() via
+    // wilson(hits, n); this is the first thing that persists it rather than
+    // discarding it at the end of the run.
+    ci_low: Math.round(s.ciLow * 100) / 100,
+    ci_high: Math.round(s.ciHigh * 100) / 100,
     is_calibrated: s.calibrated,
     window_days: null,
     notes: s.calibrated ? note

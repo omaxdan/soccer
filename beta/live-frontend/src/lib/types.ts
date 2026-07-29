@@ -549,7 +549,11 @@ export interface LeagueGapSummary {
   hit_rate_lenient: number | null;
   lift_over_baseline: number | null;
   baseline_rate: number | null;
-  readiness_status: string | null;
+  /** consistent / mixed / volatile / insufficient. Was readiness_status —
+   *  renamed with migration 039 once the dimension it summarises moved from
+   *  readiness gap to confidence band. No render site read the old name;
+   *  confirmed by search before either the migration or this rename shipped. */
+  band_status: string | null;
   meets_sample_gate: boolean;
 }
 

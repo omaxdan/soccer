@@ -20,32 +20,12 @@
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { zoneOfPositionCode } from '../lib/lineups';
+import {
+  derivePick, outcomeOf, scoreHistoricalRows, summariseHistoricalRows,
+  strictRate, type Pick, type RawFrozenRow,
+} from '../lib/confidenceBand';
 
 const READINESS_FORMULA_VERSION = 'v1';
-
-// Near-zero readiness gap band within which the pick is recorded as DRAW
-// rather than being forced onto a side. A documented constant, not a magic
-// number buried in a branch — surfaced here for the team to tune (spec §5).
-const DRAW_GAP_BAND = 3;
-
-type Pick = 'HOME' | 'AWAY' | 'DRAW';
-
-/** Derive the analytical pick + the pick-oriented signed gap from a match's
- *  readiness numbers. The pick is HOME/AWAY for a meaningful gap, DRAW inside
- *  the near-zero band. predicted_gap is SIGNED RELATIVE TO THE PICK: positive
- *  when the picked side had the higher readiness, negative when the pick is
- *  the lower-readiness side (only possible if a future non-readiness factor
- *  ever overrides — with the current pure-readiness pick it will be >= 0 for
- *  HOME/AWAY picks, but the column and orientation exist so the "Negative
- *  Edge" tier is populatable the moment such a factor is introduced). */
-function derivePick(homeReadiness: number, awayReadiness: number): { pick: Pick; gap: number } {
-  const rawGap = homeReadiness - awayReadiness; // + favors home, − favors away
-  if (Math.abs(rawGap) <= DRAW_GAP_BAND) {
-    return { pick: 'DRAW', gap: rawGap }; // gap near zero by definition
-  }
-  if (rawGap > 0) return { pick: 'HOME', gap: rawGap };        // + = home advantage, agrees
-  return { pick: 'AWAY', gap: Math.abs(rawGap) };              // magnitude in favor of away pick
-}
 
 /** Average per-player predicted-lineup confidence within each position area,
  *  → department confidence: the mean confidence of that team's predicted-XI
@@ -130,7 +110,11 @@ export async function archiveReadinessSnapshot(): Promise<{ candidates: number; 
   let written = 0;
   for (const m of toWrite) {
     const mi = toOne(m.mi);
+    // toWrite is pre-filtered to rows with both readiness values present, so
+    // this is never actually null here — the guard is defensive, matching this
+    // file's own discipline elsewhere of rejecting rather than assuming.
     const { pick, gap } = derivePick(mi.home_readiness, mi.away_readiness);
+    if (!pick || gap == null) continue;
     const dept = deriveDepartmentConfidence(lineupByMatch.get(m.id) ?? []);
 
     const { error: insErr } = await db.from('readiness_history').insert({
@@ -235,7 +219,11 @@ export async function archiveReadinessSnapshotForDate(dateStr: string): Promise<
   let written = 0;
   for (const m of toWrite) {
     const mi = toOne(m.mi);
+    // toWrite is pre-filtered to rows with both readiness values present, so
+    // this is never actually null here — the guard is defensive, matching this
+    // file's own discipline elsewhere of rejecting rather than assuming.
     const { pick, gap } = derivePick(mi.home_readiness, mi.away_readiness);
+    if (!pick || gap == null) continue;
     const dept = deriveDepartmentConfidence(lineupByMatch.get(m.id) ?? []);
 
     const { error: insErr } = await db.from('readiness_history').insert({
@@ -303,8 +291,7 @@ export async function linkReadinessResults(): Promise<{ pending: number; linked:
     const res = resultByMatch.get(snap.match_id);
     if (!res) continue; // not finished yet — leave unlinked
 
-    const outcome: Pick = res.home_score > res.away_score ? 'HOME'
-      : res.home_score < res.away_score ? 'AWAY' : 'DRAW';
+    const outcome: Pick = outcomeOf(res.home_score, res.away_score);
 
     // Strict: pick matches outcome exactly (draw is its own outcome).
     const strict = snap.predicted_pick === outcome;
@@ -353,88 +340,115 @@ function toOne<T>(v: T | T[] | null | undefined): T | null {
 const SAMPLE_GATE_HEADLINE = 30;    // spec §2.6 — confident badge threshold
 const SAMPLE_GATE_PROVISIONAL = 10; // spec §2.6 — softer "provisional" band
 
-type GapTier = 'strong' | 'moderate' | 'small' | 'negative';
-
-function gapTier(predictedGap: number): GapTier {
-  if (predictedGap < 0) return 'negative';
-  if (predictedGap >= 20) return 'strong';
-  if (predictedGap >= 10) return 'moderate';
-  return 'small';
-}
-
+/**
+ * Rebuilds league_gap_analytics (league x band cells) and league_gap_summary
+ * (per-league roll-up) from readiness_history, using the SHARED engine —
+ * scoreHistoricalRows() for the row-level pick/band/hit, summariseHistoricalRows()
+ * for the aggregation. This function used to do both of those itself, with its
+ * own gapTier() bucketing by readiness-gap magnitude; it now differs from
+ * jobs/backtestConfidenceBands.ts's platform aggregation only in its groupKey
+ * and its baseline's pool — same statistics, same Wilson interval, same lift
+ * formula, same defensive pre-kickoff check.
+ *
+ * BASELINE, now shared with the platform backtest's methodology rather than
+ * the previous "guess the league's most common outcome" naive rate: each
+ * band's hit rate is measured against ITS OWN LEAGUE's overall strict hit
+ * rate across all bands. "Is Elite better than this league's picks on
+ * average" rather than "is Elite better than blind guessing" — the same
+ * self-referential baseline concept backtestConfidenceBands.ts already used
+ * for the platform-wide numbers, now applied at league scope. This is a real
+ * change in what the stored lift_over_baseline MEANS, not just how it is
+ * computed; the number for a given league will differ from what it showed
+ * before this migration ran, even though its unit and format do not.
+ *
+ * LIFT, STORED AS A PERCENTAGE — explicit product decision, not an oversight.
+ * summariseHistoricalRows() computes lift internally as a ratio (rate /
+ * baseline). What gets written to lift_over_baseline is liftPct =
+ * (ratio - 1) * 100 — e.g. a 48% hit rate over a 40% baseline is ratio 1.20,
+ * stored as +20. This keeps every existing frontend render site
+ * (app/leagues/page.tsx, app/league/[slug]/page.tsx) working unmodified: the
+ * column is still a signed percentage number, same as it always was. Only
+ * the FORMULA feeding it changed, not its shape.
+ */
 export async function refreshLeagueGapAnalytics(): Promise<{ rowsScanned: number; leagues: number; cells: number }> {
-  logger.info('refreshLeagueGapAnalytics started — rebuilding aggregates');
+  logger.info('refreshLeagueGapAnalytics started — rebuilding aggregates (band dimension)');
 
-  // Only result-linked rows contribute to accuracy. An unlinked row (match
-  // not finished, or postponed/cancelled and never linked) has no outcome to
-  // score and is simply excluded — consistent with how the platform treats
-  // inactive matches elsewhere.
+  // Only result-linked rows contribute to accuracy — a match not yet finished
+  // has no outcome to score. confidence_pct and snapshot_at are now selected
+  // too: the old query did not need them (gapTier read predicted_gap only,
+  // and there was no defensive pre-kickoff re-check). scoreHistoricalRows()
+  // needs both.
   const { data: rows, error } = await db
     .from('readiness_history')
-    .select('league_name, predicted_gap, pick_correct_strict, pick_correct_lenient, final_outcome, squad_versatility, home_readiness, away_readiness')
+    .select('match_id, league_name, snapshot_at, match_date, confidence_pct, predicted_gap, predicted_pick, final_outcome, pick_correct_strict, pick_correct_lenient, squad_versatility')
     .not('result_linked_at', 'is', null);
 
   if (error) throw new Error(`analytics source query: ${error.message}`);
-  const linked = rows ?? [];
 
-  // ── per-league baseline: the naive accuracy with NO model. Defined here as
-  //    the league's base rate of the most common single outcome (home/draw/
-  //    away) — "how often would you be right by always guessing this league's
-  //    modal result." Lift is then how much the readiness pick beats that. ──
-  const outcomesByLeague = new Map<string, { HOME: number; DRAW: number; AWAY: number; total: number }>();
-  for (const r of linked) {
-    if (!r.final_outcome) continue;
-    const o = outcomesByLeague.get(r.league_name) ?? { HOME: 0, DRAW: 0, AWAY: 0, total: 0 };
-    o[r.final_outcome as 'HOME' | 'DRAW' | 'AWAY']++;
-    o.total++;
-    outcomesByLeague.set(r.league_name, o);
-  }
-  const baselineByLeague = new Map<string, number>();
-  for (const [league, o] of outcomesByLeague) {
-    const modal = Math.max(o.HOME, o.DRAW, o.AWAY);
-    baselineByLeague.set(league, o.total > 0 ? modal / o.total : 0);
-  }
+  const raw: RawFrozenRow[] = (rows ?? []).map((r: any) => ({
+    matchId: r.match_id,
+    leagueName: r.league_name,
+    snapshotAt: r.snapshot_at,
+    matchDate: r.match_date,
+    confidencePct: r.confidence_pct,
+    predictedGap: r.predicted_gap,
+    predictedPick: r.predicted_pick,
+    finalOutcome: r.final_outcome,
+    pickCorrectStrict: r.pick_correct_strict,
+    pickCorrectLenient: r.pick_correct_lenient,
+    squadVersatility: r.squad_versatility,
+  }));
 
-  // ── per (league × tier) cells ──
-  type Cell = {
-    league: string; tier: GapTier; total: number;
-    correctStrict: number; correctLenient: number;
-    winningGaps: number[]; losingGaps: number[]; versatilityPresent: number;
-  };
-  const cells = new Map<string, Cell>();
-  for (const r of linked) {
-    const tier = gapTier(Number(r.predicted_gap));
-    const key = `${r.league_name}::${tier}`;
-    const c: Cell = cells.get(key) ?? {
-      league: r.league_name, tier, total: 0,
-      correctStrict: 0, correctLenient: 0,
-      winningGaps: [], losingGaps: [], versatilityPresent: 0,
-    };
-    c.total++;
-    if (r.pick_correct_strict) { c.correctStrict++; c.winningGaps.push(Number(r.predicted_gap)); }
-    else { c.losingGaps.push(Number(r.predicted_gap)); }
-    if (r.pick_correct_lenient) c.correctLenient++;
-    if (r.squad_versatility != null) c.versatilityPresent++;
-    cells.set(key, c);
-  }
+  const { scored, rejected } = scoreHistoricalRows(raw);
+  logger.info(
+    { candidates: raw.length, scored: scored.length, rejected },
+    'refreshLeagueGapAnalytics: rows scored'
+  );
 
-  const mean = (a: number[]) => (a.length === 0 ? null : Math.round((a.reduce((s, x) => s + x, 0) / a.length) * 100) / 100);
-  const rate = (n: number, d: number) => (d === 0 ? null : Math.round((n / d) * 1000) / 10); // one-decimal %
+  // ONE baseline, computed once, used for every cell and every league below —
+  // the platform-wide overall strict rate. This is deliberately NOT scoped
+  // per-league. A first pass here measured each league's cells against that
+  // league's own average, which is the wrong analogy to draw from
+  // backtestConfidenceBands.ts: that job uses ONE baseline for its entire
+  // call (the whole platform), not a baseline that varies by group. A
+  // per-league summary row's lift against ITS OWN average is also
+  // tautologically ~0 by construction, which would have made
+  // league_gap_summary.lift_over_baseline a useless constant — a regression
+  // in information, not just a different formula. Using the platform-wide
+  // rate everywhere answers a real, useful question instead: is this
+  // league/band combination better or worse than the platform as a whole.
+  const platformBaseline = strictRate(scored);
 
-  // Rebuild league_gap_analytics.
+  // ── league x band cells -> league_gap_analytics ──────────────────────────
+  const cellStats = summariseHistoricalRows(
+    scored,
+    r => `${r.leagueName}::${r.band}`,
+    {
+      minSample: SAMPLE_GATE_PROVISIONAL,
+      minLift: 1.0, // cells are informational, not calibration-gated; the real gate is on the summary roll-up below
+      baselineOf: () => platformBaseline,
+    }
+  );
+
   await db.from('league_gap_analytics').delete().neq('id', 0); // TRUNCATE-equivalent via delete-all
-  const analyticsRows = [...cells.values()].map(c => {
-    const hitStrict = rate(c.correctStrict, c.total);
-    const baseline = (baselineByLeague.get(c.league) ?? 0) * 100;
+  const analyticsRows = cellStats.map(c => {
+    const [leagueName, band] = c.key.split('::');
     return {
-      league_name: c.league, gap_tier: c.tier, total_picks: c.total,
-      hit_rate_strict: hitStrict,
-      hit_rate_lenient: rate(c.correctLenient, c.total),
-      avg_winning_gap: mean(c.winningGaps),
-      avg_losing_gap: mean(c.losingGaps),
-      baseline_rate: Math.round(baseline * 10) / 10,
-      lift_over_baseline: hitStrict != null ? Math.round((hitStrict - baseline) * 10) / 10 : null,
-      versatility_coverage: rate(c.versatilityPresent, c.total),
+      league_name: leagueName,
+      gap_tier: band, // column name kept; now stores Elite/Strong/Moderate/Risky/Avoid
+      total_picks: c.n,
+      hit_rate_strict: Math.round(c.rate * 1000) / 10,
+      hit_rate_lenient: Math.round(c.rateLenient * 1000) / 10,
+      avg_winning_gap: mean(scored.filter(r => r.leagueName === leagueName && r.band === band && r.strict).map(r => r.predictedGap)),
+      avg_losing_gap: mean(scored.filter(r => r.leagueName === leagueName && r.band === band && !r.strict).map(r => r.predictedGap)),
+      baseline_rate: Math.round(c.baseline * 1000) / 10,
+      lift_over_baseline: c.liftPct,
+      versatility_coverage: (() => {
+        const cell = scored.filter(r => r.leagueName === leagueName && r.band === band);
+        return cell.length > 0
+          ? Math.round((cell.filter(r => r.squadVersatility != null).length / cell.length) * 1000) / 10
+          : null;
+      })(),
     };
   });
   if (analyticsRows.length > 0) {
@@ -442,54 +456,53 @@ export async function refreshLeagueGapAnalytics(): Promise<{ rowsScanned: number
     if (insErr) throw new Error(`league_gap_analytics insert: ${insErr.message}`);
   }
 
-  // ── per-league roll-up ──
-  type LeagueAgg = { total: number; correctStrict: number; correctLenient: number; winningGaps: number[]; tierHitRates: number[] };
-  const leagueAgg = new Map<string, LeagueAgg>();
-  for (const c of cells.values()) {
-    const g: LeagueAgg = leagueAgg.get(c.league) ?? { total: 0, correctStrict: 0, correctLenient: 0, winningGaps: [], tierHitRates: [] };
-    g.total += c.total;
-    g.correctStrict += c.correctStrict;
-    g.correctLenient += c.correctLenient;
-    g.winningGaps.push(...c.winningGaps);
-    const cellHit = c.total > 0 ? c.correctStrict / c.total : null;
-    if (cellHit != null && c.total >= SAMPLE_GATE_PROVISIONAL) g.tierHitRates.push(cellHit);
-    leagueAgg.set(c.league, g);
-  }
+  // ── per-league roll-up -> league_gap_summary ─────────────────────────────
+  const leagueStats = summariseHistoricalRows(
+    scored,
+    r => r.leagueName,
+    {
+      minSample: SAMPLE_GATE_HEADLINE,
+      minLift: 1.0,
+      baselineOf: () => platformBaseline,
+    }
+  );
 
   await db.from('league_gap_summary').delete().neq('id', 0);
-  const summaryRows = [...leagueAgg.entries()].map(([league, g]) => {
-    const hitStrict = rate(g.correctStrict, g.total);
-    const baseline = (baselineByLeague.get(league) ?? 0) * 100;
-    const lift = hitStrict != null ? Math.round((hitStrict - baseline) * 10) / 10 : null;
-    const meetsGate = g.total >= SAMPLE_GATE_HEADLINE;
+  const summaryRows = leagueStats.map(s => {
+    const league = s.key;
+    const cellsForLeague = cellStats.filter(c => c.key.startsWith(`${league}::`));
+    const meetsGate = s.n >= SAMPLE_GATE_HEADLINE;
 
-    // readiness_status — factual, sample-gated. "insufficient" until the
-    // headline gate is met (never a confident badge on thin data, spec §2.6).
-    // Among gated leagues: consistent = beats baseline with low tier
-    // variance; volatile = erratic across tiers or below baseline; mixed
-    // otherwise. Variance measured as the spread of per-tier hit rates.
+    // band_status (was readiness_status) — factual, sample-gated. No live
+    // consumer read the old column's values (confirmed before this migration:
+    // grep found zero render sites), so this rename and this recomputation
+    // are both safe. Same variance-based logic as before — beats the
+    // platform baseline with low spread across its own band cells =
+    // consistent; below baseline or high spread = volatile — now measured
+    // across BAND cells instead of gap-tier cells.
     let status: string;
     if (!meetsGate) {
       status = 'insufficient';
     } else {
-      const hr = g.tierHitRates;
-      const variance = hr.length >= 2
-        ? hr.reduce((s, x) => s + (x - hr.reduce((a, b) => a + b, 0) / hr.length) ** 2, 0) / hr.length
+      const cellRates = cellsForLeague.filter(c => c.n >= SAMPLE_GATE_PROVISIONAL).map(c => c.rate);
+      const variance = cellRates.length >= 2
+        ? cellRates.reduce((acc, x) => acc + (x - cellRates.reduce((a, b) => a + b, 0) / cellRates.length) ** 2, 0) / cellRates.length
         : 0;
-      const beatsBaseline = (lift ?? 0) > 0;
+      const beatsBaseline = s.liftPct > 0;
       if (beatsBaseline && variance < 0.02) status = 'consistent';
       else if (!beatsBaseline || variance > 0.05) status = 'volatile';
       else status = 'mixed';
     }
 
     return {
-      league_name: league, total_picks: g.total,
-      hit_rate_strict: hitStrict,
-      hit_rate_lenient: rate(g.correctLenient, g.total),
-      avg_winning_gap: mean(g.winningGaps),
-      baseline_rate: Math.round(baseline * 10) / 10,
-      lift_over_baseline: lift,
-      readiness_status: status,
+      league_name: league,
+      total_picks: s.n,
+      hit_rate_strict: Math.round(s.rate * 1000) / 10,
+      hit_rate_lenient: Math.round(s.rateLenient * 1000) / 10,
+      avg_winning_gap: mean(scored.filter(r => r.leagueName === league && r.strict).map(r => r.predictedGap)),
+      baseline_rate: Math.round(s.baseline * 1000) / 10,
+      lift_over_baseline: s.liftPct,
+      band_status: status,
       meets_sample_gate: meetsGate,
     };
   });
@@ -498,6 +511,13 @@ export async function refreshLeagueGapAnalytics(): Promise<{ rowsScanned: number
     if (insErr) throw new Error(`league_gap_summary insert: ${insErr.message}`);
   }
 
-  logger.info({ rowsScanned: linked.length, leagues: leagueAgg.size, cells: cells.size }, 'refreshLeagueGapAnalytics completed');
-  return { rowsScanned: linked.length, leagues: leagueAgg.size, cells: cells.size };
+  logger.info(
+    { rowsScanned: scored.length, leagues: leagueStats.length, cells: cellStats.length },
+    'refreshLeagueGapAnalytics completed'
+  );
+  return { rowsScanned: scored.length, leagues: leagueStats.length, cells: cellStats.length };
+}
+
+function mean(a: number[]): number | null {
+  return a.length === 0 ? null : Math.round((a.reduce((s, x) => s + x, 0) / a.length) * 100) / 100;
 }

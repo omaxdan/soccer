@@ -996,7 +996,11 @@ export interface BandBacktest {
   band: string;
   rate: number;
   sample: number;
+  hits: number;
   lift: number;
+  /** Wilson 95% interval, as percentages. Null on any row written before migration 040. */
+  ciLow: number | null;
+  ciHigh: number | null;
   isCalibrated: boolean;
   evaluatedAt: string | null;
 }
@@ -1007,7 +1011,7 @@ export async function getBandBacktests(): Promise<Record<string, BandBacktest>> 
   try {
     const { data, error } = await client
       .from("signal_backtests")
-      .select("rule_key, sample_size, hit_rate, lift, is_calibrated, evaluated_at")
+      .select("rule_key, sample_size, hits, hit_rate, lift, ci_low, ci_high, is_calibrated, evaluated_at")
       .eq("market", "PICK_STRICT");
     if (error || !data) return {};
     const out: Record<string, BandBacktest> = {};
@@ -1022,7 +1026,10 @@ export async function getBandBacktests(): Promise<Record<string, BandBacktest>> 
         band,
         rate: Number(r.hit_rate) * 100,
         sample: Number(r.sample_size),
+        hits: Number(r.hits ?? 0),
         lift: Number(r.lift),
+        ciLow: r.ci_low != null ? Number(r.ci_low) : null,
+        ciHigh: r.ci_high != null ? Number(r.ci_high) : null,
         isCalibrated: r.is_calibrated === true,
         evaluatedAt: r.evaluated_at ?? null,
       };
