@@ -265,7 +265,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
       </section>
 
       {!i && !m.opportunity && !m.risk && (
-        <div className="rounded-term border border-line bg-raised/50 p-4 text-center">
+        <div className="rounded-term border border-line bg-[color-mix(in_srgb,var(--raised)_50%,var(--panel))] p-4 text-center">
           <p className="mono text-[0.7rem] font-semibold text-amber">Intelligence pending</p>
           <p className="mono mt-1 text-[0.62rem] leading-relaxed text-muted">
             This fixture is on the board — the model hasn&rsquo;t finished processing readiness, signals and risk yet. Check back closer to kickoff.
@@ -376,7 +376,7 @@ function ScoringProbsCard({ probs, homeName, awayName }: { probs: MatchScoringPr
   const bttsColor = btts != null && btts >= 55 ? "var(--amber)" : "var(--text)";
   const partial = probs.components_available != null && probs.components_available < 4;
   return (
-    <div className="mt-3 rounded-term border border-line bg-raised/50 p-3">
+    <div className="mt-3 rounded-term border border-line bg-[color-mix(in_srgb,var(--raised)_50%,var(--panel))] p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="mono text-sm font-bold tnum" style={{ color: bttsColor }}>BTTS: {scoringPct(probs.btts_pct)}</span>
         {probs.btts_verdict && <span className="mono text-[0.6rem] text-muted">{probs.btts_verdict}</span>}

@@ -15,6 +15,7 @@ const config: Config = {
         // class, or an inline color-mix(), instead of a slash modifier.
         line: "var(--line)",
         text: "var(--text)",
+        secondary: "var(--text-secondary)",
         muted: "var(--muted)",
         faint: "var(--faint)",
         amber: "var(--amber)",
@@ -23,6 +24,10 @@ const config: Config = {
         risk: "var(--risk)",
         warn: "var(--warn)",
         cool: "var(--cool)",
+        success: "var(--success)",
+        warning: "var(--warning)",
+        danger: "var(--danger)",
+        info: "var(--info)",
       },
       fontFamily: {
         mono: [

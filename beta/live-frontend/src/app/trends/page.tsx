@@ -74,7 +74,7 @@ export default async function TrendsPage() {
                 {t.rows.map((r, idx) => (
                   <li
                     key={r.team.id}
-                    className="flex items-center gap-2 rounded-term px-2 py-1 odd:bg-raised/40"
+                    className="flex items-center gap-2 rounded-term px-2 py-1 odd:bg-[color-mix(in_srgb,var(--raised)_40%,transparent)]"
                   >
                     <span className="mono tnum w-4 shrink-0 text-[0.6rem] text-faint">{idx + 1}</span>
                     <Link

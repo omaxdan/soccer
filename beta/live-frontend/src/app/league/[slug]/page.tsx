@@ -115,7 +115,7 @@ export default async function LeagueHub({ params }: { params: Promise<{ slug: st
         {table.map((s) => {
           const gd = (s.scores_for ?? 0) - (s.scores_against ?? 0);
           return (
-            <Link key={s.team.id} href={`/team/${teamSlug(s.team)}`} className="mono grid grid-cols-[1.5rem_1fr_repeat(4,1.6rem)_2rem] items-center gap-1 px-3 py-2 text-[0.72rem] transition-colors odd:bg-raised/30 hover:bg-raised sm:grid-cols-[1.5rem_1fr_repeat(7,1.7rem)_2rem]">
+            <Link key={s.team.id} href={`/team/${teamSlug(s.team)}`} className="mono grid grid-cols-[1.5rem_1fr_repeat(4,1.6rem)_2rem] items-center gap-1 px-3 py-2 text-[0.72rem] transition-colors odd:bg-[color-mix(in_srgb,var(--raised)_30%,transparent)] hover:bg-raised sm:grid-cols-[1.5rem_1fr_repeat(7,1.7rem)_2rem]">
               <span className="text-faint tnum">{s.position ?? "—"}</span>
               <span className="flex min-w-0 items-center gap-1.5"><Crest team={s.team} size={18} /><span className="truncate">{s.team.short_name || s.team.name}</span></span>
               <span className="text-right tnum">{n0(s.matches)}</span>

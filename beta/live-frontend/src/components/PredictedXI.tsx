@@ -64,7 +64,7 @@ function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
     natural != null && slot != null && natural.toUpperCase() !== slot.toUpperCase();
 
   return (
-    <li className="flex items-center gap-2 rounded-term px-2 py-1.5 odd:bg-raised/40">
+    <li className="flex items-center gap-2 rounded-term px-2 py-1.5 odd:bg-[color-mix(in_srgb,var(--raised)_40%,transparent)]">
       <span className="mono tnum w-6 shrink-0 text-right text-[0.62rem] text-faint">
         {p.shirt_number ?? "—"}
       </span>

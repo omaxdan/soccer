@@ -163,7 +163,7 @@ export function PerformanceIntelView({ perf }: { perf: PerformanceIntel }) {
 
       {/* transparency: missing inputs */}
       {perf.missing.length > 0 && (
-        <p className="mono rounded-term border border-line bg-raised/40 p-2.5 text-[0.6rem] leading-relaxed text-faint">
+        <p className="mono rounded-term border border-line bg-[color-mix(in_srgb,var(--raised)_45%,var(--panel))] p-2.5 text-[0.6rem] leading-relaxed text-faint">
           Some shot-level metrics ({perf.missing.join(", ")}) aren&rsquo;t in the
           warehouse yet, so finishing and suppression reads are partial. Add
           these columns to team_season_statistics and they compute automatically.

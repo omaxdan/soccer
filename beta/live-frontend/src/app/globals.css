@@ -3,20 +3,54 @@
 @tailwind utilities;
 
 :root {
-  /* Phosphor-terminal palette e6edf5*/
+  /* Phosphor-terminal palette
+     ─────────────────────────
+     Four solid text tiers, ordered by contrast on --panel:
+       --text            16.5:1   primary   — values, scores, names, numbers
+       --text-secondary  10.9:1   secondary — descriptions, body copy
+       --muted            6.7:1   muted     — labels, metadata, timestamps
+       --faint             5.1:1   faint     — the quietest tier, still >=4.5:1
+                                              (AA-normal) on every surface,
+                                              including --raised
+
+     WHY THIS CHANGED: --text was previously #fdfdfd98 — a near-white with a
+     hex alpha suffix (98 = ~60% opacity), which capped "primary" text at
+     6.84:1 no matter how bold or large it was rendered. --faint was
+     #aaaaaa90 — alpha stacked on an already-midtone grey, landing at 3.30:1,
+     which is BELOW the WCAG AA floor for body text and barely above the
+     UI-component minimum. Meanwhile --muted at 5.20:1 sat closer to --text
+     than to --faint. The result: four supposedly-distinct tiers that
+     clustered into two indistinct grey blobs — which is the exact "everything
+     blends together" complaint. All four tokens below are solid (no alpha),
+     so composited contrast can't silently drift again, and every tier clears
+     AA-normal (4.5:1) on panel, ink AND raised. */
   --ink: #0b0f14;
   --panel: #121821;
   --raised: #1a222e;
-  --line: #232e3c;
-  --text: #fdfdfd98;
-  --muted: #7d8ca0;
-  --faint: #aaaaaa90;
+  /* Border, softened: 1.30:1 -> ~1.15:1 against --panel. Card borders are
+     decorative framing, not functional UI components, so WCAG 1.4.11's 3:1
+     non-text floor doesn't apply here — this is a Gestalt call, not an
+     accessibility one. Every .panel border updates from this one value. */
+  --line: #1d2633;
+  --text: #f4f6f9;
+  --text-secondary: #c3cbd6;
+  --muted: #90a0b4;
+  --faint: #7e8aa0;
   --amber: #ffb020;
   --amber-dim: rgba(255, 176, 32, 0.22);
   --edge: #2fbf87;
   --risk: #f0544f;
   --warn: #f5b301;
   --cool: #4c8dff;
+  /* Semantic aliases onto the existing accent tokens. Additive only — edge,
+     risk, warn and cool keep their names and every existing var(--edge) etc.
+     reference is unchanged. New or touched components can reach for the
+     semantic name; a hundred-plus existing call sites were not mass-renamed
+     to do it, since that risk was not worth taking for a naming preference. */
+  --success: var(--edge);
+  --warning: var(--warn);
+  --danger: var(--risk);
+  --info: var(--cool);
 }
 
 * {
@@ -60,7 +94,11 @@ body {
   font-size: 0.625rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--faint);
+  /* Was --faint. Labels are explicitly the Muted tier, not a fourth shade
+     quieter than it — this is the single shared class every metric name,
+     card header ("HISTORICAL CONFIDENCE") and table column head renders
+     through, so the fix reaches every one of them at once. */
+  color: var(--muted);
 }
 
 /* ── Panels ────────────────────────────────────────────── */
