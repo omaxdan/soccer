@@ -610,6 +610,86 @@ export async function getLeagueBandSummary(): Promise<LeagueBandSummaryRow[]> {
     return [];
   }
 }
+
+// ── Confidence band drilldown — upcoming fixtures, live data ───────────────
+//
+// Deliberately NOT the readiness_history/historical-accuracy path above. An
+// upcoming, not-yet-played match has no frozen snapshot to read — there is
+// nothing to protect against lookahead bias here, because there is no
+// "later" data to leak into a "past" measurement. Reading
+// match_intelligence.confidence_band directly for a match that hasn't
+// happened yet is the correct and only source; it would only be wrong to use
+// it for scoring a match that already has a result, which this never does.
+
+export interface UpcomingBandMatch {
+  matchId: number;
+  date: string;
+  competition: string | null;
+  leagueName: string | null;
+  homeName: string;
+  awayName: string;
+  band: string | null;
+  confidenceScore: number | null;
+}
+
+/**
+ * One query, grouped by the caller as needed — the band drilldown page calls
+ * this with a band filter and shows every league; the league drilldown page
+ * calls it with a league filter and groups the result by band itself. Same
+ * function either way — no second implementation of "which upcoming matches
+ * fall in which band".
+ */
+export async function getUpcomingMatchesByBand(filters: {
+  band?: string;
+  league?: string;
+  daysAhead?: number;
+}): Promise<UpcomingBandMatch[]> {
+  const client = await supabaseServer();
+  if (!client) return [];
+  try {
+    const now = new Date();
+    const to = new Date(now.getTime() + (filters.daysAhead ?? 7) * 86_400_000);
+
+    let query = client
+      .from("matches")
+      .select(
+        "id, date, competition, tournament:tournaments(name), home:teams!matches_home_team_id_fkey(name, short_name), away:teams!matches_away_team_id_fkey(name, short_name)"
+      )
+      .gte("date", now.toISOString())
+      .lte("date", to.toISOString())
+      .order("date", { ascending: true });
+    if (filters.league) query = query.eq("competition", filters.league);
+
+    const { data: matches } = await query;
+    if (!matches || matches.length === 0) return [];
+    const ids = (matches as any[]).map((m) => m.id);
+
+    const { data: intel } = await client
+      .from("match_intelligence")
+      .select("match_id, confidence_band, confidence_score")
+      .in("match_id", ids);
+    const intelByMatch = new Map(((intel as any[]) ?? []).map((r) => [r.match_id, r]));
+
+    return (matches as any[])
+      .map((m: any) => {
+        const i = intelByMatch.get(m.id);
+        return {
+          matchId: m.id,
+          date: m.date,
+          competition: m.competition ?? null,
+          leagueName: m.tournament?.name ?? m.competition ?? null,
+          homeName: m.home?.short_name || m.home?.name || "—",
+          awayName: m.away?.short_name || m.away?.name || "—",
+          band: (i as any)?.confidence_band ?? null,
+          confidenceScore: (i as any)?.confidence_score ?? null,
+        };
+      })
+      .filter((m) => !filters.band || m.band === filters.band);
+  } catch {
+    return [];
+  }
+}
+
 export async function exportUsersCsv(filters: UserListFilters = {}): Promise<string> {
   const actor = await requireActor();
   if ("error" in actor) return "";

@@ -46,7 +46,13 @@ function build(teams: TeamDirectoryRow[]): Trend[] {
 }
 
 export default async function TrendsPage() {
-  const teams = await getTeamDirectory();
+  // Leaderboards here rank across the whole team set, not just the top page
+  // by readiness — a team outside the readiness top-100 could still lead the
+  // volatility or attack-rating leaderboard. 100 is the pagination system's
+  // max page size; this is a real, honest trade-off against the old
+  // unbounded 400-team fetch, not a silent one — some edge-case leaders
+  // outside the top 100 by readiness may now be missing from these lists.
+  const { rows: teams } = await getTeamDirectory({ pageSize: 100 });
   const trends = build(teams);
 
   return (

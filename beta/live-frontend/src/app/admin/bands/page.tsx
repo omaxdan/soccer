@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/components/AdminGuard";
 import { getBandBacktests } from "@/lib/queries";
 import { getLeagueBandCells, getLeagueBandSummary } from "@/lib/admin";
+import { AdminFilterBar } from "@/components/AdminFilterBar";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin · Confidence Bands" };
@@ -40,6 +41,7 @@ export default async function AdminBandsPage({
   const sp = await searchParams;
   const leagueFilter = sp.league ?? "";
   const bandFilter = sp.band ?? "";
+  const searchFilter = sp.search ?? "";
 
   // Every number on this page is a read of something already computed by the
   // shared confidence-band engine (beta/backend/src/lib/confidenceBand.ts) —
@@ -57,7 +59,10 @@ export default async function AdminBandsPage({
   const leagues = Array.from(new Set(cells.map((c) => c.leagueName))).sort();
 
   const filteredCells = cells.filter(
-    (c) => (!leagueFilter || c.leagueName === leagueFilter) && (!bandFilter || c.band === bandFilter)
+    (c) =>
+      (!leagueFilter || c.leagueName === leagueFilter) &&
+      (!bandFilter || c.band === bandFilter) &&
+      (!searchFilter || c.leagueName.toLowerCase().includes(searchFilter.toLowerCase()))
   );
 
   // Group filtered cells by league for the matrix table.
@@ -110,6 +115,12 @@ export default async function AdminBandsPage({
                     </p>
                   </>
                 )}
+                <Link
+                  href={`/admin/bands/${encodeURIComponent(band)}`}
+                  className="mono mt-2 block text-[0.58rem] tracking-widest text-amber"
+                >
+                  VIEW MATCHES →
+                </Link>
               </div>
             );
           })}
@@ -117,28 +128,14 @@ export default async function AdminBandsPage({
       </section>
 
       {/* Filters — plain GET form, results live in the URL. */}
-      <form action="/admin/bands" method="get" className="panel flex flex-wrap items-end gap-2 p-3">
-        <select name="league" defaultValue={leagueFilter} className="mono rounded-term border border-line bg-raised px-2 py-1.5 text-[0.68rem] text-text">
-          <option value="">All leagues</option>
-          {leagues.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </select>
-        <select name="band" defaultValue={bandFilter} className="mono rounded-term border border-line bg-raised px-2 py-1.5 text-[0.68rem] text-text">
-          <option value="">All bands</option>
-          {BAND_ORDER.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-        <button type="submit" className="mono rounded-term px-3 py-1.5 text-[0.64rem] font-semibold tracking-widest" style={{ color: "var(--ink)", background: "var(--amber)" }}>
-          FILTER
-        </button>
-        {(leagueFilter || bandFilter) && (
-          <Link href="/admin/bands" className="mono text-[0.62rem] tracking-widest text-faint">
-            CLEAR
-          </Link>
-        )}
-      </form>
+      <AdminFilterBar
+        basePath="/admin/bands"
+        fields={[
+          { type: "search", name: "search", placeholder: "Search leagues" },
+          { type: "select", name: "league", label: "All leagues", options: leagues.map((l) => ({ value: l, label: l })) },
+          { type: "select", name: "band", label: "All bands", options: BAND_ORDER.map((b) => ({ value: b, label: b })) },
+        ]}
+      />
 
       {/* League section — league x band matrix, from league_gap_analytics. */}
       <section className="panel overflow-x-auto p-4">
@@ -165,7 +162,11 @@ export default async function AdminBandsPage({
                   const summary = summaryByLeague.get(league);
                   return (
                     <tr key={league} className="border-b border-line last:border-0">
-                      <td className="py-1.5 pr-3 text-text">{league}</td>
+                      <td className="py-1.5 pr-3 text-text">
+                        <Link href={`/admin/bands/league/${encodeURIComponent(league)}`} className="text-amber hover:underline">
+                          {league}
+                        </Link>
+                      </td>
                       {BAND_ORDER.map((band) => {
                         const c = cellByBand.get(band);
                         return (

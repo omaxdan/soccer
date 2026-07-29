@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/components/AdminGuard";
 import { listUsers, type UserListFilters } from "@/lib/admin";
+import { AdminFilterBar } from "@/components/AdminFilterBar";
 import { NavSearch } from "@/components/icons/NavIcons";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +48,15 @@ export default async function AdminUsersPage({
   };
   const { rows, total, page, pageSize } = await listUsers(filters);
   const pages = Math.max(1, Math.ceil(total / pageSize));
+  // A bookmarked or shared URL with page=50 after the underlying result set
+  // shrinks (a filter narrowed, an account was deleted) previously rendered
+  // as an empty table with pagination controls still showing "Page 50 of 50"
+  // — looks broken even though nothing errored. Redirect to the real last
+  // page instead of rendering that.
+  if (page > pages && total > 0) {
+    const clamped = { q: sp.q, role: sp.role, plan: sp.plan, provider: sp.provider, status: sp.status, pageSize: sp.pageSize, page: pages };
+    redirect(`/admin/users${qs(clamped)}`);
+  }
   const baseFilters = { q: sp.q, role: sp.role, plan: sp.plan, provider: sp.provider, status: sp.status, pageSize: sp.pageSize };
   const exportHref = `/admin/users/export${qs(baseFilters)}`;
 
@@ -72,55 +83,16 @@ export default async function AdminUsersPage({
       </header>
 
       {/* Search + filters — plain GET form, so results live in the URL. */}
-      <form action="/admin/users" method="get" className="panel flex flex-wrap items-end gap-2 p-3">
-        <label className="relative min-w-0 flex-1">
-          <span className="sr-only">Search by email or name</span>
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint">
-            <NavSearch size={13} />
-          </span>
-          <input
-            name="q"
-            defaultValue={sp.q ?? ""}
-            placeholder="Email or name"
-            autoComplete="off"
-            className="mono w-full rounded-term border border-line bg-raised py-1.5 pl-7 pr-2 text-[0.7rem] text-text outline-none focus:border-amber"
-          />
-        </label>
-        <select name="role" defaultValue={sp.role ?? ""} className="mono rounded-term border border-line bg-raised px-2 py-1.5 text-[0.68rem] text-text">
-          <option value="">Any role</option>
-          {ROLES.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-        <select name="plan" defaultValue={sp.plan ?? ""} className="mono rounded-term border border-line bg-raised px-2 py-1.5 text-[0.68rem] text-text">
-          <option value="">Any plan</option>
-          <option value="free">Free</option>
-          <option value="pro">Pro</option>
-        </select>
-        <select name="provider" defaultValue={sp.provider ?? ""} className="mono rounded-term border border-line bg-raised px-2 py-1.5 text-[0.68rem] text-text">
-          <option value="">Any provider</option>
-          {PROVIDERS.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-        <select name="status" defaultValue={sp.status ?? ""} className="mono rounded-term border border-line bg-raised px-2 py-1.5 text-[0.68rem] text-text">
-          <option value="">Any status</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-        </select>
-        <button
-          type="submit"
-          className="mono rounded-term px-3 py-1.5 text-[0.64rem] font-semibold tracking-widest"
-          style={{ color: "var(--ink)", background: "var(--amber)" }}
-        >
-          FILTER
-        </button>
-        {(sp.q || sp.role || sp.plan || sp.provider || sp.status) && (
-          <Link href="/admin/users" className="mono text-[0.62rem] tracking-widest text-faint">
-            CLEAR
-          </Link>
-        )}
-      </form>
+      <AdminFilterBar
+        basePath="/admin/users"
+        fields={[
+          { type: "search", name: "q", placeholder: "Email or name" },
+          { type: "select", name: "role", label: "Any role", options: ROLES.map((r) => ({ value: r, label: r })) },
+          { type: "select", name: "plan", label: "Any plan", options: [{ value: "free", label: "Free" }, { value: "pro", label: "Pro" }] },
+          { type: "select", name: "provider", label: "Any provider", options: PROVIDERS.map((p) => ({ value: p, label: p })) },
+          { type: "select", name: "status", label: "Any status", options: [{ value: "active", label: "Active" }, { value: "suspended", label: "Suspended" }] },
+        ]}
+      />
 
       {/* Desktop table */}
       <div className="panel hidden overflow-x-auto sm:block">

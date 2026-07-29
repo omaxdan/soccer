@@ -54,6 +54,44 @@ export interface BoardWindow {
  * onward". The schedule view needs past days for its date strip; without a
  * lower bound there is nothing behind today to navigate to.
  */
+/**
+ * Matches by id, with no date window at all — what getBoard() cannot do,
+ * since every one of its callers relies on the window to keep the query
+ * bounded. The watchlist needs the opposite: a saved match from three months
+ * ago must still be fetchable, which a daysBack/daysForward filter would
+ * always exclude regardless of how wide it was set.
+ */
+export async function getMatchesByIds(ids: number[]): Promise<MatchRow[]> {
+  if (ids.length === 0) return [];
+  const client = db();
+  if (!client) return M.MOCK_MATCHES.filter((m) => ids.includes(m.id));
+  try {
+    const [matches, results] = await Promise.all([
+      client
+        .from("matches")
+        .select(
+          `id, external_match_id, date, status, competition,
+           tournament:tournaments(id, external_id, name, slug, country:countries(id, name, alpha2)),
+           home:teams!matches_home_team_id_fkey(${TEAM_COLS}),
+           away:teams!matches_away_team_id_fkey(${TEAM_COLS})`
+        )
+        .in("id", ids),
+      client.from("match_results").select("match_id, home_score, away_score").in("match_id", ids),
+    ]);
+    if (matches.error || !matches.data) return [];
+    const resMap = new Map(((results.data as any[]) ?? []).map((r) => [r.match_id, r]));
+    return sortBoard(
+      (matches.data as any[]).map((m) => ({
+        ...m,
+        home_score: (resMap.get(m.id) as any)?.home_score ?? null,
+        away_score: (resMap.get(m.id) as any)?.away_score ?? null,
+      })) as MatchRow[]
+    );
+  } catch {
+    return [];
+  }
+}
+
 export async function getBoard(
   limit = 24,
   window?: BoardWindow
@@ -1132,15 +1170,57 @@ export interface TeamDirectoryRow {
   travelFatigue: number | null;
 }
 
-export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]> {
+export interface TeamDirectoryResult {
+  rows: TeamDirectoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Server-side search and pagination. Previously capped at 400 teams with no
+ * way to reach anything past that — not "unpaginated", actually unreachable:
+ * most of the platform's tracked teams could never appear on this page at
+ * all. Base table stays team_intelligence (only teams the platform has
+ * computed intelligence for are listed, same as before), ordered by
+ * readiness_score — the page's existing default sort. A search term resolves
+ * matching team ids first, via the trigram index already built for global
+ * search (migration 036), then filters/paginates team_intelligence to that
+ * set — still sorted by readiness among the matches, not by relevance, since
+ * this page's whole point is browsing by strength, not fuzzy lookup.
+ */
+export async function getTeamDirectory(
+  opts: { q?: string; page?: number; pageSize?: number } = {}
+): Promise<TeamDirectoryResult> {
   const client = db();
-  if (!client) return [];
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(100, Math.max(10, opts.pageSize ?? 50));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  if (!client) return { rows: [], total: 0, page, pageSize };
   try {
-    const { data: intel } = await client
+    let matchingIds: number[] | null = null;
+    if (opts.q && opts.q.trim().length >= 2) {
+      const { data: matches } = await client
+        .from("teams")
+        .select("id")
+        .or(`name.ilike.%${opts.q.trim()}%,short_name.ilike.%${opts.q.trim()}%`);
+      matchingIds = ((matches as any[]) ?? []).map((r) => r.id);
+      // A search with zero matches must produce zero rows, not "no filter" —
+      // an empty .in() array would otherwise be dropped by PostgREST and
+      // silently return everyone.
+      if (matchingIds.length === 0) return { rows: [], total: 0, page, pageSize };
+    }
+
+    let intelQuery = client
       .from("team_intelligence")
-      .select("team_id, readiness_score, form_index, rest_days_avg, travel_fatigue_score")
-      .limit(limit);
-    if (!intel || intel.length === 0) return [];
+      .select("team_id, readiness_score, form_index, rest_days_avg, travel_fatigue_score", { count: "exact" })
+      .order("readiness_score", { ascending: false, nullsFirst: false });
+    if (matchingIds) intelQuery = intelQuery.in("team_id", matchingIds);
+
+    const { data: intel, count, error } = await intelQuery.range(from, to);
+    if (error || !intel || intel.length === 0) return { rows: [], total: count ?? 0, page, pageSize };
     const ids = (intel as any[]).map((r) => r.team_id);
 
     const [teams, quality, dash] = await Promise.all([
@@ -1161,7 +1241,7 @@ export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]>
     const qMap = byId((quality.data as any[]) ?? [], "team_id");
     const dMap = byId((dash.data as any[]) ?? [], "team_id");
 
-    return (intel as any[])
+    const rows = (intel as any[])
       .map((r) => {
         const t = tMap.get(r.team_id) as any;
         if (!t) return null;
@@ -1184,8 +1264,9 @@ export async function getTeamDirectory(limit = 400): Promise<TeamDirectoryRow[]>
         } as TeamDirectoryRow;
       })
       .filter((r): r is TeamDirectoryRow => r !== null);
+    return { rows, total: count ?? rows.length, page, pageSize };
   } catch {
-    return [];
+    return { rows: [], total: 0, page, pageSize };
   }
 }
 
