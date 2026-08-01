@@ -1850,6 +1850,19 @@ export async function processMatchIntelligencePartial(opts?: {
     let matchQuery = db
       .from('matches')
       .select('id, home_team_id, away_team_id, date, competition')
+      // Match Immutability Rule (see docs/PIPELINE_INTEGRITY.md): a finished
+      // match's pre-kickoff intelligence must never be recalculated. This was
+      // the one processor of the four that write match_intelligence missing
+      // this filter — processScorelinePredictions, processStartingXIStrength
+      // and processNetBattleIndex all already scope to 'scheduled' matches
+      // only. Without it, every unscoped process:all-db run overwrote
+      // confidence_score/confidence_band/readiness_gap/the predicted pick for
+      // every match in the database using the CURRENT state of both teams —
+      // which, for a match that already happened, is post-match state. That
+      // is precisely how a finished match's "Historical Advantage" and
+      // "Confidence" card changed after kickoff: not a rendering bug, this
+      // query recomputing over matches it should never have touched.
+      .eq('status', 'scheduled')
       .order('date', { ascending: false });
 
     // Apply scope filter when requested — dramatically cheaper for daily

@@ -199,7 +199,62 @@ export function wilson(hits: number, n: number, z = 1.96): [number, number] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHARED HISTORICAL SCORING PIPELINE
+// Minimum sample policy
+//
+// Before this, three unrelated numeric conventions already existed for "is
+// this enough data": SAMPLE_GATE_HEADLINE/PROVISIONAL (30/10, sample size for
+// a league's hit-rate percentage) in archiveReadinessHistory.ts, MIN_SAMPLE
+// (200) in backtestConfidenceBands.ts and backtestSignals.ts, and
+// MIN_POPULATION (5) in processDbOnly.ts's NBSI z-score population floor.
+// None of them shared a definition of what to DO below threshold, and each
+// was invented independently by whoever wrote that processor.
+//
+// Centralizing does NOT mean collapsing these to one number — 5 teams for a
+// population mean/stddev, 30 result-linked matches to trust a league's hit
+// rate, and 200 samples to declare a confidence band calibrated are
+// genuinely different statistical claims with genuinely different sample
+// requirements. What's shared here is the POLICY: given a sample size and
+// the threshold appropriate to the claim being made, return one consistent
+// answer about what a caller may say, so "insufficient data" means the same
+// thing and gets the same treatment everywhere it's decided, rather than
+// each processor inventing its own suppression logic ad hoc.
+export type SampleQuality = 'insufficient' | 'limited' | 'adequate';
+
+export interface SampleThresholds {
+  /** Below this: no classification is defensible. Return 'insufficient'. */
+  minimum: number;
+  /** Below this (but >= minimum): defensible but should read as provisional. */
+  provisional: number;
+}
+
+/** Named presets matching this codebase's own existing, already-proven conventions — not new numbers invented for this helper. */
+export const SAMPLE_THRESHOLDS = {
+  /** A league/team hit-rate percentage. Matches archiveReadinessHistory.ts's existing SAMPLE_GATE_HEADLINE/PROVISIONAL. */
+  historicalRate: { minimum: 10, provisional: 30 } as SampleThresholds,
+  /** A z-score population mean/stddev. Matches processDbOnly.ts's existing NBSI MIN_POPULATION. */
+  population: { minimum: 5, provisional: 5 } as SampleThresholds,
+  /** A calibration/backtest gate strong enough to publish. Matches backtestConfidenceBands.ts / backtestSignals.ts's existing MIN_SAMPLE. */
+  calibration: { minimum: 50, provisional: 200 } as SampleThresholds,
+  /** Team/venue/head-to-head form claims — the new case this centralization exists to cover, not yet enforced anywhere. */
+  formClaim: { minimum: 3, provisional: 5 } as SampleThresholds,
+} as const;
+
+export function sampleQuality(n: number, thresholds: SampleThresholds): SampleQuality {
+  if (n < thresholds.minimum) return 'insufficient';
+  if (n < thresholds.provisional) return 'limited';
+  return 'adequate';
+}
+
+/**
+ * True only when a caller may state a strong/elite-tier classification.
+ * 'limited' data may still show a number — just not a confident one; this is
+ * the boundary between "show it, caveated" and "make a strong claim from it".
+ */
+export function canClassifyStrongly(n: number, thresholds: SampleThresholds): boolean {
+  return sampleQuality(n, thresholds) === 'adequate';
+}
+
+
 //
 // The one place a readiness_history row becomes a scored, banded outcome, and
 // the one place a group of them becomes a hit-rate/lift/interval statistic.

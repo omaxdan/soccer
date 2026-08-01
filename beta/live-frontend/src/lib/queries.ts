@@ -5,7 +5,7 @@ import type {
   TeamFormQuality, TeamVenuePerformance, TeamMomentum, PositionDepth,
   PredictedLineupPlayer, LeagueIntelligence, LeagueGapSummary,
   DailyBettingCard,  // ✅ Add this
-  MatchScoringProbabilities,
+  MatchScoringProbabilities, ReadinessSnapshot,
 } from "./types";
 import * as M from "./mock";
 import { normProb } from "./intel";
@@ -1411,4 +1411,68 @@ export async function globalSearch(q: string, limit = 20): Promise<SearchHit[]> 
   } catch {
     return [];
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Match Immutability Rule
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The frozen pre-kickoff record for one match, if one was taken.
+ *
+ * A finished match's "Historical advantage" and "Historical confidence" must
+ * display exactly what readiness_history froze before kickoff — never live
+ * match_intelligence, which keeps recomputing as team state changes after the
+ * match finishes. Fixing the backend's match-selection filter (see
+ * jobs/processDbOnly.ts) stops FUTURE corruption of that live table; it does
+ * not change what a finished match's page reads today. This is the read path
+ * the actual display bug needs.
+ *
+ * Returns null when no snapshot exists — a match from before
+ * archiveReadinessSnapshot existed, or one the job hasn't reached yet. The
+ * caller must not silently treat that as "nothing to show": it means falling
+ * back to live data, which the UI should say plainly rather than present as
+ * frozen when it isn't.
+ */
+export async function getReadinessSnapshot(matchId: number): Promise<ReadinessSnapshot | null> {
+  const client = db();
+  if (!client) return null;
+  try {
+    const { data } = await client
+      .from("readiness_history")
+      .select("snapshot_at, predicted_pick, confidence_pct, predicted_gap")
+      .eq("match_id", matchId)
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      snapshotAt: (data as any).snapshot_at,
+      predictedPick: (data as any).predicted_pick,
+      confidencePct: Number((data as any).confidence_pct),
+      readinessGap: Number((data as any).predicted_gap),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Elite/Strong/Moderate/Risky/Avoid from a confidence score, mirroring
+ * beta/backend/src/lib/confidenceBand.ts's BAND_FLOOR thresholds
+ * (95/85/70/55/0) exactly.
+ *
+ * This duplicates the backend's bandFor() — frontend and backend share no
+ * TypeScript import graph anywhere in this codebase, a gap already flagged
+ * earlier in this audit, not new here. What makes this specific duplication
+ * defensible rather than the pattern the whole audit is about: it is a pure,
+ * stateless classification of an ALREADY-FROZEN number
+ * (readiness_history.confidence_pct), not a recomputation from live inputs.
+ * Rounding a frozen number and classifying a frozen number carry the same
+ * risk profile; this is the latter, not a second business-logic pipeline.
+ */
+export function bandForFrozenScore(score: number): "Elite" | "Strong" | "Moderate" | "Risky" | "Avoid" {
+  if (score >= 95) return "Elite";
+  if (score >= 85) return "Strong";
+  if (score >= 70) return "Moderate";
+  if (score >= 55) return "Risky";
+  return "Avoid";
 }

@@ -142,6 +142,13 @@ export interface ModuleTravelRow {
   [column: string]: unknown;
 }
 
+export interface ReadinessSnapshot {
+  snapshotAt: string;
+  predictedPick: "HOME" | "AWAY" | "DRAW";
+  confidencePct: number;
+  readinessGap: number;
+}
+
 export interface MatchRow {
   id: number;
   external_match_id: number;

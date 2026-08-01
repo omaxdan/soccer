@@ -8,7 +8,7 @@ import { getViewerIdentity } from "@/lib/access";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs, getTeamIntel } from "@/lib/queries";
+import { getMatchBySlug, getLineups, getBettingCard, getMatchScoringProbs, getTeamIntel, getReadinessSnapshot, bandForFrozenScore } from "@/lib/queries";
 import { redactTeamInputs } from "@/lib/access";
 import type { TeamBriefInput } from "@/lib/teamBrief";
 import {
@@ -53,7 +53,7 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const m = await getMatchBySlug(slug);
   if (!m) notFound();
-  const [lineups, bettingCard, scoringProbs] = await Promise.all([getLineups(m.id), getBettingCard(), getMatchScoringProbs(m.id)]);
+  const [lineups, bettingCard, scoringProbs, readinessSnapshot] = await Promise.all([getLineups(m.id), getBettingCard(), getMatchScoringProbs(m.id), getReadinessSnapshot(m.id)]);
   const homeLineup = lineups.filter((p) => p.team_id === m.home.id);
   const awayLineup = lineups.filter((p) => p.team_id === m.away.id);
   const pick = pickTierByMatch(bettingCard.singles).get(m.id);
@@ -149,18 +149,43 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const heroTally = tally(moduleReadings);
   const heroOverall = overallVerdict(heroTally);
   const heroFiring = moduleReadings.filter((r) => r.status !== "inactive").length;
-  const heroSide = derivePickSide(m);
+
+  // ── Match Immutability Rule ─────────────────────────────────────────────
+  // A finished match must display exactly what was known before kickoff —
+  // never live match_intelligence, which keeps recomputing as both teams'
+  // form/readiness change after the match itself. derivePickSide(m) and
+  // i?.confidence_score/confidence_band below are LIVE reads; they are the
+  // right source for an upcoming or in-progress match (Mode B: current
+  // intelligence should track the present), and the wrong source the moment
+  // a match has finished (Mode C: historical intelligence must freeze).
+  //
+  // finished is the same time-boundary the rest of this page already uses
+  // for kickoff/FT display (kickoff().rel) — not a new definition of
+  // "finished" invented for this fix.
+  const finished = k.rel === "FT";
+  const heroFrozen = finished && readinessSnapshot ? readinessSnapshot : null;
+
+  const heroSide = heroFrozen
+    ? heroFrozen.predictedPick === "HOME" ? "home" : heroFrozen.predictedPick === "AWAY" ? "away" : null
+    : derivePickSide(m);
   const heroPickName =
     heroSide === "home" ? homeName : heroSide === "away" ? awayName : null;
-  const heroGap = i?.readiness_gap ?? null;
+  // finished && !readinessSnapshot: a match that ended before
+  // archiveReadinessSnapshot existed, or one the job hasn't reached yet. Per
+  // the immutability rule, falling back to live data here would silently
+  // reintroduce the exact bug this fixes — so this state is surfaced
+  // honestly (below) rather than papered over with a live number.
+  const heroSnapshotMissing = finished && !readinessSnapshot;
+  const heroGap = heroFrozen ? heroFrozen.readinessGap : (i?.readiness_gap ?? null);
   const heroGapName = heroGap == null ? null : heroGap > 0 ? homeName : awayName;
+  const heroBandForSummary = heroFrozen ? bandForFrozenScore(heroFrozen.confidencePct) : i?.confidence_band;
   const heroSummary = heroPickName
-    ? `Historical evidence currently favours ${heroPickName}, on ${heroTally.supports} supporting ` +
+    ? `Historical evidence ${heroFrozen ? "favoured" : "currently favours"} ${heroPickName}, on ${heroTally.supports} supporting ` +
       `stream${heroTally.supports === 1 ? "" : "s"}` +
       (heroTally.contradicts
         ? ` against ${heroTally.contradicts} that run counter`
         : "") +
-      `${i?.confidence_band ? `, with confidence limited by the ${i.confidence_band} calibration band` : ""}.`
+      `${heroBandForSummary ? `, with confidence limited by the ${heroBandForSummary} calibration band` : ""}.`
     : "No readiness gap separates these sides, so the evidence produces no directional lean.";
 
   // ── Standalone sections (no tabs) ──
@@ -239,10 +264,18 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           <div className="panel p-3">
             <div className="label-cap">Historical advantage</div>
             <div className="mono mt-0.5 truncate text-[0.95rem] font-semibold text-text">
-              {heroPickName ?? "No edge"}
+              {heroSnapshotMissing ? "—" : heroPickName ?? "No edge"}
             </div>
-            {!heroFull && (
-              <div className="mono text-[0.58rem] text-faint">direction only</div>
+            {heroFrozen ? (
+              <div className="mono text-[0.58rem] text-faint">
+                as of {new Date(heroFrozen.snapshotAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              </div>
+            ) : heroSnapshotMissing ? (
+              <div className="mono text-[0.58rem]" style={{ color: "var(--faint)" }}>
+                pre-match record not available
+              </div>
+            ) : (
+              !heroFull && <div className="mono text-[0.58rem] text-faint">direction only</div>
             )}
           </div>
 
@@ -250,12 +283,22 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
             <div className="panel p-3">
               <div className="label-cap">Historical confidence</div>
               <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
-                {i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
+                {heroSnapshotMissing
+                  ? "—"
+                  : heroFrozen
+                    ? `${Math.round(heroFrozen.confidencePct)}%`
+                    : i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
               </div>
-              {i?.confidence_band && (
+              {heroFrozen ? (
                 <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
-                  {i.confidence_band}
+                  {bandForFrozenScore(heroFrozen.confidencePct)}
                 </div>
+              ) : (
+                !heroSnapshotMissing && i?.confidence_band && (
+                  <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
+                    {i.confidence_band}
+                  </div>
+                )
               )}
             </div>
           ) : (

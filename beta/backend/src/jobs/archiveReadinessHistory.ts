@@ -22,7 +22,7 @@ import { logger } from '../utils/logger';
 import { zoneOfPositionCode } from '../lib/lineups';
 import {
   derivePick, outcomeOf, scoreHistoricalRows, summariseHistoricalRows,
-  strictRate, type Pick, type RawFrozenRow,
+  strictRate, SAMPLE_THRESHOLDS, type Pick, type RawFrozenRow,
 } from '../lib/confidenceBand';
 
 const READINESS_FORMULA_VERSION = 'v1';
@@ -337,8 +337,11 @@ function toOne<T>(v: T | T[] | null | undefined): T | null {
 // the summaries the analytics page consumes — the page itself does zero
 // aggregation at request time, per this platform's precompute principle.
 
-const SAMPLE_GATE_HEADLINE = 30;    // spec §2.6 — confident badge threshold
-const SAMPLE_GATE_PROVISIONAL = 10; // spec §2.6 — softer "provisional" band
+// Sourced from lib/confidenceBand.ts's SAMPLE_THRESHOLDS.historicalRate — kept
+// as local names for readability at each call site below, but no longer a
+// second independently-chosen pair of numbers. Values unchanged (30/10).
+const SAMPLE_GATE_HEADLINE = SAMPLE_THRESHOLDS.historicalRate.provisional;    // 30 — spec §2.6, confident badge threshold
+const SAMPLE_GATE_PROVISIONAL = SAMPLE_THRESHOLDS.historicalRate.minimum;    // 10 — spec §2.6, softer "provisional" band
 
 /**
  * Rebuilds league_gap_analytics (league x band cells) and league_gap_summary
