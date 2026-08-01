@@ -1835,6 +1835,7 @@ export async function processMatchIntelligencePartial(opts?: {
 }): Promise<{
   matchesProcessed: number;
   rowsWritten: number;
+  triggerViolations?: number;
   error?: string;
 }> {
   const modeLabel = opts?.matchIds
@@ -2291,11 +2292,29 @@ export async function processMatchIntelligencePartial(opts?: {
     // Batch upsert
     const chunkSize = 500;
     let written = 0;
+    let triggerViolations = 0;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
       const { error } = await db
         .from('match_intelligence')
         .upsert(chunk, { onConflict: 'match_id' });
+      // Found while adding this: `error` was never checked here — a rejected
+      // chunk (by the immutability trigger, migration 042/043, or any other
+      // DB error) previously still counted toward `written` below, reporting
+      // a false success. The whole point of the trigger is to fail loudly;
+      // silently swallowing its rejection here would have defeated that.
+      if (error) {
+        if (error.message?.includes('MATCH_INTELLIGENCE_IMMUTABILITY_VIOLATION')) {
+          triggerViolations++;
+          logger.error(
+            { chunkStart: i, chunkSize: chunk.length, error: error.message },
+            'processMatchIntelligencePartial: immutability trigger rejected a chunk — this means a finalized match reached the write path despite both application-level guards. Investigate immediately.'
+          );
+        } else {
+          logger.error({ chunkStart: i, chunkSize: chunk.length, error: error.message }, 'processMatchIntelligencePartial: chunk upsert failed');
+        }
+        continue; // do not count a failed chunk as written
+      }
       written += chunk.length;
     }
 
@@ -2304,11 +2323,12 @@ export async function processMatchIntelligencePartial(opts?: {
         matchesProcessed: matches.length,
         rowsWritten: written,
         withFullReadiness: rows.filter(r => r.home_readiness !== null && r.away_readiness !== null).length,
-        skippedFinished, // matches that reached this loop as 'scheduled' but already had a recorded score by write time — race-guard catches, expect near-zero in steady state
+        skippedFinished, // race-guard catches — expect near-zero in steady state
+        triggerViolations, // should always be 0; nonzero means a finalized match reached the write path despite both application-level guards
       },
       'processMatchIntelligencePartial completed'
     );
-    return { matchesProcessed: matches.length, rowsWritten: written };
+    return { matchesProcessed: matches.length, rowsWritten: written, triggerViolations };
 
   } catch (error: any) {
     logger.error({ error: error.message }, 'processMatchIntelligencePartial failed');

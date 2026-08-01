@@ -1,10 +1,17 @@
 -- ─── Post-fix historical integrity health check ──────────────────────────────
 --
+-- Prefer `npm run cli verify:historical-integrity` (jobs/verifyHistoricalIntegrity.ts)
+-- for routine/automated checks — it runs these same checks programmatically
+-- and prints a PASS/FAIL verdict, so it can be wired into a deploy pipeline
+-- or scheduled monitoring. This file exists for ad hoc use directly against
+-- the database (a SQL console, a dashboard's query tool) where running the
+-- CLI isn't convenient — same checks, manual context instead.
+--
 -- Written to answer the four checks from the Historical Integrity fix review,
 -- not executed — no live database access exists in the environment these
 -- changes were built in (no credentials, no network path to Supabase,
 -- confirmed repeatedly this session). Run this after applying migrations
--- 041/042 and deploying the processDbOnly.ts fix, ideally once immediately
+-- 041/042/043 and deploying the processDbOnly.ts fix, ideally once immediately
 -- after deploy and again after the next process:all-db run.
 
 -- 1. Count completed matches.

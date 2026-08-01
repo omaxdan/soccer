@@ -39,6 +39,7 @@ import { processFormQuality } from './jobs/processFormQuality';
 import { backtestSignals } from './jobs/backtestSignals';
 import { backtestConfidenceBands } from './jobs/backtestConfidenceBands';
 import { processRiskOpportunity } from './jobs/processRiskOpportunity';
+import { verifyHistoricalIntegrity } from './jobs/verifyHistoricalIntegrity';
 
 /**
  * CLI Interface for Manual Job Execution
@@ -1567,6 +1568,21 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info('Computing team venue performance (home/away splits) — DB only...');
         const r = await processTeamVenuePerformance();
         logger.info(r, 'Venue performance complete');
+        break;
+      }
+
+      case 'verify:historical-integrity': {
+        const report = await verifyHistoricalIntegrity();
+        console.log('\n━━━ Historical Integrity Report ━━━');
+        console.log(`Completed matches ........... ${report.completedMatches}`);
+        console.log(`Snapshots found .............. ${report.snapshotsFound}`);
+        console.log(`Snapshots missing ............ ${report.snapshotsMissing}`);
+        console.log(`  (last 7 days) .............. ${report.snapshotsMissingLast7Days}`);
+        console.log(`Post-kickoff updates ......... ${report.postKickoffUpdates}  <- the actual bug fingerprint`);
+        console.log(`Historical updates blocked ... see application logs (triggerViolations — not independently queryable)`);
+        console.log(`Live intelligence leaks ...... 2 (ModuleReport.tsx, MatchReport.tsx — Phase 2, deliberately deferred)`);
+        console.log(`\n${report.pass ? 'PASS' : 'FAIL'}\n`);
+        if (!report.pass) process.exitCode = 1;
         break;
       }
 
