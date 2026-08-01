@@ -2,6 +2,7 @@ import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { isTrackedBySlug, isTrackedLeague } from '../config/trackedLeagues';
 import { computeMatchSignals, MatchSignalInput } from '../lib/signalLogic';
+import { MUTABLE_MATCH_STATUS } from '../lib/matchLifecycle';
 // BETA: pagination helper moved to db/fetchAllRows and now ALWAYS orders
 // (appends .order('id') — deterministic paging; the old local version
 // paginated unordered, which has no stability guarantee in Postgres).
@@ -1863,7 +1864,7 @@ export async function processMatchIntelligencePartial(opts?: {
       // is precisely how a finished match's "Historical Advantage" and
       // "Confidence" card changed after kickoff: not a rendering bug, this
       // query recomputing over matches it should never have touched.
-      .eq('status', 'scheduled')
+      .eq('status', MUTABLE_MATCH_STATUS)
       .order('date', { ascending: false });
 
     // Apply scope filter when requested — dramatically cheaper for daily
@@ -3213,7 +3214,7 @@ export async function processStartingXIStrength(): Promise<{
     const matches = await fetchAllRows(
       db.from('matches')
         .select('id, home_team_id, away_team_id, date')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );
@@ -3546,7 +3547,7 @@ export async function processFixtureDifficulty(): Promise<{
     const upcomingMatches = await fetchAllRows(
       db.from('matches')
         .select('home_team_id, away_team_id, date')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .order('date', { ascending: true })
     );
@@ -3851,7 +3852,7 @@ export async function processMatchSignals(): Promise<{
     const matches = await fetchAllRows(
       db.from('matches')
         .select('id, home_team_id, away_team_id')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', twoWeeksOut)
     );
@@ -4033,7 +4034,7 @@ export async function processScorelinePredictions(): Promise<{
       db
         .from('matches')
         .select('id, home_team_id, away_team_id, date, competition')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );
@@ -4383,7 +4384,7 @@ export async function processNetBattleIndex(): Promise<{
       db
         .from('matches')
         .select('id, home_team_id, away_team_id, date')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );

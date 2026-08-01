@@ -40,6 +40,7 @@
 import { db } from '../db/client';
 import { fetchAllRows } from '../db/fetchAllRows';
 import { logger } from '../utils/logger';
+import { MUTABLE_MATCH_STATUS } from '../lib/matchLifecycle';
 import {
   assembleLineup,
   buildCandidates,
@@ -102,7 +103,7 @@ async function loadMatches(opts: PredictedLineupOptions): Promise<MatchRow[]> {
     db
       .from('matches')
       .select('id, home_team_id, away_team_id, date')
-      .eq('status', 'scheduled')
+      .eq('status', MUTABLE_MATCH_STATUS)
       .gte('date', now)
       .lte('date', until),
   );

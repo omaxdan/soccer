@@ -52,6 +52,7 @@ import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { fetchAllRows } from '../db/fetchAllRows';
 import { normalizePosition, zoneOfPositionCode } from '../lib/lineups';
+import { MUTABLE_MATCH_STATUS } from '../lib/matchLifecycle';
 
 // ─── POSITION CODES FROM match_predicted_lineups (migration 025) ────────────
 //
@@ -1079,7 +1080,7 @@ export async function processPlayerMatchImpact(opts?: {
     // ─── 1. Get ALL matches with predicted lineups ──────────────────────────
     let query = db.from('matches')
       .select('id, home_team_id, away_team_id, status, date')
-      .not('status', 'in', '("cancelled","postponed")');
+      .eq('status', MUTABLE_MATCH_STATUS);
 
     // If specific match IDs provided, use them
     if (opts?.matchIds && opts.matchIds.length > 0) {
@@ -1351,7 +1352,7 @@ export async function processMatchPerformanceComparison(opts?: {
     // ─── 1. Get matches with proper filtering ──────────────────────────────
     let query = db.from('matches')
       .select('id, home_team_id, away_team_id, competition, status, date')
-      .not('status', 'in', '("cancelled","postponed")')
+      .eq('status', MUTABLE_MATCH_STATUS)
       .order('date', { ascending: false });
 
     if (opts?.matchIds && opts.matchIds.length > 0) {
@@ -1691,7 +1692,7 @@ export async function processTeamVersatility(): Promise<{
       db
         .from('matches')
         .select('id, home_team_id, away_team_id')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );
@@ -1899,7 +1900,7 @@ export async function processFormationMatchup(): Promise<{
       db
         .from('matches')
         .select('id, home_team_id, away_team_id')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );
@@ -2316,7 +2317,7 @@ export async function processPositionAdaptability(): Promise<{ matchesProcessed:
   logger.info('processPositionAdaptability started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
@@ -2423,7 +2424,7 @@ export async function processTacticalFlexibility(): Promise<{ matchesProcessed: 
   logger.info('processTacticalFlexibility started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
@@ -2524,7 +2525,7 @@ export async function processSubstitutionImpact(opts?: {
     // ─── 1. Get ALL matches with predicted lineups ──────────────────────────
     let query = db.from('matches')
       .select('id, home_team_id, away_team_id, status, date')
-      .not('status', 'in', '("cancelled","postponed")');
+      .eq('status', MUTABLE_MATCH_STATUS);
 
     if (opts?.matchIds && opts.matchIds.length > 0) {
       query = query.in('id', opts.matchIds);
@@ -2710,7 +2711,7 @@ export async function processSquadDepthComparison(): Promise<{ matchesProcessed:
   logger.info('processSquadDepthComparison started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -2860,7 +2861,7 @@ export async function processMatchImpactSummary(): Promise<{ matchesProcessed: n
   try {
     const now = new Date().toISOString();
     const twoWeeksOut = new Date(Date.now() + 14 * 86400000).toISOString();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id, competition').eq('status', 'scheduled').gte('date', now).lte('date', twoWeeksOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id, competition').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', twoWeeksOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -3093,7 +3094,7 @@ export async function processTeamMatchImpact(): Promise<{ matchesProcessed: numb
   logger.info('processTeamMatchImpact started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
     const matchIds = matches.map((m: any) => m.id);
@@ -3179,7 +3180,7 @@ export async function processMatchImpactAdvantage(): Promise<{ matchesProcessed:
   logger.info('processMatchImpactAdvantage started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
 
@@ -3247,7 +3248,7 @@ export async function processMatchKeyBattles(opts?: {
     // ─── 1. Get ALL matches with predicted lineups ──────────────────────────
     let query = db.from('matches')
       .select('id, home_team_id, away_team_id, status, date')
-      .not('status', 'in', '("cancelled","postponed")');
+      .eq('status', MUTABLE_MATCH_STATUS);
 
     if (opts?.matchIds && opts.matchIds.length > 0) {
       query = query.in('id', opts.matchIds);
@@ -3427,7 +3428,7 @@ export async function processMatchPositionalMatchups(): Promise<{ matchesProcess
   logger.info('processMatchPositionalMatchups started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
 
@@ -3488,7 +3489,7 @@ export async function processMatchTacticalAdvantages(): Promise<{ matchesProcess
   logger.info('processMatchTacticalAdvantages started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
@@ -3574,7 +3575,7 @@ export async function processPlayerMatchup(): Promise<{ matchesProcessed: number
   logger.info('processPlayerMatchup started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
 
@@ -3682,7 +3683,7 @@ export async function processMatchWeather(): Promise<{ matchesProcessed: number;
   try {
     const { now, weekOut } = upcomingWindow();
     const matches = await fetchAllRows(
-      db.from('matches').select('id, date, venue_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut).not('venue_id', 'is', null)
+      db.from('matches').select('id, date, venue_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut).not('venue_id', 'is', null)
     );
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
 
@@ -3754,7 +3755,7 @@ export async function processTeamPlayingStyle(): Promise<{ teamsProcessed: numbe
   logger.info('processTeamPlayingStyle started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -3825,7 +3826,7 @@ export async function processTeamStrengthDashboard(): Promise<{ teamsProcessed: 
   logger.info('processTeamStrengthDashboard started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -3893,7 +3894,7 @@ export async function processTeamStrengths(): Promise<{ teamsProcessed: number; 
   logger.info('processTeamStrengths started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -3958,7 +3959,7 @@ export async function processTeamWeaknesses(): Promise<{ teamsProcessed: number;
   logger.info('processTeamWeaknesses started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -4032,7 +4033,7 @@ export async function processTeamTacticalVariations(): Promise<{
       db
         .from('matches')
         .select('id, home_team_id, away_team_id, date')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );
@@ -4292,7 +4293,7 @@ export async function processFormationAnalysis(): Promise<{
       db
         .from('matches')
         .select('id')
-        .eq('status', 'scheduled')
+        .eq('status', MUTABLE_MATCH_STATUS)
         .gte('date', now)
         .lte('date', weekOut)
     );
@@ -4397,7 +4398,7 @@ export async function processFormationOptions(): Promise<{ matchesProcessed: num
   logger.info('processFormationOptions started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
 
@@ -4451,7 +4452,7 @@ export async function processSquadDepth(): Promise<{ matchesProcessed: number; r
   logger.info('processSquadDepth started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
@@ -4559,7 +4560,7 @@ export async function processPositionDepthComparison(): Promise<{ matchesProcess
   logger.info('processPositionDepthComparison started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -4618,7 +4619,7 @@ export async function processVersatilityAdvantage(): Promise<{ matchesProcessed:
   logger.info('processVersatilityAdvantage started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const matchIds = matches.map((m: any) => m.id);
 
@@ -4697,7 +4698,7 @@ export async function processInjuryAdaptability(): Promise<{ matchesProcessed: n
   logger.info('processInjuryAdaptability started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
@@ -4777,7 +4778,7 @@ export async function processPositionCoverage(): Promise<{ teamsProcessed: numbe
   logger.info('processPositionCoverage started — DB only, zero API calls');
   try {
     const { now, weekOut } = upcomingWindow();
-    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', 'scheduled').gte('date', now).lte('date', weekOut));
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
     if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
     const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
 
