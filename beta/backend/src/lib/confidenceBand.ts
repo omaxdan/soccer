@@ -239,10 +239,22 @@ export const SAMPLE_THRESHOLDS = {
   formClaim: { minimum: 3, provisional: 5 } as SampleThresholds,
 } as const;
 
-export function sampleQuality(n: number, thresholds: SampleThresholds): SampleQuality {
-  if (n < thresholds.minimum) return 'insufficient';
-  if (n < thresholds.provisional) return 'limited';
-  return 'adequate';
+export interface SampleQualityResult {
+  quality: SampleQuality;
+  sufficient: boolean;
+  matchesPlayed: number;
+  thresholdUsed: SampleThresholds;
+}
+
+export function sampleQuality(n: number, thresholds: SampleThresholds): SampleQualityResult {
+  const quality: SampleQuality =
+    n < thresholds.minimum ? 'insufficient' : n < thresholds.provisional ? 'limited' : 'adequate';
+  return {
+    quality,
+    sufficient: quality === 'adequate',
+    matchesPlayed: n,
+    thresholdUsed: thresholds,
+  };
 }
 
 /**
@@ -251,7 +263,7 @@ export function sampleQuality(n: number, thresholds: SampleThresholds): SampleQu
  * the boundary between "show it, caveated" and "make a strong claim from it".
  */
 export function canClassifyStrongly(n: number, thresholds: SampleThresholds): boolean {
-  return sampleQuality(n, thresholds) === 'adequate';
+  return sampleQuality(n, thresholds).sufficient;
 }
 
 

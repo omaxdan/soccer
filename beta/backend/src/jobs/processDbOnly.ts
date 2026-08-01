@@ -1910,6 +1910,26 @@ export async function processMatchIntelligencePartial(opts?: {
       return { matchesProcessed: 0, rowsWritten: 0 };
     }
 
+    // ── Immutability defense-in-depth ───────────────────────────────────────
+    // The status='scheduled' filter above is the primary guard. This is a
+    // second, independent one: this function runs many sub-queries and a
+    // per-match compute loop over up to 1000 rows, which takes real wall-clock
+    // time. A match's status was 'scheduled' when matchQuery ran, but a
+    // result can land in match_results before this specific match's row is
+    // actually built later in the loop. matches.status is also a raw
+    // passthrough from the external provider (see syncDateMasterFeed.ts) —
+    // trusting it alone means trusting the provider's update ordering.
+    // match_results is written by the same sync job at the same time as
+    // status changes, so checking both closes the gap without depending on
+    // either one exclusively.
+    const finishedMatchIds = new Set<number>(
+      (await fetchAllRows(
+        db.from('match_results').select('match_id').not('home_score', 'is', null).in('match_id', matches.map((m: any) => m.id)),
+        1000, 'id', 'match-intelligence:raceGuard'
+      ) ?? []).map((r: any) => r.match_id)
+    );
+    let skippedFinished = 0;
+
     // ── Load team_intelligence: form, congestion, travel, stability, comps ──
     const teamIntel = await fetchAllRows(
       db
@@ -2029,6 +2049,12 @@ export async function processMatchIntelligencePartial(opts?: {
     const rows: any[] = [];
 
     for (const m of matches) {
+      // Second guard, independent of the status filter above — see the
+      // comment where finishedMatchIds is built.
+      if (finishedMatchIds.has(m.id)) {
+        skippedFinished++;
+        continue;
+      }
       const matchDate = new Date(m.date);
 
       const calcRestDays = (teamId: number): number | null => {
@@ -2278,6 +2304,7 @@ export async function processMatchIntelligencePartial(opts?: {
         matchesProcessed: matches.length,
         rowsWritten: written,
         withFullReadiness: rows.filter(r => r.home_readiness !== null && r.away_readiness !== null).length,
+        skippedFinished, // matches that reached this loop as 'scheduled' but already had a recorded score by write time — race-guard catches, expect near-zero in steady state
       },
       'processMatchIntelligencePartial completed'
     );
