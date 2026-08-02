@@ -28,7 +28,17 @@ The blueprint is the bridge between the audit and the V2 schema. It contains no 
 |---|---|---|
 | 07 | [V2 Logical Data Model](./07-v2-logical-data-model.md) | Principles · ~98 logical constructs across nine families · relationship graph · lifecycle classification · versioning and inheritance · identity rules · 173 numbered constraints |
 
-Technology-independent. Sits between the architecture and physical database design: no storage types, no keys as implemented, no indexes, no partitioning, no triggers, no access rules, no interfaces. Phase 5 realizes it, gated on the blocking prerequisites in document 05.
+Technology-independent. Sits between the architecture and physical database design: no storage types, no keys as implemented, no indexes, no partitioning, no triggers, no access rules, no interfaces.
+
+## Phase 5 — Physical database design
+
+| # | Document | Contents |
+|---|---|---|
+| 08 | [V2 Physical Database Design](./08-v2-physical-database-design.md) | 25 chapters · 7 schemas · mapping rules · naming standards · identity and attribute strategy · referential integrity · constraint realisation · partitioning · indexing · write and read architecture · lifecycle, version and security realisation · retention · entity and relationship catalogues · migration, validation and performance strategy |
+
+Binding engineering specification for PostgreSQL 16 under Supabase. Contains no DDL, no migration scripts, and no procedural code. Nineteen recorded decisions and three gated on measurement, each with a stated default.
+
+Next: Phase 5.5 — Physical Validation Review.
 
 ## Sources analysed
 
