@@ -38,7 +38,13 @@ Technology-independent. Sits between the architecture and physical database desi
 
 Binding engineering specification for PostgreSQL 16 under Supabase. Contains no DDL, no migration scripts, and no procedural code. Nineteen recorded decisions and three gated on measurement, each with a stated default.
 
-Next: Phase 5.5 — Physical Validation Review.
+## Phase 5.5 — Physical validation review
+
+| # | Document | Contents |
+|---|---|---|
+| 09 | [V2 Physical Validation Review](./09-v2-physical-validation-review.md) | PostgreSQL 16 and Supabase compatibility · schema and ownership validation · partitioning and volume assessment · feature value model review · snapshot integrity · RLS leakage paths · trigger burden · migration risk and ordering · blocker table · final decision |
+
+**Outcome: B — Approved with required changes.** 25 findings; 2 blockers; 17 corrections required before DDL; 8 before production. Every correction is physical — none changes the architecture, the logical model, or any Phase 4 guarantee.
 
 ## Sources analysed
 
