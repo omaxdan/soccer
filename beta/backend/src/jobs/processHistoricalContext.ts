@@ -90,6 +90,20 @@ interface SnapshotRow {
   form_rating_before: number | null;
   readiness_before: number | null;
   strength_rating_before: number | null;
+  // Added in migration 044 — schema and type only, not yet populated by
+  // this function. Each mirrors an existing live processor's calculation
+  // (team_form_quality, team_travel_load, team_fixture_load); populating
+  // them correctly requires reading each source's value AS OF this match's
+  // date, not live/current — the same temporal-correctness discipline this
+  // whole codebase's immutability work exists to enforce, and not something
+  // to bolt on without testing against real historical data first. Left
+  // undefined here deliberately rather than filled with a placeholder that
+  // would look populated but wouldn't be trustworthy.
+  opponent_adjusted_form_before?: number | null;
+  strength_of_schedule_before?: number | null;
+  rest_days_before?: number | null;
+  travel_load_before?: number | null;
+  fixture_congestion_before?: number | null;
   calculated_at: string;
 }
 
