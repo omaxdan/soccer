@@ -51,6 +51,7 @@
 import { db } from '../db/client';
 import { logger } from '../utils/logger';
 import { fetchAllRows } from '../db/fetchAllRows';
+import { chunkedIn } from '../db/chunkedIn';
 import { normalizePosition, zoneOfPositionCode } from '../lib/lineups';
 import { MUTABLE_MATCH_STATUS } from '../lib/matchLifecycle';
 
@@ -1910,14 +1911,22 @@ export async function processFormationMatchup(): Promise<{
 
     const matchIds = matches.map((m: any) => m.id);
 
-    const lineups = await fetchAllRows(
-      db
-        .from('match_predicted_lineups')
-        .select(
-          'match_id, team_id, player_id, position_code, position_group, tactical_position, formation, confidence, players:player_id(id, name)'
-        )
-        .in('match_id', matchIds)
-        .order('rank_in_position', { ascending: true })
+    // CONFIRMED PRODUCTION FAILURE, fixed here: HeadersOverflowError,
+    // ~202 match IDs producing a 16623-character request URL. matchIds is
+    // built from every currently-scheduled match across the whole platform
+    // in the next 7 days — during a busy multi-league week this routinely
+    // exceeds what a single .in() request can carry.
+    const lineups = await chunkedIn<any, number>(
+      matchIds,
+      (chunk) =>
+        db
+          .from('match_predicted_lineups')
+          .select(
+            'match_id, team_id, player_id, position_code, position_group, tactical_position, formation, confidence, players:player_id(id, name)'
+          )
+          .in('match_id', chunk)
+          .order('rank_in_position', { ascending: true }),
+      { label: 'processFormationMatchup:lineups' }
     );
 
     if (!lineups || lineups.length === 0)
@@ -1927,11 +1936,16 @@ export async function processFormationMatchup(): Promise<{
     const allPlayerIds = [
       ...new Set(lineups.map((l: any) => l.player_id)),
     ] as number[];
-    const playerStrengths = await fetchAllRows(
-      db
-        .from('player_intelligence')
-        .select('player_id, player_strength_score')
-        .in('player_id', allPlayerIds)
+    // Same class of risk as matchIds above, worse in practice: up to 22
+    // players (11 per side) per match, before deduplication.
+    const playerStrengths = await chunkedIn<any, number>(
+      allPlayerIds,
+      (chunk) =>
+        db
+          .from('player_intelligence')
+          .select('player_id, player_strength_score')
+          .in('player_id', chunk),
+      { label: 'processFormationMatchup:playerStrengths' }
     );
     const strengthMap = new Map<number, number>();
     for (const ps of playerStrengths) {
@@ -1943,11 +1957,14 @@ export async function processFormationMatchup(): Promise<{
         matches.flatMap((m: any) => [m.home_team_id, m.away_team_id])
       ),
     ];
-    const teamIntel = await fetchAllRows(
-      db
-        .from('team_intelligence')
-        .select('team_id, readiness_score')
-        .in('team_id', teamIds)
+    const teamIntel = await chunkedIn<any, number>(
+      teamIds,
+      (chunk) =>
+        db
+          .from('team_intelligence')
+          .select('team_id, readiness_score')
+          .in('team_id', chunk),
+      { label: 'processFormationMatchup:teamIntel' }
     );
     const intelMap = new Map<number, any>(
       teamIntel.map((r: any) => [r.team_id, r])
@@ -2609,20 +2626,23 @@ export async function processSubstitutionImpact(opts?: {
     }
 
     const strengthMap = new Map<number, number>();
-    
-    for (let i = 0; i < allPlayerIds.length; i += 500) {
-      const batchPlayerIds = allPlayerIds.slice(i, i + 500);
-      const batchIntel = await fetchAllRows(
+
+    // Was manually chunked at 500 IDs per request — the same arithmetic that
+    // confirmed the processFormationMatchup failure (~202 IDs -> 16623 chars,
+    // ~82 chars/ID) puts 500 IDs at roughly 41,000 characters, almost
+    // certainly still over common 8-16KB header limits. This was a real
+    // attempt at the same protection chunkedIn() now provides, just sized
+    // from an assumption nobody had verified against an actual limit either.
+    const playerStrengthRows = await chunkedIn<any, number>(
+      allPlayerIds,
+      (chunk) =>
         db.from('player_intelligence')
           .select('player_id, player_strength_score')
-          .in('player_id', batchPlayerIds),
-        500,
-        'player_id'
-      );
-      
-      for (const r of batchIntel) {
-        strengthMap.set(r.player_id, r.player_strength_score ?? 30);
-      }
+          .in('player_id', chunk),
+      { label: 'processSubstitutionImpact:playerStrengths' }
+    );
+    for (const r of playerStrengthRows) {
+      strengthMap.set(r.player_id, r.player_strength_score ?? 30);
     }
 
     // ─── 5. Process matches ──────────────────────────────────────────────────
@@ -4481,11 +4501,16 @@ export async function processSquadDepth(): Promise<{ matchesProcessed: number; r
     const allPlayerIds: number[] = [];
     for (const roster of playersByTeam.values()) for (const p of roster) allPlayerIds.push(p.id);
     const strengthMap = new Map<number, number>();
-    for (let i = 0; i < allPlayerIds.length; i += 500) {
-      const batch = allPlayerIds.slice(i, i + 500);
-      const batchIntel = await fetchAllRows(db.from('player_intelligence').select('player_id, player_strength_score').in('player_id', batch));
-      for (const r of batchIntel) strengthMap.set(r.player_id, r.player_strength_score ?? 30);
-    }
+    // Same class of fix as processSubstitutionImpact: was manually chunked at
+    // 500 IDs, which the confirmed processFormationMatchup failure's own
+    // arithmetic (~202 IDs -> 16623 chars) puts at ~41,000 characters —
+    // likely still oversized, not actually validated against a real limit.
+    const playerStrengthRows = await chunkedIn<any, number>(
+      allPlayerIds,
+      (chunk) => db.from('player_intelligence').select('player_id, player_strength_score').in('player_id', chunk),
+      { label: 'processSquadDepth:playerStrengths' }
+    );
+    for (const r of playerStrengthRows) strengthMap.set(r.player_id, r.player_strength_score ?? 30);
 
     const now2 = Date.now();
     const ageOf = (dob: string | null): number | null => dob ? Math.floor((now2 - new Date(dob).getTime()) / (365.25 * 86400000)) : null;
