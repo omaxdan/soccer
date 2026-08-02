@@ -35,7 +35,6 @@ import { sportsApiClient } from './services/sportsApiClient';
 
 
 import { processHistoricalContextBackfill, processHistoricalContextRecent } from './jobs/processHistoricalContext';
-import { processFormQuality } from './jobs/processFormQuality';
 import { backtestSignals } from './jobs/backtestSignals';
 import { backtestConfidenceBands } from './jobs/backtestConfidenceBands';
 import { processRiskOpportunity } from './jobs/processRiskOpportunity';
@@ -1398,16 +1397,6 @@ async function handleCommand(command: string, ...args: string[]) {
         logger.info({ days }, 'Processing recent historical context...');
         const r = await processHistoricalContextRecent(days);
         logger.info(r, 'Historical context complete');
-        break;
-      }
-
-      case 'process:form-quality': {
-        // Opponent-adjusted form, strength of schedule, tier splits,
-        // giant-killer/flat-track, expected-vs-actual points, volatility.
-        // Depends on historical context. DB-only.
-        logger.info('Processing form quality...');
-        const r = await processFormQuality();
-        logger.info(r, 'Form quality complete');
         break;
       }
 
