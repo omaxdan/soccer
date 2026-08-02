@@ -88,9 +88,20 @@ export async function processPlayerMatchLoad(): Promise<{
 }> {
   logger.info('processPlayerMatchLoad started — DB only');
 
+  // ── Instrumentation added to investigate a statement-timeout regression ──
+  // report. Purely observational — no behavior change. Each DB call is timed
+  // independently so the next real run shows which one is actually slow,
+  // rather than continuing to guess from static code review alone. This
+  // environment has no live database access, so none of these numbers can
+  // be produced here — this is the instrumentation itself, not a result.
+  const t0 = Date.now();
   const rawStats = await fetchAllRows(
     db.from('player_season_statistics')
       .select('player_id, team_id, season_external_id, minutes_played, appearances, matches_started')
+  );
+  logger.info(
+    { query: 'player_season_statistics (rawStats)', durationMs: Date.now() - t0, rows: rawStats.length },
+    '[timing] processPlayerMatchLoad'
   );
 
   if (rawStats.length === 0) {
@@ -110,12 +121,39 @@ export async function processPlayerMatchLoad(): Promise<{
   // Get all matches for these teams — home OR away, correctly ORed
   // (see docstring above for the bug this replaces).
   const teamIds = [...new Set(players.map((p: any) => p.team_id))];
+  const filter = `home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`;
+
+  // Logged BEFORE the query runs, per the requested instrumentation — if
+  // this query is the one that times out, these numbers (not a repeat of
+  // the same guess) are what determine whether it's a data-growth story
+  // (teamIds much larger than expected) or something else entirely.
+  logger.info(
+    {
+      teamIds: teamIds.length,
+      players: players.length,
+      filterLength: filter.length,
+      // Full string, not just the length — so EXPLAIN ANALYZE can be run
+      // against the EXACT real query in a SQL console, not a reconstruction
+      // of it. This is deliberately at info level despite its size: if this
+      // query is the culprit, this is the one line that turns "run EXPLAIN
+      // ANALYZE on something like this" into "run EXPLAIN ANALYZE on
+      // exactly this, copy-pasted."
+      filter,
+    },
+    '[timing] processPlayerMatchLoad: matches query about to run'
+  );
+
+  const t1 = Date.now();
   const matches = await fetchAllRows(
     db.from('matches')
       .select('id, home_team_id, away_team_id, date')
-      .or(`home_team_id.in.(${teamIds.join(',')}),away_team_id.in.(${teamIds.join(',')})`)
+      .or(filter)
       .lte('date', new Date().toISOString())
       .order('date', { ascending: true })
+  );
+  logger.info(
+    { query: 'matches (home/away OR filter)', durationMs: Date.now() - t1, rows: matches.length },
+    '[timing] processPlayerMatchLoad'
   );
 
   if (matches.length === 0) {
@@ -162,11 +200,16 @@ export async function processPlayerMatchLoad(): Promise<{
     // delete()+insert() pair was two PostgREST transactions — a failed
     // insert left the table EMPTY until the next run, and every run had
     // a visible empty-table window for readers.
+    const t2 = Date.now();
     const { error } = await db.rpc('replace_player_match_load', { p_rows: rows });
+    logger.info(
+      { query: 'replace_player_match_load (RPC write)', durationMs: Date.now() - t2, rows: rows.length, failed: !!error },
+      '[timing] processPlayerMatchLoad'
+    );
     if (error) throw new Error(error.message);
   }
 
-  logger.info({ playersProcessed, rowsWritten: rows.length }, 'processPlayerMatchLoad completed');
+  logger.info({ playersProcessed, rowsWritten: rows.length, totalDurationMs: Date.now() - t0 }, 'processPlayerMatchLoad completed');
   return { playersProcessed, rowsWritten: rows.length };
 }
 
