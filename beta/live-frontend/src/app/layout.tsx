@@ -4,8 +4,6 @@ import "./globals.css";
 import { BottomNav, SideNav } from "@/components/Nav";
 import { getViewerIdentity } from "@/lib/access";
 import { AccountMenu } from "@/components/AccountMenu";
-import { StatusDot } from "@/components/StatusDot";
-import { LIVE } from "@/lib/supabase";
 
 export const metadata: Metadata = {
   title: {
@@ -54,11 +52,8 @@ export default async function RootLayout({
             </Link>
             <span className="hidden h-4 w-px bg-line sm:block" />
             <span className="mono hidden text-[0.6rem] tracking-wide text-muted sm:block">
-              Football betting intelligence
+              Football Intelligence
             </span>
-            <div className="ml-auto">
-              <StatusDot live={LIVE} />
-            </div>
             <form action="/search" method="get" className="hidden min-w-0 flex-1 justify-end md:flex">
               <label className="relative w-full max-w-[14rem]">
                 <span className="sr-only">Search</span>
@@ -71,7 +66,9 @@ export default async function RootLayout({
                 />
               </label>
             </form>
-            <AccountMenu identity={identity} />
+            <div className="ml-auto md:ml-0">
+              <AccountMenu identity={identity} />
+            </div>
           </div>
         </header>
 

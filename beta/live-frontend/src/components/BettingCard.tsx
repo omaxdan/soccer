@@ -181,7 +181,7 @@ function FormPill({ result }: { result: string }) {
   const { text, bg } = formPillColor(result);
   return (
     <span
-      className="mono grid h-4 w-4 place-items-center rounded-[3px] text-[0.6rem] font-bold"
+      className="mono grid h-4 w-4 shrink-0 place-items-center rounded-[3px] text-[0.6rem] font-bold leading-none"
       style={{ color: text, background: bg }}
     >
       {result}

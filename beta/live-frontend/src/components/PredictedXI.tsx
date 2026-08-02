@@ -11,8 +11,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React from "react";
+import Link from "next/link";
 import type { MatchRow, PredictedLineupPlayer } from "@/lib/types";
 import { getFormationName, lineOfPlayer, naturalPositionOf } from "@/lib/formation";
+import { playerSlug } from "@/lib/slug";
 import { Crest } from "./Crest";
 
 /** Shared thresholds — the legend below renders from this same table. */
@@ -69,7 +71,10 @@ function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
         {p.shirt_number ?? "—"}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="mono block truncate text-[0.74rem] font-semibold text-text">
+        <Link
+          href={`/player/${playerSlug({ id: p.player_id, name: p.player?.name ?? p.player?.short_name ?? `Player ${p.player_id}` })}`}
+          className="mono block truncate text-[0.74rem] font-semibold text-text hover:text-amber active:text-amber"
+        >
           {name}
           {p.is_captain && (
             <span
@@ -90,10 +95,10 @@ function PlayerChip({ p }: { p: PredictedLineupPlayer }) {
               DOUBT
             </span>
           )}
-        </span>
+        </Link>
         {outOfPosition && (
           <span className="mono block truncate text-[0.56rem]" style={{ color: "var(--warn)" }}>
-            Natural {natural} · played out of position
+            Natural {natural}
           </span>
         )}
         {!outOfPosition && alts.length > 0 && (

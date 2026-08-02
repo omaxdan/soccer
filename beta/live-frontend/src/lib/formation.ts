@@ -29,25 +29,47 @@ import type { PredictedLineupPlayer } from "./types";
 // Reading a code by its first character — which this file used to do — is
 // specifically wrong for the tactical vocabulary: 'RB' would classify as a
 // midfielder, 'LCB' as a midfielder, 'DM' as a defender.
+// LINE_FROM_CODE is the fallback for rows with no position_group at all — a
+// pure code-only guess with no formation context. LWB/RWB moved from DEF to
+// MID: the request's own explicit mapping lists wing-backs under midfield
+// unconditionally, and a code-only fallback can't distinguish a back-3 wing-
+// back from a back-4 full-back anyway, so MID is the safer default of the two
+// — DEF was silently wrong for every back-3/back-5 shape.
 const LINE_FROM_CODE: Record<string, "GK" | "DEF" | "MID" | "FWD"> = {
   G: "GK", GK: "GK",
   D: "DEF", DC: "DEF", DL: "DEF", DR: "DEF", CB: "DEF", LB: "DEF", RB: "DEF",
-  LWB: "DEF", RWB: "DEF", SW: "DEF", RCB: "DEF", LCB: "DEF",
+  SW: "DEF", RCB: "DEF", LCB: "DEF",
   M: "MID", MC: "MID", ML: "MID", MR: "MID", DM: "MID", AM: "MID", CM: "MID",
   LM: "MID", RM: "MID", RCM: "MID", LCM: "MID", RDM: "MID", LDM: "MID",
-  MD: "MID", CDM: "MID", MA: "MID", CAM: "MID",
+  MD: "MID", CDM: "MID", MA: "MID", CAM: "MID", LWB: "MID", RWB: "MID",
   F: "FWD", A: "FWD", S: "FWD", ST: "FWD", CF: "FWD", LW: "FWD", RW: "FWD",
   SS: "FWD", RST: "FWD", LST: "FWD",
 };
 
-// The engine's own broad grouping, when it stored one — preferred over the
-// code table above because it is the classification the engine actually used
-// to build the lineup, not a re-derivation of it.
+// The engine's own broad grouping — preferred over the code table above
+// because it is the classification the engine actually used to build the
+// lineup (formation-context-aware: the same base position can sit in a
+// different zone depending on the shape, per
+// beta/backend/src/lib/lineups/types.ts's own documented example — wide
+// players in a 4-2-3-1 are positionally wingers but count as midfielders in
+// that notation), not a code-only re-derivation of it.
+//
+// FOUND WHILE FIXING PART 1: the backend writes this column as a single
+// letter — PositionGroup = 'G' | 'D' | 'M' | 'F' (confirmed directly in the
+// backend's own type definition, not assumed from this file's stale
+// comment). This lookup table had no single-letter keys at all, meaning
+// group.toUpperCase() never matched anything, on any row, ever — the
+// backend's already-correct, formation-aware classification was being
+// silently discarded on every single lineup, and every player fell through
+// to the code-only fallback above regardless of whether a better answer was
+// available. The single-letter keys below are the actual fix; the fallback
+// table's LWB/RWB correction is defense-in-depth for the genuinely
+// contextless case (a row with no group at all), not the primary fix.
 const LINE_FROM_GROUP: Record<string, "GK" | "DEF" | "MID" | "FWD"> = {
-  GK: "GK", GOALKEEPER: "GK",
-  DEF: "DEF", DEFENCE: "DEF", DEFENSE: "DEF", DEFENDER: "DEF",
-  MID: "MID", MIDFIELD: "MID", MIDFIELDER: "MID",
-  FWD: "FWD", FORWARD: "FWD", ATTACK: "FWD", ATTACKER: "FWD",
+  G: "GK", GK: "GK", GOALKEEPER: "GK",
+  D: "DEF", DEF: "DEF", DEFENCE: "DEF", DEFENSE: "DEF", DEFENDER: "DEF",
+  M: "MID", MID: "MID", MIDFIELD: "MID", MIDFIELDER: "MID",
+  F: "FWD", FWD: "FWD", FORWARD: "FWD", ATTACK: "FWD", ATTACKER: "FWD",
 };
 
 export function lineOf(code: string | null, group?: string | null): "GK" | "DEF" | "MID" | "FWD" {

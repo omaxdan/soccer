@@ -16,7 +16,7 @@ export function FormString({ results }: { results: string | null | undefined }) 
       {results.split("").map((r, i) => (
         <span
           key={i}
-          className="mono grid h-4 w-4 place-items-center rounded-[3px] text-[0.6rem] font-bold"
+          className="mono grid h-4 w-4 shrink-0 place-items-center rounded-[3px] text-[0.6rem] font-bold leading-none"
           style={{
             color: map[r] ?? "var(--muted)",
             background: `color-mix(in srgb, ${map[r] ?? "var(--muted)"} 16%, transparent)`,
