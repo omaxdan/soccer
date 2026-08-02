@@ -20,7 +20,15 @@ Complete audit of the existing PitchTerminal system, produced before any V2 desi
 |---|---|---|
 | 06 | [V2 Canonical Data Model & Architecture Blueprint](./06-v2-canonical-data-model-blueprint.md) | Architecture principles · four-layer model · entity families · match intelligence & snapshots · team/player intelligence · calibration · operational architecture · classification of all 92 tables · architecture diagram · decisions required before schema design |
 
-The blueprint is the bridge between the audit and the V2 schema. It contains no SQL and proposes no migrations — Phase 3 derives the schema from it, gated on the blocking prerequisites in document 05.
+The blueprint is the bridge between the audit and the V2 schema. It contains no SQL and proposes no migrations.
+
+## Phase 4 — Logical data model
+
+| # | Document | Contents |
+|---|---|---|
+| 07 | [V2 Logical Data Model](./07-v2-logical-data-model.md) | Principles · ~98 logical constructs across nine families · relationship graph · lifecycle classification · versioning and inheritance · identity rules · 173 numbered constraints |
+
+Technology-independent. Sits between the architecture and physical database design: no storage types, no keys as implemented, no indexes, no partitioning, no triggers, no access rules, no interfaces. Phase 5 realizes it, gated on the blocking prerequisites in document 05.
 
 ## Sources analysed
 
