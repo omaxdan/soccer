@@ -46,6 +46,16 @@ Binding engineering specification for PostgreSQL 16 under Supabase. Contains no 
 
 **Outcome: B — Approved with required changes.** 25 findings; 2 blockers; 17 corrections required before DDL; 8 before production. Every correction is physical — none changes the architecture, the logical model, or any Phase 4 guarantee.
 
+## Phase 5.6 — Correction pass
+
+| # | Document | Contents |
+|---|---|---|
+| 10 | [V2 Physical Database Design, Revision 1](./10-v2-physical-database-design-rev1.md) | Correction register (17 corrections, each with finding, original design, problem, correction, implementation rule, reason) · corrected chapters for principles, catalogue rules, keys, partitioning, constraints, triggers, security, migration, maintenance, DDL authoring · entity catalogue delta · validation checklist |
+
+Supersedes the named sections of document 08; unnamed sections remain in force. 75 implementation rules, 15 DDL authoring rules, 4 new physical relations, none introducing a logical concept. No Phase 4 guarantee weakened; three strengthened.
+
+Next: Phase 6 — DDL authoring and migration implementation.
+
 ## Sources analysed
 
 | Source | Detail |
