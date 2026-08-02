@@ -3,6 +3,7 @@ import { getWatchlist } from "@/lib/preferences";
 import { getViewerIdentity } from "@/lib/access";
 import { getBoard, getMatchesByIds, getLeagues } from "@/lib/queries";
 import { matchSlug, teamSlug, leagueSlug } from "@/lib/slug";
+import { LocalKickoff } from "@/components/LocalKickoff";
 import { kickoff } from "@/lib/intel";
 import type { MatchRow } from "@/lib/types";
 import { IconStar, IconArrowRight } from "@/components/icons/ModuleIcons";
@@ -22,7 +23,7 @@ function FixtureRow({ m }: { m: MatchRow }) {
           ) : finished ? (
             "FT"
           ) : (
-            `${k.day} ${k.time}`
+            <LocalKickoff iso={m.date} format="dayTime" />
           )}
         </span>
         <span className="mono min-w-0 flex-1 truncate text-[0.76rem] font-semibold text-text">

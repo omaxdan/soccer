@@ -3,6 +3,7 @@ import { getBoard, getBettingCard, getBandBacktests } from "@/lib/queries";
 import { buildFeed } from "@/components/ModuleFeed";
 import { getAccessContext } from "@/lib/access";
 import { MODULES, tally, overallVerdict, derivePickSide } from "@/lib/modules";
+import { LocalKickoff } from "@/components/LocalKickoff";
 import { matchSlug } from "@/lib/slug";
 import { kickoff } from "@/lib/intel";
 import { Crest } from "@/components/Crest";
@@ -99,7 +100,7 @@ export default async function LandingPage() {
                   <div className="mono flex items-center gap-2 text-[0.6rem] text-muted">
                     <span className="truncate">{m.competition ?? m.tournament?.name ?? "—"}</span>
                     <span className="ml-auto shrink-0 text-faint">
-                      {k.day} {k.time}
+                      <LocalKickoff iso={m.date} format="dayTime" />
                     </span>
                   </div>
                   <div className="mt-2.5 space-y-1.5">

@@ -54,6 +54,21 @@ export function normScorelines(raw: ScorelineProb[] | null): ScorelineProb[] {
 }
 
 // ── Date / kickoff ───────────────────────────────────────
+/**
+ * day/time here are computed using whatever timezone the CALLING RUNTIME
+ * resolves to — correct when this executes in a browser, wrong when it runs
+ * server-side (every current caller is a server component; confirmed by
+ * checking all five). Kept for now because removing them outright would
+ * break existing callers, but they are the SERVER's local time, not the
+ * visitor's — use components/LocalKickoff.tsx for a wall-clock value that's
+ * actually correct for whoever is looking at the page.
+ *
+ * `rel` (LIVE / FT / "2h" / "3d") does NOT have this problem: it's a
+ * DURATION between two UTC instants (`d.getTime() - now.getTime()`), and
+ * .getTime() always returns UTC milliseconds regardless of the runtime's
+ * timezone — the countdown badge has always been correct. Only the
+ * wall-clock day/time strings were ever wrong.
+ */
 export function kickoff(dateStr: string): { day: string; time: string; rel: string } {
   const d = new Date(dateStr);
   const now = new Date();

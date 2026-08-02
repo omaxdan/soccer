@@ -15,6 +15,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { LocalKickoff } from "./LocalKickoff";
 import { tally, overallVerdict, derivePickSide } from "@/lib/modules";
 import type { MatchRow } from "@/lib/types";
 import type { Tier } from "@/lib/tier";
@@ -202,8 +203,12 @@ export function FeedTable({
                       href={href}
                       label={`${homeName} versus ${awayName}, ${k.day} ${k.time}`}
                     >
-                      <span className="mono block whitespace-nowrap text-[0.62rem] text-faint">{k.day}</span>
-                      <span className="mono tnum block whitespace-nowrap text-[0.74rem] text-text">{k.time}</span>
+                      <span className="mono block whitespace-nowrap text-[0.62rem] text-faint">
+                        <LocalKickoff iso={m.date} format="day" />
+                      </span>
+                      <span className="mono tnum block whitespace-nowrap text-[0.74rem] text-text">
+                        <LocalKickoff iso={m.date} format="time" />
+                      </span>
                     </CellLink>
                   </td>
 

@@ -3,6 +3,7 @@ import { getBandBacktests, getMatchPlayerImpact, getPlayerVersatility } from "@/
 import { getAccessContext, redactReadings, canAccessFeature } from "@/lib/access";
 import { UpgradePrompt } from "@/components/FeatureGate";
 import { WatchToggle } from "@/components/WatchToggle";
+import { LocalKickoff } from "@/components/LocalKickoff";
 import { isWatched } from "@/lib/preferences";
 import { getViewerIdentity } from "@/lib/access";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
@@ -233,9 +234,13 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
             {m.home_score != null && m.away_score != null ? (
               <div className="mono text-2xl font-bold tnum">{m.home_score}–{m.away_score}</div>
             ) : (
-              <div className="mono text-lg font-semibold text-amber">{k.time}</div>
+              <div className="mono text-lg font-semibold text-amber">
+                <LocalKickoff iso={m.date} format="time" />
+              </div>
             )}
-            <div className="mono mt-0.5 text-[0.55rem] uppercase tracking-widest text-faint">{k.day}</div>
+            <div className="mono mt-0.5 text-[0.55rem] uppercase tracking-widest text-faint">
+              <LocalKickoff iso={m.date} format="day" />
+            </div>
             
           </div>
           <TeamHead team={m.away} align="left" />

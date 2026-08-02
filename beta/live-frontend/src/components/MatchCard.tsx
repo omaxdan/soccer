@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Crest } from "./Crest";
 import { OpportunityRiskMeter, RiskBadge } from "./Meters";
 import { PickBadge } from "./Primitives";
+import { LocalKickoff } from "./LocalKickoff";
 import { kickoff, opportunityColor, bestLean, normProb } from "@/lib/intel";
 import { matchSlug } from "@/lib/slug";
 import type { MatchRow } from "@/lib/types";
@@ -51,7 +52,7 @@ export function MatchCard({
         </span>
         {pick && <PickBadge tier={pick} compact />}
         <span className="mono ml-auto shrink-0 text-[0.6rem] text-faint">
-          {k.day} · {k.time}
+          <LocalKickoff iso={m.date} format="day" /> · <LocalKickoff iso={m.date} format="time" />
         </span>
         <span
           className="mono shrink-0 rounded px-1 text-[0.55rem] font-semibold tracking-wider"
