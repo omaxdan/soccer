@@ -4,6 +4,7 @@ import { getAccessContext, redactReadings, canAccessFeature } from "@/lib/access
 import { UpgradePrompt } from "@/components/FeatureGate";
 import { WatchToggle } from "@/components/WatchToggle";
 import { LocalKickoff } from "@/components/LocalKickoff";
+import { evaluateEvidence, EVIDENCE_THRESHOLDS } from "@/lib/evidencePolicy";
 import { isWatched } from "@/lib/preferences";
 import { getViewerIdentity } from "@/lib/access";
 import { tally, overallVerdict, derivePickSide, MODULES } from "@/lib/modules";
@@ -151,6 +152,24 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const heroOverall = overallVerdict(heroTally);
   const heroFiring = moduleReadings.filter((r) => r.status !== "inactive").length;
 
+  // ── Evidence Maturity Framework ─────────────────────────────────────────
+  // A historical claim about a MATCHUP is only as trustworthy as its WEAKER
+  // side — two matches for one team and thirty for the other is still a
+  // two-match claim. min(), not average or either side alone.
+  //
+  // Scoped to Historical Advantage / Historical Confidence / Consensus
+  // specifically — the three fields the framework's worked example (Basel
+  // vs Lausanne, 3 matches each) names directly. NOT yet applied to the
+  // Module Report's per-module evidence classification, the Evidence
+  // Scorecard's contributing/insufficient/neutral recount, or Team/League
+  // page wording — those need their own per-module judgment, deferred
+  // deliberately rather than rushed into this same pass.
+  const heroEvidence = evaluateEvidence(
+    Math.min(homeTeamIntel.seasonMatches ?? 0, awayTeamIntel.seasonMatches ?? 0),
+    EVIDENCE_THRESHOLDS.totalMatches
+  );
+  const heroEvidenceInsufficient = heroEvidence.quality === "INSUFFICIENT";
+
   // ── Match Immutability Rule ─────────────────────────────────────────────
   // A finished match must display exactly what was known before kickoff —
   // never live match_intelligence, which keeps recomputing as both teams'
@@ -180,7 +199,9 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
   const heroGap = heroFrozen ? heroFrozen.readinessGap : (i?.readiness_gap ?? null);
   const heroGapName = heroGap == null ? null : heroGap > 0 ? homeName : awayName;
   const heroBandForSummary = heroFrozen ? bandForFrozenScore(heroFrozen.confidencePct) : i?.confidence_band;
-  const heroSummary = heroPickName
+  const heroSummary = heroEvidenceInsufficient
+    ? `Current team metrics are available, but only ${heroEvidence.matchesAvailable} league match${heroEvidence.matchesAvailable === 1 ? "" : "es"} ${heroEvidence.matchesAvailable === 1 ? "has" : "have"} been played by the side with the smaller sample, so there is not yet enough historical evidence to establish a reliable advantage.`
+    : heroPickName
     ? `Historical evidence ${heroFrozen ? "favoured" : "currently favours"} ${heroPickName}, on ${heroTally.supports} supporting ` +
       `stream${heroTally.supports === 1 ? "" : "s"}` +
       (heroTally.contradicts
@@ -269,7 +290,11 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
           <div className="panel p-3">
             <div className="label-cap">Historical advantage</div>
             <div className="mono mt-0.5 truncate text-[0.95rem] font-semibold text-text">
-              {heroSnapshotMissing ? "—" : heroPickName ?? "No edge"}
+              {heroSnapshotMissing
+                ? "—"
+                : !heroFrozen && heroEvidenceInsufficient
+                ? "Insufficient evidence"
+                : heroPickName ?? "No edge"}
             </div>
             {heroFrozen ? (
               <div className="mono text-[0.58rem] text-faint">
@@ -278,6 +303,10 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
             ) : heroSnapshotMissing ? (
               <div className="mono text-[0.58rem]" style={{ color: "var(--faint)" }}>
                 pre-match record not available
+              </div>
+            ) : heroEvidenceInsufficient ? (
+              <div className="mono text-[0.58rem]" style={{ color: "var(--warn)" }}>
+                only {heroEvidence.matchesAvailable} match{heroEvidence.matchesAvailable === 1 ? "" : "es"} played
               </div>
             ) : (
               !heroFull && <div className="mono text-[0.58rem] text-faint">direction only</div>
@@ -290,6 +319,8 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
               <div className="mono tnum mt-0.5 text-[0.95rem] font-semibold text-text">
                 {heroSnapshotMissing
                   ? "—"
+                  : !heroFrozen && heroEvidenceInsufficient
+                  ? "Awaiting evidence"
                   : heroFrozen
                     ? `${Math.round(heroFrozen.confidencePct)}%`
                     : i?.confidence_score != null ? `${Math.round(i.confidence_score)}%` : "—"}
@@ -297,6 +328,10 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
               {heroFrozen ? (
                 <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
                   {bandForFrozenScore(heroFrozen.confidencePct)}
+                </div>
+              ) : !heroFrozen && heroEvidenceInsufficient ? (
+                <div className="mono text-[0.6rem]" style={{ color: "var(--warn)" }}>
+                  INSUFFICIENT
                 </div>
               ) : (
                 !heroSnapshotMissing && i?.confidence_band && (
@@ -328,8 +363,8 @@ export default async function MatchHub({ params }: { params: Promise<{ slug: str
                   {heroFiring}
                   <span className="text-[0.7rem] text-faint">/{MODULES.length}</span>
                 </div>
-                <div className="mono text-[0.6rem]" style={{ color: heroOverall.color }}>
-                  {heroOverall.label}
+                <div className="mono text-[0.6rem]" style={{ color: heroEvidenceInsufficient && !heroFrozen ? "var(--warn)" : heroOverall.color }}>
+                  {heroEvidenceInsufficient && !heroFrozen ? "INSUFFICIENT EVIDENCE" : heroOverall.label}
                 </div>
               </>
             ) : (

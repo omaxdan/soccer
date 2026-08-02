@@ -619,6 +619,9 @@ export async function getTeamIntel(id: number): Promise<{
   tacticalVariations: import("./types").TeamTacticalVariations | null;
   transferIntel: import("./types").TeamTransferIntelligence | null;
   injuries: import("./types").PlayerInjuryRow[];
+  /** Evidence Maturity Framework — matches played this season, the count
+   *  every historical-claim gate needs and nothing previously exposed. */
+  seasonMatches: number | null;
 }> {
   const client = db();
   if (!client) {
@@ -641,11 +644,13 @@ export async function getTeamIntel(id: number): Promise<{
       tacticalVariations: null,
       transferIntel: null,
       injuries: [],
+      seasonMatches: null,
     };
   }
   const [
     intel, betting, goalDep, injury, formQuality, venue, momentum, depth, motivation, versatility,
     strengthDashboard, strengthRatings, playingStyle, strengths, weaknesses, tacticalVariations, transferIntel, injuredPlayers,
+    seasonStats,
   ] = await Promise.all([
     client.from("team_intelligence").select("*").eq("team_id", id).maybeSingle(),
     client.from("team_betting_intelligence").select("*").eq("team_id", id)
@@ -673,6 +678,12 @@ export async function getTeamIntel(id: number): Promise<{
     client.from("players")
       .select("id, name, short_name, player_injuries!inner(injury_reason, injury_status, expected_return_days, days_out, injury_severity_score)")
       .eq("team_id", id).eq("player_injuries.active", true),
+    // Evidence Maturity Framework, Phase B: season matches played — the one
+    // count missing from every table already fetched above. Added to this
+    // EXISTING batch rather than a new query; every consumer of getTeamIntel
+    // already pays for this round trip.
+    client.from("team_season_statistics").select("matches, season_external_id").eq("team_id", id)
+      .order("season_external_id", { ascending: false }).limit(1).maybeSingle(),
   ]);
   return {
     intel: intel.data ?? null,
@@ -699,6 +710,7 @@ export async function getTeamIntel(id: number): Promise<{
         injury_severity_score: pi?.injury_severity_score ?? null,
       };
     }),
+    seasonMatches: (seasonStats.data as any)?.matches ?? null,
   };
 }
 
