@@ -14,6 +14,14 @@ Complete audit of the existing PitchTerminal system, produced before any V2 desi
 | 04 | [Database V2 Requirements](./04-database-v2-requirements.md) | Current problems (technical debt + scaling) · what V2 must support · what must remain compatible · migration risk assessment |
 | 05 | [Missing Information Checklist](./05-missing-information-checklist.md) | Exactly what is still needed, with the SQL to produce it |
 
+## Phase 2 — Architecture blueprint
+
+| # | Document | Contents |
+|---|---|---|
+| 06 | [V2 Canonical Data Model & Architecture Blueprint](./06-v2-canonical-data-model-blueprint.md) | Architecture principles · four-layer model · entity families · match intelligence & snapshots · team/player intelligence · calibration · operational architecture · classification of all 92 tables · architecture diagram · decisions required before schema design |
+
+The blueprint is the bridge between the audit and the V2 schema. It contains no SQL and proposes no migrations — Phase 3 derives the schema from it, gated on the blocking prerequisites in document 05.
+
 ## Sources analysed
 
 | Source | Detail |
