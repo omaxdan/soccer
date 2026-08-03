@@ -76,25 +76,32 @@ COMMENT ON CONSTRAINT fk_module_definition__entitlement_feature ON module.module
 
 ALTER TABLE snapshot.match_snapshot
   ADD CONSTRAINT fk_match_snapshot__pipeline_job_run
-  FOREIGN KEY (pipeline_job_run_id, sealed_at)
+  FOREIGN KEY (pipeline_job_run_id, pipeline_job_run_occurred_at)
   REFERENCES operations.pipeline_job_run (id, occurred_at)
   ON DELETE RESTRICT ON UPDATE RESTRICT;
 COMMENT ON CONSTRAINT fk_match_snapshot__pipeline_job_run ON snapshot.match_snapshot IS
   'Execution attribution — the sole direction in which an authoritative relation depends on an operational one, and it exists solely for auditability. RESTRICT is what makes the retention exception of §B.9.4 structural: a job run referenced by a sealed artefact CANNOT be removed by retention.';
 
--- TODO: requires confirmation from Phase 5 schema catalogue
---   The composite reference above pairs pipeline_job_run_id with match_snapshot.
---   sealed_at, which requires the job run''s occurred_at to equal the snapshot''s
---   sealed_at exactly. That holds only if the sealing transaction stamps both
---   from one clock read. Confirm the sealing procedure does so; otherwise
---   match_snapshot must carry a separate job_run_occurred_at column bound by the
---   same composite reference. Recorded rather than silently decided.
+-- REVISION 2 (P-04). The reference pairs on the job run's OWN occurred_at,
+-- carried on match_snapshot as pipeline_job_run_occurred_at. The former form
+-- paired on sealed_at, which required the sealing transaction to stamp both from
+-- a single clock read and would have rejected valid inserts whenever the two
+-- differed by a microsecond. The TODO it carried is resolved and withdrawn.
 
 ALTER TABLE calibration.calibration_run
-  ADD CONSTRAINT fk_calibration_run__pipeline_job_run_present
-  CHECK (pipeline_job_run_id IS NOT NULL) NOT VALID;
-COMMENT ON CONSTRAINT fk_calibration_run__pipeline_job_run_present ON calibration.calibration_run IS
-  'LC-119: a run names its executing job run. Created NOT VALID so that it may be validated separately; validate before production. A full composite reference requires the job run occurred_at on this relation — see the TODO above, which applies identically here.';
+  ADD COLUMN pipeline_job_run_occurred_at timestamptz;
+
+ALTER TABLE calibration.calibration_run
+  ADD CONSTRAINT fk_calibration_run__pipeline_job_run
+  FOREIGN KEY (pipeline_job_run_id, pipeline_job_run_occurred_at)
+  REFERENCES operations.pipeline_job_run (id, occurred_at)
+  ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+ALTER TABLE calibration.calibration_run
+  ADD CONSTRAINT ck_calibration_run__job_run_reference_complete
+  CHECK ((pipeline_job_run_id IS NULL) = (pipeline_job_run_occurred_at IS NULL));
+COMMENT ON CONSTRAINT ck_calibration_run__job_run_reference_complete ON calibration.calibration_run IS
+  'REVISION 2 (P-04, D-01). Correctly named as a CHECK, and the reference is now a real composite foreign key rather than a NOT VALID presence assertion. LC-119 — a run names its executing job run — is enforced by the reference; the job run reference remains nullable only so that a run may be recorded before its job run is finalised within the same transaction.';
 
 -- -----------------------------------------------------------------------------
 -- Resumable validation procedure for populated environments (F-25, R-65)

@@ -47,11 +47,11 @@ CREATE TABLE feature.feature_definition (
   CONSTRAINT uq_feature_definition__feature_key      UNIQUE (feature_key),
   CONSTRAINT uq_feature_definition__id_subject_kind  UNIQUE (id, subject_kind_code),
   CONSTRAINT fk_feature_definition__subject_kind     FOREIGN KEY (subject_kind_code)
-    REFERENCES feature.subject_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.subject_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_feature_definition__calculator       FOREIGN KEY (feature_calculator_id)
     REFERENCES feature.feature_calculator (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_feature_definition__max_provenance   FOREIGN KEY (max_provenance_class_code)
-    REFERENCES feature.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_feature_definition__key_namespaced   CHECK (feature_key ~ '^(team|player|fixture|competition)\.[a-z0-9_]+$'),
   CONSTRAINT ck_feature_definition__direction_known  CHECK (direction IN ('HIGHER_IS_STRONGER','LOWER_IS_STRONGER','UNSIGNED')),
   CONSTRAINT ck_feature_definition__scale_bounded    CHECK (value_scale BETWEEN 0 AND 12),
@@ -108,7 +108,7 @@ CREATE TABLE feature.feature_definition_context_kind (
   CONSTRAINT fk_feature_definition_context_kind__definition FOREIGN KEY (feature_definition_id)
     REFERENCES feature.feature_definition (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_feature_definition_context_kind__context_kind FOREIGN KEY (context_kind_code)
-    REFERENCES feature.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT
+    REFERENCES football.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT
 );
 COMMENT ON TABLE feature.feature_definition_context_kind IS
   'A.11 / R-47. Enumerates the permitted (definition, context kind) pairs. feature_value declares a composite foreign key over its definition and context kind referencing this relation, so a value at an invalid context is rejected BY THE REFERENCE.
@@ -159,9 +159,9 @@ CREATE TABLE feature.feature_dependency (
   CONSTRAINT fk_feature_dependency__consumed_definition FOREIGN KEY (consumed_definition_id)
     REFERENCES feature.feature_definition (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_feature_dependency__consumer_context FOREIGN KEY (consumer_context_kind_code)
-    REFERENCES feature.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_feature_dependency__consumed_context FOREIGN KEY (consumed_context_kind_code)
-    REFERENCES feature.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_feature_dependency__not_self CHECK (consumer_definition_id <> consumed_definition_id)
 );
 COMMENT ON TABLE feature.feature_dependency IS

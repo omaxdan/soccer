@@ -92,19 +92,27 @@ COMMENT ON TABLE operations.retention_policy IS
   'PD-19 POSITIVE INCLUSION. Retention acts ONLY on relations named here. A relation not named is NEVER acted upon, so OMISSION FAILS SAFE — the correct default when the failure mode of the alternative is permanent loss of a claim.
    Note which relations are ABSENT: every snapshot relation, every calibration relation, quality_assertion_result and operational_aggregate. Their absence is their permanence.';
 
+-- REVISION 2 (B-06). Policies name DRIVING relations only. Dependent relations
+-- — feature_lineage, module_evidence, module_evidence_item — are not
+-- independently thinnable and are removed as part of their family, in an order
+-- the family function defines. See fn_thin_feature_family and
+-- fn_thin_module_family below.
+ALTER TABLE operations.retention_policy
+  ADD COLUMN family_key text;
+ALTER TABLE operations.retention_policy
+  ADD CONSTRAINT ck_retention_policy__family_known
+  CHECK (family_key IS NULL OR family_key IN ('FEATURE','MODULE'));
+
 INSERT INTO operations.retention_policy
-  (target_schema_name, target_relation_name, retention_class, recent_window, intermediate_window, bounded_window) VALUES
-  ('feature','feature_value',   'THINNED', interval '90 days', interval '2 years', NULL),
-  ('feature','feature_lineage', 'THINNED', interval '90 days', interval '2 years', NULL),
-  ('module','module_reading',   'THINNED', interval '90 days', interval '2 years', NULL),
-  ('module','module_evidence',  'THINNED', interval '90 days', interval '2 years', NULL),
-  ('module','module_evidence_item','THINNED', interval '90 days', interval '2 years', NULL),
-  ('operations','write_record', 'BOUNDED', NULL, NULL, interval '180 days'),
-  ('operations','pipeline_run', 'BOUNDED', NULL, NULL, interval '180 days'),
-  ('operations','pipeline_job_run','BOUNDED', NULL, NULL, interval '180 days'),
-  ('operations','failure',      'BOUNDED', NULL, NULL, interval '2 years'),
-  ('operations','failure_resolution','BOUNDED', NULL, NULL, interval '2 years'),
-  ('operations','api_usage',    'BOUNDED', NULL, NULL, interval '3 years');
+  (target_schema_name, target_relation_name, retention_class, recent_window, intermediate_window, bounded_window, family_key) VALUES
+  ('feature','feature_value',   'THINNED', interval '90 days', interval '2 years', NULL, 'FEATURE'),
+  ('module','module_reading',   'THINNED', interval '90 days', interval '2 years', NULL, 'MODULE'),
+  ('operations','write_record', 'BOUNDED', NULL, NULL, interval '180 days', NULL),
+  ('operations','pipeline_run', 'BOUNDED', NULL, NULL, interval '180 days', NULL),
+  ('operations','pipeline_job_run','BOUNDED', NULL, NULL, interval '180 days', NULL),
+  ('operations','failure',      'BOUNDED', NULL, NULL, interval '2 years', NULL),
+  ('operations','failure_resolution','BOUNDED', NULL, NULL, interval '2 years', NULL),
+  ('operations','api_usage',    'BOUNDED', NULL, NULL, interval '3 years', NULL);
 
 -- TODO: requires confirmation from Phase 5 schema catalogue
 --   Window durations depend on the TEMPORAL GRANULARITY decision recorded as
@@ -113,85 +121,183 @@ INSERT INTO operations.retention_policy
 --   consistent with §B.9.3''s age bands. Settle the granularity decision before
 --   production; the structure is correct at any setting.
 
+-- REVISION 2 (B-04, B-06) — per-family thinning with a defined internal order.
+--
+-- TWO DEFECTS ARE CORRECTED HERE.
+--
+-- B-04: the previous implementation correlated rows on ctid. ctid is unique only
+-- within a physical relation, NOT across a partitioned hierarchy, so the DELETE
+-- could match rows it had not selected — including prevailing boundary values
+-- that §B.9.2 requires be preserved. Correlation is now on the primary key
+-- (id, as_of), which is unique across the hierarchy and already indexed.
+--
+-- B-06: one feature_value-shaped statement was applied to relations that do not
+-- carry those columns. Worse, and undetected by the audit: NEITHER relation was
+-- thinnable at all. feature_lineage references feature_value on both endpoints
+-- with ON DELETE RESTRICT, and module_evidence/module_evidence_item chain the
+-- same way from module_reading — so every delete would have raised.
+--
+-- That RESTRICT is CORRECT and is untouched: on the CONSUMED endpoint it is what
+-- enforces LC-31, blocking removal of any value still cited by retained lineage
+-- or by sealed content. The error was treating relations as independently
+-- thinnable when they form dependent families with a required deletion order.
+--
+-- Eligibility conditions 1 and 2 of R-15 therefore remain enforced BY THE
+-- DATABASE through ordinary referential checking (R-18), not by the correctness
+-- of this function.
+
+CREATE FUNCTION operations.fn_thin_feature_family(
+  p_recent_window interval, p_intermediate_window interval
+) RETURNS integer
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+DECLARE n_values integer := 0; n_lineage integer := 0;
+BEGIN
+  -- Eligible: in the intermediate band, and not the latest value of its day for
+  -- its (subject, context, definition) group. The prevailing value at every
+  -- retained boundary survives, so historical answers are unchanged at the
+  -- retained resolution (§B.9.2, §B.9.3).
+  CREATE TEMP TABLE _eligible_values ON COMMIT DROP AS
+    SELECT id, as_of FROM (
+      SELECT fv.id, fv.as_of,
+             row_number() OVER (
+               PARTITION BY fv.subject_kind_code, fv.subject_team_id, fv.subject_player_id,
+                            fv.subject_fixture_id, fv.subject_competition_edition_id,
+                            fv.context_kind_code, fv.context_competition_edition_id,
+                            fv.feature_definition_id, date_trunc('day', fv.as_of)
+               ORDER BY fv.as_of DESC) AS rn
+      FROM feature.feature_value fv
+      WHERE fv.as_of <  now() - p_recent_window
+        AND fv.as_of >= now() - p_intermediate_window
+    ) ranked
+    WHERE rn > 1;
+
+  -- ORDER MATTERS. Lineage rows whose PRODUCED value is eligible are removed
+  -- first; LC-47 permits this because lineage travels with the value it
+  -- describes. Lineage citing an eligible value as CONSUMED is untouched, and
+  -- the RESTRICT on that endpoint will block the value's deletion if any
+  -- remains — which is the eligibility guarantee working as designed.
+  DELETE FROM feature.feature_lineage l
+   USING _eligible_values e
+   WHERE l.produced_value_id = e.id AND l.produced_value_as_of = e.as_of;
+  GET DIAGNOSTICS n_lineage = ROW_COUNT;
+
+  DELETE FROM feature.feature_value v
+   USING _eligible_values e
+   WHERE v.id = e.id AND v.as_of = e.as_of;
+  GET DIAGNOSTICS n_values = ROW_COUNT;
+
+  RETURN n_values + n_lineage;
+END;
+$$;
+ALTER FUNCTION operations.fn_thin_feature_family(interval, interval) OWNER TO pt_owner;
+
+CREATE FUNCTION operations.fn_thin_module_family(
+  p_recent_window interval, p_intermediate_window interval
+) RETURNS integer
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
+DECLARE n integer := 0; c integer;
+BEGIN
+  CREATE TEMP TABLE _eligible_readings ON COMMIT DROP AS
+    SELECT id, as_of FROM (
+      SELECT mr.id, mr.as_of,
+             row_number() OVER (
+               PARTITION BY mr.subject_kind_code, mr.subject_team_id, mr.subject_player_id,
+                            mr.subject_fixture_id, mr.subject_competition_edition_id,
+                            mr.context_kind_code, mr.context_competition_edition_id,
+                            mr.module_definition_id, date_trunc('day', mr.as_of)
+               ORDER BY mr.as_of DESC) AS rn
+      FROM module.module_reading mr
+      WHERE mr.as_of <  now() - p_recent_window
+        AND mr.as_of >= now() - p_intermediate_window
+    ) ranked
+    WHERE rn > 1;
+
+  -- Children first, deepest first: items, then evidence, then readings.
+  DELETE FROM module.module_evidence_item i
+   USING module.module_evidence ev, _eligible_readings e
+   WHERE i.module_evidence_id = ev.id AND i.reading_as_of = ev.reading_as_of
+     AND ev.module_reading_id = e.id  AND ev.reading_as_of = e.as_of;
+  GET DIAGNOSTICS c = ROW_COUNT; n := n + c;
+
+  DELETE FROM module.module_evidence ev
+   USING _eligible_readings e
+   WHERE ev.module_reading_id = e.id AND ev.reading_as_of = e.as_of;
+  GET DIAGNOSTICS c = ROW_COUNT; n := n + c;
+
+  DELETE FROM module.module_reading mr
+   USING _eligible_readings e
+   WHERE mr.id = e.id AND mr.as_of = e.as_of;
+  GET DIAGNOSTICS c = ROW_COUNT; n := n + c;
+
+  RETURN n;
+END;
+$$;
+ALTER FUNCTION operations.fn_thin_module_family(interval, interval) OWNER TO pt_owner;
+
 CREATE FUNCTION operations.fn_run_retention() RETURNS integer
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
-DECLARE p record; deleted integer := 0; n integer;
+DECLARE p record; total integer := 0;
 BEGIN
   IF current_user <> 'pt_retention' THEN
     RAISE EXCEPTION 'retention may be executed only by the retention role, not by %', current_user;
   END IF;
 
-  -- R-21: set the session marker for the duration of the execution.
+  -- R-21. The marker satisfies BOTH the append guard of migration 015 AND the
+  -- delete policy added to migration 016 by Revision 2 (B-03). The rule is
+  -- stated at two layers and a delete without the marker is blocked twice.
   PERFORM set_config('pitchterminal.retention_operation', 'true', false);
 
-  FOR p IN SELECT * FROM operations.retention_policy WHERE is_active AND retention_class = 'THINNED'
+  FOR p IN SELECT * FROM operations.retention_policy
+            WHERE is_active AND retention_class = 'THINNED'
+            ORDER BY family_key
   LOOP
-    -- Thin the intermediate band to one value per subject, context and
-    -- definition PER DAY, PRESERVING THE PREVAILING VALUE AT EVERY RETAINED
-    -- BOUNDARY so that historical answers are unchanged at the retained
-    -- resolution (§B.9.2, §B.9.3).
-    --
-    -- Eligibility conditions 1 and 2 of R-15 are enforced by ORDINARY
-    -- REFERENTIAL CHECKING on delete, which is CERTAIN — a row cited by sealed
-    -- content or by retained lineage cannot be deleted, and the delete raises.
-    -- This is why A.4's correction from detachment to deletion also STRENGTHENS
-    -- the enforcement basis (R-18).
-    EXECUTE format($f$
-      WITH ranked AS (
-        SELECT ctid,
-               row_number() OVER (
-                 PARTITION BY subject_kind_code, subject_team_id, subject_player_id,
-                              subject_fixture_id, subject_competition_edition_id,
-                              context_kind_code, context_competition_edition_id,
-                              feature_definition_id, date_trunc('day', as_of)
-                 ORDER BY as_of DESC) AS rn
-        FROM %I.%I
-        WHERE as_of < now() - %L::interval
-          AND as_of >= now() - %L::interval
-      )
-      DELETE FROM %I.%I t USING ranked r WHERE t.ctid = r.ctid AND r.rn > 1
-    $f$, p.target_schema_name, p.target_relation_name,
-         p.recent_window, p.intermediate_window,
-         p.target_schema_name, p.target_relation_name);
-    GET DIAGNOSTICS n = ROW_COUNT;
-    deleted := deleted + n;
+    IF p.family_key = 'FEATURE' THEN
+      total := total + operations.fn_thin_feature_family(p.recent_window, p.intermediate_window);
+    ELSIF p.family_key = 'MODULE' THEN
+      total := total + operations.fn_thin_module_family(p.recent_window, p.intermediate_window);
+    END IF;
   END LOOP;
 
   PERFORM set_config('pitchterminal.retention_operation', 'false', false);
-  RETURN deleted;
+  RETURN total;
 END;
 $$;
 ALTER FUNCTION operations.fn_run_retention() OWNER TO pt_owner;
 COMMENT ON FUNCTION operations.fn_run_retention() IS
-  'A.4 / R-14. THINNING BY DELETION WITHIN PARTITIONS, not by partition detachment. Detachment would remove every row in a period, including the boundary values §B.9.2 requires be preserved, and would therefore ALTER HISTORICAL ANSWERS — which no retention process may do.
-   The statement above is illustrative of the thinning rule; the feature_value column list is specific to that relation and the executable form is generated per relation. Aggregation precedes thinning within one execution (§B.9.6).';
+  'A.4 / R-14. THINNING BY DELETION WITHIN PARTITIONS, never by partition detachment — detachment would remove every row in a period including the boundary values §B.9.2 requires be preserved, and would therefore ALTER HISTORICAL ANSWERS.
+   Revision 2 delegates to per-family functions with a defined internal deletion order (B-06) and correlates on the primary key rather than ctid (B-04). Aggregation precedes thinning within one execution (§B.9.6).';
 
 -- -----------------------------------------------------------------------------
 -- Explicit freeze  (F-19)
 -- -----------------------------------------------------------------------------
 
-CREATE FUNCTION operations.fn_freeze_inactive_partitions(p_inactive_before date) RETURNS integer
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE r record; n integer := 0;
-BEGIN
-  FOR r IN
-    SELECT ns.nspname AS s, c.relname AS t
-    FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace
-    WHERE c.relispartition
-      AND ns.nspname IN ('feature','module','snapshot','football','operations','product')
-      AND c.relname ~ '_p[0-9]{6}$'
-      AND to_date(right(c.relname, 6), 'YYYYMM') < p_inactive_before
-  LOOP
-    EXECUTE format('VACUUM (FREEZE, ANALYZE) %I.%I', r.s, r.t);
-    n := n + 1;
-  END LOOP;
-  RETURN n;
-END;
+-- REVISION 2 (B-05). VACUUM cannot be executed from a function — every
+-- PL/pgSQL body runs inside a transaction block, and VACUUM is prohibited
+-- there. The previous implementation executed VACUUM inside a function while
+-- its own comment stated the prohibition.
+--
+-- The function now ENUMERATES the partitions requiring freeze. The scheduled
+-- job iterates the result and issues VACUUM (FREEZE, ANALYZE) per partition
+-- from outside any transaction, which is a NON-TRANSACTIONAL operation under
+-- R-61/R-62. F-19's intent is preserved exactly: scheduled freezing rather than
+-- unpredictable anti-wraparound.
+
+CREATE FUNCTION operations.fn_partitions_requiring_freeze(p_inactive_before date)
+RETURNS TABLE (schema_name text, partition_name text, partition_month date)
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
+  SELECT ns.nspname::text, c.relname::text, to_date(right(c.relname, 6), 'YYYYMM')
+  FROM pg_class c
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace
+  WHERE c.relispartition
+    AND ns.nspname IN ('feature','module','snapshot','football','operations','product')
+    AND c.relname ~ '_p[0-9]{6}$'
+    AND to_date(right(c.relname, 6), 'YYYYMM') < p_inactive_before
+  ORDER BY 1, 2;
 $$;
-ALTER FUNCTION operations.fn_freeze_inactive_partitions(date) OWNER TO pt_owner;
-COMMENT ON FUNCTION operations.fn_freeze_inactive_partitions(date) IS
-  'F-19. A partition written once and never touched still requires freezing before wraparound. Relaxing vacuum on append-only relations is correct for SPACE RECLAMATION and incorrect for FREEZING. Explicit scheduled freezing converts an unpredictable, large, uninterruptible anti-wraparound scan into a scheduled one.
-   NOTE: VACUUM cannot run inside a transaction block, so the scheduled invocation is a non-transactional operation (R-62).';
+ALTER FUNCTION operations.fn_partitions_requiring_freeze(date) OWNER TO pt_owner;
+COMMENT ON FUNCTION operations.fn_partitions_requiring_freeze(date) IS
+  'F-19 / B-05. Returns the partitions a freeze pass should cover. A partition written once and never touched still requires freezing before wraparound: relaxing vacuum on append-only relations is correct for SPACE RECLAMATION and incorrect for FREEZING.
+   THE CALLER ISSUES THE VACUUM, outside any transaction. This function performs none.';
 
 -- -----------------------------------------------------------------------------
 -- Checksum verification  (A.6 / R-27)
@@ -297,7 +403,9 @@ COMMENT ON VIEW operations.v_freshness IS
 GRANT SELECT ON operations.v_coverage, operations.v_freshness TO pt_platform_admin;
 GRANT EXECUTE ON FUNCTION operations.fn_maintain_partitions() TO pt_migration, pt_platform_admin;
 GRANT EXECUTE ON FUNCTION operations.fn_run_retention() TO pt_retention;
-GRANT EXECUTE ON FUNCTION operations.fn_freeze_inactive_partitions(date) TO pt_migration, pt_platform_admin;
+GRANT EXECUTE ON FUNCTION operations.fn_partitions_requiring_freeze(date) TO pt_migration, pt_platform_admin;
+GRANT EXECUTE ON FUNCTION operations.fn_thin_feature_family(interval, interval) TO pt_retention;
+GRANT EXECUTE ON FUNCTION operations.fn_thin_module_family(interval, interval) TO pt_retention;
 GRANT EXECUTE ON FUNCTION operations.fn_verify_snapshot_checksums(date,date) TO pt_platform_admin;
 GRANT SELECT, INSERT, UPDATE ON operations.retention_policy TO pt_platform_admin;
 
@@ -315,5 +423,8 @@ GRANT SELECT, INSERT, UPDATE ON operations.retention_policy TO pt_platform_admin
 --   $$SELECT operations.fn_maintain_partitions()$$);
 -- SELECT cron.schedule('pt_run_retention',       '0 3 * * 0',
 --   $$SELECT operations.fn_run_retention()$$);
--- SELECT cron.schedule('pt_freeze_partitions',   '0 4 * * 0',
---   $$SELECT operations.fn_freeze_inactive_partitions((now() - interval '3 months')::date)$$);
+-- Freeze is NOT scheduled through pg_cron as a single statement: VACUUM cannot
+-- run inside the transaction pg_cron establishes. The freeze pass is an external
+-- non-transactional job that calls
+--   SELECT * FROM operations.fn_partitions_requiring_freeze(...)
+-- and issues VACUUM (FREEZE, ANALYZE) per returned partition (B-05, R-62).

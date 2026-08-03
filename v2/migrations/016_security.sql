@@ -27,9 +27,18 @@ INSERT INTO product.platform_setting (setting_key, setting_value, meaning) VALUE
   ('subscriptions_enabled', 'false',
    'While false the platform is in open beta: every capability is available regardless of subscription. Evaluated WITHIN the policy expression, so beta posture governs AT THE DATABASE rather than only in a consuming application.');
 
+-- REVISION 2 (B-02). SECURITY INVOKER, not DEFINER.
+-- As DEFINER the function executed as pt_owner, which owns every relation it
+-- reads. FORCE ROW LEVEL SECURITY subjects the owner to policy, and no policy
+-- named pt_owner — so the function returned the EMPTY SET for every principal
+-- and every entitlement-gated read was denied, silently.
+-- INVOKER is both sufficient and stricter: the caller reads their own
+-- subscription under pl_subscription__owner__select, and plan_entitlement,
+-- entitlement_feature and platform_setting under their public read policies.
+-- It also removes a definer function from the security surface.
 CREATE FUNCTION product.fn_resolve_entitlements(p_user_id uuid)
 RETURNS TABLE (entitlement_feature_key text)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
   SELECT ef.feature_key
   FROM product.entitlement_feature ef
   WHERE (SELECT setting_value FROM product.platform_setting WHERE setting_key = 'subscriptions_enabled') = 'false'
@@ -44,7 +53,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
 $$;
 ALTER FUNCTION product.fn_resolve_entitlements(uuid) OWNER TO pt_owner;
 COMMENT ON FUNCTION product.fn_resolve_entitlements(uuid) IS
-  'F-21. THE SOLE ENTITLEMENT RESOLUTION PATH, preserving the single-path requirement of the entitlement architecture. STABLE so it evaluates once per statement. The previous platform carried two paths — an environment-variable tier and a database-backed context — live simultaneously.';
+  'REVISION 2 (B-02): SECURITY INVOKER. F-21. THE SOLE ENTITLEMENT RESOLUTION PATH, preserving the single-path requirement of the entitlement architecture. STABLE so it evaluates once per statement. The previous platform carried two paths — an environment-variable tier and a database-backed context — live simultaneously.';
 
 -- -----------------------------------------------------------------------------
 -- Enable and FORCE row-level security on every relation  (PD-18, F-09)
@@ -92,7 +101,146 @@ END
 $$;
 
 -- -----------------------------------------------------------------------------
--- Policies
+-- REVISION 2 (B-03) — SERVICE-ROLE POLICIES
+-- -----------------------------------------------------------------------------
+-- FORCE ROW LEVEL SECURITY applies to EVERY role that is neither a superuser nor
+-- holds BYPASSRLS. With RLS enabled and no matching policy a role receives:
+--     SELECT          -> zero rows
+--     INSERT          -> HARD FAILURE, "new row violates row-level security policy"
+--     UPDATE / DELETE -> zero rows affected, NO ERROR
+--
+-- The original implementation granted privileges to the pipeline roles and
+-- created no policies for them. Every pipeline INSERT would have failed on first
+-- attempt; retention would have deleted nothing and reported success, forever.
+--
+-- BYPASSRLS is rejected as the fix on two grounds: it requires superuser to set,
+-- which the platform's administrative role is not; and it would discard the
+-- posture F-09 exists to establish — every principal's access declared, none
+-- implicit.
+--
+-- THE PRIVILEGE MATRIX IS THEREFORE ALSO THE POLICY MATRIX, generated from one
+-- specification below so that the two cannot drift.
+
+DO $pol$
+DECLARE
+  r          record;
+  spec       text[][];
+  i          integer;
+  sch        text;
+  role_name  text;
+  modes      text;
+BEGIN
+  -- schema, role, modes  (S=select, I=insert, U=update)
+  spec := ARRAY[
+    ['football','pt_pipeline_ingestion','SIU'],
+    ['football','pt_pipeline_feature','S'],
+    ['football','pt_pipeline_module','S'],
+    ['football','pt_pipeline_calibration','S'],
+    ['football','pt_pipeline_projection','S'],
+    ['football','pt_platform_admin','S'],
+    ['feature','pt_pipeline_feature','SI'],
+    ['feature','pt_pipeline_module','S'],
+    ['feature','pt_pipeline_calibration','S'],
+    ['feature','pt_pipeline_projection','S'],
+    ['feature','pt_platform_admin','S'],
+    ['feature','pt_retention','S'],
+    ['module','pt_pipeline_module','SI'],
+    ['module','pt_pipeline_calibration','S'],
+    ['module','pt_pipeline_projection','S'],
+    ['module','pt_platform_admin','S'],
+    ['module','pt_retention','S'],
+    ['snapshot','pt_pipeline_module','SI'],
+    ['snapshot','pt_pipeline_calibration','SI'],
+    ['snapshot','pt_pipeline_projection','S'],
+    ['snapshot','pt_platform_admin','S'],
+    ['calibration','pt_pipeline_calibration','SI'],
+    ['calibration','pt_pipeline_module','S'],
+    ['calibration','pt_pipeline_projection','S'],
+    ['calibration','pt_platform_admin','S'],
+    ['operations','pt_pipeline_ingestion','SI'],
+    ['operations','pt_pipeline_feature','SI'],
+    ['operations','pt_pipeline_module','SI'],
+    ['operations','pt_pipeline_calibration','SI'],
+    ['operations','pt_pipeline_projection','SI'],
+    ['operations','pt_retention','SI'],
+    ['operations','pt_platform_admin','S'],
+    ['product','pt_pipeline_projection','SIU'],
+    ['product','pt_platform_admin','SIU']
+  ];
+
+  FOR i IN 1..array_length(spec,1) LOOP
+    sch := spec[i][1]; role_name := spec[i][2]; modes := spec[i][3];
+    FOR r IN SELECT c.relname AS t FROM pg_class c
+             WHERE c.relnamespace::regnamespace::text = sch
+               AND c.relkind IN ('r','p') AND NOT c.relispartition
+    LOOP
+      IF position('S' in modes) > 0 THEN
+        EXECUTE format('CREATE POLICY pl_%s__%s__select ON %I.%I FOR SELECT TO %I USING (true)',
+                       r.t, role_name, sch, r.t, role_name);
+      END IF;
+      IF position('I' in modes) > 0 THEN
+        EXECUTE format('CREATE POLICY pl_%s__%s__insert ON %I.%I FOR INSERT TO %I WITH CHECK (true)',
+                       r.t, role_name, sch, r.t, role_name);
+      END IF;
+      -- P-06: no UPDATE policy on the append-only football relations.
+      IF position('U' in modes) > 0
+         AND NOT (sch = 'football'
+                  AND r.t IN ('standing','player_valuation','fixture_lifecycle_transition')) THEN
+        EXECUTE format('CREATE POLICY pl_%s__%s__update ON %I.%I FOR UPDATE TO %I USING (true) WITH CHECK (true)',
+                       r.t, role_name, sch, r.t, role_name);
+      END IF;
+    END LOOP;
+  END LOOP;
+END
+$pol$;
+
+-- REVISION 2 (B-03) — RETENTION DELETE POLICIES
+-- The policy carries the SAME session-marker condition the append guard of
+-- migration 015 enforces, so the rule is stated at two layers and a delete
+-- without the marker is blocked twice. Only the five thinnable relations carry
+-- a delete policy, and only for pt_retention (R-20, R-22).
+DO $ret$
+DECLARE spec text[][]; i integer;
+BEGIN
+  spec := ARRAY[
+    ['feature','feature_value'],['feature','feature_lineage'],
+    ['module','module_reading'],['module','module_evidence'],['module','module_evidence_item']
+  ];
+  FOR i IN 1..array_length(spec,1) LOOP
+    EXECUTE format(
+      'CREATE POLICY pl_%s__pt_retention__delete ON %I.%I FOR DELETE TO pt_retention '
+      'USING (current_setting(''pitchterminal.retention_operation'', true) = ''true'')',
+      spec[i][2], spec[i][1], spec[i][2]);
+  END LOOP;
+END
+$ret$;
+
+-- REVISION 2 (B-02, second pass) — OWNER POLICIES FOR DEFINER FUNCTIONS
+-- FORCE ROW LEVEL SECURITY subjects pt_owner to policy. Two SECURITY DEFINER
+-- functions execute as pt_owner and perform DML or reads against forced
+-- relations; without a policy each would silently affect or return nothing —
+-- the same defect as the entitlement function, in two further places the audit
+-- did not reach.
+--
+-- These policies are deliberately NARROW: one operation, one relation each.
+-- Declaring the owner's access explicitly is precisely the posture F-09 seeks —
+-- every principal's access declared, none implicit — and is not a weakening of
+-- it.
+
+-- product.tf_watchlist__referential_defence (migration 015) clears dependent
+-- watchlist entries when a reality entity is removed (LC-155).
+CREATE POLICY pl_watchlist__pt_owner__delete ON product.watchlist
+  FOR DELETE TO pt_owner USING (true);
+CREATE POLICY pl_watchlist__pt_owner__select ON product.watchlist
+  FOR SELECT TO pt_owner USING (true);
+
+-- operations.fn_verify_snapshot_checksums (migration 018) recomputes and
+-- compares sealed content checksums — PR-04's fourth control.
+CREATE POLICY pl_match_snapshot__pt_owner__select ON snapshot.match_snapshot
+  FOR SELECT TO pt_owner USING (true);
+
+-- -----------------------------------------------------------------------------
+-- End-user policies
 -- -----------------------------------------------------------------------------
 
 -- football: reality is not confidential. Permissive read for end-user roles.
@@ -165,7 +313,16 @@ BEGIN
   FOR r IN SELECT c.relname AS t FROM pg_class c
            WHERE c.relnamespace::regnamespace::text='football' AND c.relkind IN ('r','p') AND NOT c.relispartition
   LOOP
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE ON football.%I TO pt_pipeline_ingestion', r.t);
+    -- REVISION 2 (P-06). standing, player_valuation and fixture_lifecycle_transition
+    -- are in the APPEND-ONLY lifecycle class and carry the append guard of
+    -- migration 015. Granting UPDATE asserted a capability the lifecycle class
+    -- forbids — exactly the drift PR-02 places privilege ahead of guards to
+    -- prevent. They receive SELECT and INSERT only.
+    IF r.t IN ('standing','player_valuation','fixture_lifecycle_transition') THEN
+      EXECUTE format('GRANT SELECT, INSERT ON football.%I TO pt_pipeline_ingestion', r.t);
+    ELSE
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE ON football.%I TO pt_pipeline_ingestion', r.t);
+    END IF;
     EXECUTE format('GRANT SELECT ON football.%I TO pt_pipeline_feature, pt_pipeline_module, pt_pipeline_calibration, pt_pipeline_projection, pt_platform_admin, anon, authenticated', r.t);
   END LOOP;
 END
@@ -298,4 +455,8 @@ $$;
 --   * RLS is ENABLED and FORCED on every relation in every schema (PD-18, F-09)
 --   * No end-user role holds any privilege on feature, module, snapshot,
 --     calibration or operations
+--   * REVISION 2: every service role holding a privilege has a matching policy,
+--     generated from the same specification, so grants and policies cannot drift
+--   * REVISION 2: only pt_retention holds a DELETE policy, and only on the five
+--     thinnable relations, and only under the retention session marker
 -- =============================================================================

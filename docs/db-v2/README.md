@@ -65,6 +65,14 @@ Supersedes the named sections of document 08; unnamed sections remain in force. 
 
 Every fix is a correction to the SQL. Nothing in the audit requires a change to the architecture, the logical model, or any Phase 4 guarantee.
 
+## Phase 6.1 — Remediation (migrations Revision 2)
+
+| # | Document | Contents |
+|---|---|---|
+| 12 | [Phase 6 Remediation Analysis](./12-phase6-remediation-analysis.md) | Classification of every audit finding · B-01 verification · B-07/B-08 architectural verification · scope corrections · remediation report |
+
+**Six blockers resolved, two rejected on analysis.** B-01 was verified and found incorrect — default GiST operator class resolution is search-path independent, so no change was made. B-08 was rejected because Phase 4 E8.09 explicitly authorises the reference. Two blockers proved larger than the audit stated, and two further defects were found beneath them. Thirteen of eighteen migrations modified. Phase 4 unchanged, logical model unchanged, no guarantee weakened, migration ordering unchanged.
+
 ## Sources analysed
 
 | Source | Detail |

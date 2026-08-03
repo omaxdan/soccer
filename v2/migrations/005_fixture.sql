@@ -67,9 +67,8 @@ CREATE TABLE football.fixture (
   CONSTRAINT fk_fixture__lifecycle_state FOREIGN KEY (lifecycle_state_code)
     REFERENCES football.fixture_lifecycle_state (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_fixture__participants_distinct CHECK (home_team_id <> away_team_id),
-  CONSTRAINT ck_fixture__partition_matches_kickoff
-    CHECK (fixture_partition_on = (scheduled_kickoff_at AT TIME ZONE 'UTC')::date
-           OR fixture_partition_on <= (scheduled_kickoff_at AT TIME ZONE 'UTC')::date)
+  CONSTRAINT ck_fixture__partition_not_after_kickoff
+    CHECK (fixture_partition_on <= (scheduled_kickoff_at AT TIME ZONE 'UTC')::date)
 ) PARTITION BY RANGE (fixture_partition_on);
 
 COMMENT ON TABLE football.fixture IS
@@ -80,8 +79,8 @@ COMMENT ON COLUMN football.fixture.lifecycle_state_code IS
   'The PLATFORM''S state, mapped from provider status. Sealing branches on this, never on provider_status_raw (LC-14).';
 COMMENT ON COLUMN football.fixture.provider_status_raw IS
   'The provider''s own string, retained for mapping diagnosis. Load-bearing for nothing.';
-COMMENT ON CONSTRAINT ck_fixture__partition_matches_kickoff ON football.fixture IS
-  'The partition date equals the original UTC kickoff date, or precedes the current one where the fixture has been rescheduled later. A rescheduled fixture retains its original partition date.';
+COMMENT ON CONSTRAINT ck_fixture__partition_not_after_kickoff ON football.fixture IS
+  'REVISION 2 (O-02). The partition date equals the original UTC kickoff date at creation and never advances, so it can only precede a later rescheduled kickoff. The previous formulation stated this as a disjunction whose first branch was subsumed by the second, which read as though equality were being enforced when it was not.';
 COMMENT ON COLUMN football.fixture.is_neutral_venue IS
   'The stated home and away roles are how the fixture is constituted, not an assertion about geography. Neutral-venue fixtures retain their roles.';
 

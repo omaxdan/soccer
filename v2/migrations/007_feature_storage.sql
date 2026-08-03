@@ -64,12 +64,17 @@ CREATE TABLE feature.feature_value (
   -- Business identity (§B.3.2). Subject and context LEAD because the dominant
   -- access retrieves many features for one subject at one moment, not one
   -- feature across many subjects.
+  -- REVISION 2 (O-03): the covering payload is attached HERE rather than to a
+  -- second index, so one structure enforces identity and serves the dominant
+  -- access path (§5.11.1, §5.11.3).
   CONSTRAINT uq_feature_value__subject_context_definition_asof_version
     UNIQUE (subject_kind_code, subject_team_id, subject_player_id,
             subject_fixture_id, subject_fixture_partition_on,
             subject_competition_edition_id,
             context_kind_code, context_competition_edition_id,
-            feature_definition_id, as_of, feature_version_id),
+            feature_definition_id, as_of, feature_version_id)
+    INCLUDE (value, provenance_class_code, sample_observation_count,
+             sample_meets_threshold, feature_version_id),
 
   -- Redundant unique constraint (§B.3.3): the target of every composite
   -- reference to a feature value — lineage, evidence, sealed feature state.
@@ -106,7 +111,7 @@ CREATE TABLE feature.feature_value (
   CONSTRAINT fk_feature_value__context_edition FOREIGN KEY (context_competition_edition_id)
     REFERENCES football.competition_edition (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_feature_value__provenance FOREIGN KEY (provenance_class_code)
-    REFERENCES feature.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
 
   -- Subject exclusivity (PD-03, LC-35): exactly the column corresponding to the
   -- declared kind is populated.
@@ -133,8 +138,13 @@ CREATE TABLE feature.feature_value (
     (context_kind_code <> 'COMPETITION_SCOPED' AND context_competition_edition_id IS NULL)
   ),
 
-  CONSTRAINT ck_feature_value__sample_non_negative CHECK (sample_observation_count >= 0),
-  CONSTRAINT ck_feature_value__calculated_not_before_creation CHECK (calculated_at >= as_of - interval '100 years')
+  CONSTRAINT ck_feature_value__sample_non_negative CHECK (sample_observation_count >= 0)
+  -- REVISION 2 (O-01). The former ck_feature_value__calculated_not_before_creation
+  -- permitted calculated_at up to a century before as_of, which excluded nothing
+  -- and cost an evaluation on every insert into the largest relation in the
+  -- design. No constraint replaces it: calculated_at legitimately both precedes
+  -- as_of (a value calculated for a future moment) and follows it by years
+  -- (backfill, §5.16.5), so there is no rule to state.
 ) PARTITION BY RANGE (as_of);
 
 COMMENT ON TABLE feature.feature_value IS

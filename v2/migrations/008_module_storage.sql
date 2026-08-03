@@ -48,7 +48,7 @@ CREATE TABLE module.module_definition (
   CONSTRAINT uq_module_definition__display_number     UNIQUE (display_number),
   CONSTRAINT uq_module_definition__id_subject_kind    UNIQUE (id, subject_kind_code),
   CONSTRAINT fk_module_definition__subject_kind       FOREIGN KEY (subject_kind_code)
-    REFERENCES feature.subject_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.subject_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_module_definition__calibration_mode   FOREIGN KEY (calibration_mode_code)
     REFERENCES module.calibration_mode (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_module_definition__outcome_dimension  FOREIGN KEY (outcome_dimension_code)

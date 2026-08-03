@@ -44,6 +44,7 @@ CREATE TABLE snapshot.match_snapshot (
   content_checksum              bytea       NOT NULL,
   checksum_algorithm_version_id bigint      NOT NULL,
   pipeline_job_run_id           bigint,
+  pipeline_job_run_occurred_at  timestamptz,
 
   CONSTRAINT pk_match_snapshot PRIMARY KEY (id, fixture_partition_on),
 
@@ -76,7 +77,13 @@ CREATE TABLE snapshot.match_snapshot (
   CONSTRAINT fk_match_snapshot__checksum_algorithm_version
     FOREIGN KEY (checksum_algorithm_version_id)
     REFERENCES module.checksum_algorithm_version (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT ck_match_snapshot__sealed_not_before_as_of CHECK (sealed_at >= snapshot_as_of)
+  CONSTRAINT ck_match_snapshot__sealed_not_before_as_of CHECK (sealed_at >= snapshot_as_of),
+  -- REVISION 2 (P-04). The job-run reference is composite over the job key and
+  -- ITS OWN occurred_at, not over sealed_at. Pairing on sealed_at required the
+  -- sealing transaction to stamp both from one clock read and would have
+  -- rejected valid inserts whenever the two differed by a microsecond.
+  CONSTRAINT ck_match_snapshot__job_run_reference_complete
+    CHECK ((pipeline_job_run_id IS NULL) = (pipeline_job_run_occurred_at IS NULL))
 ) PARTITION BY RANGE (fixture_partition_on);
 
 COMMENT ON TABLE snapshot.match_snapshot IS
@@ -88,6 +95,8 @@ COMMENT ON COLUMN snapshot.match_snapshot.snapshot_as_of IS
   'The moment the snapshot describes. Bound onto every content row by composite foreign key so that the contamination check of A.3 compares two trustworthy values.';
 COMMENT ON COLUMN snapshot.match_snapshot.sealed_at IS
   'When the seal occurred. The distinction from snapshot_as_of is what makes BACKFILL LEGIBLE: a snapshot describing a moment two years ago, sealed last week, is visibly a reconstruction rather than a contemporaneous observation.';
+COMMENT ON COLUMN snapshot.match_snapshot.pipeline_job_run_occurred_at IS
+  'REVISION 2 (P-04). Carried because operations.pipeline_job_run is partitioned and the reference must be composite over ITS key, not over an unrelated instant on this row.';
 COMMENT ON COLUMN snapshot.match_snapshot.pipeline_job_run_id IS
   'Execution attribution. FK added in migration 014. A job run referenced by a sealed artefact is retained permanently regardless of operational retention, because a sealed claim that cannot name its producing execution is not fully auditable (§B.9.4).';
 
@@ -211,7 +220,7 @@ CREATE TABLE snapshot.snapshot_verdict (
   historical_reliability_baseline_id bigint,
   created_at                    timestamptz NOT NULL DEFAULT now(),
 
-  CONSTRAINT pk_snapshot_verdict PRIMARY KEY (id, fixture_partition_on),
+  CONSTRAINT pk_snapshot_verdict PRIMARY KEY (id, fixture_partition_on),  -- C-02
   CONSTRAINT uq_snapshot_verdict__snapshot_version
     UNIQUE (fixture_partition_on, match_snapshot_id, verdict_composition_version_id),
   CONSTRAINT fk_snapshot_verdict__snapshot
@@ -231,10 +240,11 @@ CREATE TABLE snapshot.snapshot_verdict (
     CHECK (completeness_ratio BETWEEN 0 AND 1),
   CONSTRAINT ck_snapshot_verdict__evidence_matches_engaged
     CHECK (evidence_count = consensus_supports_count + consensus_contradicts_count + consensus_neutral_count)
-);
+) PARTITION BY RANGE (fixture_partition_on);
 
 COMMENT ON TABLE snapshot.snapshot_verdict IS
-  'E4.05 Snapshot Verdict — THE CANONICAL PRODUCT OUTPUT. A CHARACTERISATION OF THE FIXTURE, NOT A PREDICTION OF ITS RESULT.
+  'REVISION 2 (P-01): now range-partitioned monthly on fixture_partition_on and CO-PARTITIONED with the rest of the sealed family. It was previously left unpartitioned on volume grounds, which is sound in isolation and wrong in context: §B.13.3''s match-intelligence read path depends on partition-wise assembly across the family, and an unpartitioned member forces a join across the whole relation. The heaviest declared read was degraded to save partitions on its smallest member.
+   E4.05 Snapshot Verdict — THE CANONICAL PRODUCT OUTPUT. A CHARACTERISATION OF THE FIXTURE, NOT A PREDICTION OF ITS RESULT.
    A prediction states that something will happen. A verdict states what the evidence indicates, how much of it there is, how consistent it is, and how reliable that pattern has been historically.
    NO COLUMN EXISTS ANYWHERE ON THIS RELATION for a recommended action, a stake, a selection, or an instruction. The constraint is STRUCTURAL, not editorial — the model provides no construct in which one could be expressed (LC-71).';
 COMMENT ON COLUMN snapshot.snapshot_verdict.risk_score IS
@@ -419,8 +429,9 @@ DECLARE
 BEGIN
   FOREACH rel IN ARRAY ARRAY[
     'match_snapshot','snapshot_version_component','snapshot_feature_state',
-    'snapshot_module_reading','snapshot_model_output','snapshot_completeness',
-    'snapshot_completeness_item','snapshot_outcome_link','snapshot_outcome_link_currency'
+    'snapshot_module_reading','snapshot_verdict','snapshot_model_output',
+    'snapshot_completeness','snapshot_completeness_item',
+    'snapshot_outcome_link','snapshot_outcome_link_currency'
   ]
   LOOP
     d := date '2024-01-01';
@@ -438,9 +449,10 @@ BEGIN
 END
 $$;
 
--- snapshot_verdict is unpartitioned: one row per snapshot per composition
--- version, at 1.5 x 10^6 rows across the envelope, which meets fewer than two
--- of the four partitioning criteria of §5.10.1.
+-- REVISION 2 (P-01): snapshot_verdict is now included in the co-partitioned
+-- family above. Every relation in this schema is monthly range-partitioned on
+-- fixture_partition_on with identical boundaries, which is what permits the
+-- partition-wise assembly the match-intelligence read path depends upon.
 
 -- -----------------------------------------------------------------------------
 -- Ownership

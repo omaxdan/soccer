@@ -220,10 +220,21 @@ INSERT INTO football.participation_state (code, display_name, meaning) VALUES
   ('NOT_SELECTED',     'Not selected',     'Available but not named in the squad.');
 
 -- -----------------------------------------------------------------------------
--- feature — calculation vocabularies
+-- Shared calculation vocabularies — held in football
 -- -----------------------------------------------------------------------------
+-- REVISION 2 (B-07). subject_kind, provenance_class and context_kind are
+-- referenced from football, feature, module AND calibration. Doc 08 §5.3.3
+-- states absolutely that football references nothing outside itself, and lists
+-- calibration's permitted targets without feature. football is therefore the
+-- only schema every referrer may reference, and these vocabularies belong here.
+--
+-- This applies the principle the implementation already used for snapshot_point
+-- and currency above, consistently. It is a PHYSICAL RELOCATION ONLY: Phase 4
+-- classifies these as Identity Components and a Value Object (E2.06, E2.07,
+-- E2.08), whose realisation as lookup relations and the schema they occupy are
+-- physical decisions under §5.4.2 and §5.4.4. No logical entity moves.
 
-CREATE TABLE feature.subject_kind (
+CREATE TABLE football.subject_kind (
   code            text        NOT NULL,
   display_name    text        NOT NULL,
   meaning         text        NOT NULL,
@@ -233,16 +244,16 @@ CREATE TABLE feature.subject_kind (
   CONSTRAINT pk_subject_kind                 PRIMARY KEY (code),
   CONSTRAINT ck_subject_kind__period_ordered CHECK (effective_to IS NULL OR effective_to > effective_from)
 );
-COMMENT ON TABLE feature.subject_kind IS
+COMMENT ON TABLE football.subject_kind IS
   'E2.06 Subject Reference discriminator. Realised as a kind code plus one typed FK column per kind, with a check asserting exactly the corresponding column is populated (PD-03). Only a typed FK can guarantee LC-35.';
 
-INSERT INTO feature.subject_kind (code, display_name, meaning) VALUES
+INSERT INTO football.subject_kind (code, display_name, meaning) VALUES
   ('TEAM',                'Team',                'The value describes a club.'),
   ('PLAYER',              'Player',              'The value describes a player.'),
   ('FIXTURE',             'Fixture',             'The value describes a fixture.'),
   ('COMPETITION_EDITION', 'Competition edition', 'The value describes a competition edition.');
 
-CREATE TABLE feature.context_kind (
+CREATE TABLE football.context_kind (
   code                 text        NOT NULL,
   display_name         text        NOT NULL,
   meaning              text        NOT NULL,
@@ -253,17 +264,17 @@ CREATE TABLE feature.context_kind (
   CONSTRAINT pk_context_kind                 PRIMARY KEY (code),
   CONSTRAINT ck_context_kind__period_ordered CHECK (effective_to IS NULL OR effective_to > effective_from)
 );
-COMMENT ON TABLE feature.context_kind IS
+COMMENT ON TABLE football.context_kind IS
   'E2.08 Feature Context. Exactly three kinds. Context is mandatory and explicit — there is no absent context meaning global, because absent and unset are indistinguishable (LC-38).';
-COMMENT ON COLUMN feature.context_kind.requires_edition IS
+COMMENT ON COLUMN football.context_kind.requires_edition IS
   'TRUE only for COMPETITION_SCOPED. Drives the conditional check on every calculated relation (LC-39).';
 
-INSERT INTO feature.context_kind (code, display_name, meaning, requires_edition) VALUES
+INSERT INTO football.context_kind (code, display_name, meaning, requires_edition) VALUES
   ('COMPETITION_SCOPED',       'Competition-scoped',       'Describes the subject within one competition edition. Form quality, opponent-adjusted strength, venue performance.', true),
   ('ALL_COMPETITIONS',         'All competitions',         'Describes the subject overall. Fatigue, injury burden, travel load — quantities that do not partition.',            false),
   ('CROSS_COMPETITION_DERIVED','Cross-competition derived','Explicitly about the interaction between competitions. Congestion, active competition count, rotation pressure.',    false);
 
-CREATE TABLE feature.provenance_class (
+CREATE TABLE football.provenance_class (
   code            text        NOT NULL,
   display_name    text        NOT NULL,
   meaning         text        NOT NULL,
@@ -275,12 +286,12 @@ CREATE TABLE feature.provenance_class (
   CONSTRAINT uq_provenance_class__strength_rank  UNIQUE (strength_rank),
   CONSTRAINT ck_provenance_class__period_ordered CHECK (effective_to IS NULL OR effective_to > effective_from)
 );
-COMMENT ON TABLE feature.provenance_class IS
+COMMENT ON TABLE football.provenance_class IS
   'E2.07 Feature Provenance. Declares how strongly a value is known. Travels into evidence, into sealed content, and into anything a consumer sees (LC-36).';
-COMMENT ON COLUMN feature.provenance_class.strength_rank IS
+COMMENT ON COLUMN football.provenance_class.strength_rank IS
   'Ordinal strength, higher is stronger. Used by the statement-level propagation trigger of migration 015 to assert LC-37: a derived value is no stronger than the weakest input in its lineage.';
 
-INSERT INTO feature.provenance_class (code, display_name, meaning, strength_rank) VALUES
+INSERT INTO football.provenance_class (code, display_name, meaning, strength_rank) VALUES
   ('OBSERVED',  'Observed',  'A provider stated it.',                                   4),
   ('DERIVED',   'Derived',   'Calculated from observed facts.',                         3),
   ('INFERRED',  'Inferred',  'Reconstructed by heuristic where no direct source exists.',2),

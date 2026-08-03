@@ -235,7 +235,7 @@ CREATE TABLE product.read_model_source (
   CONSTRAINT fk_read_model_source__read_model FOREIGN KEY (read_model_id)
     REFERENCES product.read_model (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_read_model_source__context_kind FOREIGN KEY (drawn_context_kind)
-    REFERENCES feature.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT
+    REFERENCES football.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT
 );
 COMMENT ON TABLE product.read_model_source IS 'LC-143: declares the context at which each quantity is drawn.';
 

@@ -107,7 +107,7 @@ CREATE TABLE calibration.calibration_series (
   CONSTRAINT fk_calibration_series__dimension FOREIGN KEY (outcome_dimension_code)
     REFERENCES calibration.outcome_dimension (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_calibration_series__context_kind FOREIGN KEY (context_kind_code)
-    REFERENCES feature.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_calibration_series__competition FOREIGN KEY (context_competition_id)
     REFERENCES football.competition (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_calibration_series__point FOREIGN KEY (snapshot_point_code)
@@ -226,7 +226,7 @@ CREATE TABLE calibration.published_baseline (
   CONSTRAINT fk_published_baseline__dimension FOREIGN KEY (outcome_dimension_code)
     REFERENCES calibration.outcome_dimension (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_published_baseline__context_kind FOREIGN KEY (context_kind_code)
-    REFERENCES feature.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.context_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_published_baseline__competition FOREIGN KEY (context_competition_id)
     REFERENCES football.competition (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_published_baseline__provenance_known

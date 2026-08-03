@@ -21,16 +21,18 @@
 -- scan of one entry per feature rather than an aggregate over history.
 -- COVERING payload satisfies the path without visiting the heap.
 
-CREATE INDEX ix_feature_value__subject_context_definition_asof
-  ON feature.feature_value
-     (subject_kind_code, subject_team_id, subject_player_id,
-      subject_fixture_id, subject_competition_edition_id,
-      context_kind_code, context_competition_edition_id,
-      feature_definition_id, as_of DESC)
-  INCLUDE (value, provenance_class_code, sample_observation_count,
-           sample_meets_threshold, feature_version_id);
-COMMENT ON INDEX feature.ix_feature_value__subject_context_definition_asof IS
-  'Serves the dominant temporal access path (§5.11.3). Covering payload roughly doubles the storage of the largest relation — a deliberate trade, since heap access at these volumes would be materially worse.';
+-- REVISION 2 (O-03). The business unique constraint's supporting index and this
+-- covering index shared a long leading prefix, so two structures were maintained
+-- on a relation projected at 10^8-10^9 rows. §5.11.1 requires that a constraint's
+-- supporting index be ordered to serve the dominant access path so that ONE
+-- structure serves both purposes. The covering payload is therefore attached to
+-- the business unique constraint in 007 and the separate index is withdrawn.
+--
+-- The remaining difference is column ORDER: the constraint leads with the
+-- subject columns and carries as_of in ascending order. Descending order on a
+-- btree is scanned backwards at no cost for a bounded lookup of the greatest
+-- as_of not exceeding a bound, so the prevailing-value access path is served by
+-- the constraint index without a second structure.
 
 -- Access path: replay and audit by calculation time. Correlated with physical
 -- order by insertion, which is what makes a block-range index viable (§5.11.5).

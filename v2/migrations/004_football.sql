@@ -213,7 +213,7 @@ CREATE TABLE football.player_registration (
   CONSTRAINT fk_player_registration__edition     FOREIGN KEY (competition_edition_id)
     REFERENCES football.competition_edition (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_player_registration__provenance  FOREIGN KEY (provenance_class_code)
-    REFERENCES feature.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_player_registration__period_bounded CHECK (NOT isempty(registration_period)),
   CONSTRAINT ex_player_registration__no_overlap_per_kind
     EXCLUDE USING gist (player_id WITH =, registration_kind_code WITH =, registration_period WITH &&)
@@ -241,7 +241,7 @@ CREATE TABLE football.position_profile (
   CONSTRAINT fk_position_profile__position        FOREIGN KEY (position_code)
     REFERENCES football.position (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_position_profile__provenance      FOREIGN KEY (provenance_class_code)
-    REFERENCES feature.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.provenance_class (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_position_profile__rank_positive   CHECK (role_rank >= 1)
 );
 COMMENT ON TABLE football.position_profile IS
@@ -337,7 +337,7 @@ CREATE TABLE football.provider_statistic (
   CONSTRAINT uq_provider_statistic__subject_affiliation_edition_domain
     UNIQUE (subject_kind_code, player_id, team_id, affiliation_team_id, competition_edition_id, statistics_domain_code, provider_code),
   CONSTRAINT fk_provider_statistic__subject_kind FOREIGN KEY (subject_kind_code)
-    REFERENCES feature.subject_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
+    REFERENCES football.subject_kind (code) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_provider_statistic__player       FOREIGN KEY (player_id)
     REFERENCES football.player (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_provider_statistic__team         FOREIGN KEY (team_id)

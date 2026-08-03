@@ -152,12 +152,12 @@ BEGIN
   SELECT n.id, n.provenance_class_code, min(cp.strength_rank) AS weakest_input_rank
     INTO v_offender
   FROM new_values n
-  JOIN feature.provenance_class np ON np.code = n.provenance_class_code
+  JOIN football.provenance_class np ON np.code = n.provenance_class_code
   JOIN feature.feature_lineage l
     ON l.produced_value_id = n.id AND l.produced_value_as_of = n.as_of
   JOIN feature.feature_value cv
     ON cv.id = l.consumed_value_id AND cv.as_of = l.consumed_value_as_of
-  JOIN feature.provenance_class cp ON cp.code = cv.provenance_class_code
+  JOIN football.provenance_class cp ON cp.code = cv.provenance_class_code
   GROUP BY n.id, n.provenance_class_code, np.strength_rank
   HAVING np.strength_rank > min(cp.strength_rank)
   LIMIT 1;

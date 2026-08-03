@@ -143,8 +143,14 @@ LEFT JOIN calibration.published_baseline pb
        ON pb.module_version_id = mv.id AND upper_inf(pb.effective_period)
 LEFT JOIN calibration.calibration_result cr ON cr.id = pb.calibration_result_id;
 ALTER MATERIALIZED VIEW product.mv_module_directory OWNER TO pt_owner;
+-- REVISION 2 (P-03). published_baseline_id is nullable because the view is
+-- built on LEFT JOINs, and standard uniqueness treats nulls as distinct — so
+-- the index did NOT guarantee row uniqueness and REFRESH ... CONCURRENTLY would
+-- fail for any module with no published baseline and more than one version row.
+-- NULLS NOT DISTINCT (PostgreSQL 15+) makes the index genuinely unique.
 CREATE UNIQUE INDEX ux_mv_module_directory__module_baseline
-  ON product.mv_module_directory (module_definition_id, published_baseline_id);
+  ON product.mv_module_directory (module_definition_id, published_baseline_id)
+  NULLS NOT DISTINCT;
 COMMENT ON MATERIALIZED VIEW product.mv_module_directory IS
   'F-05 COMPLIANT: contains module definitions and PUBLISHED baselines only — content every principal may see in full. It contains no per-user, per-subscription or otherwise entitlement-scoped data. It carries an ENTITLEMENT KEY so a consumer can determine gating, but no gated content.
    Unique index present, so concurrent refresh is available.';
