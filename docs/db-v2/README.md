@@ -115,18 +115,24 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 |---|---|---|
 | S-1 Connection & credential layer | **Complete** | `beta/backend/src/v2/db/` |
 | S-2 Operational layer | **Complete**, all findings closed | `beta/backend/src/v2/operations/` |
-| S-3 onward | Not started | — |
+| S-3 Vocabulary & registry seeding | **Complete** | `beta/backend/src/v2/seed/` |
+| S-4 onward | Not started | — |
 
 | # | Document | Contents |
 |---|---|---|
 | 16 | [S-2 Migration Findings](./16-phase8-s2-migration-findings.md) | Five inconsistencies found by executing the operational layer against the approved schema, with evidence, effect, and candidate corrections |
 | 17 | [S-2 Resolution](./17-phase8-s2-resolution.md) | Closure of all five findings · migration 019 · engineering rule ER-01 · regression tests · verification |
+| 18 | [S-3 Seed Report](./18-phase8-s3-seed-report.md) | Vocabulary and registry inventory · the three approved decisions as implemented · finding S3-1 · what is deliberately not seeded · defects found by execution · verification |
 
 **All five findings are closed.** M-1 — the blocking one, where `pipeline_run` and `pipeline_job_run` could never leave `RUNNING` because both carry the append-only guard and no role holds UPDATE — is resolved by **migration 019** using Correction B: terminal state is *appended* to a completion companion under ordinal succession, the shape A.2 already uses for snapshot outcome revision. No guard was weakened, no `UPDATE` was granted, and `RUNNING` remains the immutable initial state. M-2 is resolved by a single `INSERT` grant. M-3, M-4 and M-5 are closed as documentation clarifications — in each the approved schema was already right.
 
 A standing engineering rule came out of it: **ER-01**, never round-trip a database-generated `timestamptz` through a JavaScript `Date` and back into a key comparison. PostgreSQL stores microseconds, `Date` carries milliseconds, and the truncation silently breaks every composite foreign key. This binds S-7 above all.
 
 Two costs are stated plainly rather than discovered later: the deep history V2 is designed to hold **does not exist** for the 17 team-level tables V1 overwrote in place, so point-in-time reconstruction begins at cut-over; and calibration must be re-baselined, so modules will correctly report *unverified* where V1 displayed a rate marked `provenance: "unreplayed"` by the code that produced it.
+
+**S-3 produced no migration findings.** 119 rows across twelve relations, seeded by four roles in the order the reference graph forces — there is no single seed role, because the privilege matrix assigns writes by layer and a principal with INSERT across four schemas would be broader than any pipeline. Every statement is `INSERT … ON CONFLICT DO NOTHING`; there is no update, upsert or delete path in the subsystem, because vocabulary and registry rows are historical reference data a sealed snapshot points at. Idempotence is proven by **id and `created_at` fingerprint equality** across repeat runs, not by row counts — counts alone would pass a seed that deleted and re-inserted everything.
+
+One finding, **S3-1**, is recorded rather than worked around: `pt_platform_admin` is the only role with INSERT on `product` and holds SELECT-only on `operations`, so the entitlement stage cannot open a pipeline run and executes unattributed. Widening the role would let an administrative principal write pipeline runs that never happened, so the correct disposition is to accept the gap and name it.
 
 ## Sources analysed
 

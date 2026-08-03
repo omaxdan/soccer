@@ -1,13 +1,14 @@
 {
   "name": "ninetydata-beta-backend",
   "version": "2.0.0",
-  "description": "NinetyData RIP beta backend — single-writer pipeline (audit-hardened)",
+  "description": "NinetyData RIP beta backend \u2014 single-writer pipeline (audit-hardened)",
   "main": "dist/cli.js",
   "scripts": {
     "build": "tsc",
     "cli": "ts-node src/cli.ts",
     "lint:reads": "bash scripts/check-raw-reads.sh",
-    "test": "tsc --noEmit && node --test --import tsx \"src/**/*.test.ts\""
+    "test": "tsc --noEmit && node --test --import tsx \"src/**/*.test.ts\"",
+    "seed:v2": "tsx src/v2/seed/runAll.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

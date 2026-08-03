@@ -2,7 +2,7 @@
 
 Implementation of the V2 application against the approved database architecture, built **alongside** V1 per the strangler strategy of Phase 8 §1.3.
 
-**Status: S-1 and S-2 complete, all S-2 findings closed.** Nothing beyond S-2 is implemented.
+**Status: S-1, S-2 and S-3 complete, all S-2 findings closed.** Nothing beyond S-3 is implemented.
 
 ## What exists
 
@@ -14,6 +14,8 @@ Implementation of the V2 application against the approved database architecture,
 | `db/tx.ts` | S-1 | `withRun` / `withConnection` / `withSession` / `withSavepoint`, job lifecycle seam |
 | `db/index.ts` | S-1 | Public surface — import from here, not from the modules |
 | `db/*.test.ts` | S-1 | Connection, permission, transaction and session-persistence suites |
+| `operations/` | S-2 | Pipeline runs, job lifecycle, write records, failures, API usage, schedules |
+| `seed/` | S-3 | Idempotent bootstrap of the governed vocabularies and registries |
 
 ## V1 is untouched
 
@@ -126,7 +128,7 @@ npm test
 
 The integration suites **skip** rather than fail when no V2 database is configured, so V2 work never blocks V1 work. `assertCiHasDatabase()` fails the run when `CI` is set and no database is present, because a skipped suite is not a passing suite (§12.1).
 
-Verified against PostgreSQL 16 with the full migration set applied: **130 tests, 130 passing** (64 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, and operational history is proven to survive rollback of the work it describes.
+Verified against PostgreSQL 16 with the full migration set applied: **161 tests, 161 passing** (71 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, operational history is proven to survive rollback of the work it describes, and the seed is proven idempotent by id and `created_at` fingerprint rather than by row count.
 
 ## S-2 — Operational layer
 
@@ -163,6 +165,21 @@ Five migration findings were produced while implementing S-2
   `operations.failure_resolution`, and `INSERT` alone.
 - **M-3, M-4, M-5** — closed as documentation clarifications; no schema change.
 
-## Next: S-3 — Vocabulary & registry seeding
+## S-3 — Vocabulary & registry seeding
 
-Not started. S-2 is complete and nothing beyond it has been implemented.
+```bash
+npm run seed:v2
+```
+
+Running it once and running it ten times produce the same rows, the same ids and the same timestamps. **119 rows across twelve relations**, seeded by four roles in the order the reference graph forces. Full detail in [`seed/README.md`](./seed/README.md); verification in
+[document 18](../../../../docs/db-v2/18-phase8-s3-seed-report.md).
+
+**Every statement is `INSERT … ON CONFLICT (<target>) DO NOTHING`.** There is no update path, no upsert path and no delete path in that subsystem, and none may be added — a sealed snapshot references the module version in force when it was sealed, and rewriting it would restate what a past claim meant.
+
+**There is no single seed role.** The privilege matrix assigns writes by layer: `pt_pipeline_ingestion` for `football`, `pt_platform_admin` for `product`, `pt_pipeline_feature` for `feature`, `pt_pipeline_module` for `module`. One principal with INSERT across four schemas would be broader than any pipeline.
+
+One finding, **S3-1**: `pt_platform_admin` holds SELECT on `operations`, so the entitlement stage cannot open a pipeline run and executes unattributed. Recorded, not worked around — an administrative role that could write pipeline runs could write ones that never happened.
+
+## Next: S-4 — Ingestion
+
+Not started. S-3 is complete and nothing beyond it has been implemented.
