@@ -54,7 +54,16 @@ Binding engineering specification for PostgreSQL 16 under Supabase. Contains no 
 
 Supersedes the named sections of document 08; unnamed sections remain in force. 75 implementation rules, 15 DDL authoring rules, 4 new physical relations, none introducing a logical concept. No Phase 4 guarantee weakened; three strengthened.
 
-Next: Phase 6 — DDL authoring and migration implementation.
+## Phase 6 — DDL and migration implementation
+
+| # | Location | Contents |
+|---|---|---|
+| — | [`v2/migrations/`](../../v2/migrations/) | 18 sequential migrations, ~5,100 lines, implementing document 08 revision 1 for PostgreSQL 16 on Supabase |
+| 11 | [Phase 6 Migration Audit](./11-phase6-migration-audit.md) | Implementation audit of migrations 001–018 against document 08 rev 1, Phase 4, and platform capability |
+
+**Audit outcome: C — Rework required.** 22 findings; 8 blockers; 8 before production. The implementation is structurally faithful — 12 of 17 corrections fully correct, and every mechanical rule check passes — but three defect clusters prevent deployment: unresolvable GiST operator classes, two silent failures caused by the interaction between `FORCE ROW LEVEL SECURITY` and privileged execution paths, and three defects in the retention and maintenance migration.
+
+Every fix is a correction to the SQL. Nothing in the audit requires a change to the architecture, the logical model, or any Phase 4 guarantee.
 
 ## Sources analysed
 
