@@ -1,5 +1,7 @@
 # PitchTerminal V2 — S-5 Implementation: Blocked Pending Decision
 
+> **RESOLVED.** Every decision below is settled in [document 23](./23-phase8-s5-decision-record.md). DEC-1 resolved as DECISION A; DEC-2, DEC-3 and DEC-4 approved; composite sampling ruled as `MIN(consumed)`. S-5 is ready for implementation. This document is retained as the record of why.
+
 **Implementation has not begun. No file under `src/v2/feature/` has been created.**
 
 The S-5 brief instructs: *"If an ambiguity is discovered, STOP and report it instead of making assumptions."* One was discovered before the first line of code, and it is structural rather than peripheral.
