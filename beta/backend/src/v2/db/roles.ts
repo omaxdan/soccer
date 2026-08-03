@@ -382,6 +382,18 @@ export const ROLE_DEFINITIONS: Readonly<Record<PipelineRole, RoleDefinition>> = 
           'fn_assert_security_posture(), verified to raise on breach in Phase 6.1 §14.4.',
       },
       {
+        relation: 'operations.failure_resolution',
+        modes: ['S', 'I'],
+        reason:
+          'S-2 finding M-2, granted by migration 019. failure_resolution records the TRIAGE ' +
+          'HISTORY of a failure — OPEN, INVESTIGATING, RESOLVED, WONT_FIX — and that is an ' +
+          'operator action. Migration 016 granted the administrative role SELECT only on ' +
+          'operations, so resolutions had to be written by a pipeline role, and a pipeline ' +
+          'resolving its own failures is not oversight. ' +
+          'INSERT ONLY: the relation is append-only and carries the guard, so a history is ' +
+          'the sequence of its rows and no amendment capability is conferred.',
+      },
+      {
         relation: 'operations.retention_policy',
         modes: ['S', 'I', 'U'],
         reason:

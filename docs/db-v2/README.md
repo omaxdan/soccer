@@ -114,14 +114,17 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | Subsystem | Status | Location |
 |---|---|---|
 | S-1 Connection & credential layer | **Complete** | `beta/backend/src/v2/db/` |
-| S-2 Operational layer | **Complete** | `beta/backend/src/v2/operations/` |
+| S-2 Operational layer | **Complete**, all findings closed | `beta/backend/src/v2/operations/` |
 | S-3 onward | Not started | — |
 
 | # | Document | Contents |
 |---|---|---|
 | 16 | [S-2 Migration Findings](./16-phase8-s2-migration-findings.md) | Five inconsistencies found by executing the operational layer against the approved schema, with evidence, effect, and candidate corrections |
+| 17 | [S-2 Resolution](./17-phase8-s2-resolution.md) | Closure of all five findings · migration 019 · engineering rule ER-01 · regression tests · verification |
 
-**M-1 is blocking before production:** `operations.pipeline_run` and `pipeline_job_run` carry the append-only guard and no role holds UPDATE on them, so a run inserted as `RUNNING` can never be transitioned. Run outcome and duration are not recorded. Inserting at completion instead is foreclosed by P-04, which requires the job run to be committed *during* the work so `snapshot.match_snapshot` can reference it. Recommended correction: an append-only completion companion, the shape A.2 already uses for snapshot outcome revision.
+**All five findings are closed.** M-1 — the blocking one, where `pipeline_run` and `pipeline_job_run` could never leave `RUNNING` because both carry the append-only guard and no role holds UPDATE — is resolved by **migration 019** using Correction B: terminal state is *appended* to a completion companion under ordinal succession, the shape A.2 already uses for snapshot outcome revision. No guard was weakened, no `UPDATE` was granted, and `RUNNING` remains the immutable initial state. M-2 is resolved by a single `INSERT` grant. M-3, M-4 and M-5 are closed as documentation clarifications — in each the approved schema was already right.
+
+A standing engineering rule came out of it: **ER-01**, never round-trip a database-generated `timestamptz` through a JavaScript `Date` and back into a key comparison. PostgreSQL stores microseconds, `Date` carries milliseconds, and the truncation silently breaks every composite foreign key. This binds S-7 above all.
 
 Two costs are stated plainly rather than discovered later: the deep history V2 is designed to hold **does not exist** for the 17 team-level tables V1 overwrote in place, so point-in-time reconstruction begins at cut-over; and calibration must be re-baselined, so modules will correctly report *unverified* where V1 displayed a rate marked `provenance: "unreplayed"` by the code that produced it.
 

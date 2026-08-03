@@ -35,6 +35,7 @@ topological ordering of the reference graph.
 | 016 | `016_security.sql` | RLS enabled and forced, policies, then grants. |
 | 017 | `017_views.sql` | Read models, views, projections, materialised views. |
 | 018 | `018_maintenance.sql` | Partition creation, retention, freeze, checksum, assertions. |
+| 019 | `019_operational_completion.sql` | Append-only completion for operational runs (S-2 M-1); admin failure-resolution grant (S-2 M-2). |
 
 **Privileges are applied last** (016), after every object exists and every policy
 is in force, so no window exists in which an object is reachable without its

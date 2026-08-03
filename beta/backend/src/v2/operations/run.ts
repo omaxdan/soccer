@@ -39,12 +39,15 @@ export type TriggerKind = 'SCHEDULED' | 'MANUAL' | 'BACKFILL' | 'RECONSTRUCTION'
 /**
  * Terminal states for a run. Fixed by ck_pipeline_run__outcome_known.
  *
- * 'RUNNING' is the state a row is INSERTED with. It cannot presently be
- * transitioned — see the append-only defect recorded in
- * docs/db-v2/16-phase8-s2-migration-findings.md (M-1). The type includes it
- * because the CHECK constraint does.
+ * 'RUNNING' is the IMMUTABLE INITIAL STATE of the run row and is never written
+ * to a completion record — a completion saying the run is still running is not a
+ * completion. Terminal states are recorded by appending to
+ * operations.pipeline_run_completion (migration 019, finding M-1).
  */
 export type RunOutcome = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'PARTIAL';
+
+/** Terminal outcomes only — what may appear on a completion record. */
+export type TerminalRunOutcome = Exclude<RunOutcome, 'RUNNING'>;
 
 /** A committed operations.pipeline_run row, addressed by its composite key. */
 export interface PipelineRunRef {
@@ -153,70 +156,120 @@ export async function insertPipelineRun(
 }
 
 /**
- * Whether operations run rows can be closed by UPDATE.
+ * Appends a terminal completion record for a run or a job run.
  *
- * Probed once per process rather than assumed. Today the answer is no —
- * operations.pipeline_run carries the append-only guard, which raises on UPDATE
- * for every principal, and no role holds UPDATE on it. See finding M-1.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS REPLACES tryCloseRow(), AND THE REASON IS ARCHITECTURAL
  *
- * This is a probe rather than a hard-coded `false` so that the moment the
- * architecture owner corrects the defect, the application starts closing runs
- * with no code change. Until then it attempts once, learns, and stops.
+ * The first S-2 implementation attempted `UPDATE … SET outcome, ended_at` and
+ * discovered it could never succeed: operations.pipeline_run and
+ * pipeline_job_run carry the append-only guard, which raises on UPDATE for every
+ * principal without exception (R-19), and no role holds UPDATE on either. Runs
+ * stayed RUNNING for ever. That was finding M-1.
+ *
+ * Inserting the row once at completion instead is foreclosed by P-04: the job
+ * run must be committed DURING the work so snapshot.match_snapshot can reference
+ * it compositely.
+ *
+ * Migration 019 resolves it with the pattern A.2 already established for
+ * snapshot outcome revision — an append-only companion carrying ordinal
+ * succession. Nothing is updated, no guard is weakened, and no UPDATE privilege
+ * exists anywhere. A correction to a recorded outcome is a new row at a higher
+ * ordinal, and the earlier record stays readable.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * NEVER THROWS. A telemetry failure must not turn a successful pipeline into a
+ * failed one, nor replace the error of a failing one. Returns false when the
+ * completion could not be appended, having logged why.
  */
-let closeSupported: boolean | null = null;
-
-/** Test-only. Forces the capability probe to run again. */
-export function resetCloseCapabilityForTesting(): void {
-  closeSupported = null;
-}
-
-/** Diagnostic: what the probe concluded, or null if it has not run. */
-export function runCloseCapability(): boolean | null {
-  return closeSupported;
-}
-
-/**
- * Attempts to record a terminal outcome on a run or job row.
- *
- * Returns true when the close landed, false when the schema does not permit it.
- * NEVER THROWS on the append-guard path: a telemetry limitation must not turn a
- * successful pipeline into a failed one, and must not replace the error of a
- * failing one.
- */
-export async function tryCloseRow(
+export async function appendCompletion(
   control: PoolClient,
-  relation: 'pipeline_run' | 'pipeline_job_run',
+  target: CompletionTarget,
   id: string,
   occurredAt: Date,
-  outcome: string
+  outcome: string,
+  endedAt: Date = operationalNow()
 ): Promise<boolean> {
-  if (closeSupported === false) return false;
+  const spec = COMPLETION_SPEC[target];
   try {
+    // The ordinal is allocated from the existing succession for this run. A
+    // first completion is ordinal 1; a later correction is 2, and so on.
+    //
+    // The partition predicate on occurred_at is mandatory on a partitioned
+    // relation (§5.10.6) and F-15 registers a conformance check that detects
+    // reads without one. A completion is always within days of the run it
+    // completes, so a bounded lookback is both correct and prunable.
     await control.query(
-      `UPDATE operations.${relation === 'pipeline_run' ? 'pipeline_run' : 'pipeline_job_run'}
-          SET outcome = $3, ended_at = now()
-        WHERE id = $1 AND occurred_at = $2`,
-      [id, occurredAt, outcome]
+      `INSERT INTO operations.${spec.relation}
+         (occurred_at, ${spec.idColumn}, ${spec.instantColumn}, ended_at, outcome, ordinal)
+       SELECT $1, $2, $3, $4, $5,
+              COALESCE((SELECT max(c.ordinal) + 1
+                          FROM operations.${spec.relation} c
+                         WHERE c.occurred_at >= $3::timestamptz - interval '30 days'
+                           AND c.${spec.idColumn} = $2
+                           AND c.${spec.instantColumn} = $3), 1)`,
+      [operationalNow(), id, occurredAt, endedAt, outcome]
     );
-    if (closeSupported === null) {
-      closeSupported = true;
-      logger.info('v2: operations run rows are closable — outcomes will be recorded');
-    }
     return true;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (closeSupported === null) {
-      closeSupported = false;
-      logger.warn(
-        { err: message },
-        'v2: operations run rows CANNOT be closed (append-only guard / no UPDATE grant). ' +
-          'Runs will remain RUNNING and ended_at will stay NULL. This is migration finding ' +
-          'M-1 — see docs/db-v2/16-phase8-s2-migration-findings.md. Terminal outcomes are ' +
-          'still recorded for failures, in operations.failure.'
-      );
-    }
+    logger.error(
+      {
+        relation: spec.relation,
+        id,
+        outcome,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'v2: could not append completion record'
+    );
     return false;
   }
+}
+
+/** Which completion relation a target uses, and how it addresses its parent. */
+type CompletionTarget = 'pipeline_run' | 'pipeline_job_run';
+
+const COMPLETION_SPEC: Readonly<
+  Record<CompletionTarget, { relation: string; idColumn: string; instantColumn: string }>
+> = {
+  pipeline_run: {
+    relation: 'pipeline_run_completion',
+    idColumn: 'pipeline_run_id',
+    instantColumn: 'run_occurred_at',
+  },
+  pipeline_job_run: {
+    relation: 'pipeline_job_run_completion',
+    idColumn: 'pipeline_job_run_id',
+    instantColumn: 'job_occurred_at',
+  },
+};
+
+/**
+ * The prevailing completion for a run, or null while it is still in flight.
+ *
+ * Highest ordinal wins, with occurred_at and id breaking a tie deterministically
+ * — the partition key participates in the uniqueness constraint, so a duplicate
+ * ordinal is possible in principle, and an arbitrary winner is the defect class
+ * Phase 7 recorded as DB-04.
+ */
+export async function currentCompletion(
+  control: PoolClient,
+  target: CompletionTarget,
+  id: string,
+  occurredAt: Date
+): Promise<{ outcome: string; endedAt: Date; ordinal: number } | null> {
+  const spec = COMPLETION_SPEC[target];
+  const { rows } = await control.query<{ outcome: string; ended_at: Date; ordinal: number }>(
+    `SELECT outcome, ended_at, ordinal
+       FROM operations.${spec.relation}
+      WHERE occurred_at >= $2::timestamptz - interval '30 days'
+        AND ${spec.idColumn} = $1
+        AND ${spec.instantColumn} = $2
+      ORDER BY ordinal DESC, occurred_at DESC, id DESC
+      LIMIT 1`,
+    [id, occurredAt]
+  );
+  if (rows.length === 0) return null;
+  return { outcome: rows[0].outcome, endedAt: rows[0].ended_at, ordinal: rows[0].ordinal };
 }
 
 export interface PipelineRunOptions {
@@ -307,21 +360,19 @@ export async function withPipelineRun<T>(
 }
 
 /**
- * Closes a run on a briefly-acquired connection.
+ * Records a run's terminal state on a briefly-acquired connection.
  *
- * Never throws: a telemetry limitation must not turn a successful pipeline into
- * a failed one, and must not replace the error of a failing one. Today the close
- * cannot land at all — finding M-1 — and this still returns cleanly.
+ * Never throws: telemetry must not decide the fate of the work it describes.
  */
 async function closeRun(pool: Pool, ref: PipelineRunRef, outcome: RunOutcome): Promise<void> {
   let closer: PoolClient | undefined;
   try {
     closer = await pool.connect();
-    await tryCloseRow(closer, 'pipeline_run', ref.id, ref.occurredAt, outcome);
+    await appendCompletion(closer, 'pipeline_run', ref.id, ref.occurredAt, outcome);
   } catch (err) {
     logger.warn(
       { runId: ref.id, err: err instanceof Error ? err.message : String(err) },
-      'v2: could not acquire a connection to close the pipeline run'
+      'v2: could not acquire a connection to complete the pipeline run'
     );
   } finally {
     closer?.release();

@@ -31,7 +31,8 @@ import {
   withPipelineRun,
   currentRun,
   codeRevision,
-  runCloseCapability,
+  currentCompletion,
+  appendCompletion,
   recordWrite,
   WriteAccumulator,
   recordFailure,
@@ -51,7 +52,6 @@ import {
   ScheduleStorageUnavailableError,
   type FailureRef,
 } from './index';
-import { resetCloseCapabilityForTesting } from './run';
 import { resetImplicitRunsForTesting } from './jobLifecycle';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -210,7 +210,6 @@ describe('operational layer (requires a V2 database)', { skip: skipReason() || f
     resetV2ConfigForTesting();
     process.env.PT_V2_POOL_MAX_INGESTION = '12';
     installOperationalLayer();
-    resetCloseCapabilityForTesting();
   });
 
   beforeEach(() => {
@@ -683,45 +682,311 @@ describe('operational layer (requires a V2 database)', { skip: skipReason() || f
     assert.equal(await countJobRuns(jobKey), 1, 'the job run must exist and be singular');
   });
 
-  // ── Migration finding M-1, asserted rather than assumed ───────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // M-1 REGRESSION — the completion model, and that nothing was weakened
+  // ─────────────────────────────────────────────────────────────────────────
 
-  test('M-1: operations run rows cannot be closed, and the layer detects it', async () => {
-    // Documented in docs/db-v2/16-phase8-s2-migration-findings.md. This test
-    // ASSERTS the current behaviour so that if the architecture owner corrects
-    // the defect, this test fails and the finding gets closed rather than
-    // quietly outliving its truth.
-    await withRun(role, `test.m1.${Date.now()}`, async () => undefined);
-    assert.equal(
-      runCloseCapability(),
-      false,
-      'If this now reports true, M-1 has been fixed — update the findings document ' +
-        'and this assertion.'
+  test('M-1: a run reaches a terminal state without any UPDATE', async () => {
+    const runKey = `test.m1.complete.${Date.now()}`;
+    await withPipelineRun(role, runKey, async () => {
+      await withRun(role, 'test.m1.job', async () => undefined);
+    });
+
+    await withConnection(role, async (client) => {
+      // The run row itself is untouched: RUNNING is the immutable initial state.
+      const run = await client.query<{ id: string; occurred_at: Date; outcome: string }>(
+        `SELECT id::text, occurred_at, outcome FROM operations.pipeline_run
+          WHERE occurred_at >= now() - interval '1 hour' AND run_key = $1`,
+        [runKey]
+      );
+      assert.equal(run.rows.length, 1);
+      assert.equal(run.rows[0].outcome, 'RUNNING', 'the run row must never be amended');
+
+      // The terminal state lives in the append-only companion.
+      const completion = await currentCompletion(
+        client,
+        'pipeline_run',
+        run.rows[0].id,
+        run.rows[0].occurred_at
+      );
+      assert.ok(completion, 'a completion record must have been appended');
+      assert.equal(completion.outcome, 'SUCCEEDED');
+      assert.equal(completion.ordinal, 1, 'the first completion is ordinal 1');
+      assert.ok(completion.endedAt instanceof Date, 'and it records when the run ended');
+    });
+  });
+
+  test('M-1: a failed run records FAILED, and the failure survives alongside it', async () => {
+    const runKey = `test.m1.failed.${Date.now()}`;
+    const jobKey = `test.m1.failedjob.${Date.now()}`;
+
+    await assert.rejects(
+      withPipelineRun(role, runKey, async () => {
+        await withRun(role, jobKey, async () => {
+          throw new Error('deliberate failure');
+        });
+      }),
+      /deliberate failure/
     );
 
     await withConnection(role, async (client) => {
-      const { rows } = await client.query<{ n: string }>(
-        `SELECT count(*)::text AS n FROM operations.pipeline_job_run
-          WHERE occurred_at >= now() - interval '1 hour' AND outcome = 'RUNNING'`
+      const run = await client.query<{ id: string; occurred_at: Date }>(
+        `SELECT id::text, occurred_at FROM operations.pipeline_run
+          WHERE occurred_at >= now() - interval '1 hour' AND run_key = $1`,
+        [runKey]
       );
+      const runCompletion = await currentCompletion(
+        client,
+        'pipeline_run',
+        run.rows[0].id,
+        run.rows[0].occurred_at
+      );
+      assert.equal(runCompletion?.outcome, 'FAILED');
+
+      const job = await client.query<{ id: string; occurred_at: Date }>(
+        `SELECT id::text, occurred_at FROM operations.pipeline_job_run
+          WHERE occurred_at >= now() - interval '1 hour' AND job_key = $1`,
+        [jobKey]
+      );
+      const jobCompletion = await currentCompletion(
+        client,
+        'pipeline_job_run',
+        job.rows[0].id,
+        job.rows[0].occurred_at
+      );
+      assert.equal(jobCompletion?.outcome, 'FAILED');
+
+      // …and the failure row itself, per the S-2 contract.
+      const failure = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM operations.failure
+          WHERE occurred_at >= now() - interval '1 hour'
+            AND pipeline_job_run_id = $1 AND job_occurred_at = $2`,
+        [job.rows[0].id, job.rows[0].occurred_at]
+      );
+      assert.equal(failure.rows[0].n, '1');
+    });
+  });
+
+  test('M-1: a snapshot may reference a job run while it is still open', async () => {
+    // The constraint that foreclosed insert-at-completion. The job run must be
+    // committed and referenceable DURING the work (P-04), which is why the row
+    // is inserted at open and completed by appending.
+    const jobKey = `test.m1.reference.${Date.now()}`;
+    await withRun(role, jobKey, async (_tx, job) => {
+      const attribution = requireJobRun(job, 'Referencing an open job run');
+      await withConnection(role, async (client) => {
+        const { rows } = await client.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM operations.pipeline_job_run
+            WHERE occurred_at >= now() - interval '1 hour'
+              AND id = $1 AND occurred_at = $2 AND outcome = 'RUNNING'`,
+          [attribution.id, attribution.occurredAt]
+        );
+        assert.equal(
+          rows[0].n,
+          '1',
+          'the job run must be committed and visible from another connection while open — ' +
+            'this is what snapshot.match_snapshot needs under P-04'
+        );
+      });
+    });
+  });
+
+  test('M-1: a corrected outcome appends a higher ordinal and keeps the earlier one', async () => {
+    // A.2 ordinal succession. Revising a recorded outcome is a NEW row, so the
+    // fact that it was revised remains readable.
+    const jobKey = `test.m1.succession.${Date.now()}`;
+    let jobId = '';
+    let jobAt = new Date();
+    await withRun(role, jobKey, async (_tx, job) => {
+      jobId = job!.id;
+      jobAt = job!.occurredAt;
+    });
+
+    await withConnection(role, async (client) => {
+      const first = await currentCompletion(client, 'pipeline_job_run', jobId, jobAt);
+      assert.equal(first?.ordinal, 1);
+      assert.equal(first?.outcome, 'SUCCEEDED');
+
       assert.ok(
-        Number(rows[0].n) > 0,
-        'job runs remain RUNNING because the outcome cannot be transitioned'
+        await appendCompletion(client, 'pipeline_job_run', jobId, jobAt, 'FAILED'),
+        'a correction must be appendable'
+      );
+
+      const latest = await currentCompletion(client, 'pipeline_job_run', jobId, jobAt);
+      assert.equal(latest?.ordinal, 2, 'the correction takes the next ordinal');
+      assert.equal(latest?.outcome, 'FAILED', 'and the latest ordinal prevails');
+
+      const { rows } = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM operations.pipeline_job_run_completion
+          WHERE occurred_at >= now() - interval '1 hour'
+            AND pipeline_job_run_id = $1 AND job_occurred_at = $2`,
+        [jobId, jobAt]
+      );
+      assert.equal(rows[0].n, '2', 'both records remain — the earlier one is not overwritten');
+    });
+  });
+
+  test('M-1: nothing was weakened — no UPDATE or DELETE on any completion relation', async () => {
+    await withConnection(role, async (client) => {
+      const { rows } = await client.query<{ offender: string }>(
+        `SELECT pg_get_userbyid(a.grantee)||':'||c.relname||':'||a.privilege_type AS offender
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           CROSS JOIN LATERAL aclexplode(c.relacl) a
+          WHERE n.nspname = 'operations'
+            AND c.relname LIKE '%completion%'
+            AND a.privilege_type IN ('UPDATE','DELETE')
+            AND a.grantee <> c.relowner`
+      );
+      assert.deepEqual(rows.map((r) => r.offender), []);
+    });
+  });
+
+  test('M-1: completions are protected at BOTH layers, privilege and guard', async () => {
+    // Defence in depth, and the two layers refuse different principals:
+    //
+    //   a granted role  -> refused by PRIVILEGE  ("permission denied")
+    //   the owner       -> refused by the GUARD  (R-19, no exception)
+    //
+    // The first assertion below exercises the privilege layer, which is the one a
+    // pipeline actually hits. The second confirms the guard is attached, because
+    // no application credential authenticates as the owner and the privilege
+    // check would mask the guard even if it were absent.
+    await withConnection(role, async (client) => {
+      await assert.rejects(
+        client.query(
+          `UPDATE operations.pipeline_run_completion SET outcome = 'SUCCEEDED'
+            WHERE occurred_at >= now() - interval '1 hour'`
+        ),
+        /permission denied|append-only relation: UPDATE attempted/
+      );
+
+      const { rows } = await client.query<{ relname: string; tgname: string }>(
+        `SELECT c.relname, t.tgname
+           FROM pg_trigger t
+           JOIN pg_class c ON c.oid = t.tgrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'operations'
+            AND NOT t.tgisinternal
+            AND c.relname IN ('pipeline_run_completion','pipeline_job_run_completion')
+            AND t.tgname LIKE '%append_guard'`
+      );
+      assert.deepEqual(
+        rows.map((r) => r.relname).sort(),
+        ['pipeline_job_run_completion', 'pipeline_run_completion'],
+        'both completion relations must carry the append-only guard'
       );
     });
   });
 
-  test('M-2: pt_platform_admin cannot write operations telemetry', async () => {
-    if (!testableRoles().includes('pt_platform_admin')) return;
-    await withConnection('pt_platform_admin', async (client) => {
-      const { rows } = await client.query<{ ins: boolean; sel: boolean }>(
-        `SELECT has_table_privilege('operations.failure_resolution','INSERT') AS ins,
-                has_table_privilege('operations.failure_resolution','SELECT') AS sel`
+  test('M-1: the current-state view resolves the prevailing outcome', async () => {
+    const runKey = `test.m1.view.${Date.now()}`;
+    await withPipelineRun(role, runKey, async () => {
+      await withRun(role, 'test.m1.viewjob', async () => undefined);
+    });
+    await withConnection(role, async (client) => {
+      const { rows } = await client.query<{ outcome: string; duration: string | null }>(
+        `SELECT outcome, duration::text FROM operations.v_pipeline_run_current
+          WHERE run_occurred_at >= now() - interval '1 hour' AND run_key = $1`,
+        [runKey]
       );
-      assert.equal(rows[0].sel, true, 'the admin role can read resolutions');
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].outcome, 'SUCCEEDED', 'the view reports the completion, not RUNNING');
+      assert.ok(rows[0].duration !== null, 'and duration is now answerable');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // M-2 REGRESSION — the administrative role may resolve, but not amend
+  // ─────────────────────────────────────────────────────────────────────────
+
+  test('M-2: pt_platform_admin can append a failure resolution', async () => {
+    if (!testableRoles().includes('pt_platform_admin')) return;
+
+    const jobKey = `test.m2.${Date.now()}`;
+    let failure: FailureRef | null = null;
+    await withRun(role, jobKey, async (_tx, job) => {
+      await withConnection(role, async (control) => {
+        failure = await recordFailure(control, job, new Error('needs an operator'));
+      });
+    });
+    const ref = failure as unknown as FailureRef;
+
+    await withConnection('pt_platform_admin', async (admin) => {
+      await appendResolution(admin, ref, 'INVESTIGATING', 'operator triage');
+      const latest = await latestResolution(admin, ref);
+      assert.equal(latest?.state, 'INVESTIGATING');
+      assert.equal(latest?.note, 'operator triage');
+    });
+  });
+
+  test('M-2: pt_platform_admin cannot modify or remove an existing resolution', async () => {
+    if (!testableRoles().includes('pt_platform_admin')) return;
+
+    // INSERT only. failure_resolution stays append-only: a triage history is the
+    // sequence of its rows, and an amended history is not a history.
+    await withConnection('pt_platform_admin', async (admin) => {
+      const { rows } = await admin.query<{ ins: boolean; upd: boolean; del: boolean }>(
+        `SELECT has_table_privilege('operations.failure_resolution','INSERT') AS ins,
+                has_table_privilege('operations.failure_resolution','UPDATE') AS upd,
+                has_table_privilege('operations.failure_resolution','DELETE') AS del`
+      );
+      assert.equal(rows[0].ins, true, 'M-2 grants INSERT');
+      assert.equal(rows[0].upd, false, 'and must never grant UPDATE');
+      assert.equal(rows[0].del, false, 'nor DELETE');
+
+      await assert.rejects(
+        admin.query(
+          `UPDATE operations.failure_resolution SET resolution_state = 'RESOLVED'
+            WHERE occurred_at >= now() - interval '1 hour'`
+        ),
+        /permission denied|append-only relation: UPDATE attempted/
+      );
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Timestamp precision — the rule every later subsystem inherits
+  // ─────────────────────────────────────────────────────────────────────────
+
+  test('composite foreign keys succeed using application-supplied instants', async () => {
+    // PostgreSQL stores timestamptz at microsecond precision; a JS Date carries
+    // milliseconds. A database-generated instant returned to the application and
+    // sent back as half a key arrives TRUNCATED and matches nothing. Every job
+    // run failed to attach to its pipeline run until the application began
+    // supplying occurred_at itself.
+    const runKey = `test.precision.${Date.now()}`;
+    await withPipelineRun(role, runKey, async () => {
+      await withRun(role, 'test.precision.job', async () => undefined);
+    });
+
+    await withConnection(role, async (client) => {
+      // Every level of the chain resolves: run -> job -> completion.
+      const { rows } = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n
+           FROM operations.pipeline_run r
+           JOIN operations.pipeline_job_run j
+             ON j.pipeline_run_id = r.id AND j.run_occurred_at = r.occurred_at
+           JOIN operations.pipeline_job_run_completion jc
+             ON jc.pipeline_job_run_id = j.id AND jc.job_occurred_at = j.occurred_at
+          WHERE r.occurred_at >= now() - interval '1 hour' AND r.run_key = $1`,
+        [runKey]
+      );
+      assert.equal(rows[0].n, '1', 'the whole composite chain must resolve');
+    });
+  });
+
+  test('an application-supplied instant round-trips without loss', async () => {
+    await withConnection(role, async (client) => {
+      const supplied = new Date();
+      const { rows } = await client.query<{ returned: Date; identical: boolean }>(
+        'SELECT $1::timestamptz AS returned, $1::timestamptz = $1::timestamptz AS identical',
+        [supplied]
+      );
       assert.equal(
-        rows[0].ins,
-        false,
-        'If this now reports true, M-2 has been fixed — update the findings document.'
+        rows[0].returned.getTime(),
+        supplied.getTime(),
+        'a millisecond-precision instant must survive the round trip exactly'
       );
     });
   });

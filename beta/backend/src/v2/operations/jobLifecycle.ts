@@ -29,10 +29,12 @@
 // cannot subsequently be corrected, because operations.pipeline_job_run carries
 // the append-only guard and no role holds UPDATE on it.
 //
-// What is NOT lost: a failure still produces an operations.failure row, which is
-// append-only and works. The terminal state of a failed job is therefore
-// recorded — just in `failure` rather than in `outcome`. Success is the absence
-// of a failure against the job.
+// The consequence — that the outcome could not subsequently be recorded — WAS
+// finding M-1, and migration 019 resolves it without weakening anything: the
+// terminal state is APPENDED to operations.pipeline_job_run_completion using the
+// ordinal-succession pattern A.2 already established for snapshot outcomes.
+// The job row stays RUNNING for ever, which is now a true statement about an
+// immutable initial state rather than a permanent lie about a finished job.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg';
@@ -44,10 +46,10 @@ import {
   type JobRunRef,
 } from '../db/tx';
 import {
+  appendCompletion,
   ensureImplicitRun,
   noteJobOutcome,
   operationalNow,
-  tryCloseRow,
   type PipelineRunRef,
 } from './run';
 import { recordFailure } from './failure';
@@ -135,10 +137,11 @@ export const operationalJobLifecycle: JobLifecycle = {
     if (!ref) return;
     noteJobOutcome(outcome);
 
-    // Attempted, not assumed. tryCloseRow probes the capability once and never
-    // throws — see finding M-1. If the architecture owner corrects the defect,
-    // this begins working with no code change here.
-    const closed = await tryCloseRow(
+    // APPENDED, not updated. The job row itself is never touched again — it
+    // carries the append-only guard and stays RUNNING for ever, which is now a
+    // true statement about the row rather than a lie about the job. The terminal
+    // state lives in operations.pipeline_job_run_completion (migration 019).
+    const completed = await appendCompletion(
       control,
       'pipeline_job_run',
       ref.id,
@@ -149,7 +152,7 @@ export const operationalJobLifecycle: JobLifecycle = {
     const implicit = implicitRuns.get(ref.id);
     if (implicit) {
       implicitRuns.delete(ref.id);
-      await tryCloseRow(
+      await appendCompletion(
         control,
         'pipeline_run',
         implicit.id,
@@ -159,8 +162,8 @@ export const operationalJobLifecycle: JobLifecycle = {
     }
 
     logger.debug(
-      { role: ctx.role, jobKey: ctx.jobKey, jobRunId: ref.id, outcome, closed },
-      'v2: job run closed'
+      { role: ctx.role, jobKey: ctx.jobKey, jobRunId: ref.id, outcome, completed },
+      'v2: job run completed'
     );
   },
 

@@ -21,11 +21,14 @@ export {
   insertPipelineRun,
   ensureImplicitRun,
   codeRevision,
-  runCloseCapability,
+  operationalNow,
+  appendCompletion,
+  currentCompletion,
   type PipelineRunRef,
   type PipelineRunOptions,
   type TriggerKind,
   type RunOutcome,
+  type TerminalRunOutcome,
 } from './run';
 
 export {

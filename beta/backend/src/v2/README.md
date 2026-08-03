@@ -2,7 +2,7 @@
 
 Implementation of the V2 application against the approved database architecture, built **alongside** V1 per the strangler strategy of Phase 8 §1.3.
 
-**Status: S-1 and S-2 complete.** Nothing beyond S-2 is implemented.
+**Status: S-1 and S-2 complete, all S-2 findings closed.** Nothing beyond S-2 is implemented.
 
 ## What exists
 
@@ -29,7 +29,9 @@ Not one V1 source file is modified. `src/db/client.ts` and its `supabase-js` cli
 
 **4. Anything referencing a job run must call `requireJobRun()`.** `snapshot.match_snapshot` pairs compositely on `(pipeline_job_run_id, pipeline_job_run_occurred_at)` and the both-or-neither CHECK rejects a partial reference (P-04). With S-2 installed this now returns a real attribution; without `installOperationalLayer()` it still fails with a message naming the missing call.
 
-**5. Never send a database-generated `timestamptz` back as half of a key.** PostgreSQL stores microseconds; a JS `Date` carries milliseconds, so the round trip truncates and the composite key matches nothing. Supply the instant from the application — `operations/run.ts:operationalNow()`. This cost a full debugging cycle in S-2 and is invisible in the DDL; see the implementation note in `docs/db-v2/16-phase8-s2-migration-findings.md`.
+**5. ER-01 — timestamp precision.** Any timestamp participating in a **composite key**, a **foreign key** or a **partition key** must either (a) originate from an application-controlled value, or (b) remain serialised without JavaScript `Date` conversion. **Never** `database timestamptz → JS Date → database key comparison`. PostgreSQL stores microseconds; a JS `Date` carries milliseconds, so the round trip truncates and the key matches nothing. Supply the instant from the application — `operations/run.ts:operationalNow()`. This binds every later subsystem, **S-7 above all**, whose sealing writes carry the job run's instant into `snapshot.match_snapshot` under P-04.
+
+**7. Terminal state is appended, never updated.** `operations.pipeline_run` and `pipeline_job_run` stay `RUNNING` for ever — that is their immutable initial state. Outcome and duration live in `pipeline_run_completion` / `pipeline_job_run_completion` under ordinal succession (migration 019, the A.2 pattern). Read current state from `operations.v_pipeline_run_current`.
 
 **6. Connection arithmetic.** An attributed run holds **two** connections at steady state (control + work). N concurrent pipelines need 2N. The pipeline-run connection is acquired only to open and to close, deliberately — holding it for the body cost three per pipeline and deadlocked against the small pools of R-05.
 
@@ -148,21 +150,18 @@ opens a `pipeline_job_run`, executes the business transaction, and records the
 outcome — with the lifecycle on a connection that survives a rollback of the work
 it describes. **S-1's public contract is unchanged.**
 
-Five migration findings were produced while implementing S-2 and are recorded in
-[`docs/db-v2/16-phase8-s2-migration-findings.md`](../../../../docs/db-v2/16-phase8-s2-migration-findings.md).
-Two need a decision before production:
+Five migration findings were produced while implementing S-2
+([document 16](../../../../docs/db-v2/16-phase8-s2-migration-findings.md)) and
+**all five are now closed**
+([document 17](../../../../docs/db-v2/17-phase8-s2-resolution.md)):
 
-- **M-1 (blocking)** — run and job rows carry the append-only guard and no UPDATE
-  grant, so `outcome` is permanently `RUNNING` and `ended_at` is never set. Run
-  outcome and duration are therefore not recorded. The layer probes the capability
-  once and starts working the moment the defect is corrected.
-- **M-2** — `pt_platform_admin` holds SELECT only on `operations` and cannot write
-  a failure resolution, so triage must currently be performed by a pipeline role.
-
-Three need no schema change and are recorded so the divergence is not mistaken for
-a shortcut: **M-3** (`write_record` shape), **M-4** (`api_usage` is a window
-aggregate), **M-5** (`pipeline_schedule` does not exist — pg_cron owns schedule
-definitions per §8.3).
+- **M-1** — resolved by migration `019`, Correction B. Terminal state is appended
+  to `pipeline_run_completion` / `pipeline_job_run_completion` under ordinal
+  succession, the pattern A.2 already established for snapshot outcomes. No guard
+  weakened, no `UPDATE` granted, `RUNNING` remains the immutable initial state.
+- **M-2** — resolved by migration `019`. `pt_platform_admin` holds `INSERT` on
+  `operations.failure_resolution`, and `INSERT` alone.
+- **M-3, M-4, M-5** — closed as documentation clarifications; no schema change.
 
 ## Next: S-3 — Vocabulary & registry seeding
 
