@@ -117,7 +117,7 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | S-2 Operational layer | **Complete**, all findings closed | `beta/backend/src/v2/operations/` |
 | S-3 Vocabulary & registry seeding | **Complete** | `beta/backend/src/v2/seed/` |
 | S-4 Ingestion foundation | **Complete** | `beta/backend/src/v2/ingestion/` |
-| S-5 Feature calculation | **Decisions closed, ready for coding** — not implemented | [docs 20](./20-phase8-s5-feature-architecture.md), [21](./21-phase8-s5-implementation-specification.md), [22](./22-phase8-s5-implementation-blocked.md), [23](./23-phase8-s5-decision-record.md) |
+| S-5 Feature calculation | **Implemented** — one guarantee blocked by finding S5-5 | `beta/backend/src/v2/feature/` · [docs 20](./20-phase8-s5-feature-architecture.md)–[24](./24-phase8-s5-schema-defect.md) |
 | S-6 onward | Not started | — |
 
 | # | Document | Contents |
@@ -130,6 +130,7 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | 21 | [S-5 Implementation Specification](./21-phase8-s5-implementation-specification.md) | **The implementation contract.** All six decisions resolved · `squad_stability` deferred, six features ship · deterministic replay requirements · order-derivation mutation test · ambiguity review · seven-invariant compliance check · finding responses · implementation readiness |
 | 22 | [S-5 Implementation Blocked](./22-phase8-s5-implementation-blocked.md) | **Resolved.** The version-semantics conflict found before coding: `feature_version` 1.0.0 claims a V1 carry-across the spec contradicts · per-feature evidence · why congestion was jointly unsatisfiable |
 | 23 | [S-5 Decision Record](./23-phase8-s5-decision-record.md) | **Final ruling.** DECISION A · readiness weights and normalisation · window precedence · index scale · composite sampling as `MIN(consumed)` · the two registry amendments and the role correction |
+| 24 | [S-5 Schema Defect (S5-5)](./24-phase8-s5-schema-defect.md) | **Blocking finding.** The feature-value business identity cannot detect a duplicate — a plain UNIQUE whose key columns are forced NULL · evidence · blast radius across seven relations · proposed correction |
 
 **All five findings are closed.** M-1 — the blocking one, where `pipeline_run` and `pipeline_job_run` could never leave `RUNNING` because both carry the append-only guard and no role holds UPDATE — is resolved by **migration 019** using Correction B: terminal state is *appended* to a completion companion under ordinal succession, the shape A.2 already uses for snapshot outcome revision. No guard was weakened, no `UPDATE` was granted, and `RUNNING` remains the immutable initial state. M-2 is resolved by a single `INSERT` grant. M-3, M-4 and M-5 are closed as documentation clarifications — in each the approved schema was already right.
 

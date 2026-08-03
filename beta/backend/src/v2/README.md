@@ -2,7 +2,7 @@
 
 Implementation of the V2 application against the approved database architecture, built **alongside** V1 per the strangler strategy of Phase 8 §1.3.
 
-**Status: S-1 through S-4 complete, all S-2 findings closed.** Nothing beyond S-4 is implemented.
+**Status: S-1 through S-5 implemented.** S-5 is complete apart from idempotency, which is blocked by a schema defect (finding S5-5) no application code can fix. Nothing beyond S-5 is implemented.
 
 ## What exists
 
@@ -17,6 +17,7 @@ Implementation of the V2 application against the approved database architecture,
 | `operations/` | S-2 | Pipeline runs, job lifecycle, write records, failures, API usage, schedules |
 | `seed/` | S-3 | Idempotent bootstrap of the governed vocabularies and registries |
 | `ingestion/` | S-4 | Provider transport, quota accounting, mapping, and the football writers |
+| `feature/` | S-5 | Registry loading, four calculators, exact arithmetic, and the append-only feature writers |
 
 ## V1 is untouched
 
@@ -209,6 +210,30 @@ budget; `PT_V2_PROVIDER_TIMEOUT_MS`, `PT_V2_PROVIDER_DAILY_QUOTA` and
 deliberately not reused — V2 must be deployable without inheriting V1
 environment.
 
-## Next: S-5 — Feature calculation
+## S-5 — Feature calculation
 
-Not started. S-4 is complete and nothing beyond it has been implemented.
+```bash
+npm run feature:v2                        # forward
+npm run feature:v2 -- replay --from … --to …
+npm run feature:v2 -- verify
+```
+
+Six features across four calculators, `ALL_COMPETITIONS` only, four snapshot
+points per fixture. Full detail in [`feature/README.md`](./feature/README.md).
+
+**Execution order is derived from `feature_dependency`, never written down** —
+proven by a mutation test that inserts an edge and watches a calculator move
+between stages.
+
+**No JavaScript `number` reaches a stored value.** Exact bigint-scaled decimal
+throughout, rounded once at the write boundary.
+
+**⚠ Idempotency is blocked by finding S5-5** — the feature-value business
+identity is a plain `UNIQUE` whose key columns are forced NULL, so it can never
+detect a duplicate. Recorded in
+[document 24](../../../../docs/db-v2/24-phase8-s5-schema-defect.md). Do not add
+an application-side existence check to work around it.
+
+## Next: S-6 — Module evaluation
+
+Not started.
