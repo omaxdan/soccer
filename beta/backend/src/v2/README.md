@@ -2,7 +2,7 @@
 
 Implementation of the V2 application against the approved database architecture, built **alongside** V1 per the strangler strategy of Phase 8 §1.3.
 
-**Status: S-1 (Connection & Credential Layer) complete.** Nothing beyond S-1 is implemented.
+**Status: S-1 and S-2 complete.** Nothing beyond S-2 is implemented.
 
 ## What exists
 
@@ -27,7 +27,11 @@ Not one V1 source file is modified. `src/db/client.ts` and its `supabase-js` cli
 
 **3. A constraint violation is never retried.** It means the application attempted something the architecture forbids. `withRun` lets it propagate; §8.2 is explicit that retrying repeats it.
 
-**4. Anything referencing a job run must call `requireJobRun()`.** `snapshot.match_snapshot` pairs compositely on `(pipeline_job_run_id, pipeline_job_run_occurred_at)` and the both-or-neither CHECK rejects a partial reference (P-04). Until S-2 installs a real lifecycle, `withRun` supplies a null job reference and `requireJobRun` fails with a message naming the missing subsystem.
+**4. Anything referencing a job run must call `requireJobRun()`.** `snapshot.match_snapshot` pairs compositely on `(pipeline_job_run_id, pipeline_job_run_occurred_at)` and the both-or-neither CHECK rejects a partial reference (P-04). With S-2 installed this now returns a real attribution; without `installOperationalLayer()` it still fails with a message naming the missing call.
+
+**5. Never send a database-generated `timestamptz` back as half of a key.** PostgreSQL stores microseconds; a JS `Date` carries milliseconds, so the round trip truncates and the composite key matches nothing. Supply the instant from the application — `operations/run.ts:operationalNow()`. This cost a full debugging cycle in S-2 and is invisible in the DDL; see the implementation note in `docs/db-v2/16-phase8-s2-migration-findings.md`.
+
+**6. Connection arithmetic.** An attributed run holds **two** connections at steady state (control + work). N concurrent pipelines need 2N. The pipeline-run connection is acquired only to open and to close, deliberately — holding it for the body cost three per pipeline and deadlocked against the small pools of R-05.
 
 ## Environment variables
 
@@ -120,8 +124,46 @@ npm test
 
 The integration suites **skip** rather than fail when no V2 database is configured, so V2 work never blocks V1 work. `assertCiHasDatabase()` fails the run when `CI` is set and no database is present, because a skipped suite is not a passing suite (§12.1).
 
-Verified against PostgreSQL 16 with the full migration set applied: **96 tests, 96 passing**, all seven roles connecting, both conformance assertions returning 0.
+Verified against PostgreSQL 16 with the full migration set applied: **130 tests, 130 passing** (64 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, and operational history is proven to survive rollback of the work it describes.
 
-## Next: S-2 — Operational layer
+## S-2 — Operational layer
 
-`db/tx.ts` exposes the seam. S-2 implements `JobLifecycle` against `operations.pipeline_run`, `pipeline_job_run`, `write_record` and `failure`, and installs it with `registerJobLifecycle()`. **Nothing can be sealed until that lands** — S-7 depends on job runs existing, and `requireJobRun()` enforces the dependency at runtime.
+Install once, at process start, before any `withRun()`:
+
+```ts
+import { installOperationalLayer, withPipelineRun } from './v2/operations';
+
+installOperationalLayer();
+
+await withPipelineRun('pt_pipeline_ingestion', 'nightly.ingest', async () => {
+  await withRun('pt_pipeline_ingestion', 'ingest.fixtures', async (tx, job) => {
+    const attribution = requireJobRun(job, 'Ingesting fixtures');
+    // …work, all in one transaction…
+  });
+});
+```
+
+After installation `withRun` opens a `pipeline_run` (or joins the ambient one),
+opens a `pipeline_job_run`, executes the business transaction, and records the
+outcome — with the lifecycle on a connection that survives a rollback of the work
+it describes. **S-1's public contract is unchanged.**
+
+Five migration findings were produced while implementing S-2 and are recorded in
+[`docs/db-v2/16-phase8-s2-migration-findings.md`](../../../../docs/db-v2/16-phase8-s2-migration-findings.md).
+Two need a decision before production:
+
+- **M-1 (blocking)** — run and job rows carry the append-only guard and no UPDATE
+  grant, so `outcome` is permanently `RUNNING` and `ended_at` is never set. Run
+  outcome and duration are therefore not recorded. The layer probes the capability
+  once and starts working the moment the defect is corrected.
+- **M-2** — `pt_platform_admin` holds SELECT only on `operations` and cannot write
+  a failure resolution, so triage must currently be performed by a pipeline role.
+
+Three need no schema change and are recorded so the divergence is not mistaken for
+a shortcut: **M-3** (`write_record` shape), **M-4** (`api_usage` is a window
+aggregate), **M-5** (`pipeline_schedule` does not exist — pg_cron owns schedule
+definitions per §8.3).
+
+## Next: S-3 — Vocabulary & registry seeding
+
+Not started. S-2 is complete and nothing beyond it has been implemented.

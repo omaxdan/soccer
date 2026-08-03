@@ -109,6 +109,20 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 
 **Readiness 7/10 — ready to begin, with one blocking prerequisite.** The thirteen `mv_*` definitions that exist only in production must be recovered first; they feed the module layer and hold the effort estimate at ±40% until closed. Estimated **55–79 engineer-weeks**, ≈36 calendar weeks across six phases with four engineers.
 
+### Implementation progress
+
+| Subsystem | Status | Location |
+|---|---|---|
+| S-1 Connection & credential layer | **Complete** | `beta/backend/src/v2/db/` |
+| S-2 Operational layer | **Complete** | `beta/backend/src/v2/operations/` |
+| S-3 onward | Not started | — |
+
+| # | Document | Contents |
+|---|---|---|
+| 16 | [S-2 Migration Findings](./16-phase8-s2-migration-findings.md) | Five inconsistencies found by executing the operational layer against the approved schema, with evidence, effect, and candidate corrections |
+
+**M-1 is blocking before production:** `operations.pipeline_run` and `pipeline_job_run` carry the append-only guard and no role holds UPDATE on them, so a run inserted as `RUNNING` can never be transitioned. Run outcome and duration are not recorded. Inserting at completion instead is foreclosed by P-04, which requires the job run to be committed *during* the work so `snapshot.match_snapshot` can reference it. Recommended correction: an append-only completion companion, the shape A.2 already uses for snapshot outcome revision.
+
 Two costs are stated plainly rather than discovered later: the deep history V2 is designed to hold **does not exist** for the 17 team-level tables V1 overwrote in place, so point-in-time reconstruction begins at cut-over; and calibration must be re-baselined, so modules will correctly report *unverified* where V1 displayed a rate marked `provenance: "unreplayed"` by the code that produced it.
 
 ## Sources analysed
