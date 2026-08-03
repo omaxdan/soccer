@@ -9,15 +9,15 @@ npm run feature:v2 -- replay --from 2026-09-01 --to 2026-09-30
 npm run feature:v2 -- verify                        # the four temporary controls
 ```
 
-> ### ⚠ Known limitation — finding S5-5
+> ### Idempotency is enforced by PostgreSQL — finding S5-5 is resolved
 >
-> **Replay B cannot pass until the schema replaces nullable UNIQUE constraints with NULLS NOT DISTINCT.**
+> Implementation uncovered a schema defect: `uq_feature_value__subject_context_definition_asof_version` was a plain `UNIQUE`, and five of its eleven key columns are *forced* NULL by the table's own CHECK constraints. Under PostgreSQL's default `NULLS DISTINCT` it could never detect a duplicate, so `ON CONFLICT DO NOTHING` had nothing to catch.
 >
-> `uq_feature_value__subject_context_definition_asof_version` is a plain `UNIQUE` without `NULLS NOT DISTINCT`, and five of its eleven key columns are *forced* NULL by the table's own CHECK constraints. Under PostgreSQL's default `NULLS DISTINCT` it can never detect a duplicate, so **`ON CONFLICT DO NOTHING` has nothing to catch and re-running is not idempotent**.
+> **Corrected by migration `020_null_distinct_identities.sql`.** The constraint now carries `NULLS NOT DISTINCT`, along with six others of the same shape; two single-column alternate keys were deliberately left alone. **No application code changed** — the write path already named the constraint, it simply named one that could not match.
 >
-> This is a **schema-owner issue**, outside S-5 ownership. It is recorded in [document 24](../../../../docs/db-v2/24-phase8-s5-schema-defect.md) with evidence, blast radius and a proposed correction. Two tests are marked `todo` against it and still assert what the specification requires.
+> The finding and its evidence are retained in [document 24](../../../../docs/db-v2/24-phase8-s5-schema-defect.md).
 >
-> **Do not work around it in application code.** No existence check, no `SELECT`-then-`INSERT`, no uniqueness emulated in TypeScript: a check-then-insert is a race and the constraint is not, and any of those would duplicate a database rule while hiding the defect.
+> **The rule that came out of it still binds.** Idempotency is the database's to enforce, never the application's: no existence check, no `SELECT`-then-`INSERT`, no uniqueness emulated in TypeScript. A check-then-insert is a race and a constraint is not.
 
 ## Six features, four calculators
 
@@ -71,11 +71,11 @@ Two scenarios, and they have different statuses.
 
 Values, lineage, provenance classes, sample counts, skipped counts and execution order are all identical. **`calculated_at` is the only permitted difference**, and `id` is excluded from comparison because it is drawn from a sequence that does not reset — identity is the business key, and the business key is compared in full. Lineage is compared by the **natural keys of both endpoints**, never by surrogate id, for the same reason.
 
-**Replay B — a second run over unchanged reality writes zero rows. ❌ CANNOT PASS.**
+**Replay B — a second run over unchanged reality writes zero rows. ✅ PASSES.**
 
-Blocked by finding S5-5 above. The business identity cannot detect a duplicate, so `ON CONFLICT DO NOTHING` never fires and every re-run appends a complete duplicate set. Because `feature_value` is append-only and `pt_pipeline_feature` holds no `DELETE`, those duplicates would be permanent.
+Enforced by the business identity itself, which is the only place it belongs. A re-run conflicts on `uq_feature_value__subject_context_definition_asof_version` and writes nothing; every candidate is reported skipped, and that count is diagnostic rather than noise.
 
-The test remains in the suite, marked `todo`, still asserting what the specification requires. It should begin passing the moment the schema is corrected — at which point the characterisation test that documents the defect (test 102) will start failing, which is the intended signal that both should be removed.
+Verified at the database as well as through the suite: a multi-row batch replayed returns `INSERT 0 2` then `INSERT 0 0`. Two properties were checked alongside it, because `NULLS NOT DISTINCT` must not over-merge — **two feature versions of one definition still coexist** at the same subject and instant, and **`ALL_COMPETITIONS` and `COMPETITION_SCOPED` values remain distinct**. Neither can collide, because the discriminator that determines the NULL pattern is itself NOT NULL and in the key.
 
 ## Append-only
 
@@ -147,4 +147,4 @@ npm test                    # 181 declaration tests, no database
 PT_V2_DB_HOST=… npm test    # plus persistence, privilege, lifecycle, leakage, replay
 ```
 
-103 tests in this subsystem: **101 pass, 0 fail, 2 todo** (blocked by S5-5). Six mutation tests: wall clock, hard-coded ordering, dependency-graph derivation, bare `ON CONFLICT`, double rounding, provenance floor.
+102 tests in this subsystem: **102 pass, 0 fail, 0 todo, 0 skipped**. Six mutation tests: wall clock, hard-coded ordering, dependency-graph derivation, bare `ON CONFLICT`, double rounding, provenance floor.

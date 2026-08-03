@@ -1626,20 +1626,7 @@ describe('feature pipeline against a V2 database', { skip: !hasDatabase }, () =>
     assert.ok(first.values.length > 0, 'the comparison must not be vacuous');
   });
 
-  // ⚠ EXPECTED TO FAIL — finding S5-5, and it MUST NOT be worked around.
-  //
-  // `uq_feature_value__subject_context_definition_asof_version` is a plain
-  // UNIQUE without NULLS NOT DISTINCT. Five of its eleven key columns are NULL
-  // for every TEAM value at ALL_COMPETITIONS — and are FORCED null by
-  // ck_feature_value__subject_exclusive and ck_feature_value__context_edition_
-  // conditional. Under PostgreSQL's default NULLS DISTINCT the constraint can
-  // therefore never detect a duplicate, so ON CONFLICT DO NOTHING has nothing to
-  // catch and idempotency is unattainable.
-  //
-  // Marked todo rather than deleted or weakened: the assertion below is what the
-  // approved specification REQUIRES, and it should start passing the moment the
-  // schema is corrected. See docs/db-v2/24-phase8-s5-schema-defect.md.
-  it('98. REPLAY B — a second run over unchanged reality writes nothing', { todo: 'blocked by finding S5-5' }, async () => {
+  it('98. REPLAY B — a second run over unchanged reality writes nothing', async () => {
     await inRolledBackTx(async (tx) => {
       const calculatedAt = new Date('2026-11-10T13:00:00Z');
       const first = await writeStageOne(tx, REFERENCE_AS_OF, calculatedAt);
@@ -1651,7 +1638,7 @@ describe('feature pipeline against a V2 database', { skip: !hasDatabase }, () =>
     });
   });
 
-  it('99. calculated_at is not part of the business identity', { todo: 'blocked by finding S5-5' }, async () => {
+  it('99. calculated_at is not part of the business identity', async () => {
     await inRolledBackTx(async (tx) => {
       await writeStageOne(tx, REFERENCE_AS_OF, new Date('2026-11-10T13:00:00Z'));
       await writeStageOne(tx, REFERENCE_AS_OF, new Date('2026-11-12T13:00:00Z'));
@@ -1722,51 +1709,7 @@ describe('feature pipeline against a V2 database', { skip: !hasDatabase }, () =>
     });
   });
 
-  it('102. FINDING S5-5 — the business identity cannot detect a duplicate', async () => {
-    // Characterises a SCHEMA DEFECT, and is the evidence behind tests 98 and 99
-    // being marked todo. It asserts the behaviour that exists, not the behaviour
-    // that is required — so it will FAIL when the schema is corrected, which is
-    // exactly the signal wanted: the fix must be accompanied by removing this
-    // test and un-marking those two.
-    await inRolledBackTx(async (tx) => {
-      const { rows: definitions } = await tx.query<{ constraint_def: string }>(
-        `SELECT pg_get_constraintdef(oid) AS constraint_def
-           FROM pg_constraint
-          WHERE conname = 'uq_feature_value__subject_context_definition_asof_version'`
-      );
-      assert.ok(
-        !definitions[0].constraint_def.includes('NULLS NOT DISTINCT'),
-        'if this now says NULLS NOT DISTINCT, the defect is fixed — remove this test'
-      );
-
-      const registry = await loadRegistry(tx);
-      const rest = registry.definitionsByKey.get('team.rest_advantage')!;
-      const values = [
-        REFERENCE_AS_OF,
-        rest.id,
-        rest.versionId,
-        world.alphaTeamId,
-      ];
-      const insert = `INSERT INTO feature.feature_value
-           (as_of, feature_definition_id, feature_version_id, subject_kind_code,
-            subject_team_id, context_kind_code, value, provenance_class_code,
-            sample_observation_count, sample_meets_threshold)
-         VALUES ($1, $2::bigint, $3::bigint, 'TEAM', $4::bigint, 'ALL_COMPETITIONS',
-                 2.0, 'OBSERVED', 1, true)
-         ON CONFLICT ON CONSTRAINT uq_feature_value__subject_context_definition_asof_version
-         DO NOTHING`;
-
-      const first = await tx.query(insert, values);
-      const second = await tx.query(insert, values);
-
-      assert.equal(first.rowCount, 1);
-      // The second insert SHOULD be skipped. It is not, because five NULL key
-      // columns make the two rows unequal under NULLS DISTINCT.
-      assert.equal(second.rowCount, 1, 'documents the defect: the duplicate is accepted');
-    });
-  });
-
-  it('103. the seeded world is untouched by the feature role', async () => {
+  it('102. the seeded world is untouched by the feature role', async () => {
     // Everything above rolled back or wrote only to `feature`. Reality is
     // exactly as ingestion left it — which the privilege model guarantees, and
     // this confirms end to end.

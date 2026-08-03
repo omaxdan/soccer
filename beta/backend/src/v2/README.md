@@ -2,7 +2,7 @@
 
 Implementation of the V2 application against the approved database architecture, built **alongside** V1 per the strangler strategy of Phase 8 §1.3.
 
-**Status: S-1 through S-5 implemented.** S-5 is complete apart from idempotency, which is blocked by a schema defect (finding S5-5) no application code can fix. Nothing beyond S-5 is implemented.
+**Status: S-1 through S-5 complete.** Nothing beyond S-5 is implemented.
 
 ## What exists
 
@@ -130,7 +130,7 @@ npm test
 
 The integration suites **skip** rather than fail when no V2 database is configured, so V2 work never blocks V1 work. `assertCiHasDatabase()` fails the run when `CI` is set and no database is present, because a skipped suite is not a passing suite (§12.1).
 
-Verified against PostgreSQL 16 with the full migration set applied: **219 tests, 219 passing** (109 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, operational history is proven to survive rollback of the work it describes, the seed is proven idempotent by id and `created_at` fingerprint rather than by row count, and the ingestion writers are driven end to end against a real database through a stubbed provider.
+Verified against PostgreSQL 16 with the full migration set applied: **321 tests, 321 passing** (181 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, operational history is proven to survive rollback of the work it describes, the seed is proven idempotent by id and `created_at` fingerprint rather than by row count, and the ingestion writers are driven end to end against a real database through a stubbed provider.
 
 ## S-2 — Operational layer
 
@@ -228,11 +228,16 @@ between stages.
 **No JavaScript `number` reaches a stored value.** Exact bigint-scaled decimal
 throughout, rounded once at the write boundary.
 
-**⚠ Idempotency is blocked by finding S5-5** — the feature-value business
-identity is a plain `UNIQUE` whose key columns are forced NULL, so it can never
-detect a duplicate. Recorded in
-[document 24](../../../../docs/db-v2/24-phase8-s5-schema-defect.md). Do not add
-an application-side existence check to work around it.
+**Idempotency is enforced by PostgreSQL.** Implementation uncovered a schema
+defect — the feature-value business identity was a plain `UNIQUE` whose key
+columns are forced NULL, so it could never match (finding S5-5). Corrected by
+migration `020_null_distinct_identities.sql` with no application change; the
+write path already named the constraint. Retained in
+[document 24](../../../../docs/db-v2/24-phase8-s5-schema-defect.md).
+
+**The rule it produced still binds:** idempotency belongs to the database. No
+existence check, no `SELECT`-then-`INSERT`, no uniqueness emulated in
+TypeScript — a check-then-insert is a race and a constraint is not.
 
 ## Next: S-6 — Module evaluation
 

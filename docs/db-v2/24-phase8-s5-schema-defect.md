@@ -4,7 +4,7 @@
 
 **A genuine contradiction with the live database schema, found by executing the implementation. Reported rather than worked around, per the S-5 implementation brief.**
 
-S-5 is **implemented and passing** apart from this. 103 tests: 101 pass, 0 fail, 2 marked `todo` against this finding.
+*Historical record. The finding below was live when written; migration 020 resolved it. S-5 now runs 102/102 with no `todo` markers.*
 
 ---
 
@@ -113,16 +113,16 @@ Two adjacent questions worth settling at the same time, both outside S-5's autho
 
 ## 8. Status of S-5
 
-**Implemented, and complete apart from this.**
+**Complete.** The table below records the state when the finding was raised.
 
 | | |
 |---|---|
 | Source files | 18, exactly the approved layout. No `squadContinuity.ts` |
 | Features calculated | 6. `team.squad_stability` registered and never touched |
-| Tests | 103 — 101 pass, 0 fail, **2 todo against this finding** |
-| Full backend suite | 322 tests, 320 pass, 0 fail, 2 todo |
+| Tests | 103 — 101 pass, 0 fail, 2 todo *(now 102 — 102 pass, 0 todo)* |
+| Full backend suite | 322 tests, 320 pass, 0 fail, 2 todo *(now 321 — 321 pass)* |
 | Without a database | 181 tests, 181 pass |
 
 Everything else specified is built and verified: derived execution order, exact arithmetic, single rounding boundary, provenance floor, `MIN(consumed)` sampling, lineage for readiness alone, the four temporary verification controls, privilege and lifecycle posture, leakage bounds, Replay A, and all six mutation tests.
 
-**The one guarantee that cannot be delivered is idempotency, and it cannot be delivered by any amount of application code.**
+**Idempotency could not be delivered by any amount of application code — which is why the correction was a migration and not a workaround. It is now enforced by PostgreSQL.**
