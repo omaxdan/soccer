@@ -99,6 +99,18 @@ Three defects are live today, independent of V2: admin-granted subscriptions nev
 
 Strengths to preserve through the rewrite: the dependency-ordered idempotent `process:all-db` pipeline, `confidenceBand.ts`'s byte-identical published/backtested formula guarantee, `auth.getUser()` over `getSession()`, and a clean server/client boundary that keeps module logic and entitlement context out of the browser bundle.
 
+## Phase 8 — Application migration specification
+
+| # | Document | Contents |
+|---|---|---|
+| 15 | [Phase 8 Application Migration & Implementation Specification](./15-phase8-application-migration-specification.md) | Executive summary · dependency graph · backend rewrite plan by subsystem · page-by-page frontend plan · API layer migration · module system migration · snapshot migration · operational layer · security · performance · file-level worklist for all 162 files · testing strategy · phased deployment · risk register · readiness assessment |
+
+The authoritative engineering guide for the V2 rewrite. **Strategy: strangler with a shadow pipeline** — V2 runs alongside V1, new writers are built beside the existing ones rather than editing them, and the read path cuts over page by page. The rollback boundary is the read path, which is what makes a rewrite of this size executable; decommissioning V1 is the one-way door and is separately gated.
+
+**Readiness 7/10 — ready to begin, with one blocking prerequisite.** The thirteen `mv_*` definitions that exist only in production must be recovered first; they feed the module layer and hold the effort estimate at ±40% until closed. Estimated **55–79 engineer-weeks**, ≈36 calendar weeks across six phases with four engineers.
+
+Two costs are stated plainly rather than discovered later: the deep history V2 is designed to hold **does not exist** for the 17 team-level tables V1 overwrote in place, so point-in-time reconstruction begins at cut-over; and calibration must be re-baselined, so modules will correctly report *unverified* where V1 displayed a rate marked `provenance: "unreplayed"` by the code that produced it.
+
 ## Sources analysed
 
 | Source | Detail |
