@@ -117,7 +117,8 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | S-2 Operational layer | **Complete**, all findings closed | `beta/backend/src/v2/operations/` |
 | S-3 Vocabulary & registry seeding | **Complete** | `beta/backend/src/v2/seed/` |
 | S-4 Ingestion foundation | **Complete** | `beta/backend/src/v2/ingestion/` |
-| S-5 onward | Not started | — |
+| S-5 Feature calculation | **Architecture only** — not implemented | [doc 20](./20-phase8-s5-feature-architecture.md) |
+| S-6 onward | Not started | — |
 
 | # | Document | Contents |
 |---|---|---|
@@ -125,6 +126,7 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | 17 | [S-2 Resolution](./17-phase8-s2-resolution.md) | Closure of all five findings · migration 019 · engineering rule ER-01 · regression tests · verification |
 | 18 | [S-3 Seed Report](./18-phase8-s3-seed-report.md) | Vocabulary and registry inventory · the three approved decisions as implemented · finding S3-1 · what is deliberately not seeded · defects found by execution · verification |
 | 19 | [S-4 Ingestion Inventory & Report](./19-phase8-s4-ingestion-inventory.md) | Provider sources · provider→canonical entity map · foreign key targets · unmapped-value and duplicate handling · provenance requirements · role permissions verified · decisions D-1 to D-3 · finding S4-1 · verification and mutation testing |
+| 20 | [S-5 Feature Calculation Architecture](./20-phase8-s5-feature-architecture.md) | Feature and source inventory · dependency graph and derived ordering · duplicate handling and supersession · provenance model · security and constraint verification · scope and deferrals · six open decisions · findings S5-1 to S5-4 · verification plan · proposed layout |
 
 **All five findings are closed.** M-1 — the blocking one, where `pipeline_run` and `pipeline_job_run` could never leave `RUNNING` because both carry the append-only guard and no role holds UPDATE — is resolved by **migration 019** using Correction B: terminal state is *appended* to a completion companion under ordinal succession, the shape A.2 already uses for snapshot outcome revision. No guard was weakened, no `UPDATE` was granted, and `RUNNING` remains the immutable initial state. M-2 is resolved by a single `INSERT` grant. M-3, M-4 and M-5 are closed as documentation clarifications — in each the approved schema was already right.
 
@@ -141,6 +143,10 @@ One finding, **S3-1**, is recorded rather than worked around: `pt_platform_admin
 Unmapped values degrade safely and visibly, following the precedent the schema already set with `UNKNOWN` sealing by default: an unmapped country writes NULL and is counted, an unmapped currency **refuses the row**, because `player_valuation.currency_code` is NOT NULL and `minor_unit` makes a substituted currency wrong by orders of magnitude. Nothing creates a vocabulary row. **Finding S4-1**: `SC` (Scotland) collides with Seychelles in ISO 3166-1 and `WA` (Wales) is unassigned — both are football associations occupying ISO-shaped slots, recorded for the schema owner rather than corrected, since the seed has no update path by design.
 
 Two guarantees were **mutation-tested** rather than merely asserted: removing the result-revision append and removing the no-null-overwrite `COALESCE` each made the suite fail, then were restored.
+
+**S-5 is architecture only — no calculator has been written.** The dependency graph has one edge (`readiness_score` consumes `rest_advantage` and `congestion_index`), giving two stages: four independent calculators, then one dependent. Execution order is derived from `feature_dependency` rather than hard-coded, which is the failure V1's fifty-edge implicit graph represents. Supersession is by version, not overwrite — `feature_version_id` sits inside the business identity, so a rule change produces a new row and the old value remains attributed to the rule that made it.
+
+**Two material findings, both proven by execution rather than argued.** **S5-1**: the A.12 provenance propagation trigger *cannot fire* — lineage references its produced value by foreign key, so it can only be written after the value, and the trigger's inner join against lineage therefore always matches zero rows. Demonstrated by inserting an `OBSERVED` value consuming an `ESTIMATED` one and watching it be accepted. The trigger is correctly installed and statement-level on the partitioned parent, so the platform doubt recorded in migration 015 is resolved in the affirmative; the defect is write ordering. **S5-2**: twelve of the fourteen checks registered in `operations.quality_check` have no executable implementation, including the compensating control for S5-1 and the `BLOCKING` acyclicity validation — so `value_scale` and provenance currently rest entirely on the calculating process, with neither prevention nor detection behind them. Neither finding is designed around; both are the schema owner's call.
 
 ## Sources analysed
 
