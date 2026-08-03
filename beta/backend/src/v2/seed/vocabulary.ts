@@ -89,6 +89,19 @@ const CURRENCIES: readonly (readonly [string, string, number, string])[] = [
  * and a vocabulary nobody governs is the V1 pattern this replaces. S-4 adds a
  * code when a competition genuinely requires it, under the same governance.
  *
+ * EXTENDED BY S-4 (decision D-2), 24 -> 51. `config/trackedLeagues.ts` declares
+ * 57 leagues spanning roughly 48 countries, and 27 of them had no code — so a
+ * Ukrainian or South Korean competition would have ingested with a NULL country
+ * and become ungroupable by nation. That is the requirement S-3 anticipated
+ * arriving, and this is the governance it anticipated: a static, reviewed,
+ * ADDITIVE source change. The seed is insert-only, so nothing already seeded is
+ * touched and re-running remains a no-op for the original 24.
+ *
+ * It is emphatically NOT dynamic vocabulary creation. V1 upserted countries from
+ * the provider's category name on every sync (`syncDateMasterFeed.ts:473`), which
+ * is how it accumulated codes nobody governed. Ingestion reads this list and
+ * rejects what it cannot map; it never adds to it.
+ *
  * The CHECK on this relation is `^[A-Z]{2}$`, so alpha-2 is the primary key and
  * alpha-3 is carried alongside for providers that report it.
  */
@@ -117,6 +130,40 @@ const COUNTRIES: readonly (readonly [string, string, string, string])[] = [
   ['JP', 'Japan', 'JPN', 'J1 League.'],
   ['SA', 'Saudi Arabia', 'SAU', 'Saudi Pro League.'],
   ['AU', 'Australia', 'AUS', 'A-League.'],
+
+  // ── Added by S-4 (D-2), for tracked leagues that had no code ──────────────
+  // FOOTBALL ASSOCIATION, NOT AN ISO COUNTRY. Wales has no ISO 3166-1 alpha-2 of
+  // its own — it is the subdivision GB-WLS — but it fields a separate association
+  // and a separate league, which is what this vocabulary is for. 'WA' is
+  // unassigned in ISO 3166-1 today; it is a PLATFORM code occupying an ISO-shaped
+  // slot, exactly as S-3's 'SC' for Scotland already is. See finding S4-1.
+  ['WA', 'Wales', 'WAL', 'Cymru Premier, and Welsh clubs in the English pyramid. Carried separately because the association is distinct from the GB state code, as Scotland already is. Not an ISO country code — see S4-1.'],
+  ['IE', 'Ireland', 'IRL', 'League of Ireland Premier Division.'],
+  ['UA', 'Ukraine', 'UKR', 'Ukrainian Premier League.'],
+  ['RU', 'Russia', 'RUS', 'Russian Premier League.'],
+  ['HR', 'Croatia', 'HRV', 'HNL.'],
+  ['RS', 'Serbia', 'SRB', 'Serbian SuperLiga.'],
+  ['SI', 'Slovenia', 'SVN', 'Slovenian PrvaLiga.'],
+  ['SK', 'Slovakia', 'SVK', 'Slovak Super Liga.'],
+  ['CZ', 'Czechia', 'CZE', 'Czech First League. ISO renamed the country to Czechia; the code is unchanged.'],
+  ['HU', 'Hungary', 'HUN', 'Nemzeti Bajnokság I.'],
+  ['RO', 'Romania', 'ROU', 'Liga I.'],
+  ['BG', 'Bulgaria', 'BGR', 'First Professional League.'],
+  ['CY', 'Cyprus', 'CYP', 'Cypriot First Division.'],
+  ['FI', 'Finland', 'FIN', 'Veikkausliiga.'],
+  ['LT', 'Lithuania', 'LTU', 'A Lyga.'],
+  ['MC', 'Monaco', 'MCO', 'Monégasque club competing in Ligue 1.'],
+  ['AD', 'Andorra', 'AND', 'Andorran club competing in the Spanish pyramid.'],
+  ['LI', 'Liechtenstein', 'LIE', 'Liechtenstein clubs competing in the Swiss pyramid.'],
+  ['CA', 'Canada', 'CAN', 'Canadian clubs in Major League Soccer.'],
+  ['CO', 'Colombia', 'COL', 'Categoría Primera A.'],
+  ['UY', 'Uruguay', 'URY', 'Primera División.'],
+  ['EC', 'Ecuador', 'ECU', 'Serie A.'],
+  ['KR', 'South Korea', 'KOR', 'K League 1.'],
+  ['CN', 'China', 'CHN', 'Chinese Super League.'],
+  ['IN', 'India', 'IND', 'Indian Super League.'],
+  ['EG', 'Egypt', 'EGY', 'Egyptian Premier League.'],
+  ['ZA', 'South Africa', 'ZAF', 'Betway Premiership.'],
 ];
 
 /**
@@ -207,6 +254,25 @@ export async function verifyMigrationVocabularies(tx: PoolClient): Promise<void>
     await assertVocabularyPresent(tx, vocabulary.relation, vocabulary.column, vocabulary.codes);
   }
 }
+
+/**
+ * Codes in this vocabulary that are NOT ISO 3166-1 alpha-2 country codes.
+ *
+ * Both are football ASSOCIATIONS carried separately from the state they sit in,
+ * because each fields its own league and the competition record must name it.
+ * Neither has an alpha-2 of its own — Scotland is GB-SCT and Wales is GB-WLS.
+ *
+ * 'SC' IS A GENUINE COLLISION: in ISO 3166-1 it denotes Seychelles. S-3 seeded it
+ * for Scotland, so the platform cannot later represent Seychelles without a
+ * conflict. Recorded as finding S4-1 rather than corrected here — the seed has no
+ * update path by design, and changing a seeded code is exactly what the
+ * append-only posture forbids. 'WA' is unassigned in ISO today, so it collides
+ * with nothing, but it carries the same caveat.
+ *
+ * Exported so the ingestion mapper and the test suite can both name them without
+ * restating the list.
+ */
+export const NON_ISO_ASSOCIATION_CODES = ['SC', 'WA'] as const;
 
 /** Exposed for the test suite, so expectations are not restated by hand. */
 export const VOCABULARY_COUNTS = {

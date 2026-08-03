@@ -8,7 +8,8 @@
     "cli": "ts-node src/cli.ts",
     "lint:reads": "bash scripts/check-raw-reads.sh",
     "test": "tsc --noEmit && node --test --import tsx \"src/**/*.test.ts\"",
-    "seed:v2": "tsx src/v2/seed/runAll.ts"
+    "seed:v2": "tsx src/v2/seed/runAll.ts",
+    "ingest:v2": "tsx src/v2/ingestion/cli.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

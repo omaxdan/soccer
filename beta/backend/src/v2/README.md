@@ -2,7 +2,7 @@
 
 Implementation of the V2 application against the approved database architecture, built **alongside** V1 per the strangler strategy of Phase 8 §1.3.
 
-**Status: S-1, S-2 and S-3 complete, all S-2 findings closed.** Nothing beyond S-3 is implemented.
+**Status: S-1 through S-4 complete, all S-2 findings closed.** Nothing beyond S-4 is implemented.
 
 ## What exists
 
@@ -16,6 +16,7 @@ Implementation of the V2 application against the approved database architecture,
 | `db/*.test.ts` | S-1 | Connection, permission, transaction and session-persistence suites |
 | `operations/` | S-2 | Pipeline runs, job lifecycle, write records, failures, API usage, schedules |
 | `seed/` | S-3 | Idempotent bootstrap of the governed vocabularies and registries |
+| `ingestion/` | S-4 | Provider transport, quota accounting, mapping, and the football writers |
 
 ## V1 is untouched
 
@@ -128,7 +129,7 @@ npm test
 
 The integration suites **skip** rather than fail when no V2 database is configured, so V2 work never blocks V1 work. `assertCiHasDatabase()` fails the run when `CI` is set and no database is present, because a skipped suite is not a passing suite (§12.1).
 
-Verified against PostgreSQL 16 with the full migration set applied: **161 tests, 161 passing** (71 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, operational history is proven to survive rollback of the work it describes, and the seed is proven idempotent by id and `created_at` fingerprint rather than by row count.
+Verified against PostgreSQL 16 with the full migration set applied: **219 tests, 219 passing** (109 without a database, with the integration suites skipping). All seven roles connect, both conformance assertions return 0, operational history is proven to survive rollback of the work it describes, the seed is proven idempotent by id and `created_at` fingerprint rather than by row count, and the ingestion writers are driven end to end against a real database through a stubbed provider.
 
 ## S-2 — Operational layer
 
@@ -180,6 +181,34 @@ Running it once and running it ten times produce the same rows, the same ids and
 
 One finding, **S3-1**: `pt_platform_admin` holds SELECT on `operations`, so the entitlement stage cannot open a pipeline run and executes unattributed. Recorded, not worked around — an administrative role that could write pipeline runs could write ones that never happened.
 
-## Next: S-4 — Ingestion
+## S-4 — Ingestion foundation
 
-Not started. S-3 is complete and nothing beyond it has been implemented.
+```bash
+npm run ingest:v2                          # today
+npm run ingest:v2 -- --from … --to …       # a bounded range
+```
+
+Writes schema `football` and nothing else, as `pt_pipeline_ingestion` under one
+provider namespace — `SPORTSAPI_API`, a source constant rather than
+configuration. Full detail in [`ingestion/README.md`](./ingestion/README.md);
+inventory, decisions and verification in
+[document 19](../../../../docs/db-v2/19-phase8-s4-ingestion-inventory.md).
+
+**Every stage is attributed.** The ingestion role holds `S` and `I` on
+`operations`, so unlike `pt_platform_admin` under finding S3-1 there is no
+unattributed path here.
+
+**Intelligence cannot be calculated during ingestion.** The role holds no
+`USAGE` on `feature`, `module`, `snapshot` or `calibration`, so the constraint
+holds against a coding mistake and not merely against intent.
+
+**Additional environment variables**, all V2-scoped: `PT_V2_PROVIDER_BASE_URL`
+and `PT_V2_PROVIDER_KEY` are required; `PT_V2_PROVIDER_KEY_2` doubles the daily
+budget; `PT_V2_PROVIDER_TIMEOUT_MS`, `PT_V2_PROVIDER_DAILY_QUOTA` and
+`PT_V2_PROVIDER_MIN_INTERVAL_MS` have defaults. V1's provider configuration is
+deliberately not reused — V2 must be deployable without inheriting V1
+environment.
+
+## Next: S-5 — Feature calculation
+
+Not started. S-4 is complete and nothing beyond it has been implemented.
