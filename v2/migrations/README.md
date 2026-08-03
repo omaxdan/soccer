@@ -36,6 +36,7 @@ topological ordering of the reference graph.
 | 017 | `017_views.sql` | Read models, views, projections, materialised views. |
 | 018 | `018_maintenance.sql` | Partition creation, retention, freeze, checksum, assertions. |
 | 019 | `019_operational_completion.sql` | Append-only completion for operational runs (S-2 M-1); admin failure-resolution grant (S-2 M-2). |
+| 020 | `020_null_distinct_identities.sql` | `NULLS NOT DISTINCT` on seven composite business identities whose key columns are forced NULL by CHECK (S-5 finding S5-5). Two single-column alternate keys deliberately left `NULLS DISTINCT`. Rollback: `020_null_distinct_identities.rollback.sql`. |
 
 **Privileges are applied last** (016), after every object exists and every policy
 is in force, so no window exists in which an object is reachable without its

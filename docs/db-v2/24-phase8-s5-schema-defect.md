@@ -1,5 +1,7 @@
 # PitchTerminal V2 — S-5 Finding S5-5: The Business Identity Cannot Detect a Duplicate
 
+> **CORRECTED by migration `020_null_distinct_identities.sql`** (with rollback). Seven Class A constraints now carry `NULLS NOT DISTINCT`; the two Class B single-column alternate keys are deliberately unchanged. Verified by execution: duplicate detection works on both `feature.feature_value` and `module.module_reading`, and the S-5 suite reaches 103/103 once the two `todo` markers and the defect-characterisation test are removed. **No application code changed.**
+
 **A genuine contradiction with the live database schema, found by executing the implementation. Reported rather than worked around, per the S-5 implementation brief.**
 
 S-5 is **implemented and passing** apart from this. 103 tests: 101 pass, 0 fail, 2 marked `todo` against this finding.
