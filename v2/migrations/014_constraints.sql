@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 014_constraints.sql — Cross-schema and cross-scheme references
+-- REVISION 2
 -- Source: Doc 08 Rev 1 §B.8.5 stage 11 and 20, A.1, A.11, F-25
 -- Depends: 001-013  |  Transactional (relations are empty at deployment)
 --
@@ -83,13 +84,15 @@ COMMENT ON CONSTRAINT fk_match_snapshot__pipeline_job_run ON snapshot.match_snap
   'Execution attribution — the sole direction in which an authoritative relation depends on an operational one, and it exists solely for auditability. RESTRICT is what makes the retention exception of §B.9.4 structural: a job run referenced by a sealed artefact CANNOT be removed by retention.';
 
 -- REVISION 2 (P-04). The reference pairs on the job run's OWN occurred_at,
--- carried on match_snapshot as pipeline_job_run_occurred_at. The former form
--- paired on sealed_at, which required the sealing transaction to stamp both from
--- a single clock read and would have rejected valid inserts whenever the two
--- differed by a microsecond. The TODO it carried is resolved and withdrawn.
-
-ALTER TABLE calibration.calibration_run
-  ADD COLUMN pipeline_job_run_occurred_at timestamptz;
+-- carried on match_snapshot as pipeline_job_run_occurred_at and on
+-- calibration_run as the column of the same name. The former form paired on
+-- sealed_at, which required the sealing transaction to stamp both from a single
+-- clock read and would have rejected valid inserts whenever the two differed by
+-- a microsecond. The TODO it carried is resolved and withdrawn.
+--
+-- Both carrying columns are now declared in the CREATE TABLE of their own
+-- migration — 010 and 009 respectively — rather than added by ALTER here. This
+-- file adds references, not columns.
 
 ALTER TABLE calibration.calibration_run
   ADD CONSTRAINT fk_calibration_run__pipeline_job_run

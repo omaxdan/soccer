@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 002_reference_vocabularies.sql
+-- REVISION 2
 -- PitchTerminal V2 — Governed reference vocabularies
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 2

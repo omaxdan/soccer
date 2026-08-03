@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 011_product.sql — Layer 4: plans, entitlement, subscriptions, user data
+-- REVISION 2
 -- Source: Doc 08 Rev 1 §B.8.5 stage 12, A.1  |  Depends: 001-010  |  Transactional
 --
 -- Layer rule: authoritative for exactly three things — what a user chose, what

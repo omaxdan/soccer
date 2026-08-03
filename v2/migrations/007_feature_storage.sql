@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 007_feature_storage.sql
+-- REVISION 2
 -- PitchTerminal V2 — Feature value and lineage
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 7, A.1, A.11

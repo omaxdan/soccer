@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 004_football.sql
+-- REVISION 2
 -- PitchTerminal V2 — Layer 1 structural relations
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 4, §5.20.1

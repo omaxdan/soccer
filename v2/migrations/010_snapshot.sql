@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 010_snapshot.sql
+-- REVISION 2
 -- PitchTerminal V2 — Sealed match intelligence
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 10, A.1, A.2, A.3, A.6

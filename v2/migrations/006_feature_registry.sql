@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 006_feature_registry.sql
+-- REVISION 2
 -- PitchTerminal V2 — Feature registry and governance relations
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 6, A.11

@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 008_module_storage.sql
+-- REVISION 2
 -- PitchTerminal V2 — Module registry, readings and evidence
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 8, A.11

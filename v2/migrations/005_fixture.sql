@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 005_fixture.sql
+-- REVISION 2
 -- PitchTerminal V2 — Partitioned fixture-scoped relations
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 5, §B.4, A.1, A.7

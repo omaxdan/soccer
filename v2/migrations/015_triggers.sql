@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 015_triggers.sql — The five permitted triggers
+-- REVISION 2
 -- Source: Doc 08 Rev 1 §B.8.5 stage 15, §B.6, A.5, A.12  |  Depends: 001-014
 --
 -- PERMITTED CLASSES ONLY (§B.6.1). No calculation trigger, no registry-lookup
@@ -18,7 +19,7 @@
 -- 1. SEALING GUARD  (R-23) — no exception, for any principal, ever
 -- -----------------------------------------------------------------------------
 
-CREATE FUNCTION snapshot.tf_sealed__guard() RETURNS trigger
+CREATE OR REPLACE FUNCTION snapshot.tf_sealed__guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 BEGIN
   RAISE EXCEPTION
@@ -55,7 +56,7 @@ $$;
 -- DELETE raises unless BOTH hold: the role is the retention role, AND the
 -- session carries the retention marker. Either alone is insufficient.
 
-CREATE FUNCTION feature.tf_append_only__guard() RETURNS trigger
+CREATE OR REPLACE FUNCTION feature.tf_append_only__guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 DECLARE
   v_marker text := current_setting('pitchterminal.retention_operation', true);
@@ -112,7 +113,7 @@ $$;
 -- 3. SNAPSHOT LIFECYCLE GUARD  (LC-79)
 -- -----------------------------------------------------------------------------
 
-CREATE FUNCTION snapshot.tf_match_snapshot__lifecycle_guard() RETURNS trigger
+CREATE OR REPLACE FUNCTION snapshot.tf_match_snapshot__lifecycle_guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 DECLARE
   v_is_open boolean;
@@ -144,7 +145,7 @@ COMMENT ON FUNCTION snapshot.tf_match_snapshot__lifecycle_guard() IS
 -- 4. PROVENANCE PROPAGATION  (A.12, R-50 to R-53) — STATEMENT LEVEL
 -- -----------------------------------------------------------------------------
 
-CREATE FUNCTION feature.tf_feature_value__provenance_propagation() RETURNS trigger
+CREATE OR REPLACE FUNCTION feature.tf_feature_value__provenance_propagation() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 DECLARE
   v_offender record;
@@ -195,7 +196,7 @@ COMMENT ON FUNCTION feature.tf_feature_value__provenance_propagation() IS
 -- 5. WATCHLIST REFERENTIAL DEFENCE  (LC-155)
 -- -----------------------------------------------------------------------------
 
-CREATE FUNCTION product.tf_watchlist__referential_defence() RETURNS trigger
+CREATE OR REPLACE FUNCTION product.tf_watchlist__referential_defence() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   IF TG_TABLE_NAME = 'fixture' THEN

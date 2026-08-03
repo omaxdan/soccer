@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 009_calibration.sql
+-- REVISION 2
 -- PitchTerminal V2 — Calibration and canonical model designation
 -- =============================================================================
 -- Source of truth : Document 08 Revision 1, §B.8.5 stage 9, A.8, A.11
@@ -132,6 +133,7 @@ CREATE TABLE calibration.calibration_run (
   measurement_population_id bigint      NOT NULL,
   calibration_version_id    bigint      NOT NULL,
   pipeline_job_run_id       bigint,
+  pipeline_job_run_occurred_at timestamptz,
   started_at                timestamptz NOT NULL,
   completed_at              timestamptz,
   outcome                   text        NOT NULL,
@@ -147,6 +149,8 @@ COMMENT ON TABLE calibration.calibration_run IS
   'E7.01 Calibration Run. One act of measurement, sealed on completion. A reliability figure that cannot name the population it was taken over, or the rule version it measured, is not evidence.';
 COMMENT ON COLUMN calibration.calibration_run.pipeline_job_run_id IS
   'Execution attribution. The foreign key to operations.pipeline_job_run is added in migration 014, operations being created later in the ordering. Note that a job run referenced by calibration or by a sealed artefact is retained PERMANENTLY regardless of operational retention (§B.9.4).';
+COMMENT ON COLUMN calibration.calibration_run.pipeline_job_run_occurred_at IS
+  'REVISION 2 (P-04). operations.pipeline_job_run is range-partitioned on its own occurred_at, so the reference to it must be composite over ITS key (A.1, R-01). This column carries the job run''s own instant, not an instant belonging to this row. Declared here rather than added by ALTER in migration 014 so that the relation is created in its final shape and the file remains re-runnable.';
 
 -- -----------------------------------------------------------------------------
 -- calibration_result

@@ -73,6 +73,20 @@ Every fix is a correction to the SQL. Nothing in the audit requires a change to 
 
 **Six blockers resolved, two rejected on analysis.** B-01 was verified and found incorrect — default GiST operator class resolution is search-path independent, so no change was made. B-08 was rejected because Phase 4 E8.09 explicitly authorises the reference. Two blockers proved larger than the audit stated, and two further defects were found beneath them. Thirteen of eighteen migrations modified. Phase 4 unchanged, logical model unchanged, no guarantee weakened, migration ordering unchanged.
 
+## Phase 6.1 — Migration set Revision 2
+
+| # | Document | Contents |
+|---|---|---|
+| 13 | [Phase 6 Revision 2 Migration Set](./13-phase6-revision-2-migration-set.md) | Per-migration summary, changed SQL, implementation notes and seven-point verification · section-by-section conformance · `SECURITY DEFINER` disposition · idempotency · remaining TODO markers · architectural impact · verification by execution |
+
+**The set was executed end to end on PostgreSQL 16, not reasoned about.** All eighteen migrations apply cleanly in sequence, every corrected behaviour was exercised against real data, and both new conformance gates were verified to fire when the posture is deliberately broken.
+
+Three further blockers were found and fixed in this pass, all of the same silent class as B-02/B-03: the privilege matrix could not reach relations created after migration 016, so the projection pipeline could not write its own projection relations (**B-09**); no refresh path existed for either materialised view, because refresh requires ownership and no process authenticates as the owner (**B-10**); and three more grant-without-policy pairs would have silently affected nothing (**B-11**). Two additional defects surfaced only by running the SQL. Retention gained the archival band §B.9.3 specifies and Revision 1 omitted entirely.
+
+The fix is structural rather than instance-by-instance: the privilege matrix and the policy matrix are now one specification applied by one function, and a catalogue assertion proves the correspondence on every deployment.
+
+**B-01 is now settled empirically.** Eighteen exclusion constraints created with `extensions` absent from the search path.
+
 ## Sources analysed
 
 | Source | Detail |

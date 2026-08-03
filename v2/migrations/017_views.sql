@@ -1,5 +1,6 @@
 -- =============================================================================
 -- 017_views.sql — Read models, projections, materialised views
+-- REVISION 2
 -- Source: Doc 08 Rev 1 §B.8.5 stage 18, §B.13, F-04, F-05  |  Depends: 001-016
 --
 -- RULES
@@ -44,7 +45,7 @@ COMMENT ON TABLE product.read_model IS
 -- Direct views  (F-04: invoker semantics AND security barrier)
 -- -----------------------------------------------------------------------------
 
-CREATE VIEW football.v_fixture
+CREATE OR REPLACE VIEW football.v_fixture
   WITH (security_invoker = true, security_barrier = true) AS
 SELECT f.id                    AS fixture_id,
        f.fixture_partition_on,
@@ -70,7 +71,7 @@ ALTER VIEW football.v_fixture OWNER TO pt_owner;
 COMMENT ON VIEW football.v_fixture IS
   'F-04. security_invoker makes the querying principal''s policies apply; security_barrier prevents predicate leakage. The two are INDEPENDENT and both are required — barrier alone does not determine whose privileges apply, and a view owned by a policy-bypassing role would return rows the principal is not entitled to.';
 
-CREATE VIEW football.v_player_current
+CREATE OR REPLACE VIEW football.v_player_current
   WITH (security_invoker = true, security_barrier = true) AS
 SELECT p.id AS player_id, p.full_name, p.date_of_birth, p.nationality_code,
        pr.team_id AS current_team_id, pr.registration_kind_code,
@@ -94,7 +95,7 @@ COMMENT ON VIEW football.v_player_current IS
 -- separate history structure because its primary store could not hold history;
 -- V2 does not relocate that structure — IT STOPS NEEDING ONE.
 
-CREATE FUNCTION feature.fn_team_state(
+CREATE OR REPLACE FUNCTION feature.fn_team_state(
   p_team_id bigint,
   p_context_kind_code text,
   p_competition_edition_id bigint,
@@ -204,15 +205,23 @@ COMMENT ON TABLE product.p_landing IS
 
 -- Entitlement enforcement AT THE PROJECTION BOUNDARY (§B.7.6). Consults the
 -- single resolution function; never resolves entitlement inline.
-CREATE POLICY pl_p_landing__entitled__select ON product.p_landing
-  FOR SELECT TO authenticated
-  USING (
-    required_entitlement_key IS NULL
+--
+-- REVISION 2 (B-09). Declared through operations.fn_apply_access, the same
+-- applicator migration 016 uses, so these relations — created AFTER 016 has run
+-- and therefore invisible to its expansion — obtain their policies and their
+-- grants from one statement and cannot acquire one without the other.
+SELECT operations.fn_apply_access('product','p_landing','authenticated','S',
+  $$required_entitlement_key IS NULL
     OR required_entitlement_key IN (SELECT entitlement_feature_key
-                                    FROM product.fn_resolve_entitlements((SELECT auth.uid())))
-  );
-CREATE POLICY pl_p_landing__anon__select ON product.p_landing
-  FOR SELECT TO anon USING (required_entitlement_key IS NULL);
+                                    FROM product.fn_resolve_entitlements((SELECT auth.uid())))$$);
+SELECT operations.fn_apply_access('product','p_landing','anon','S',
+  'required_entitlement_key IS NULL');
+-- REVISION 2 (B-09). The projection pipeline held SELECT, INSERT, UPDATE and
+-- DELETE on both projection relations and had NO POLICY on either. Under FORCE
+-- ROW LEVEL SECURITY every projection refresh would have failed on its first
+-- insert — the same defect as B-03, in the one place the privilege matrix of
+-- migration 016 could not reach.
+SELECT operations.fn_apply_access('product','p_landing','pt_pipeline_projection','SIUD');
 
 CREATE TABLE product.p_team_state (
   id                        bigint      GENERATED ALWAYS AS IDENTITY,
@@ -234,26 +243,63 @@ CREATE TABLE product.p_team_state (
 ALTER TABLE product.p_team_state OWNER TO pt_owner;
 ALTER TABLE product.p_team_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE product.p_team_state FORCE ROW LEVEL SECURITY;
-CREATE POLICY pl_p_team_state__entitled__select ON product.p_team_state
-  FOR SELECT TO authenticated
-  USING (
-    required_entitlement_key IS NULL
+SELECT operations.fn_apply_access('product','p_team_state','authenticated','S',
+  $$required_entitlement_key IS NULL
     OR required_entitlement_key IN (SELECT entitlement_feature_key
-                                    FROM product.fn_resolve_entitlements((SELECT auth.uid())))
-  );
-CREATE POLICY pl_p_team_state__anon__select ON product.p_team_state
-  FOR SELECT TO anon USING (required_entitlement_key IS NULL);
+                                    FROM product.fn_resolve_entitlements((SELECT auth.uid())))$$);
+SELECT operations.fn_apply_access('product','p_team_state','anon','S',
+  'required_entitlement_key IS NULL');
+SELECT operations.fn_apply_access('product','p_team_state','pt_pipeline_projection','SIUD');
 COMMENT ON TABLE product.p_team_state IS
   'Materialisation of fn_team_state across contexts. LABELS THE CONTEXT of every element (LC-110), so a reader can tell which competition a figure describes — the previous platform presented all such figures as unqualified club-level numbers.';
 
-GRANT SELECT ON product.p_landing, product.p_team_state,
-                product.mv_module_directory, product.mv_competition_summary
-  TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON product.p_landing, product.p_team_state
-  TO pt_pipeline_projection;
+-- Materialised views are not row-level-security capable, so their grants carry
+-- no policy and are issued directly. Both are F-05 compliant — they hold no
+-- entitlement-scoped content — which is precisely why they may be materialised
+-- views at all, and why a blanket read grant on them is safe.
+GRANT SELECT ON product.mv_module_directory, product.mv_competition_summary
+  TO anon, authenticated, pt_platform_admin;
 GRANT SELECT ON football.v_fixture, football.v_player_current TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION feature.fn_team_state(bigint, text, bigint, timestamptz)
   TO pt_pipeline_projection, pt_platform_admin;
+
+-- -----------------------------------------------------------------------------
+-- Materialised view refresh  (REVISION 2, B-10)
+-- -----------------------------------------------------------------------------
+-- REFRESH MATERIALIZED VIEW requires OWNERSHIP of the view. Every object in the
+-- design is owned by pt_owner, which no process authenticates as (§5.17.5, D-15),
+-- so the projection role could not refresh either view and no refresh path
+-- existed. This is the one case in this migration where ownership elevation is
+-- GENUINELY REQUIRED rather than merely convenient, and it is therefore the one
+-- case that retains SECURITY DEFINER — with an empty search path, a fixed set of
+-- targets named in the body, and no parameter that can redirect it.
+--
+-- CONCURRENTLY throughout: both views carry a unique index (P-03 made the first
+-- of them genuinely unique), so refresh does not lock out readers. It is
+-- permitted inside a transaction block, unlike VACUUM and CREATE INDEX
+-- CONCURRENTLY, so no non-transactional migration class is involved (R-62).
+
+CREATE OR REPLACE FUNCTION product.fn_refresh_projection_views() RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY product.mv_module_directory;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY product.mv_competition_summary;
+END;
+$$;
+ALTER FUNCTION product.fn_refresh_projection_views() OWNER TO pt_owner;
+REVOKE ALL ON FUNCTION product.fn_refresh_projection_views() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION product.fn_refresh_projection_views()
+  TO pt_pipeline_projection, pt_platform_admin;
+COMMENT ON FUNCTION product.fn_refresh_projection_views() IS
+  'REVISION 2 (B-10). The sole refresh path for the two materialised views. SECURITY DEFINER because refresh requires ownership and no process authenticates as the owner; the elevation is bounded to two named, non-entitlement-scoped views and admits no argument. EXECUTE is revoked from PUBLIC and granted to two roles.';
+
+-- -----------------------------------------------------------------------------
+-- Assertion  (REVISION 2, B-09)
+-- -----------------------------------------------------------------------------
+-- Re-run after the relations created by this file, so a privilege granted here
+-- without its policy fails the migration rather than production.
+
+SELECT operations.fn_assert_access_correspondence();
 
 -- =============================================================================
 -- MATCH INTELLIGENCE has NO projection, deliberately (§B.13.3). A sealed
