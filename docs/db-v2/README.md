@@ -87,6 +87,18 @@ The fix is structural rather than instance-by-instance: the privilege matrix and
 
 **B-01 is now settled empirically.** Eighteen exclusion constraints created with `extensions` absent from the search path.
 
+## Phase 7 — Application conformance audit
+
+| # | Document | Contents |
+|---|---|---|
+| 14 | [Phase 7 Application Conformance Audit](./14-phase7-application-conformance-audit.md) | Executive summary · architecture conformance · security findings by severity · performance findings with estimated impact · database misuse · production risks · prioritised fixes · final verdict |
+
+**Outcome: Not Ready for Deployment.** The application has zero adoption of the approved architecture — no schema-qualified reference to any of the seven schemas, no V2 relation read or written, and `product.fn_resolve_entitlements` never called. The write model is update-in-place (78 upserts); under V2 those statements raise rather than degrade, because the append and seal guards admit no exception.
+
+Three defects are live today, independent of V2: admin-granted subscriptions never expire because `lib/admin.ts` writes `current_period_end` while `lib/access.ts` reads `expires_at`; an unauthenticated `?q=` parameter is interpolated into a PostgREST `or()` filter; and there is no session-refresh middleware, so sessions expire mid-visit. A fourth — thirteen `mv_*` relations defined nowhere in the repository — means production cannot be reproduced from its own source.
+
+Strengths to preserve through the rewrite: the dependency-ordered idempotent `process:all-db` pipeline, `confidenceBand.ts`'s byte-identical published/backtested formula guarantee, `auth.getUser()` over `getSession()`, and a clean server/client boundary that keeps module logic and entitlement context out of the browser bundle.
+
 ## Sources analysed
 
 | Source | Detail |
