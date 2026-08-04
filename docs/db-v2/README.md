@@ -120,6 +120,7 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | S-5 Feature calculation | **Complete** | `beta/backend/src/v2/feature/` · [docs 20](./20-phase8-s5-feature-architecture.md)–[24](./24-phase8-s5-schema-defect.md) · migration 020 |
 | S-6 Module evaluation | **Blocked, not started** | No code written · five blockers in [doc 25](./25-phase8-s6-not-specified.md) |
 | S-0 `mv_*` recovery | **Blocked** — needs production access | 0 of 13 definitions recoverable from this repository · [doc 26](./26-phase8-s0-mv-recovery.md) |
+| S-0 module-logic recovery | **Complete** | V1 evaluation logic recovered in full · [doc 27](./27-phase8-s0-module-evaluation-recovery.md) |
 | S-7 onward | Not started | — |
 
 | # | Document | Contents |
@@ -135,6 +136,7 @@ The authoritative engineering guide for the V2 rewrite. **Strategy: strangler wi
 | 24 | [S-5 Schema Defect (S5-5)](./24-phase8-s5-schema-defect.md) | **Resolved by migration 020.** The feature-value business identity could not detect a duplicate — a plain UNIQUE whose key columns are forced NULL · evidence · blast radius across seven relations · the correction as applied |
 | 25 | [S-6 Cannot Begin](./25-phase8-s6-not-specified.md) | **S-6 not started, no code written.** Five verified blockers: no S-6 specification of any kind · S-0 unfinished and named as blocking · `module_version` 1.0.0 repeats the S-5 authority conflict · module subject kinds have no features at their own kind · nothing declares module inputs though four NOT NULL counts require them |
 | 26 | [S-0 `mv_*` Recovery](./26-phase8-s0-mv-recovery.md) | **0 of 13 definitions recovered.** Five exhaustive searches including all 832 git blobs · why reconstruction is impossible · per-view status · findings S0-1 to S0-3, chiefly that eleven of the thirteen views are never queried · observed dependency graph · the exact recovery query for whoever holds production access |
+| 27 | [S-0 Module Evaluation Recovery](./27-phase8-s0-module-evaluation-recovery.md) | **The V1 evaluation logic, recovered in full.** Seventeen evaluators — not thirteen — with every threshold, classifier and early return · per-module input inventory · V1→V2 dependency mapping · what S-5 features supply and what is gone · evidence model against `module_evidence_item` · findings S0-4 to S0-10, chiefly that the four single-team evaluators never run and that four V1 modules are retired by decision · four new blockers B-6 to B-9 |
 
 **All five findings are closed.** M-1 — the blocking one, where `pipeline_run` and `pipeline_job_run` could never leave `RUNNING` because both carry the append-only guard and no role holds UPDATE — is resolved by **migration 019** using Correction B: terminal state is *appended* to a completion companion under ordinal succession, the shape A.2 already uses for snapshot outcome revision. No guard was weakened, no `UPDATE` was granted, and `RUNNING` remains the immutable initial state. M-2 is resolved by a single `INSERT` grant. M-3, M-4 and M-5 are closed as documentation clarifications — in each the approved schema was already right.
 
