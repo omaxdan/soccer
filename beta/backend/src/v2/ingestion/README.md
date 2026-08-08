@@ -3,11 +3,36 @@
 Writes schema `football` from the provider feed. Nothing else.
 
 ```bash
-npm run ingest:v2                                    # today
+npm run ingest:v2                                    # today's schedule
 npm run ingest:v2 -- --date 2026-08-01               # one date
 npm run ingest:v2 -- --from 2026-08-01 --to 2026-08-07
 npm run ingest:v2 -- --from … --to … --allow-over-budget
+
+npm run ingest:v2 -- squads                          # the stalest teams, bounded
+npm run ingest:v2 -- squads --limit 40
+npm run ingest:v2 -- squads --team 4501              # one team, by provider id
 ```
+
+A bare invocation still means today's schedule, so every existing command and cron entry is unchanged.
+
+## Two stages
+
+| Stage | Endpoint | Cost | Writes |
+|---|---|---|---|
+| `schedule` | `/schedule/{date}` | **FEED** — 1 call per date | competition · edition · stage · venue · team · team_registration · fixture · lifecycle transition · result |
+| `squads` | `/teams/{id}/players` | **PER_ENTITY** — 1 call per team | player · player_registration · player_availability · player_valuation |
+
+**The squad work list is a query, not a table.** `team_players` costs one call per team, so the stage takes the stalest teams and stops. Staleness is *derived* — `max(player_valuation.as_of_on)` per team, because the squad response carries valuations and `recordValuations` writes at most one row per player per source per day. `NULLS FIRST` puts never-observed teams ahead of stale ones; `team.id` is the final tie-break, so the list is totally ordered and two runs against the same state choose the same teams.
+
+**There is no `squads --from/--to`, deliberately.** A roster endpoint returns *today's* squad. Replaying it into a past date would assert a registration nobody observed then. The only replay for a squad is "fetch this team again now".
+
+### An incomplete response must not close a valid spell
+
+`closeResolvedSpells` treats absence as recovery — that is its design: *"A spell that ends is not reported as ending — it simply stops appearing."* The unit of trust is therefore **the team's squad response**: absence within a squad we successfully fetched is evidence; absence because we fetched nothing is not.
+
+So closing is **gated on the response having resolved at least one player**. A zero-player response is a failed observation, not a report of a fully fit squad. The gate invents no threshold — it does not ask whether a squad "looks big enough", only whether an observation happened at all.
+
+**`closeResolvedSpells` still dates its closure with `now()`** while the stage carries the run's single observation date. When the two diverge the guard `lower(spell_period) < now()::date` silently refuses the update. That is doc 29 blocker **B-2**, it is **not** worked around here, and test 61 pins it down so that fixing it breaks a test that says why.
 
 ## What this subsystem is, and is not
 
@@ -88,7 +113,9 @@ Codes, foreign keys, uniqueness, participant distinctness, score non-negativity,
 
 **In:** competition, edition, stage, venue, team, team_registration, player, fixture, lifecycle transition, result, result_revision, player_registration, player_availability, player_valuation, standing.
 
-**Deferred:** `position_profile` (no governed meaning until S-6), `lineup`/`lineup_selection`/`appearance`/`match_event` (per-fixture endpoints, separate quota class), `official`/`official_assignment` (not in the schedule feed), `provider_statistic` (own cadence).
+**Deferred:** `position_profile` (no governed meaning until S-6), `lineup`/`lineup_selection`/`appearance`/`match_event` (**G-1 is OPEN** — no provider endpoint for per-fixture player data has been demonstrated; see [doc 35](../../../../docs/db-v2/35-phase0-provider-capability-investigation.md)), `official`/`official_assignment` (not in the schedule feed), `provider_statistic` (own cadence).
+
+**The squad stage may never imply participation.** A roster states MEMBERSHIP, not who played. No minutes, no starter status, no unused-substitute status, no lineup, no appearance, no season-minute allocation. Test 60 asserts that the stage reports none of those relations and creates no row in them.
 
 ## Testing
 
@@ -97,6 +124,6 @@ npm test                    # 38 declaration tests, no database needed
 PT_V2_DB_HOST=… npm test    # plus 20 persistence and end-to-end tests
 ```
 
-Fifty-eight tests. The end-to-end tests drive the real writers against a real database through a stubbed provider, so the composite foreign keys, the lifecycle transition and the result revision are exercised rather than reasoned about.
+Seventy tests. The end-to-end tests drive the real writers against a real database through a stubbed provider, so the composite foreign keys, the lifecycle transition and the result revision are exercised rather than reasoned about.
 
 Two guarantees were **mutation-tested** — the code was deliberately broken and the suite confirmed to fail: removing the result-revision append (test 54) and removing the `COALESCE` guard (test 49).

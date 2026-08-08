@@ -36,9 +36,10 @@ import { recordWrite } from '../operations/writeRecord';
 import { buildDiagnostic } from '../operations/failure';
 import { assertRolesConfigured } from '../config/index';
 import { ProviderClient, ProviderRequestError } from './provider/client';
-import { dailyQuota, loadProviderConfig } from './provider/config';
+import { PROVIDER_CODE, dailyQuota, loadProviderConfig } from './provider/config';
 import { IngestionCounts } from './write/index';
 import { ingestScheduleDate } from './stages/schedule';
+import { ingestTeamSquad, type SquadTeam } from './stages/squad';
 import { utcDateString } from './normalise';
 import { logger } from '../../utils/logger';
 
@@ -180,5 +181,153 @@ async function reportWrites(
       await recordWrite(control, job, { schema, relation: name }, counts.toWriteCounts());
     }
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SQUAD INGESTION — G-4 and G-9
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// THE WORK LIST IS A QUERY, NOT A TABLE
+//
+// `team_players` is a PER_ENTITY endpoint: one call per team. Against a 200-call
+// daily budget an unbounded pass over the estate is not affordable, so the stage
+// takes the STALEST teams and stops.
+//
+// Staleness is derived rather than recorded, because recording it would need a
+// relation the architecture does not have and S-4 may not add. The squad
+// response carries valuations, `recordValuations` writes at most one row per
+// player per source per day, and the grain is therefore exactly "the day this
+// squad was last observed". `max(player_valuation.as_of_on)` is that date.
+//
+// NULLS FIRST puts never-observed teams ahead of stale ones: a squad never
+// fetched is worth more than one fetched three days ago. `team.id` is the final
+// tie-break, so the list is TOTALLY ORDERED and two runs against the same state
+// choose the same teams in the same order.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SquadIngestionOptions {
+  /** Maximum teams to fetch in this run. One provider call each. */
+  readonly limit?: number;
+  /** Ingest exactly one team, by provider id. Overrides the work list. */
+  readonly teamProviderExternalId?: string;
+  /** Refuse to start when the run would exceed the daily budget. ON by default. */
+  readonly enforceQuotaBudget?: boolean;
+  /**
+   * The run's single observation date, `YYYY-MM-DD` UTC.
+   *
+   * Captured ONCE and passed down, per the S-5 discipline. Tests supply it;
+   * production does not.
+   */
+  readonly observedOn?: string;
+}
+
+const DEFAULT_SQUAD_LIMIT = 20;
+
+/** The stalest teams first, bounded. See the header for why this is a query. */
+export async function selectSquadWorkList(
+  tx: PoolClient,
+  options: SquadIngestionOptions = {}
+): Promise<SquadTeam[]> {
+  if (options.teamProviderExternalId) {
+    const { rows } = await tx.query<{ id: string; provider_external_id: string; name: string }>(
+      `SELECT id::text, provider_external_id, name
+         FROM football.team
+        WHERE provider_code = $1 AND provider_external_id = $2`,
+      [PROVIDER_CODE, options.teamProviderExternalId]
+    );
+    return rows.map((r) => ({
+      teamId: r.id,
+      providerExternalId: r.provider_external_id,
+      name: r.name,
+    }));
+  }
+
+  const { rows } = await tx.query<{ id: string; provider_external_id: string; name: string }>(
+    `SELECT t.id::text, t.provider_external_id, t.name
+       FROM football.team t
+       LEFT JOIN football.player_registration r
+              ON r.team_id = t.id AND upper_inf(r.registration_period)
+       LEFT JOIN football.player_valuation v
+              ON v.player_id = r.player_id
+      WHERE t.provider_code = $1
+      GROUP BY t.id, t.provider_external_id, t.name
+      ORDER BY max(v.as_of_on) NULLS FIRST, t.id
+      LIMIT $2`,
+    [PROVIDER_CODE, options.limit ?? DEFAULT_SQUAD_LIMIT]
+  );
+  return rows.map((r) => ({
+    teamId: r.id,
+    providerExternalId: r.provider_external_id,
+    name: r.name,
+  }));
+}
+
+/**
+ * Ingests squads for the stalest teams.
+ *
+ * ONE TRANSACTION PER TEAM. A team that fails rolls back entirely — including
+ * its `closeResolvedSpells` — and the run continues to the next. Teams are
+ * independent, so one bad response does not cost the rest of the list.
+ *
+ * Quota is flushed per team on the control connection, outside the work
+ * transaction, exactly as the schedule stage does: the provider charged for the
+ * call whatever happened afterwards.
+ */
+export async function ingestSquads(options: SquadIngestionOptions = {}): Promise<IngestionReport> {
+  assertRolesConfigured([INGESTION_ROLE]);
+  installOperationalLayer();
+
+  const config = loadProviderConfig();
+  // One observation date for the whole run.
+  const observedOn = options.observedOn ?? utcDateString(new Date());
+
+  const teams = await withConnection(INGESTION_ROLE, (tx) => selectSquadWorkList(tx, options));
+
+  if (options.enforceQuotaBudget !== false && teams.length > dailyQuota(config)) {
+    throw new Error(
+      `Refusing to fetch ${teams.length} squads against a daily budget of ${dailyQuota(config)} calls. ` +
+        'Lower --limit, or pass enforceQuotaBudget: false to accept the cost.'
+    );
+  }
+
+  const client = new ProviderClient(config);
+  const total = new IngestionCounts();
+  let failures = 0;
+  let apiCalls = 0;
+
+  await withPipelineRun(INGESTION_ROLE, 'v2.ingest.squads', async () => {
+    for (const team of teams) {
+      try {
+        const counts = await withRun(
+          INGESTION_ROLE,
+          'ingest.squad',
+          async (tx: PoolClient, job) => {
+            const stageCounts = await ingestTeamSquad(tx, client, team, observedOn);
+            await reportWrites(job, stageCounts);
+            return stageCounts;
+          },
+          { detail: { team: team.providerExternalId, observedOn } }
+        );
+        total.add(counts.total);
+      } catch (error) {
+        failures += 1;
+        const notFound = error instanceof ProviderRequestError && error.isNotFound;
+        // NOT recorded here — the S-2 job lifecycle already wrote the
+        // operations.failure row when withRun rejected, on the control
+        // connection and outside the transaction that rolled back.
+        logger[notFound ? 'warn' : 'error'](
+          { team: team.name, providerExternalId: team.providerExternalId, error: buildDiagnostic(error) },
+          notFound
+            ? 'v2 ingestion: provider has no squad for this team'
+            : 'v2 ingestion: squad failed, continuing with the work list'
+        );
+      } finally {
+        apiCalls += client.pendingCallCount;
+        await withConnection(INGESTION_ROLE, (control) => client.flushUsage(control));
+      }
+    }
+  });
+
+  return { datesProcessed: teams.length, counts: total, apiCalls, failures };
 }
 

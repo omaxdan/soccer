@@ -46,6 +46,7 @@ import {
 import { parseArguments } from '../cli';
 import { IngestionCounts, insertAppendOnly, upsertMutable } from '../write/index';
 import { ingestScheduleDate } from '../stages/schedule';
+import { ingestTeamSquad, type SquadTeam } from '../stages/squad';
 import { NON_ISO_ASSOCIATION_CODES } from '../../seed/vocabulary';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
@@ -306,8 +307,15 @@ describe('normalisation', () => {
 });
 
 describe('CLI', () => {
+  /** Narrows the command union, and asserts the default is still `schedule`. */
+  function asSchedule(args: ReturnType<typeof parseArguments>) {
+    assert.equal(args.command, 'schedule');
+    if (args.command !== 'schedule') throw new Error('unreachable');
+    return args;
+  }
+
   it('35. defaults to a single day', () => {
-    const args = parseArguments([]);
+    const args = asSchedule(parseArguments([]));
     assert.equal(utcDateString(args.from), utcDateString(args.to));
     assert.equal(args.enforceQuotaBudget, true);
   });
@@ -321,6 +329,44 @@ describe('CLI', () => {
   it('37. refuses a reversed range and a malformed date', () => {
     assert.throws(() => parseArguments(['--from', '2026-08-07', '--to', '2026-08-01']), /precedes/);
     assert.throws(() => parseArguments(['--date', '01-08-2026']), /YYYY-MM-DD/);
+  });
+
+  it('37a. every existing invocation still means `schedule`', () => {
+    // Backward compatibility is the point: the runbook and any cron entry
+    // predate the subcommand and must keep working unchanged.
+    for (const argv of [
+      [],
+      ['--date', '2026-08-01'],
+      ['--from', '2026-08-01', '--to', '2026-08-07'],
+      ['--from', '2026-08-01', '--to', '2026-08-07', '--allow-over-budget'],
+    ]) {
+      assert.equal(parseArguments(argv).command, 'schedule', `'${argv.join(' ')}' must stay schedule`);
+    }
+  });
+
+  it('37b. `squads` is selected only by that exact positional', () => {
+    assert.equal(parseArguments(['squads']).command, 'squads');
+    // An unrecognised positional must NOT silently change what runs.
+    assert.equal(parseArguments(['squad']).command, 'schedule');
+    assert.equal(parseArguments(['SQUADS']).command, 'schedule');
+  });
+
+  it('37c. squad flags parse, and --limit refuses a non-number', () => {
+    const args = parseArguments(['squads', '--limit', '40', '--team', '4501']);
+    assert.equal(args.command, 'squads');
+    if (args.command !== 'squads') throw new Error('unreachable');
+    assert.equal(args.limit, 40);
+    assert.equal(args.teamProviderExternalId, '4501');
+    assert.equal(args.enforceQuotaBudget, true);
+    assert.throws(() => parseArguments(['squads', '--limit', 'many']), /whole number/);
+  });
+
+  it('37d. there is no squad replay range — a roster is always "now"', () => {
+    // A roster endpoint returns TODAY's squad. Replaying it into a past date
+    // would assert a registration nobody observed then.
+    const args = parseArguments(['squads', '--from', '2026-01-01', '--to', '2026-06-01']);
+    assert.equal(args.command, 'squads');
+    assert.ok(!('from' in args), 'squads must expose no replay range');
   });
 });
 
@@ -889,6 +935,369 @@ describe('ingestion persistence (requires a V2 database)', { skip: !hasDatabase 
           after[0].updated_at.getTime() >= before[0].updated_at.getTime(),
           'updated_at must advance rather than freeze at first insert'
         );
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // SQUAD STAGE — G-4 and G-9
+  //
+  // These drive the REAL writers against a REAL database through a stubbed
+  // provider, so the exclusion constraints, the temporal succession and the
+  // append guard are exercised rather than reasoned about.
+  //
+  // G-1 REMAINS OPEN. Nothing below creates or implies fixture-level
+  // participation, and test 60 asserts that it cannot.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** A squad team row created inside the caller's transaction. */
+  async function makeTeam(tx: PoolClient, suffix: string): Promise<SquadTeam> {
+    const providerExternalId = `${TEST_PREFIX}-SQ${suffix}`;
+    const row = await upsertMutable(tx, {
+      relation: 'football.team',
+      columns: ['provider_code', 'provider_external_id', 'name', 'slug'],
+      values: [PROVIDER_CODE, providerExternalId, `Squad Team ${suffix}`, `${TEST_PREFIX}-sq${suffix}`.toLowerCase()],
+      conflictTarget: ['provider_code', 'provider_external_id'],
+    });
+    return { teamId: String(row.id), providerExternalId, name: `Squad Team ${suffix}` };
+  }
+
+  /** Stands in for ProviderClient. Only `get` is reached by the stage. */
+  function stubSquad(players: readonly Record<string, unknown>[]) {
+    return { get: async () => ({ players }) } as unknown as Parameters<typeof ingestTeamSquad>[1];
+  }
+
+  function squadPlayer(suffix: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id: `${TEST_PREFIX}-P${suffix}`,
+      name: `Test Player ${suffix}`,
+      shortName: `T. Player ${suffix}`,
+      country: { name: 'England' },
+      height: 182,
+      preferredFoot: 'Right',
+      positionsDetailed: 'CM,AM',
+      ...overrides,
+    };
+  }
+
+  // Deliberately in the PAST relative to the run clock. `closeResolvedSpells`
+  // dates its closure with `now()` rather than the run's observation date, and
+  // refuses to close a spell that began on or after that instant — correctly,
+  // since the range would be empty. Test 61 pins that divergence down.
+  const OBSERVED = '2026-08-01';
+
+  it('54. player identity is idempotent — the same provider player twice is one row', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'A');
+        const client = stubSquad([squadPlayer('A1')]);
+
+        await ingestTeamSquad(tx, client, team, OBSERVED);
+        await ingestTeamSquad(tx, client, team, OBSERVED);
+
+        const { rows } = await tx.query<{ count: string }>(
+          `SELECT count(*)::text FROM football.player
+            WHERE provider_code = $1 AND provider_external_id = $2`,
+          [PROVIDER_CODE, `${TEST_PREFIX}-PA1`]
+        );
+        assert.equal(rows[0].count, '1', 'a re-ingested squad must not mint a second identity');
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('55. registration is idempotent — an unchanged roster opens no second spell', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'B');
+        const client = stubSquad([squadPlayer('B1')]);
+
+        const first = await ingestTeamSquad(tx, client, team, OBSERVED);
+        const second = await ingestTeamSquad(tx, client, team, OBSERVED);
+
+        const { rows } = await tx.query<{ count: string; provenance: string }>(
+          `SELECT count(*)::text, min(r.provenance_class_code) AS provenance
+             FROM football.player_registration r
+             JOIN football.player p ON p.id = r.player_id
+            WHERE p.provider_external_id = $1`,
+          [`${TEST_PREFIX}-PB1`]
+        );
+        assert.equal(rows[0].count, '1', 'the same membership observed twice is one registration');
+        assert.equal(
+          rows[0].provenance,
+          'INFERRED',
+          'a roster states membership, not a transfer — the boundary is INFERRED'
+        );
+
+        assert.ok(
+          (first.byRelation.get('football.player_registration')?.written ?? 0) === 1,
+          'the first run must write the registration'
+        );
+        assert.equal(
+          second.byRelation.get('football.player_registration')?.written ?? 0,
+          0,
+          'the second run must write nothing'
+        );
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('56. availability is idempotent — the same open spell is not re-opened', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'C');
+        const injured = squadPlayer('C1', {
+          injury: { reason: 'Hamstring strain', startTimestamp: 1_786_000_000, expectedReturn: 21 },
+        });
+        const client = stubSquad([injured]);
+
+        await ingestTeamSquad(tx, client, team, OBSERVED);
+        await ingestTeamSquad(tx, client, team, OBSERVED);
+
+        const { rows } = await tx.query<{ count: string }>(
+          `SELECT count(*)::text FROM football.player_availability a
+             JOIN football.player p ON p.id = a.player_id
+            WHERE p.provider_external_id = $1`,
+          [`${TEST_PREFIX}-PC1`]
+        );
+        assert.equal(rows[0].count, '1', 'an unchanged spell must not be duplicated');
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('57. availability semantics — kind, period and subject are recorded from the provider', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'D');
+        await ingestTeamSquad(
+          tx,
+          stubSquad([
+            squadPlayer('D1', { injury: { reason: 'Hamstring strain', expectedReturn: 14 } }),
+            squadPlayer('D2', { injury: { reason: 'Suspended — red card' } }),
+            squadPlayer('D3', { injury: { reason: 'Personal reasons' } }),
+            squadPlayer('D4'),
+          ]),
+          team,
+          OBSERVED
+        );
+
+        const { rows } = await tx.query<{ ext: string; kind: string; starts_on: string; reason: string }>(
+          `SELECT p.provider_external_id AS ext,
+                  a.unavailability_kind_code AS kind,
+                  lower(a.spell_period)::text AS starts_on,
+                  a.reason
+             FROM football.player_availability a
+             JOIN football.player p ON p.id = a.player_id
+            WHERE p.provider_external_id LIKE $1
+            ORDER BY p.provider_external_id`,
+          [`${TEST_PREFIX}-PD%`]
+        );
+
+        assert.equal(rows.length, 3, 'only the three the provider reports unavailable');
+        assert.equal(rows[0].kind, 'INJURY');
+        assert.equal(rows[1].kind, 'SUSPENSION');
+        assert.equal(rows[2].kind, 'OTHER', 'an unclassifiable reason keeps the vocabulary fall-through');
+        assert.equal(rows[0].starts_on, OBSERVED, 'no provider start date — the observation date, not a guess');
+        assert.equal(rows[0].reason, 'Hamstring strain', "the provider's own words are retained verbatim");
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('58. an incomplete response does not close a valid spell — but a complete one does', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'E');
+        const injured = squadPlayer('E1', { injury: { reason: 'Knee ligament tear' } });
+
+        await ingestTeamSquad(tx, stubSquad([injured]), team, OBSERVED);
+
+        const openSpells = async () => {
+          const { rows } = await tx.query<{ count: string }>(
+            `SELECT count(*)::text FROM football.player_availability a
+               JOIN football.player p ON p.id = a.player_id
+              WHERE p.provider_external_id = $1 AND upper_inf(a.spell_period)`,
+            [`${TEST_PREFIX}-PE1`]
+          );
+          return rows[0].count;
+        };
+        assert.equal(await openSpells(), '1', 'the spell must be open to begin with');
+
+        // An EMPTY response is a failed observation, not a report of a fit squad.
+        await ingestTeamSquad(tx, stubSquad([]), team, OBSERVED);
+        assert.equal(
+          await openSpells(),
+          '1',
+          'a zero-player response must never be read as "everyone recovered"'
+        );
+
+        // A response that DOES observe the player and no longer reports the
+        // injury is genuine evidence, and must close the spell.
+        await ingestTeamSquad(tx, stubSquad([squadPlayer('E1')]), team, OBSERVED);
+        assert.equal(
+          await openSpells(),
+          '0',
+          'absence within an observed squad is the documented recovery signal'
+        );
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('59. valuation is written only when the provider supplies amount AND currency', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'F');
+        const counts = await ingestTeamSquad(
+          tx,
+          stubSquad([
+            squadPlayer('F1', { proposedMarketValueRaw: { value: 4_500_000, currency: 'EUR' } }),
+            // V1 read the amount and DISCARDED the currency. mapCurrency refuses
+            // that: a JPY valuation treated as EUR is wrong by two orders of
+            // magnitude, so no row is better than a wrong one.
+            squadPlayer('F2', { proposedMarketValueRaw: { value: 900_000 } }),
+            squadPlayer('F3'),
+          ]),
+          team,
+          OBSERVED
+        );
+
+        const { rows } = await tx.query<{ ext: string; amount: string; currency: string; as_of_on: string }>(
+          `SELECT p.provider_external_id AS ext, v.amount::text, v.currency_code AS currency,
+                  v.as_of_on::text
+             FROM football.player_valuation v
+             JOIN football.player p ON p.id = v.player_id
+            WHERE p.provider_external_id LIKE $1
+            ORDER BY p.provider_external_id`,
+          [`${TEST_PREFIX}-PF%`]
+        );
+
+        assert.equal(rows.length, 1, 'only the fully specified valuation is written');
+        assert.equal(rows[0].ext, `${TEST_PREFIX}-PF1`);
+        assert.equal(rows[0].currency, 'EUR');
+        assert.equal(rows[0].as_of_on, OBSERVED, 'a valuation is a DATED observation');
+        assert.ok(
+          (counts.byRelation.get('football.player_valuation')?.rejected ?? 0) >= 1,
+          'the currency-less valuation must be counted as rejected, not silently dropped'
+        );
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('61. B-2 confirmed by execution — the writer dates closure by its own clock', async () => {
+    // NOT a defect in this stage, and NOT worked around here.
+    //
+    // `closeResolvedSpells` closes with `utcDateString(new Date())` while the
+    // stage carries the run's observation date. When the two diverge — an
+    // observation dated at or after the run clock — the guard
+    // `lower(spell_period) < $3::date` refuses the update and the spell stays
+    // open SILENTLY. Documented as doc 29 blocker B-2.
+    //
+    // This test exists so the behaviour is a recorded fact rather than a
+    // surprise, and so that fixing B-2 breaks a test that says why.
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'H');
+        const future = utcDateString(new Date(Date.now() + 7 * 86_400_000));
+
+        await ingestTeamSquad(
+          tx,
+          stubSquad([squadPlayer('H1', { injury: { reason: 'Calf strain' } })]),
+          team,
+          future
+        );
+        // The player is observed and no longer injured — the recovery signal.
+        await ingestTeamSquad(tx, stubSquad([squadPlayer('H1')]), team, future);
+
+        const { rows } = await tx.query<{ count: string }>(
+          `SELECT count(*)::text FROM football.player_availability a
+             JOIN football.player p ON p.id = a.player_id
+            WHERE p.provider_external_id = $1 AND upper_inf(a.spell_period)`,
+          [`${TEST_PREFIX}-PH1`]
+        );
+        assert.equal(
+          rows[0].count,
+          '1',
+          'B-2: a spell dated at/after the run clock is not closed. Fix B-2 and this flips to 0.'
+        );
+      } finally {
+        await tx.query('ROLLBACK');
+      }
+    });
+  });
+
+  it('60. the squad stage never produces appearance, lineup or lineup_selection (G-1 gate)', async () => {
+    await asIngestion(async (tx) => {
+      await tx.query('BEGIN');
+      try {
+        const team = await makeTeam(tx, 'G');
+
+        const before = await tx.query<{ appearance: string; lineup: string; selection: string }>(
+          `SELECT (SELECT count(*) FROM football.appearance)::text        AS appearance,
+                  (SELECT count(*) FROM football.lineup)::text            AS lineup,
+                  (SELECT count(*) FROM football.lineup_selection)::text  AS selection`
+        );
+
+        const counts = await ingestTeamSquad(
+          tx,
+          stubSquad([
+            squadPlayer('G1', {
+              injury: { reason: 'Ankle sprain' },
+              proposedMarketValueRaw: { value: 1_000_000, currency: 'GBP' },
+            }),
+          ]),
+          team,
+          OBSERVED
+        );
+
+        // It wrote the four relations in scope …
+        for (const relation of [
+          'football.player',
+          'football.player_registration',
+          'football.player_availability',
+          'football.player_valuation',
+        ]) {
+          assert.ok(counts.byRelation.has(relation), `${relation} must be reported per relation`);
+        }
+
+        // … and reported nothing about fixture-level participation.
+        for (const forbidden of [
+          'football.appearance',
+          'football.lineup',
+          'football.lineup_selection',
+          'football.match_event',
+        ]) {
+          assert.equal(
+            counts.byRelation.has(forbidden),
+            false,
+            `${forbidden} must not appear — G-1 is OPEN and this stage may not imply participation`
+          );
+        }
+
+        const after = await tx.query<{ appearance: string; lineup: string; selection: string }>(
+          `SELECT (SELECT count(*) FROM football.appearance)::text        AS appearance,
+                  (SELECT count(*) FROM football.lineup)::text            AS lineup,
+                  (SELECT count(*) FROM football.lineup_selection)::text  AS selection`
+        );
+        assert.deepEqual(after.rows[0], before.rows[0], 'no fixture-level row may be created');
       } finally {
         await tx.query('ROLLBACK');
       }

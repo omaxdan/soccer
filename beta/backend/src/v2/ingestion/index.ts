@@ -20,9 +20,12 @@
 
 export {
   ingestSchedule,
+  ingestSquads,
+  selectSquadWorkList,
   INGESTION_ROLE,
   type IngestionReport,
   type ScheduleIngestionOptions,
+  type SquadIngestionOptions,
 } from './pipeline';
 
 export {
@@ -77,6 +80,8 @@ export {
 } from './normalise';
 
 export { ingestScheduleDate, type StageCounts } from './stages/schedule';
+
+export { ingestTeamSquad, type SquadTeam, type SquadStageCounts } from './stages/squad';
 
 export {
   recordRegistration,
