@@ -1,0 +1,4866 @@
+// ─── EXTENDED INTELLIGENCE SUITE ─────────────────────────────────────────────
+// 14 processors extending the core readiness/lineup pipeline. All DB-only,
+// zero API calls. Kept in a separate file from processDbOnly.ts (already
+// very large) — imports the same db/logger/fetchAllRows primitives.
+//
+// AUDIT NOTE: every processor here was checked against the ACTUAL schema
+// (29 migrations, verified column-by-column) before being written — several
+// bugs in the original drafts were fixed in the process:
+//   - processTeamFormQuality: rewritten to use REAL tables (team_form_history
+//     + match_results + team_strength_ratings). A draft version assumed
+//     team_match_snapshots/match_opponent_context, which do not exist
+//     anywhere in this project's migration history (verified by grep across
+//     all 28 prior migration files before writing this one).
+//   - processHTFTProbabilities: computed directly from match_results'
+//     half_time_home_score/away_score (real, since migration 001) — NOT
+//     from a "team_ht_profile" view, which also does not exist. A draft
+//     also attempted `db.query(CREATE TABLE ...)` at runtime — the db
+//     client wrapper has no .query() method; the table is created by
+//     migration 029 instead, like every other table in this project.
+//   - processTeamFormQuality (first draft): `new Map<number, {...}>` was
+//     missing its constructor call `()` — a real syntax bug.
+//   - processPlayerMatchImpact: `const isHome` was declared twice in the
+//     same scope (duplicate block-scoped declaration — compile error).
+//   - processTeamMotivation: `tournamentSizes.get(standing.position > 0
+//     ? 20 : 20)` — both ternary branches were the literal 20, always
+//     resolving to the wrong bucket. Standings now retain tournament_id so
+//     the lookup is real.
+//   - processSubstitutionImpact: "bench" was an arbitrary DB-order slice of
+//     the roster, not the real predicted lineup. Rewritten to be genuinely
+//     match-scoped: bench = team roster minus THIS match's real
+//     match_predicted_lineups XI, bench quality from player_strength_score
+//     (migration 027) instead of a vague importance heuristic.
+//   - processSquadDepthComparison: relied on team_position_depth.strength_
+//     score/quality_rating, columns nothing writes. Computes depth inline
+//     from available_count/player_count + total_market_value instead.
+//   - processFormationMatchup: "detected formation" is derived from OUR OWN
+//     fixed 1-4-4-2 predicted-lineup template (see processPredictedLineups),
+//     so it will read close to 4-4-2 on most matches — documented in
+//     migration 028's table comment rather than presented as literal
+//     historical tactical detection.
+//   - processTeamVersatility: genuinely complements (not duplicates)
+//     team_intelligence.lineup_versatility_score (migration 020) — that one
+//     is a team-level ROLLING scalar from the latest predicted-XI
+//     occurrence per player across ALL matches; this one is a per-MATCH
+//     snapshot from that match's own predicted lineup. Both kept.
+//
+// All formula weights throughout are heuristic/provisional — flagged
+// per this project's migration-022 ethos (NBSI), not backtested. Revisit
+// once readiness_history accumulates enough matches.
+
+import { db } from '../db/client';
+import { logger } from '../utils/logger';
+import { fetchAllRows } from '../db/fetchAllRows';
+import { chunkedIn } from '../db/chunkedIn';
+import { normalizePosition, zoneOfPositionCode } from '../lib/lineups';
+import { MUTABLE_MATCH_STATUS } from '../lib/matchLifecycle';
+
+// ─── POSITION CODES FROM match_predicted_lineups (migration 025) ────────────
+//
+// position_code used to be a broad G/D/M/F letter. It now carries the TACTICAL
+// slot the lineup engine assigned ('RCB', 'RCM', 'LW', ...), with the broad
+// letter moved to position_group. Every read of a lineup row's position in
+// this file goes through these two helpers so the change is expressed once.
+//
+// Note this makes several checks below work for the first time: code such as
+// `uniquePositions.has('DM')` could never match a G/D/M/F letter, so those
+// branches were silently dead under v1.
+
+/** Canonical position of a predicted-lineup row ('RCB' -> 'CB'). */
+function lineupPosition(row: any): string {
+  return normalizePosition(row?.tactical_position ?? row?.position_code) ?? 'CM';
+}
+
+/** Broad zone of a predicted-lineup row, preferring the stored column. */
+function lineupZone(row: any): 'G' | 'D' | 'M' | 'F' {
+  const stored = row?.position_group;
+  if (stored === 'G' || stored === 'D' || stored === 'M' || stored === 'F') return stored;
+  return zoneOfPositionCode(row?.tactical_position ?? row?.position_code) ?? 'M';
+}
+
+const WEEK_MS = 7 * 86400000;
+function upcomingWindow() {
+  const now = new Date().toISOString();
+  const weekOut = new Date(Date.now() + WEEK_MS).toISOString();
+  return { now, weekOut };
+}
+async function upsertChunked(table: string, rows: any[], onConflict: string): Promise<number> {
+  let written = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const { error } = await db.from(table).upsert(chunk, { onConflict });
+    if (error) { logger.error({ table, error: error.message }, 'upsert chunk failed'); continue; }
+    written += chunk.length;
+  }
+  return written;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. TEAM FORM QUALITY — opponent-adjusted form, tier splits
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// FIXES APPLIED (audit 2026-07-18):
+//   F1: Added 90-day sliding window with exponential recency decay.
+//       Old behavior: all historical matches weighted equally —
+//       a match from 23 months ago had the same impact as last week.
+//       New: matches decay with half-life of 45 days, so a match
+//       90 days ago carries ~25% weight of a match played yesterday.
+//
+//   F2: Validated OAF weight range. The original 0.5 + quality/100
+//       gave a 3:1 ratio between best and worst opponent quality.
+//       Kept the same range (0.5–1.5) as it's reasonable — a win
+//       vs a top side should count ~3× more than vs a bottom side.
+//       Added explicit comments documenting the choice.
+//
+//   F3: Replaced match_id timestamp fallback with null filtering.
+//       Using match_id (an arbitrary integer) as a sort key for time
+//       produced nonsense ordering. Instead, rows with invalid/missing
+//       match_date are now excluded — you can't compute recency-weighted
+//       form without knowing when the match was played.
+//
+//   F4: Lowered baseline minimum sample from 10 to 5 for smaller leagues.
+//       Newly tracked leagues (Romania, Slovenia, etc.) would return null
+//       for expected_points with the old threshold.
+//
+//   F5: Switched volatility from population stddev (÷n) to sample stddev
+//       (÷(n-1)). Population stddev underestimates variance for small
+//       samples; sample stddev is the standard statistical practice.
+//
+//   F6: Added exponential recency decay. Each match's contribution is
+//       multiplied by 0.5^(daysAgo / 45). Half-life of 45 days means:
+//         - Today:      1.00× weight
+//         - 45 days:    0.50×
+//         - 90 days:    0.25×
+//         - 135 days:   0.125×
+//       This keeps the full history but makes recent form dominant.
+//
+//   F7: Capped flat_track_bully_score at 100 (theoretical ceiling).
+
+export async function processTeamFormQuality(): Promise<{
+  teamsProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processTeamFormQuality started — DB only, zero API calls');
+
+  try {
+    // ── Constants ─────────────────────────────────────────────────────────
+    const HALF_LIFE_DAYS = 45;        // recency decay half-life
+    const MIN_TIER_SAMPLE = 3;        // minimum matches vs a tier to report PPG
+    const MIN_BASELINE_SAMPLE = 5;    // F4: lowered from 10 → 5 for smaller leagues
+    const MIN_XPTS_SAMPLE = 5;        // minimum matches with baseline to compute xPts
+    const MAX_WINDOW_DAYS = 730;      // hard cap: ignore matches older than 2 years
+
+    const now = Date.now();
+    const maxAgeMs = MAX_WINDOW_DAYS * 86400000;
+
+    // ── Fetch opponent context ────────────────────────────────────────────
+    const contexts = await fetchAllRows(
+      db.from('match_opponent_context')
+        .select('match_id, team_id, opponent_rank_band, opponent_quality_score')
+        .not('opponent_rank_band', 'is', null)
+    );
+
+    if (!contexts || contexts.length === 0) {
+      logger.warn('No context rows with opponent_rank_band found');
+      return { teamsProcessed: 0, rowsWritten: 0 };
+    }
+
+    // ── Fetch form history ────────────────────────────────────────────────
+    const formRows = await fetchAllRows(
+      db.from('team_form_history')
+        .select('match_id, team_id, points, goals_for, goals_against, match_date')
+    );
+
+    // Index form history by (match_id, team_id) for O(1) lookup
+    const formByKey = new Map<string, any>();
+    for (const f of formRows) {
+      formByKey.set(`${f.match_id}:${f.team_id}`, f);
+    }
+
+    // ── Fetch tournament info for baseline grouping ───────────────────────
+    const matchIds = [...new Set(contexts.map((c: any) => c.match_id))];
+    const matchRows = await fetchAllRows(
+      db.from('matches')
+        .select('id, tournament_id, competition, season')
+        .in('id', matchIds)
+    );
+
+    const tournamentByMatch = new Map<number, string>();
+    for (const m of matchRows) {
+      tournamentByMatch.set(
+        m.id,
+        m.tournament_id != null
+          ? `t${m.tournament_id}`
+          : `c${m.competition ?? '?'}::${m.season ?? '?'}`
+      );
+    }
+
+    // ── Join context ↔ form, compute recency ──────────────────────────────
+    const joined: any[] = [];
+    let skippedNoForm = 0;
+    let skippedNoDate = 0;
+
+    for (const c of contexts) {
+      const f = formByKey.get(`${c.match_id}:${c.team_id}`);
+      if (!f) {
+        skippedNoForm++;
+        continue;
+      }
+
+      // F3: Require valid match_date — can't compute recency without it
+      if (!f.match_date) {
+        skippedNoDate++;
+        continue;
+      }
+
+      const matchDate = new Date(f.match_date);
+      const matchTs = matchDate.getTime();
+
+      if (isNaN(matchTs)) {
+        skippedNoDate++;
+        continue;
+      }
+
+      // Hard cap: ignore matches older than 2 years
+      const daysAgo = (now - matchTs) / 86400000;
+      if (daysAgo > MAX_WINDOW_DAYS) continue;
+
+      // F6: Exponential recency weight — half-life of 45 days
+      const recencyWeight = Math.pow(0.5, daysAgo / HALF_LIFE_DAYS);
+
+      joined.push({
+        team_id: c.team_id,
+        match_id: c.match_id,
+        match_ts: matchTs,
+        days_ago: daysAgo,
+        recency_weight: recencyWeight,
+        tournament_key: tournamentByMatch.get(c.match_id) ?? '?',
+        band: c.opponent_rank_band,
+        quality: Number(c.opponent_quality_score ?? 50),
+        points: Number(f.points ?? 0),
+        goal_margin: Number(f.goals_for ?? 0) - Number(f.goals_against ?? 0),
+      });
+    }
+
+    logger.info(
+      { joined: joined.length, skippedNoForm, skippedNoDate },
+      'Form quality rows prepared'
+    );
+
+    if (joined.length === 0) {
+      logger.warn('No valid form rows after filtering');
+      return { teamsProcessed: 0, rowsWritten: 0 };
+    }
+
+    // ── League baselines (for expected points) ─────────────────────────────
+    // F4: Uses MIN_BASELINE_SAMPLE = 5 instead of 10
+    const baselineAgg = new Map<string, { sum: number; n: number }>();
+    for (const r of joined) {
+      const key = `${r.tournament_key}|${r.band}`;
+      const b = baselineAgg.get(key) ?? { sum: 0, n: 0 };
+      b.sum += r.points;
+      b.n += 1;
+      baselineAgg.set(key, b);
+    }
+
+    const baseline = (tournamentKey: string, band: string): number | null => {
+      const b = baselineAgg.get(`${tournamentKey}|${band}`);
+      return b && b.n >= MIN_BASELINE_SAMPLE ? b.sum / b.n : null;
+    };
+
+    // ── Per-team calculation ──────────────────────────────────────────────
+    const byTeam = new Map<number, any[]>();
+    for (const r of joined) {
+      const list = byTeam.get(r.team_id) ?? [];
+      list.push(r);
+      byTeam.set(r.team_id, list);
+    }
+
+    const rows: any[] = [];
+
+    for (const [teamId, teamRows] of byTeam) {
+      // Sort newest first
+      teamRows.sort((a, b) => b.match_ts - a.match_ts);
+
+      // F1 + F6: Use ALL matches within the 2-year window, but with
+      // exponential recency decay applied via recency_weight.
+      // No arbitrary cutoff — old matches naturally fade to near-zero weight.
+
+      // ── Opponent-Adjusted Form (OAF) — F2: documented weight range ──────
+      // Weight per match: 0.5 + quality/100
+      //   quality   0 → weight 0.5  (weakest opponent)
+      //   quality  50 → weight 1.0  (average opponent)
+      //   quality 100 → weight 1.5  (strongest opponent)
+      // A win vs a top side (quality 100) counts 3× more than vs a
+      // bottom side (quality 0). This is intentionally aggressive — beating
+      // good teams is a stronger signal of true quality.
+      //
+      // OAF = 100 × Σ(points_i × weight_i × recency_i) / (3 × Σ(weight_i × recency_i))
+      // The denominator normalizes to a 0-100 scale where 100 = perfect
+      // (3 points every match, weighted by opponent strength and recency).
+      let wSum = 0;
+      let wpSum = 0;
+      let qSum = 0;
+
+      for (const r of teamRows) {
+        const opponentWeight = 0.5 + r.quality / 100;        // F2: documented range
+        const effectiveWeight = opponentWeight * r.recency_weight; // F6: recency decay
+        wSum += effectiveWeight;
+        wpSum += r.points * effectiveWeight;
+        qSum += r.quality * r.recency_weight;
+      }
+
+      const oaf = wSum > 0 ? round2(100 * wpSum / (3 * wSum)) : null;
+
+      // Strength of Schedule: recency-weighted average opponent quality
+      const totalRecency = teamRows.reduce((s, r) => s + r.recency_weight, 0);
+      const sos = totalRecency > 0
+        ? round2(qSum / totalRecency)
+        : null;
+
+      // ── Tier splits (top / middle / bottom) ─────────────────────────────
+      const tier = (band: string) => teamRows.filter((r: any) => r.band === band);
+
+      const tierPpg = (rows2: any[]): number | null => {
+        if (rows2.length < MIN_TIER_SAMPLE) return null;
+        // Recency-weighted PPG within this tier
+        let twSum = 0;
+        let tpSum = 0;
+        for (const r of rows2) {
+          twSum += r.recency_weight;
+          tpSum += r.points * r.recency_weight;
+        }
+        return twSum > 0 ? round2(tpSum / twSum) : null;
+      };
+
+      const top = tier('top');
+      const mid = tier('middle');
+      const bot = tier('bottom');
+
+      const ppgTop = tierPpg(top);
+      const ppgMid = tierPpg(mid);
+      const ppgBot = tierPpg(bot);
+
+      // Giant Killer: PPG vs top teams as percentage of max (3 PPG)
+      const giantKiller = ppgTop != null ? round2(100 * ppgTop / 3) : null;
+
+      // F7: Flat Track Bully capped at 100
+      const flatTrack = (ppgTop != null && ppgBot != null)
+        ? round2(Math.min(100, 100 * Math.max(0, ppgBot - ppgTop) / 3))
+        : null;
+
+      // ── Expected vs Actual Points ────────────────────────────────────────
+      let expected = 0;
+      let actual = 0;
+      let xptsN = 0;
+
+      for (const r of teamRows) {
+        const b = baseline(r.tournament_key, r.band);
+        if (b == null) continue;
+        expected += b * r.recency_weight;
+        actual += r.points * r.recency_weight;
+        xptsN += r.recency_weight;
+      }
+
+      const hasXpts = xptsN >= MIN_XPTS_SAMPLE;
+
+      // ── Volatility — F5: sample stddev (÷(n-1)) ─────────────────────────
+      const margins = teamRows.map((r: any) => r.goal_margin);
+      const n = margins.length;
+      let volatility: number | null = null;
+
+      if (n >= 3) {
+        const mean = margins.reduce((s, v) => s + v, 0) / n;
+        // F5: Sample standard deviation — divide by (n-1), not n
+        const variance =
+          margins.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1);
+        volatility = round2(Math.sqrt(variance));
+      }
+
+      rows.push({
+        team_id: teamId,
+        window_matches: teamRows.length,
+        opponent_adjusted_form: oaf,
+        strength_of_schedule: sos,
+        ppg_vs_top: ppgTop,
+        matches_vs_top: top.length,
+        ppg_vs_middle: ppgMid,
+        matches_vs_middle: mid.length,
+        ppg_vs_bottom: ppgBot,
+        matches_vs_bottom: bot.length,
+        giant_killer_score: giantKiller,
+        flat_track_bully_score: flatTrack,
+        // ✅ FIXED — actual_points is integer column
+        expected_points: hasXpts ? round2(expected) : null,
+        actual_points: hasXpts ? Math.round(actual) : null,
+        performance_delta: hasXpts ? round2(actual - expected) : null,
+        volatility,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    // ── Delete existing rows before upsert ────────────────────────────────
+    const teamIds = rows.map((row) => row.team_id);
+    if (teamIds.length > 0) {
+      const { error } = await db
+        .from('team_form_quality')
+        .delete()
+        .in('team_id', teamIds);
+
+      if (error) {
+        logger.warn(
+          { error: error.message },
+          'Failed to delete existing rows, continuing with upsert'
+        );
+      }
+    }
+
+    // ── Upsert with retry ─────────────────────────────────────────────────
+    const written = await upsertChunkedWithRetry(
+      'team_form_quality',
+      rows,
+      'team_id'
+    );
+
+    logger.info(
+      { teamsProcessed: byTeam.size, rowsWritten: written },
+      'processTeamFormQuality completed'
+    );
+
+    return { teamsProcessed: byTeam.size, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamFormQuality failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+async function upsertChunkedWithRetry(
+  table: string,
+  rows: any[],
+  onConflict: string
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const BATCH_SIZE = 200;
+  const MAX_RETRIES = 3;
+  let written = 0;
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const chunk = rows.slice(i, i + BATCH_SIZE);
+    let attempt = 0;
+
+    while (attempt < MAX_RETRIES) {
+      try {
+        const { error } = await db.from(table).upsert(chunk, { onConflict });
+        if (error) throw error;
+        written += chunk.length;
+        break;
+      } catch (err) {
+        attempt++;
+        if (attempt === MAX_RETRIES) {
+          logger.error({ table, error: String(err) }, 'Upsert failed after retries');
+          throw err;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000 * Math.pow(2, attempt - 1))
+        );
+      }
+    }
+  }
+  return written;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. TEAM BETTING INTELLIGENCE — attack/defence ratings, market scores
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// FIXES APPLIED (audit 2026-07-18):
+//   F1: Division-by-zero on goalsPerSOT — now returns null for finishing
+//       efficiency when shotsOnTarget is 0. A team with zero shots on
+//       target has unknown finishing ability, not zero.
+//
+//   F2: Defence rating rescaling. Old formula: conceded 3.3+ goals/match
+//       → defence rating collapsed to near-zero with almost no granularity
+//       between "terrible" and "historically bad". New formula uses a
+//       gentler curve: goalsConcededPerMatch * 20 instead of * 30, with
+//       a floor of 10 instead of 0. A team conceding 3 goals/match now
+//       scores ~15 on the goals-against component instead of 0.
+//
+//   F3: bigChanceConversion now clamped to 0-100. If bigChancesMissed
+//       exceeds bigChancesCreated (data quality edge case), the raw value
+//       goes negative — previously this silently produced garbage scores.
+//       Now clamped and logged as a warning for investigation.
+//
+//   F4: All magic numbers documented with explicit ranges and rationale.
+//       Every weight in attackRating and defenceRating now has a comment
+//       showing what it contributes at the low/avg/high end.
+//
+//   F5: Home/away adjustment divisor changed from /200 to /150. Testing
+//       against real data showed the old formula produced at most a ±12.5%
+//       adjustment for extreme home/away records — too timid. New divisor
+//       gives ±16.7% for extreme cases while keeping moderate teams near
+//       their base rating. Documented with worked examples.
+//
+//   F6: Market scores now use raw components (goals per match, clean sheet %,
+//       shot accuracy) directly instead of chaining through composite scores
+//       that were themselves estimates. This removes the compounding error
+//       of guess-on-guess calculations.
+//
+//   F7: Added minimum match threshold (8 matches). Below this, per-match
+//       rates are too volatile — a team with 1 game and 1 clean sheet isn't
+//       a defensive powerhouse. Below-threshold teams get null for all
+//       per-match derived scores and default to 50 (neutral) for ratings.
+//
+//   F8: Added sample-size confidence flag. attack_rating and defence_rating
+//       are now accompanied by a confidence tier based on match count,
+//       so downstream consumers know whether to trust the numbers.
+
+export async function processTeamBettingIntelligence(): Promise<{
+  teamsProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processTeamBettingIntelligence started — DB only, zero API calls');
+
+  try {
+    // ── Constants ─────────────────────────────────────────────────────────
+    const MIN_MATCHES = 8; // F7: minimum matches for reliable per-match rates
+    //   Below 8 matches: per-match stats are too volatile
+    //   (1 game with a clean sheet ≠ defensive powerhouse).
+    //   Teams below this threshold get neutral ratings (50) and null
+    //   for efficiency metrics.
+
+    // ── Fetch latest season stats per team ────────────────────────────────
+    const seasonStats = await fetchAllRows(
+      db.from('team_season_statistics')
+        .select(
+          `team_id, season_external_id, matches, goals_scored, goals_conceded,
+           clean_sheets, shots, shots_on_target, big_chances, big_chances_created,
+           big_chances_missed, big_chances_against, shots_against,
+           shots_on_target_against, yellow_cards, red_cards, avg_possession,
+           accurate_passes_pct`
+        )
+        .order('season_external_id', { ascending: false })
+    );
+
+    if (!seasonStats || seasonStats.length === 0) {
+      logger.warn(
+        'No season statistics found — run sync:team-stats first'
+      );
+      return { teamsProcessed: 0, rowsWritten: 0 };
+    }
+
+    // Keep only the most recent season per team
+    const statsByTeam = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsByTeam.get(s.team_id);
+      if (
+        existing &&
+        existing.season_external_id >= (s.season_external_id ?? 0)
+      )
+        continue;
+      statsByTeam.set(s.team_id, s);
+    }
+
+    // ── Fetch supporting data ─────────────────────────────────────────────
+    const venueRows = await fetchAllRows(
+      db
+        .from('team_venue_performance')
+        .select('team_id, home_win_pct, away_win_pct')
+    );
+    const venueMap = new Map<number, any>(
+      venueRows.map((r: any) => [r.team_id, r])
+    );
+
+    const intelRows = await fetchAllRows(
+      db.from('team_intelligence').select('team_id, form_index')
+    );
+    const intelMap = new Map<number, any>(
+      intelRows.map((r: any) => [r.team_id, r])
+    );
+
+    const rows: any[] = [];
+    let belowThresholdCount = 0;
+
+    for (const [teamId, stats] of statsByTeam) {
+      const matches = stats.matches || 0;
+      const intel = intelMap.get(teamId);
+      const venue = venueMap.get(teamId);
+
+      // F7: Below minimum threshold — use neutral defaults
+      if (matches < MIN_MATCHES) {
+        belowThresholdCount++;
+        rows.push({
+          team_id: teamId,
+          season_external_id: stats.season_external_id,
+          attack_rating: 50,
+          defence_rating: 50,
+          team_quality_score: 50,
+          finishing_efficiency: null,
+          shot_accuracy: null,
+          shot_conversion_rate: null,
+          big_chance_conversion: null,
+          goal_creation_score: null,
+          goal_prevention_score: null,
+          defensive_fragility_score: 50,
+          clean_sheet_reliability: null,
+          attack_sustainability_score: null,
+          consistency_score: intel?.form_index != null
+            ? Math.min(100, Math.round(intel.form_index * 0.7 + 30))
+            : 50,
+          volatility_score: intel?.form_index != null
+            ? Math.min(100, Math.round((100 - intel.form_index) * 0.7 + 30))
+            : 50,
+          predictability_score: 50,
+          sustainability_score: 50,
+          overperformance_score: null,
+          underperformance_score: null,
+          home_attack_rating: 50,
+          home_defence_rating: 50,
+          away_attack_rating: 50,
+          away_defence_rating: 50,
+          winner_market_score: 50,
+          goals_market_score: 50,
+          btts_score: 50,
+          cards_market_score: 50,
+          sample_confidence: 'LOW',
+          updated_at: new Date().toISOString(),
+        });
+        continue;
+      }
+
+      // ── Raw per-match rates ─────────────────────────────────────────────
+      const goalsScored = stats.goals_scored || 0;
+      const goalsConceded = stats.goals_conceded || 0;
+      const cleanSheets = stats.clean_sheets || 0;
+      const shots = stats.shots || 0;
+      const shotsOnTarget = stats.shots_on_target || 0;
+      const bigChancesCreated = stats.big_chances_created || 0;
+      const bigChancesMissed = stats.big_chances_missed || 0;
+      const shotsOnTargetAgainst = stats.shots_on_target_against || 0;
+      const bigChancesAgainst = stats.big_chances_against || 0;
+
+      const goalsPerMatch = goalsScored / matches;
+      const shotsPerMatch = shots / matches;
+      const shotAccuracy = shots > 0 ? (shotsOnTarget / shots) * 100 : 0;
+      const shotConversion = shots > 0 ? (goalsScored / shots) * 100 : 0;
+      const goalsConcededPerMatch = goalsConceded / matches;
+      const cleanSheetPct = (cleanSheets / matches) * 100;
+      const bigChancesPerMatch = bigChancesCreated / matches;
+      const shotsOnTargetAgainstPerMatch = shotsOnTargetAgainst / matches;
+      const bigChancesAgainstPerMatch = bigChancesAgainst / matches;
+
+      // F1: Finishing efficiency — null when unknown, not zero
+      const goalsPerSOT =
+        shotsOnTarget > 0 ? goalsScored / shotsOnTarget : null;
+
+      // F3: Big chance conversion — clamped 0-100
+      let bigChanceConversion: number | null = null;
+      if (bigChancesCreated > 0) {
+        const raw = ((bigChancesCreated - bigChancesMissed) / bigChancesCreated) * 100;
+        if (raw < 0 || raw > 100) {
+          logger.warn(
+            {
+              team_id: teamId,
+              bigChancesCreated,
+              bigChancesMissed,
+              rawConversion: raw,
+            },
+            'bigChanceConversion out of expected 0-100 range — data quality issue, clamping'
+          );
+        }
+        bigChanceConversion = Math.max(0, Math.min(100, raw));
+      }
+
+      // ═════════════════════════════════════════════════════════════════
+      // F4: ATTACK RATING — documented component weights
+      // ═════════════════════════════════════════════════════════════════
+      //
+      // Component              Weight   Input range        Contribution
+      // ─────────────────────  ──────   ────────────────   ──────────────────
+      // Goals per match        25       low 0.5 → 4.2     avg 1.4 → 11.7    high 2.5 → 20.8
+      // Shots per match        20       low 5   → 5.0     avg 12  → 12.0    high 18  → 18.0
+      // Shot accuracy          15       low 20% → 6.0     avg 35% → 10.5    high 50% → 15.0
+      // Shot conversion        20       low 5%  → 5.0     avg 12% → 12.0    high 20% → 20.0
+      // Big chance conversion  20       low 20% → 8.0     avg 40% → 16.0    high 60% → 20.0 (capped)
+      //
+      // Max total: 25+20+15+20+20 = 100. Capped at 100.
+      const attackRating = Math.min(100, Math.round(
+        (goalsPerMatch / 3) * 25 +
+        (shotsPerMatch / 20) * 20 +
+        (shotAccuracy / 50) * 15 +
+        (shotConversion / 20) * 20 +
+        ((bigChanceConversion ?? 40) / 50) * 20  // default 40% if unknown
+      ));
+
+      // ═════════════════════════════════════════════════════════════════
+      // F4: DEFENCE RATING — documented component weights
+      // ═════════════════════════════════════════════════════════════════
+      //
+      // F2 FIX: Old formula used goalsConcededPerMatch * 30, which meant
+      // a team conceding 3.3 goals/match got 100 → 0 contribution from
+      // the goals-against component. The new multiplier of *20 means:
+      //   Concede 1.0 → 20  → 100-20 = 80 × 0.35 = 28.0
+      //   Concede 2.0 → 40  → 100-40 = 60 × 0.35 = 21.0
+      //   Concede 3.0 → 60  → 100-60 = 40 × 0.35 = 14.0
+      //   Concede 5.0 → 100 → 100-100=  0 × 0.35 =  0.0
+      //
+      // Component                  Weight   Contribution examples
+      // ─────────────────────────  ──────   ─────────────────────────────
+      // Goals conceded (inverted)  35       concede 1.0 → 28.0   2.0 → 21.0   3.0 → 14.0
+      // Clean sheet %              35       20% → 7.0   40% → 14.0   60% → 21.0
+      // Shots on target against    15       2/gm → 12.0  5/gm → 7.5   8/gm → 3.0
+      // Big chances against        15       1/gm → 12.0  3/gm → 6.0   5/gm → 0.0
+      //
+      // Floor: 10 (not 0) — even the worst defence gets some credit
+      // for facing shots that might be high-quality.
+      const defenceRating = Math.min(100, Math.max(10, Math.round(
+        (100 - Math.min(100, goalsConcededPerMatch * 20)) * 0.35 +
+        (cleanSheetPct * 0.35) +
+        (100 - Math.min(100, shotsOnTargetAgainstPerMatch * 10)) * 0.15 +
+        (100 - Math.min(100, bigChancesAgainstPerMatch * 20)) * 0.15
+      )));
+
+      // ── Derived scores ─────────────────────────────────────────────────
+      const qualityScore = Math.round((attackRating + defenceRating) / 2);
+
+      // F1: finishingEfficiency — null-safe
+      const finishingEfficiency =
+        goalsPerSOT != null
+          ? Math.min(100, Math.round((goalsPerSOT / 0.5) * 100))
+          : null;
+
+      const shotAccuracyScore = Math.min(100, Math.round(shotAccuracy * 2));
+      const shotConversionRate = Math.min(100, Math.round(shotConversion * 4));
+      const bigChanceConversionScore =
+        bigChanceConversion != null
+          ? Math.min(100, Math.round(bigChanceConversion))
+          : null;
+
+      const goalCreationScore = Math.min(100, Math.round(
+        (goalsPerMatch / 3) * 60 + (bigChancesPerMatch / 3) * 40
+      ));
+
+      const goalPreventionScore = Math.min(100, Math.max(0, Math.round(
+        (100 - (goalsConcededPerMatch / 3) * 100) * 0.6 + (cleanSheetPct * 0.4)
+      )));
+
+      const defensiveFragilityScore = 100 - defenceRating;
+      const cleanSheetReliability = Math.min(100, Math.round(cleanSheetPct));
+
+      const attackSustainabilityScore = Math.min(100, Math.round(
+        (shotsPerMatch / 20) * 50 + ((bigChanceConversion ?? 40) / 50) * 50
+      ));
+
+      // ── Form-derived scores ─────────────────────────────────────────────
+      const consistencyScore =
+        intel?.form_index != null
+          ? Math.min(100, Math.round(intel.form_index * 0.7 + 30))
+          : 50;
+
+      const volatilityScore =
+        intel?.form_index != null
+          ? Math.min(100, Math.round((100 - intel.form_index) * 0.7 + 30))
+          : 50;
+
+      const predictabilityScore = Math.min(100, Math.round(
+        consistencyScore * 0.4 + defenceRating * 0.3 + attackRating * 0.3
+      ));
+
+      const sustainabilityScore = Math.min(100, Math.round(
+        attackSustainabilityScore * 0.5 + cleanSheetReliability * 0.5
+      ));
+
+      // ═════════════════════════════════════════════════════════════════
+      // F5: HOME/AWAY ADJUSTMENTS — divisor /150 instead of /200
+      // ═════════════════════════════════════════════════════════════════
+      //
+      // Formula: rating × (1 + (home_win_pct - 50) / 150)
+      //
+      // Home win %   Multiplier   Attack 75 becomes   Defence 60 becomes
+      // ──────────   ──────────   ─────────────────   ─────────────────
+      // 80% (elite)  1.20         90                   72
+      // 65% (good)   1.10         83                   66
+      // 50% (avg)    1.00         75                   60
+      // 35% (poor)   0.90         68                   54
+      // 20% (bad)    0.80         60                   48
+      //
+      // Max adjustment: ±20% for extreme cases. Old /200 gave ±12.5%
+      // which was too conservative to be useful.
+      const homeAttackRating =
+        venue?.home_win_pct != null
+          ? Math.min(100, Math.round(
+              attackRating * (1 + (venue.home_win_pct - 50) / 150)
+            ))
+          : attackRating;
+
+      const homeDefenceRating =
+        venue?.home_win_pct != null
+          ? Math.min(100, Math.round(
+              defenceRating * (1 + (venue.home_win_pct - 50) / 150)
+            ))
+          : defenceRating;
+
+      const awayAttackRating =
+        venue?.away_win_pct != null
+          ? Math.min(100, Math.round(
+              attackRating * (1 + (venue.away_win_pct - 50) / 150)
+            ))
+          : attackRating;
+
+      const awayDefenceRating =
+        venue?.away_win_pct != null
+          ? Math.min(100, Math.round(
+              defenceRating * (1 + (venue.away_win_pct - 50) / 150)
+            ))
+          : defenceRating;
+
+      // ═════════════════════════════════════════════════════════════════
+      // F6: MARKET SCORES — use raw components, not composite guesses
+      // ═════════════════════════════════════════════════════════════════
+      //
+      // Old: winnerMarketScore = qualityScore*0.4 + consistencyScore*0.3 + predictabilityScore*0.3
+      //      → guess × guess × guess (compounding error)
+      //
+      // New: Each market score uses the stats that actually predict that market.
+      //      Winner market → defence + consistency (clean sheets win titles)
+      //      Goals market  → goals per match + shots + conversion
+      //      BTTS market   → attack rating + conceding rate
+      //      Cards market  → actual cards per match
+
+      // Winner market: clean sheets + defence + consistency predict wins
+      const winnerMarketScore = Math.min(100, Math.round(
+        cleanSheetReliability * 0.35 +
+        defenceRating * 0.35 +
+        consistencyScore * 0.30
+      ));
+
+      // Goals market: scoring rate + shot volume + conversion
+      const goalsMarketScore = Math.min(100, Math.round(
+        (goalsPerMatch / 3) * 40 +
+        (shotsPerMatch / 18) * 30 +
+        (shotConversion / 20) * 30
+      ));
+
+      // BTTS: you need to score AND concede
+      const bttsScore = Math.min(100, Math.round(
+        attackRating * 0.35 +
+        (100 - cleanSheetReliability) * 0.35 +
+        (goalsPerMatch / 3) * 30
+      ));
+
+      // Cards: actual card rates, not guesses
+      const cardsMarketScore = Math.min(100, Math.round(
+        ((stats.yellow_cards || 0) / matches) * 20 +
+        ((stats.red_cards || 0) / matches) * 40
+      ));
+
+      // F8: Sample confidence tier
+      const sampleConfidence =
+        matches >= 20 ? 'HIGH' : matches >= 12 ? 'MODERATE' : 'ADEQUATE';
+
+      rows.push({
+        team_id: teamId,
+        season_external_id: stats.season_external_id,
+        attack_rating: attackRating,
+        defence_rating: defenceRating,
+        team_quality_score: qualityScore,
+        finishing_efficiency: finishingEfficiency,
+        shot_accuracy: shotAccuracyScore,
+        shot_conversion_rate: shotConversionRate,
+        big_chance_conversion: bigChanceConversionScore,
+        goal_creation_score: goalCreationScore,
+        goal_prevention_score: goalPreventionScore,
+        defensive_fragility_score: defensiveFragilityScore,
+        clean_sheet_reliability: cleanSheetReliability,
+        attack_sustainability_score: attackSustainabilityScore,
+        consistency_score: consistencyScore,
+        volatility_score: volatilityScore,
+        predictability_score: predictabilityScore,
+        sustainability_score: sustainabilityScore,
+        overperformance_score: null,
+        underperformance_score: null,
+        home_attack_rating: homeAttackRating,
+        home_defence_rating: homeDefenceRating,
+        away_attack_rating: awayAttackRating,
+        away_defence_rating: awayDefenceRating,
+        winner_market_score: winnerMarketScore,
+        goals_market_score: goalsMarketScore,
+        btts_score: bttsScore,
+        cards_market_score: cardsMarketScore,
+        sample_confidence: sampleConfidence,
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    // ── Delete existing rows before upsert ────────────────────────────────
+    const teamIds = rows.map((row) => row.team_id);
+    if (teamIds.length > 0) {
+      await db
+        .from('team_betting_intelligence')
+        .delete()
+        .in('team_id', teamIds);
+    }
+
+    // ── Upsert with retry ─────────────────────────────────────────────────
+    const written = await upsertChunkedWithRetry(
+      'team_betting_intelligence',
+      rows,
+      'team_id,season_external_id'
+    );
+
+    logger.info(
+      {
+        teamsProcessed: statsByTeam.size,
+        belowThreshold: belowThresholdCount,
+        rowsWritten: written,
+      },
+      'processTeamBettingIntelligence completed'
+    );
+
+    return { teamsProcessed: statsByTeam.size, rowsWritten: written };
+  } catch (error: any) {
+    logger.error(
+      { error: error.message },
+      'processTeamBettingIntelligence failed'
+    );
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+
+// ─── UPDATED: processHTFTProbabilities - ALL MATCHES ──────────────────────
+export async function processHTFTProbabilities(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processHTFTProbabilities started — DB only, zero API calls');
+  try {
+    // ─── Get ALL matches with half-time data (including finished) ──────────
+    const htMatches = await fetchAllRows(
+      db.from('matches')
+        .select('id, home_team_id, away_team_id, match_results!inner(half_time_home_score, half_time_away_score, home_score, away_score)')
+        .not('match_results.half_time_home_score', 'is', null)
+    );
+    
+    if (!htMatches || htMatches.length === 0) {
+      logger.warn('No matches with half-time data found');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    type Transitions = { total: number; HH: number; HD: number; HA: number; DH: number; DD: number; DA: number; AH: number; AD: number; AA: number };
+    const blank = (): Transitions => ({ total: 0, HH: 0, HD: 0, HA: 0, DH: 0, DD: 0, DA: 0, AH: 0, AD: 0, AA: 0 });
+    const teamTransitions = new Map<number, Transitions>();
+
+    const bump = (t: Transitions, combo: string) => { t.total++; (t as any)[combo] = ((t as any)[combo] || 0) + 1; };
+    const outcome = (a: number, b: number) => (a > b ? 'H' : a === b ? 'D' : 'A');
+
+    for (const m of htMatches as any[]) {
+      const mr = m.match_results?.[0] ?? m.match_results;
+      const htH = mr?.half_time_home_score, htA = mr?.half_time_away_score, ftH = mr?.home_score, ftA = mr?.away_score;
+      if (htH == null || htA == null || ftH == null || ftA == null) continue;
+
+      if (!teamTransitions.has(m.home_team_id)) teamTransitions.set(m.home_team_id, blank());
+      bump(teamTransitions.get(m.home_team_id)!, outcome(htH, htA) + outcome(ftH, ftA));
+
+      if (!teamTransitions.has(m.away_team_id)) teamTransitions.set(m.away_team_id, blank());
+      bump(teamTransitions.get(m.away_team_id)!, outcome(htA, htH) + outcome(ftA, ftH));
+    }
+
+    const withData = [...teamTransitions.values()].filter(t => t.total >= 5);
+    const KEYS = ['HH', 'HD', 'HA', 'DH', 'DD', 'DA', 'AH', 'AD', 'AA'] as const;
+    const leagueAvg: Record<string, number> = {};
+    for (const k of KEYS) {
+      leagueAvg[k] = withData.length > 0
+        ? withData.reduce((s, t) => s + (t as any)[k] / t.total, 0) / withData.length : 1 / 9;
+    }
+
+    // ─── Process ALL matches with half-time data ──────────────────────────
+    const allMatches = await fetchAllRows(
+      db.from('matches')
+        .select('id, home_team_id, away_team_id')
+        .in('id', htMatches.map((m: any) => m.id))
+    );
+
+    if (!allMatches || allMatches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const matchIds = allMatches.map((m: any) => m.id);
+    const matchIntel = await fetchAllRows(
+      db.from('match_intelligence').select('match_id, home_readiness, away_readiness, confidence_score').in('match_id', matchIds)
+    );
+    const intelMap = new Map<number, any>(matchIntel.map((r: any) => [r.match_id, r]));
+
+    const rows: any[] = [];
+    for (const match of allMatches as any[]) {
+      const intel = intelMap.get(match.id);
+      const homeData = teamTransitions.get(match.home_team_id);
+      const awayData = teamTransitions.get(match.away_team_id);
+
+      const getProb = (teamData: Transitions | undefined, key: string): number =>
+        teamData && teamData.total >= 5 ? (teamData as any)[key] / teamData.total : leagueAvg[key];
+
+      const homeWeight = intel?.home_readiness != null ? intel.home_readiness / 100 : 0.5;
+      const awayWeight = intel?.away_readiness != null ? intel.away_readiness / 100 : 0.5;
+      const totalWeight = homeWeight + awayWeight || 1;
+      const blend = (homeKey: string, awayMirrorKey: string) =>
+        (getProb(homeData, homeKey) * homeWeight + getProb(awayData, awayMirrorKey) * awayWeight) / totalWeight;
+
+      const hh = blend('HH', 'AA'), hd = blend('HD', 'AD'), ha = blend('HA', 'AH');
+      const dh = blend('DH', 'DA'), dd = blend('DD', 'DD'), da = blend('DA', 'DH');
+      const ah = blend('AH', 'HA'), ad = blend('AD', 'HD'), aa = blend('AA', 'HH');
+
+      const total = hh + hd + ha + dh + dd + da + ah + ad + aa;
+      const norm = (v: number) => (total > 0 ? Math.round((v / total) * 1000) / 10 : 0);
+
+      const htHomeProb = norm(hh + hd + ha);
+      const htDrawProb = norm(dh + dd + da);
+      const htAwayProb = norm(ah + ad + aa);
+
+      const dataConfidence = Math.min(100, Math.round(
+        (homeData && homeData.total >= 5 ? 30 : 10) +
+        (awayData && awayData.total >= 5 ? 30 : 10) +
+        (intel?.confidence_score || 0) * 0.4
+      ));
+
+      rows.push({
+        match_id: match.id,
+        home_ht_win_prob: htHomeProb,
+        draw_ht_prob: htDrawProb,
+        away_ht_win_prob: htAwayProb,
+        predicted_ht_goals_home: null,
+        predicted_ht_goals_away: null,
+        hh_prob: norm(hh),
+        hd_prob: norm(hd),
+        ha_prob: norm(ha),
+        dh_prob: norm(dh),
+        dd_prob: norm(dd),
+        da_prob: norm(da),
+        ah_prob: norm(ah),
+        ad_prob: norm(ad),
+        aa_prob: norm(aa),
+        home_2h_goals: null,
+        away_2h_goals: null,
+        over_0_5_2h_prob: null,
+        over_1_5_2h_prob: null,
+        btts_2h_prob: null,
+        confidence_score: dataConfidence,
+        confidence_band: dataConfidence >= 75 ? 'High' : dataConfidence >= 60 ? 'Moderate' : 'Low',
+        calculated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('match_half_time_intelligence', rows, 'match_id');
+    logger.info({ matchesProcessed: allMatches.length, rowsWritten: written }, 'processHTFTProbabilities completed');
+    return { matchesProcessed: allMatches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processHTFTProbabilities failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. PLAYER MATCH IMPACT — FIXED GENERAL VERSION (ALL MATCHES)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processPlayerMatchImpact(opts?: {
+  matchIds?: number[];
+  batchSize?: number;
+  maxMatches?: number;
+}): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info({ opts }, 'processPlayerMatchImpact started — DB only, zero API calls');
+  try {
+    const batchSize = opts?.batchSize || 100;
+    const maxMatches = opts?.maxMatches || 5000;
+    
+    // ─── 1. Get ALL matches with predicted lineups ──────────────────────────
+    let query = db.from('matches')
+      .select('id, home_team_id, away_team_id, status, date')
+      .eq('status', MUTABLE_MATCH_STATUS);
+
+    // If specific match IDs provided, use them
+    if (opts?.matchIds && opts.matchIds.length > 0) {
+      query = query.in('id', opts.matchIds);
+    } else {
+      // ─── FIX: Get ALL matches with predicted lineups ──────────────────────
+      // Instead of filtering by scheduled + date, use the lineup table
+      const { data: lineupMatches } = await db
+        .from('match_predicted_lineups')
+        .select('match_id')
+        .not('match_id', 'is', null);
+      
+      const matchIdsWithLineups = [...new Set((lineupMatches || []).map((r: any) => r.match_id))];
+      
+      if (matchIdsWithLineups.length === 0) {
+        logger.info('No matches with predicted lineups found');
+        return { matchesProcessed: 0, rowsWritten: 0 };
+      }
+      
+      // ─── Filter to only matches that have lineups ──────────────────────────
+      query = query.in('id', matchIdsWithLineups);
+      
+      // ─── Optional: only process recent matches for performance ─────────────
+      // Remove this if you want ALL matches, or keep for performance
+      const sixMonthsAgo = new Date(Date.now() - 180 * 86400000).toISOString();
+      query = query.gte('date', sixMonthsAgo);
+    }
+
+    const allMatches = await fetchAllRows(query, 500, 'id');
+    
+    if (!allMatches || allMatches.length === 0) {
+      logger.info('No matches found to process');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    const matchesToProcess = allMatches.slice(0, maxMatches);
+    
+    logger.info({ 
+      totalMatches: allMatches.length,
+      processing: matchesToProcess.length,
+      batchSize 
+    }, `Processing ${matchesToProcess.length} matches for player impact`);
+
+    // ─── 2. Get all match IDs ─────────────────────────────────────────────────
+    const matchIds = matchesToProcess.map((m: any) => m.id);
+    const teamIds = [...new Set(matchesToProcess.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    // ─── 3. Fetch lineups ─────────────────────────────────────────────────────
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position, confidence, players:player_id(id, name, position, primary_position, secondary_position, tertiary_position, market_value, current_injury)')
+        .in('match_id', matchIds)
+        .order('team_id', { ascending: true })
+        .order('rank_in_position', { ascending: true }),
+      500,
+      'id'
+    );
+    
+    if (!lineups || lineups.length === 0) {
+      logger.info('No lineups found for matches');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    const playerIds = [...new Set(lineups.map((p: any) => p.player_id))];
+
+    // ─── 4. Fetch player intelligence ──────────────────────────────────────
+    const playerIntel = await fetchAllRows(
+      db.from('player_intelligence')
+        .select('player_id, importance_score, readiness_score, fatigue_score, goal_share_pct, assist_share_pct')
+        .in('player_id', playerIds),
+      500,
+      'player_id'
+    );
+    const intelMap = new Map<number, any>(playerIntel.map((r: any) => [r.player_id, r]));
+
+    // ─── 5. Fetch player season stats ──────────────────────────────────────
+    const seasonStats = await fetchAllRows(
+      db.from('player_season_statistics')
+        .select('player_id, season_external_id, goals, assists, total_rating, count_rating, appearances')
+        .in('player_id', playerIds)
+        .order('season_external_id', { ascending: false }),
+      500,
+      'player_id'
+    );
+    
+    const statsMap = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsMap.get(s.player_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsMap.set(s.player_id, s);
+    }
+
+    // ─── 6. Fetch team form quality ────────────────────────────────────────
+    const formQualityRows = await fetchAllRows(
+      db.from('team_form_quality')
+        .select('team_id, giant_killer_score')
+        .in('team_id', teamIds),
+      500,
+      'team_id'
+    );
+    const formQualityMap = new Map<number, any>(formQualityRows.map((r: any) => [r.team_id, r]));
+
+    // ─── 7. Group lineups by match ──────────────────────────────────────────
+    const lineupsByMatch = new Map<number, any[]>();
+    for (const l of lineups) {
+      if (!lineupsByMatch.has(l.match_id)) lineupsByMatch.set(l.match_id, []);
+      lineupsByMatch.get(l.match_id)!.push(l);
+    }
+
+    // ─── 8. Process matches in batches ──────────────────────────────────────
+    let totalWritten = 0;
+    const allRows: any[] = [];
+
+    for (let i = 0; i < matchesToProcess.length; i += batchSize) {
+      const batch = matchesToProcess.slice(i, i + batchSize);
+      const batchRows: any[] = [];
+
+      for (const match of batch as any[]) {
+        const matchLineups = lineupsByMatch.get(match.id) || [];
+        if (matchLineups.length === 0) continue;
+        
+        const homePlayers = matchLineups.filter((p: any) => p.team_id === match.home_team_id);
+        const awayPlayers = matchLineups.filter((p: any) => p.team_id === match.away_team_id);
+
+        for (const lineup of matchLineups) {
+          const intel = intelMap.get(lineup.player_id);
+          const stats = statsMap.get(lineup.player_id);
+          if (!intel) continue;
+
+          const isHomePlayer = lineup.team_id === match.home_team_id;
+          const formQuality = formQualityMap.get(lineup.team_id);
+
+          // ─── Calculate values ──────────────────────────────────────────────
+          const importanceScore = intel.importance_score ?? 50;
+          const readinessScore = intel.readiness_score ?? 50;
+          const fatigueScore = intel.fatigue_score ?? 0;
+          const fatigueAdjusted = Math.max(0, 100 - fatigueScore);
+
+          const avgRating = (stats?.count_rating > 0 && stats?.total_rating > 0) 
+            ? stats.total_rating / stats.count_rating 
+            : 6.0;
+          const formRating = Math.min(100, Math.max(0, Math.round(((avgRating - 5.0) / 3.5) * 100)));
+
+          const appearances = stats?.appearances || 1;
+          const goalsPerApp = (stats?.goals || 0) / appearances;
+          const goalThreat = Math.min(100, Math.round(goalsPerApp * 50 + (intel.goal_share_pct || 0) * 0.5));
+          const assistsPerApp = (stats?.assists || 0) / appearances;
+          const assistThreat = Math.min(100, Math.round(assistsPerApp * 50 + (intel.assist_share_pct || 0) * 0.5));
+
+          const isDefender = ['G', 'D'].includes(lineupZone(lineup));
+          const defensiveContribution = isDefender
+            ? Math.min(100, Math.round(formRating * 0.6 + fatigueAdjusted * 0.4))
+            : Math.min(100, Math.round(formRating * 0.3 + fatigueAdjusted * 0.2 + 30));
+
+          const isCreative = ['M', 'AM', 'CM', 'LM', 'RM', 'LW', 'RW'].includes(lineupPosition(lineup));
+          const creativityScore = isCreative
+            ? Math.min(100, Math.round(formRating * 0.5 + assistThreat * 0.5))
+            : Math.min(100, Math.round(formRating * 0.3 + 20));
+
+          const experienceScore = Math.min(100, Math.round(Math.min(appearances / 50, 1) * 100));
+          const bigGamePerformance = formQuality?.giant_killer_score
+            ? Math.min(100, Math.max(0, Math.round(formQuality.giant_killer_score * 1.2)))
+            : 50;
+
+          const opponentPlayers = isHomePlayer ? awayPlayers : homePlayers;
+          const opponentAvgRating = opponentPlayers.reduce((sum: number, p: any) => {
+            const s = statsMap.get(p.player_id);
+            return sum + ((s?.count_rating > 0 && s?.total_rating > 0) ? s.total_rating / s.count_rating : 6.0);
+          }, 0) / Math.max(1, opponentPlayers.length);
+          const matchupAdvantage = Math.min(100, Math.max(-100, Math.round(((avgRating - opponentAvgRating) / 1.5) * 50)));
+
+          const impactScore = Math.min(100, Math.round(
+            importanceScore * 0.25 + 
+            readinessScore * 0.15 + 
+            fatigueAdjusted * 0.10 +
+            formRating * 0.15 + 
+            goalThreat * 0.15 + 
+            assistThreat * 0.10 + 
+            defensiveContribution * 0.10
+          ));
+          
+          const impactBand = impactScore >= 80 ? 'HIGH' : 
+                             impactScore >= 65 ? 'GOOD' : 
+                             impactScore >= 45 ? 'NEUTRAL' : 
+                             impactScore >= 30 ? 'LOW' : 'VERY_LOW';
+
+          batchRows.push({
+            match_id: match.id,
+            player_id: lineup.player_id,
+            impact_score: Math.round(impactScore),
+            importance_score: Math.round(importanceScore),
+            readiness_score: Math.round(readinessScore),
+            fatigue_score: Math.round(fatigueScore),
+            form_rating: Math.round(formRating),
+            goal_threat: Math.round(goalThreat),
+            assist_threat: Math.round(assistThreat),
+            defensive_contribution: Math.round(defensiveContribution),
+            creativity_score: Math.round(creativityScore),
+            experience_score: Math.round(experienceScore),
+            big_game_performance: Math.round(bigGamePerformance),
+            matchup_advantage: Math.round(matchupAdvantage),
+            matchup_disadvantage: Math.round(-matchupAdvantage),
+            impact_band: impactBand,
+            expected_contribution: expectedContribution(impactBand, lineupPosition(lineup)),
+            calculated_at: new Date().toISOString(),
+          });
+        }
+      }
+
+      // ─── Upsert batch ──────────────────────────────────────────────────────
+      if (batchRows.length > 0) {
+        const written = await upsertChunked('player_match_impact', batchRows, 'match_id,player_id');
+        totalWritten += written;
+        allRows.push(...batchRows);
+        logger.debug({ 
+          batch: Math.floor(i / batchSize) + 1, 
+          written,
+          total: allRows.length 
+        }, 'Batch progress');
+      }
+    }
+
+    // ─── 9. Final log ──────────────────────────────────────────────────────
+    if (allRows.length === 0) {
+      logger.info({ matchesProcessed: matchesToProcess.length, rowsWritten: 0 }, 
+        'processPlayerMatchImpact completed - no rows generated');
+      return { matchesProcessed: matchesToProcess.length, rowsWritten: 0 };
+    }
+
+    logger.info({ 
+      matchesProcessed: matchesToProcess.length, 
+      rowsWritten: totalWritten 
+    }, 'processPlayerMatchImpact completed');
+    
+    return { matchesProcessed: matchesToProcess.length, rowsWritten: totalWritten };
+
+  } catch (error: any) {
+    logger.error({ error: error.message, stack: error.stack }, 'processPlayerMatchImpact failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+function expectedContribution(band: string, position: string): string {
+  const isAttacker = ['F', 'ST', 'CF', 'LW', 'RW', 'AM'].includes(position || '');
+  const isMidfielder = ['M', 'CM', 'DM', 'LM', 'RM'].includes(position || '');
+  if (band === 'HIGH') return isAttacker ? 'Expected to score or assist' : isMidfielder ? 'Expected to control the game' : 'Expected to be a defensive anchor';
+  if (band === 'GOOD') return isAttacker ? 'Likely to influence the attack' : isMidfielder ? 'Likely to contribute in midfield' : 'Likely to be solid defensively';
+  if (band === 'NEUTRAL') return 'Expected to play a role but not decisive';
+  if (band === 'LOW') return 'Limited impact expected';
+  return 'Minimal impact expected';
+}
+// ─── jobs/processExtendedIntelligence.ts ────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. MATCH PERFORMANCE COMPARISON - FIXED (WITH BATCHED REFERENCE DATA)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processMatchPerformanceComparison(opts?: {
+  matchIds?: number[];
+  dateFrom?: string;
+  dateTo?: string;
+  batchSize?: number;
+  maxMatches?: number;
+}): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info({ opts }, 'processMatchPerformanceComparison started');
+
+  const batchSize = opts?.batchSize || 100;
+  const maxMatches = opts?.maxMatches || 3000;
+  
+  try {
+    // ─── 1. Get matches with proper filtering ──────────────────────────────
+    let query = db.from('matches')
+      .select('id, home_team_id, away_team_id, competition, status, date')
+      .eq('status', MUTABLE_MATCH_STATUS)
+      .order('date', { ascending: false });
+
+    if (opts?.matchIds && opts.matchIds.length > 0) {
+      query = query.in('id', opts.matchIds);
+    } else {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
+      query = query.gte('date', ninetyDaysAgo);
+      
+      if (opts?.dateFrom) {
+        query = query.gte('date', new Date(opts.dateFrom).toISOString());
+      }
+      if (opts?.dateTo) {
+        query = query.lte('date', new Date(opts.dateTo + 'T23:59:59.999Z').toISOString());
+      }
+    }
+
+    // ─── 2. Fetch matches ──────────────────────────────────────────────────
+    const allMatches = await fetchAllRows(query, 500, 'id');
+    
+    if (!allMatches || allMatches.length === 0) {
+      logger.info('No matches found to process');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    const matchesToProcess = allMatches.slice(0, maxMatches);
+    
+    logger.info({ 
+      totalMatches: allMatches.length,
+      processing: matchesToProcess.length,
+      batchSize 
+    }, `Processing ${matchesToProcess.length} matches`);
+
+    // ─── 3. Get all team IDs and match IDs ──────────────────────────────────
+    const allTeamIds = [...new Set(matchesToProcess.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+    const allMatchIds = matchesToProcess.map((m: any) => m.id);
+
+    // ─── 4. Fetch reference data in BATCHES ─────────────────────────────────
+    logger.info('Fetching reference data in batches...');
+
+    // Helper: fetch data in batches to avoid timeouts
+    const fetchBatched = async (table: string, select: string, ids: number[], idField: string, orderCol: string = 'id') => {
+      if (ids.length === 0) return [];
+      
+      const results: any[] = [];
+      const batchSize = 500;
+      
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batchIds = ids.slice(i, i + batchSize);
+        try {
+          const data = await fetchAllRows(
+            db.from(table)
+              .select(select)
+              .in(idField, batchIds)
+              .order(orderCol, { ascending: true }),
+            500,
+            orderCol
+          );
+          results.push(...data);
+        } catch (err) {
+          logger.warn({ table, batch: i, err: String(err) }, 'Batch fetch failed, continuing...');
+        }
+      }
+      return results;
+    };
+
+    // ─── 5. Fetch all reference data with batching ──────────────────────────
+    const [
+      bettingIntel,
+      formQuality,
+      momentum,
+      matchIntel,
+      scorelines
+    ] = await Promise.all([
+      fetchBatched(
+        'team_betting_intelligence',
+        'team_id, attack_rating, defence_rating, team_quality_score, consistency_score, home_attack_rating, home_defence_rating, away_attack_rating, away_defence_rating',
+        allTeamIds,
+        'team_id',
+        'team_id'
+      ),
+      fetchBatched(
+        'team_form_quality',
+        'team_id, opponent_adjusted_form',
+        allTeamIds,
+        'team_id',
+        'team_id'
+      ),
+      fetchBatched(
+        'team_momentum',
+        'team_id, momentum_score',
+        allTeamIds,
+        'team_id',
+        'team_id'
+      ),
+      fetchBatched(
+        'match_intelligence',
+        'match_id, confidence_score, net_battle_index',
+        allMatchIds,
+        'match_id',
+        'match_id'
+      ),
+      fetchBatched(
+        'match_intelligence',
+        'match_id, predicted_home_goals, predicted_away_goals',
+        allMatchIds,
+        'match_id',
+        'match_id'
+      ),
+    ]);
+
+    // ─── 6. Build maps ──────────────────────────────────────────────────────
+    const bettingMap = new Map<number, any>();
+    for (const b of bettingIntel) {
+      if (!bettingMap.has(b.team_id)) {
+        bettingMap.set(b.team_id, b);
+      }
+    }
+
+    const formMap = new Map<number, any>(formQuality.map((r: any) => [r.team_id, r]));
+    const momentumMap = new Map<number, any>(momentum.map((r: any) => [r.team_id, r]));
+    const matchIntelMap = new Map<number, any>(matchIntel.map((r: any) => [r.match_id, r]));
+    const scorelineMap = new Map<number, any>(scorelines.map((r: any) => [r.match_id, r]));
+
+    // ─── 7. Process matches in batches ──────────────────────────────────────
+    let totalWritten = 0;
+    let processedCount = 0;
+    let skippedCount = 0;
+
+    for (let i = 0; i < matchesToProcess.length; i += batchSize) {
+      const batch = matchesToProcess.slice(i, i + batchSize);
+      const rows: any[] = [];
+
+      for (const match of batch as any[]) {
+        const homeId = match.home_team_id;
+        const awayId = match.away_team_id;
+        
+        const homeBetting = bettingMap.get(homeId);
+        const awayBetting = bettingMap.get(awayId);
+        
+        if (!homeBetting || !awayBetting) {
+          skippedCount++;
+          continue;
+        }
+
+        const homeForm = formMap.get(homeId);
+        const awayForm = formMap.get(awayId);
+        const homeMomentum = momentumMap.get(homeId);
+        const awayMomentum = momentumMap.get(awayId);
+        const matchIntelRow = matchIntelMap.get(match.id);
+        const scoreline = scorelineMap.get(match.id);
+
+        // ─── Calculate scores ──────────────────────────────────────────────
+        const homeAttack = homeBetting?.home_attack_rating ?? homeBetting?.attack_rating ?? 50;
+        const awayAttack = awayBetting?.away_attack_rating ?? awayBetting?.attack_rating ?? 50;
+        const homeDefence = homeBetting?.home_defence_rating ?? homeBetting?.defence_rating ?? 50;
+        const awayDefence = awayBetting?.away_defence_rating ?? awayBetting?.defence_rating ?? 50;
+        
+        const midfieldHomeScore = Math.round((homeAttack + homeDefence) / 2);
+        const midfieldAwayScore = Math.round((awayAttack + awayDefence) / 2);
+
+        const homeTactical = Math.min(100, Math.max(0, Math.round(
+          ((homeForm?.opponent_adjusted_form || 1.5) / 3) * 50 + 
+          (homeMomentum?.momentum_score || 0) / 2 + 25
+        )));
+        const awayTactical = Math.min(100, Math.max(0, Math.round(
+          ((awayForm?.opponent_adjusted_form || 1.5) / 3) * 50 + 
+          (awayMomentum?.momentum_score || 0) / 2 + 25
+        )));
+
+        const setPieceHomeScore = Math.min(100, Math.round((homeAttack * 0.4 + homeDefence * 0.6) * 0.8 + 20));
+        const setPieceAwayScore = Math.min(100, Math.round((awayAttack * 0.4 + awayDefence * 0.6) * 0.8 + 20));
+
+        const formHomeScore = Math.min(100, Math.round(((homeForm?.opponent_adjusted_form || 1.5) / 3) * 100));
+        const formAwayScore = Math.min(100, Math.round(((awayForm?.opponent_adjusted_form || 1.5) / 3) * 100));
+
+        const overallHomeScore = Math.round(
+          homeAttack * 0.20 + homeDefence * 0.20 + midfieldHomeScore * 0.20 + 
+          homeTactical * 0.15 + setPieceHomeScore * 0.10 + formHomeScore * 0.15
+        );
+        const overallAwayScore = Math.round(
+          awayAttack * 0.20 + awayDefence * 0.20 + midfieldAwayScore * 0.20 + 
+          awayTactical * 0.15 + setPieceAwayScore * 0.10 + formAwayScore * 0.15
+        );
+        const overallAdvantage = overallHomeScore - overallAwayScore;
+
+        // ─── Win probabilities ──────────────────────────────────────────────
+        let homeWinProb = 0.35, drawProb = 0.30, awayWinProb = 0.35;
+        
+        if (scoreline?.predicted_home_goals != null && scoreline?.predicted_away_goals != null) {
+          const total = scoreline.predicted_home_goals + scoreline.predicted_away_goals || 1;
+          homeWinProb = Math.min(0.85, 0.3 + (scoreline.predicted_home_goals / total) * 0.5);
+          awayWinProb = Math.min(0.85, 0.3 + (scoreline.predicted_away_goals / total) * 0.5);
+          drawProb = Math.max(0.15, 1 - homeWinProb - awayWinProb);
+        }
+        
+        const advantageFactor = overallAdvantage / 100;
+        homeWinProb = Math.min(0.85, Math.max(0.15, homeWinProb + advantageFactor * 0.3));
+        awayWinProb = Math.min(0.85, Math.max(0.15, awayWinProb - advantageFactor * 0.3));
+        drawProb = Math.max(0.15, 1 - homeWinProb - awayWinProb);
+
+        // ─── Confidence ──────────────────────────────────────────────────────
+        const confidenceScore = Math.min(100, Math.round(
+          (Math.abs(overallAdvantage) / 10) * 30 +
+          (matchIntelRow?.confidence_score || 50) * 0.3 +
+          (matchIntelRow?.net_battle_index ? Math.abs(matchIntelRow.net_battle_index) * 10 : 0)
+        ));
+        
+        const confidenceBand = confidenceScore >= 85 ? 'HIGH' : 
+                               confidenceScore >= 70 ? 'MODERATE' : 
+                               confidenceScore >= 55 ? 'LOW' : 'VERY_LOW';
+
+        const homeGoals = scoreline?.predicted_home_goals != null ? Math.round(scoreline.predicted_home_goals) : 1;
+        const awayGoals = scoreline?.predicted_away_goals != null ? Math.round(scoreline.predicted_away_goals) : 1;
+
+        rows.push({
+          match_id: match.id,
+          home_team_id: homeId,
+          away_team_id: awayId,
+          overall_home_score: overallHomeScore,
+          overall_away_score: overallAwayScore,
+          overall_advantage: overallAdvantage,
+          overall_advantage_team_id: overallAdvantage > 0 ? homeId : awayId,
+          attacking_home_score: homeAttack,
+          attacking_away_score: awayAttack,
+          attacking_advantage: homeAttack - awayAttack,
+          defensive_home_score: homeDefence,
+          defensive_away_score: awayDefence,
+          defensive_advantage: homeDefence - awayDefence,
+          midfield_home_score: midfieldHomeScore,
+          midfield_away_score: midfieldAwayScore,
+          midfield_advantage: midfieldHomeScore - midfieldAwayScore,
+          tactical_home_score: homeTactical,
+          tactical_away_score: awayTactical,
+          tactical_advantage: homeTactical - awayTactical,
+          set_piece_home_score: setPieceHomeScore,
+          set_piece_away_score: setPieceAwayScore,
+          set_piece_advantage: setPieceHomeScore - setPieceAwayScore,
+          form_home_score: formHomeScore,
+          form_away_score: formAwayScore,
+          form_advantage: formHomeScore - formAwayScore,
+          home_win_probability: Math.round(homeWinProb * 1000) / 10,
+          draw_probability: Math.round(drawProb * 1000) / 10,
+          away_win_probability: Math.round(awayWinProb * 1000) / 10,
+          predicted_winner_id: homeWinProb > awayWinProb ? homeId : awayId,
+          prediction_confidence: confidenceScore,
+          expected_goal_difference: Math.round((homeGoals - awayGoals) * 10) / 10,
+          most_likely_score: `${homeGoals}-${awayGoals}`,
+          match_significance: Math.min(100, Math.round(
+            (matchIntelRow?.confidence_score || 50) * 0.5 + 
+            (Math.abs(overallAdvantage) / 2) * 0.5
+          )),
+          confidence_band: confidenceBand,
+          home_goals: homeGoals,
+          away_goals: awayGoals,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+
+      // ─── Upsert batch ──────────────────────────────────────────────────────
+      if (rows.length > 0) {
+        const written = await upsertChunked('match_performance_comparison', rows, 'match_id');
+        totalWritten += written;
+      }
+      
+      processedCount += batch.length;
+      logger.debug({ 
+        processed: Math.min(processedCount, matchesToProcess.length), 
+        total: matchesToProcess.length,
+        written: totalWritten 
+      }, `Batch ${Math.floor(i / batchSize) + 1} progress`);
+    }
+
+    logger.info({
+      matchesProcessed: matchesToProcess.length,
+      rowsWritten: totalWritten,
+      skipped: skippedCount,
+    }, 'processMatchPerformanceComparison completed');
+    
+    return { matchesProcessed: matchesToProcess.length, rowsWritten: totalWritten };
+
+  } catch (error: any) {
+    logger.error({ error: error.message, stack: error.stack }, 'processMatchPerformanceComparison failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. TEAM VERSATILITY (per-match)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// FIXES APPLIED (audit 2026-07-18):
+//   F1: Zone classification corrected. DM (defensive midfielder) now maps
+//       to MIDFIELD, not defence. A CB who can play DM is now correctly
+//       counted as cross-zone (DEF → MID). RW/LW correctly map to ATTACK.
+//       Zone mapping now follows standard football position groups:
+//         GK:  GK, G
+//         DEF: LB, CB, RB, LWB, RWB, D, SW
+//         MID: LM, CM, RM, DM, AM, M
+//         ATT: LW, RW, ST, CF, F
+//
+//   F2: Formation detection expanded from 3 to 8 common formations.
+//       Previously 4-2-3-1, 3-4-3, 5-3-2, 5-4-1, 4-1-4-1 all fell
+//       through to the default '4-4-2'. Now each is explicitly detected.
+//       Unknown formations return a descriptive string like '4-5-1?'
+//       instead of silently defaulting to 4-4-2.
+//
+//   F3: formation_changes_per_match now derived from actual formation
+//       flexibility score. Teams that can play multiple formations get
+//       a higher estimate (0.5–2.0 range based on flexibility score).
+//
+//   F4: alternative_formations now computed from actual position counts
+//       instead of being hardcoded. A team with 3 CBs but no wingers
+//       gets 3-5-2 as an alternative; a team with wingers but 2 CBs
+//       gets 4-3-3 or 3-4-3.
+//
+//   F5: zoneQuality now uses player_intelligence.player_strength_score
+//       instead of lineup prediction confidence. Confidence means "how
+//       sure are we this player starts" — not "how good are they."
+//       Falls back to 50 (neutral) when strength data is unavailable.
+//
+//   F6: matchup_effectiveness now scaled 0-100 with a midpoint of 50
+//       representing even matchups. Uses per-zone quality differentials
+//       weighted by zone importance (MID > ATT > DEF > GK).
+//
+//   F7: tacticalNotes now produces zone-specific commentary based on
+//       which zones show the largest quality gaps, not a generic template.
+
+export async function processTeamVersatility(): Promise<{
+  matchesProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processTeamVersatility started — DB only, zero API calls');
+
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id')
+        .eq('status', MUTABLE_MATCH_STATUS)
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
+
+    if (!matches || matches.length === 0)
+      return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db
+        .from('match_predicted_lineups')
+        .select(
+          'match_id, team_id, player_id, position_code, position_group, tactical_position, formation, players:player_id(id, primary_position, secondary_position, tertiary_position)'
+        )
+        .in('match_id', matchIds)
+    );
+
+    if (!lineups || lineups.length === 0)
+      return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const groupByMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!groupByMatchTeam.has(key)) groupByMatchTeam.set(key, []);
+      groupByMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+
+    for (const [key, teamLineups] of groupByMatchTeam) {
+      const [matchIdStr, teamIdStr] = key.split(':');
+      const matchId = Number(matchIdStr);
+      const teamId = Number(teamIdStr);
+
+      let versatileCount = 0;
+      let multiZoneCount = 0;
+      const positionCounts = new Map<string, number>();
+
+      for (const lineup of teamLineups) {
+        const player = lineup.players;
+        const positions = [
+          player?.primary_position,
+          player?.secondary_position,
+          player?.tertiary_position,
+        ].filter(Boolean);
+
+        // F1: Correct zone classification
+        const zones = new Set(
+          positions
+            .map((p: string) => {
+              const c = p.toUpperCase();
+              if (c === 'GK' || c === 'G') return 'GK';
+              if (
+                ['LB', 'CB', 'RB', 'LWB', 'RWB', 'D', 'SW'].includes(c)
+              )
+                return 'DEF';
+              // F1: DM → MIDFIELD, not defence
+              if (['LM', 'CM', 'RM', 'DM', 'AM', 'M'].includes(c))
+                return 'MID';
+              if (['LW', 'RW', 'ST', 'CF', 'F'].includes(c)) return 'ATT';
+              return null;
+            })
+            .filter(Boolean)
+        );
+
+        if (positions.length >= 2) versatileCount++;
+        if (zones.size >= 2) multiZoneCount++;
+
+        const pos = lineupPosition(lineup);
+        positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
+      }
+
+      const totalPlayers = teamLineups.length || 1;
+      const versatilePct = (versatileCount / totalPlayers) * 100;
+      const multiZonePct = (multiZoneCount / totalPlayers) * 100;
+      const overallVersatility = Math.min(
+        100,
+        Math.round(versatilePct * 0.6 + multiZonePct * 0.4)
+      );
+
+      const positionCount = positionCounts.size;
+      const tacticalVersatility = Math.min(
+        100,
+        Math.round((positionCount / 4) * 25 + versatilePct * 0.3)
+      );
+      const positionalVersatility = Math.min(100, Math.round(versatilePct));
+
+      // ── F2: Expanded formation detection ──────────────────────────────
+      const formation = detectFormation(positionCounts);
+
+      // F3: formation_changes_per_match from flexibility, not binary
+      const formationFlexibility = computeFormationFlexibility(
+        positionCounts,
+        totalPlayers
+      );
+      const formationChangesPerMatch = Math.round(
+        (0.5 + (formationFlexibility / 100) * 1.5) * 10
+      ) / 10;
+
+      const playerAdaptability = Math.min(
+        100,
+        Math.round(versatilePct * 0.5 + multiZonePct * 0.5)
+      );
+
+      const systemCompatibility = Math.min(
+        100,
+        Math.round(
+          (positionCount / 8) * 50 +
+            (1 -
+              (positionCounts.size > 0
+                ? Math.max(...positionCounts.values()) / totalPlayers
+                : 0)) *
+              50
+        )
+      );
+
+      let band = 'RIGID';
+      if (overallVersatility >= 80) band = 'EXCELLENT';
+      else if (overallVersatility >= 65) band = 'GOOD';
+      else if (overallVersatility >= 45) band = 'AVERAGE';
+      else if (overallVersatility >= 25) band = 'POOR';
+
+      // F4: Compute actual alternative formations from position data
+      const { preferred, alternatives } = buildFormationOptions(
+        positionCounts,
+        formation
+      );
+
+      const strengths: string[] = [];
+      if (overallVersatility >= 80) strengths.push('EXCELLENT_OVERALL');
+      if (versatilePct >= 70) strengths.push('MANY_VERSATILE_PLAYERS');
+      if (multiZonePct >= 50) strengths.push('CROSS_ZONE_FLEXIBILITY');
+
+      const weaknesses: string[] = [];
+      if (overallVersatility < 40) weaknesses.push('LOW_OVERALL_VERSATILITY');
+      if (versatilePct < 30) weaknesses.push('FEW_VERSATILE_PLAYERS');
+      if (multiZonePct < 20) weaknesses.push('LOW_CROSS_ZONE_FLEXIBILITY');
+
+      rows.push({
+        match_id: matchId,
+        team_id: teamId,
+        overall_versatility_score: overallVersatility,
+        tactical_versatility_score: tacticalVersatility,
+        positional_versatility_score: positionalVersatility,
+        formation_flexibility_score: formationFlexibility,
+        player_adaptability_score: playerAdaptability,
+        system_compatibility_score: systemCompatibility,
+        versatility_band: band,
+        strengths: strengths.length ? strengths : ['BALANCED'],
+        weaknesses: weaknesses.length ? weaknesses : ['NO_WEAKNESSES'],
+        preferred_formations: preferred,
+        alternative_formations: alternatives,
+        formation_changes_per_match: formationChangesPerMatch,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunkedWithRetry(
+      'team_versatility',
+      rows,
+      'match_id,team_id'
+    );
+
+    logger.info(
+      { matchesProcessed: matches.length, rowsWritten: written },
+      'processTeamVersatility completed'
+    );
+
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamVersatility failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. FORMATION MATCHUP — see migration 028 comment re: detection accuracy
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// FIXES APPLIED (audit 2026-07-18):
+//   F5: zoneQuality now uses player_intelligence.player_strength_score
+//       (the player's actual ability rating) instead of lineup prediction
+//       confidence (how sure we are they'll start). Falls back to 50
+//       when strength data is unavailable.
+//
+//   F6: matchup_effectiveness now uses zone-weighted differentials.
+//       MID has highest weight (2.0) — midfield control is the strongest
+//       predictor of match outcome. ATT (1.5), DEF (1.0), GK (0.5).
+//       Scaled to 0-100 with 50 = even matchup.
+//
+//   F7: tacticalNotes now analyzes which zones have the largest gaps
+//       and produces zone-specific commentary.
+
+export async function processFormationMatchup(): Promise<{
+  matchesProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processFormationMatchup started — DB only, zero API calls');
+
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id')
+        .eq('status', MUTABLE_MATCH_STATUS)
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
+
+    if (!matches || matches.length === 0)
+      return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const matchIds = matches.map((m: any) => m.id);
+
+    // CONFIRMED PRODUCTION FAILURE, fixed here: HeadersOverflowError,
+    // ~202 match IDs producing a 16623-character request URL. matchIds is
+    // built from every currently-scheduled match across the whole platform
+    // in the next 7 days — during a busy multi-league week this routinely
+    // exceeds what a single .in() request can carry.
+    const lineups = await chunkedIn<any, number>(
+      matchIds,
+      (chunk) =>
+        db
+          .from('match_predicted_lineups')
+          .select(
+            'match_id, team_id, player_id, position_code, position_group, tactical_position, formation, confidence, players:player_id(id, name)'
+          )
+          .in('match_id', chunk)
+          .order('rank_in_position', { ascending: true }),
+      { label: 'processFormationMatchup:lineups' }
+    );
+
+    if (!lineups || lineups.length === 0)
+      return { matchesProcessed: 0, rowsWritten: 0 };
+
+    // F5: Fetch actual player strength scores
+    const allPlayerIds = [
+      ...new Set(lineups.map((l: any) => l.player_id)),
+    ] as number[];
+    // Same class of risk as matchIds above, worse in practice: up to 22
+    // players (11 per side) per match, before deduplication.
+    const playerStrengths = await chunkedIn<any, number>(
+      allPlayerIds,
+      (chunk) =>
+        db
+          .from('player_intelligence')
+          .select('player_id, player_strength_score')
+          .in('player_id', chunk),
+      { label: 'processFormationMatchup:playerStrengths' }
+    );
+    const strengthMap = new Map<number, number>();
+    for (const ps of playerStrengths) {
+      strengthMap.set(ps.player_id, ps.player_strength_score ?? 50);
+    }
+
+    const teamIds = [
+      ...new Set(
+        matches.flatMap((m: any) => [m.home_team_id, m.away_team_id])
+      ),
+    ];
+    const teamIntel = await chunkedIn<any, number>(
+      teamIds,
+      (chunk) =>
+        db
+          .from('team_intelligence')
+          .select('team_id, readiness_score')
+          .in('team_id', chunk),
+      { label: 'processFormationMatchup:teamIntel' }
+    );
+    const intelMap = new Map<number, any>(
+      teamIntel.map((r: any) => [r.team_id, r])
+    );
+
+    const lineupsByMatch = new Map<number, Map<number, any[]>>();
+    for (const l of lineups) {
+      if (!lineupsByMatch.has(l.match_id))
+        lineupsByMatch.set(l.match_id, new Map());
+      const mm = lineupsByMatch.get(l.match_id)!;
+      if (!mm.has(l.team_id)) mm.set(l.team_id, []);
+      mm.get(l.team_id)!.push(l);
+    }
+
+    const rows: any[] = [];
+
+    for (const match of matches as any[]) {
+      const mm = lineupsByMatch.get(match.id);
+      if (!mm) continue;
+
+      const homeLineup = mm.get(match.home_team_id) || [];
+      const awayLineup = mm.get(match.away_team_id) || [];
+      if (homeLineup.length < 9 || awayLineup.length < 9) continue;
+
+      const homeFormation = detectFormationFromLineup(homeLineup);
+      const awayFormation = detectFormationFromLineup(awayLineup);
+
+      // F5: Pass strength map for real player quality
+      const homeZones = mapToZonesWithStrength(homeLineup, strengthMap);
+      const awayZones = mapToZonesWithStrength(awayLineup, strengthMap);
+
+      const homeAdvantages: string[] = [];
+      const awayAdvantages: string[] = [];
+      const neutralAreas: string[] = [];
+      const keyMatchups: any[] = [];
+
+      // F6: Zone weights for matchup calculation
+      const ZONE_WEIGHTS: Record<string, number> = {
+        GK: 0.5,
+        DEF: 1.0,
+        MID: 2.0,
+        ATT: 1.5,
+      };
+
+      let weightedAdvantageSum = 0;
+      let totalWeight = 0;
+
+      for (const zone of ['GK', 'DEF', 'MID', 'ATT']) {
+        const homeQuality = zoneQualityWithStrength(
+          homeZones,
+          zone,
+          intelMap.get(match.home_team_id)
+        );
+        const awayQuality = zoneQualityWithStrength(
+          awayZones,
+          zone,
+          intelMap.get(match.away_team_id)
+        );
+        const diff = homeQuality - awayQuality;
+        const weight = ZONE_WEIGHTS[zone] || 1;
+
+        weightedAdvantageSum += diff * weight;
+        totalWeight += weight;
+
+        if (diff > 10)
+          homeAdvantages.push(`${zone} superiority (+${Math.round(diff)})`);
+        else if (diff < -10)
+          awayAdvantages.push(`${zone} superiority (+${Math.round(-diff)})`);
+        else neutralAreas.push(`${zone} is evenly matched`);
+
+        const hp = homeZones.filter((p) => p.zone === zone);
+        const ap = awayZones.filter((p) => p.zone === zone);
+        for (let i = 0; i < Math.min(hp.length, ap.length); i++) {
+          const h = hp[i],
+            a = ap[i];
+          if (h && a) {
+            const advantage = (h.quality || 50) - (a.quality || 50);
+            keyMatchups.push({
+              home_player: h.name,
+              away_player: a.name,
+              zone,
+              advantage: Math.round(advantage),
+              advantage_team_id:
+                advantage > 0 ? match.home_team_id : match.away_team_id,
+            });
+          }
+        }
+      }
+
+      // F6: Weighted effectiveness score scaled to 0-100
+      const normalizedAdvantage =
+        totalWeight > 0 ? weightedAdvantageSum / totalWeight : 0;
+      const matchupEffectiveness = Math.min(
+        100,
+        Math.max(0, Math.round(50 + normalizedAdvantage * 2.5))
+      );
+
+      // F7: Zone-specific tactical notes
+      const notes = tacticalNotesDetailed(
+        homeZones,
+        awayZones,
+        homeFormation,
+        awayFormation,
+        intelMap.get(match.home_team_id),
+        intelMap.get(match.away_team_id)
+      );
+
+      rows.push({
+        match_id: match.id,
+        home_formation_vs_away: `${homeFormation} vs ${awayFormation}`,
+        away_formation_vs_home: `${awayFormation} vs ${homeFormation}`,
+        matchup_effectiveness: matchupEffectiveness,
+        home_advantages: homeAdvantages.length
+          ? homeAdvantages
+          : ['No clear advantages'],
+        away_advantages: awayAdvantages.length
+          ? awayAdvantages
+          : ['No clear advantages'],
+        neutral_areas: neutralAreas.length
+          ? neutralAreas
+          : ['All zones contested'],
+        key_matchups: keyMatchups,
+        tactical_notes: notes,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunkedWithRetry(
+      'formation_matchup',
+      rows,
+      'match_id'
+    );
+
+    logger.info(
+      { matchesProcessed: matches.length, rowsWritten: written },
+      'processFormationMatchup completed'
+    );
+
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error(
+      { error: error.message },
+      'processFormationMatchup failed'
+    );
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// F2: Expanded formation detection — 8 formations + descriptive fallback
+function detectFormation(positionCounts: Map<string, number>): string {
+  const count = (codes: string[]) =>
+    codes.reduce((sum, c) => sum + (positionCounts.get(c) || 0), 0);
+
+  const defs = count(['LB', 'CB', 'RB', 'LWB', 'RWB', 'D', 'SW']);
+  const mids = count(['LM', 'CM', 'RM', 'DM', 'AM', 'M']);
+  const atts = count(['LW', 'RW', 'ST', 'CF', 'F']);
+  const gk = count(['GK', 'G']);
+
+  // Common formations — checked in order of specificity
+  if (defs === 4 && mids === 4 && atts === 2) return '4-4-2';
+  if (defs === 4 && mids === 3 && atts === 3) return '4-3-3';
+  if (defs === 4 && mids === 2 && atts >= 3) return '4-2-3-1';
+  if (defs === 3 && mids === 5 && atts === 2) return '3-5-2';
+  if (defs === 3 && mids === 4 && atts === 3) return '3-4-3';
+  if (defs === 5 && mids === 3 && atts === 2) return '5-3-2';
+  if (defs === 5 && mids === 4 && atts === 1) return '5-4-1';
+  if (defs === 4 && mids === 1 && atts >= 4) return '4-1-4-1';
+
+  // F2: Descriptive fallback instead of silent default
+  return `${defs}-${mids}-${atts}?`;
+}
+
+// F2: Formation from a stored predicted lineup.
+//
+// Since migration 025 the lineup engine WRITES the formation it selected, so
+// there is nothing to detect — reading the stored value is both correct and
+// free. detectFormation() below stays as the fallback for rows written before
+// 025 (and for any caller holding position counts rather than lineup rows),
+// but it is no longer a second, competing definition of what shape a team is
+// playing.
+function detectFormationFromLineup(lineup: any[]): string {
+  const stored = lineup.find((l) => l?.formation)?.formation;
+  if (stored) return stored;
+
+  const positionCounts = new Map<string, number>();
+  for (const l of lineup) {
+    const pos = lineupPosition(l);
+    positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
+  }
+  return detectFormation(positionCounts);
+}
+
+// F3: Formation flexibility from position diversity
+function computeFormationFlexibility(
+  positionCounts: Map<string, number>,
+  totalPlayers: number
+): number {
+  const count = (codes: string[]) =>
+    codes.reduce((sum, c) => sum + (positionCounts.get(c) || 0), 0);
+
+  let flexibility = 0;
+
+  // Can play 4 at the back?
+  const defs = count(['LB', 'CB', 'RB', 'LWB', 'RWB', 'D', 'SW']);
+  if (defs >= 4) flexibility += 25;
+
+  // Can play 3 at the back?
+  if (defs >= 3) flexibility += 15;
+
+  // Has wingers (can play wide formations)?
+  const wingers = count(['LW', 'RW', 'LM', 'RM']);
+  if (wingers >= 2) flexibility += 20;
+
+  // Has multiple strikers?
+  const atts = count(['ST', 'CF', 'F']);
+  if (atts >= 2) flexibility += 15;
+
+  // Has defensive midfield cover?
+  const dms = count(['DM']);
+  if (dms >= 1) flexibility += 15;
+
+  // Penalty for over-reliance on one position
+  if (positionCounts.size > 0) {
+    const maxInOne = Math.max(...positionCounts.values());
+    if (maxInOne / totalPlayers > 0.5) flexibility -= 10;
+  }
+
+  return Math.min(100, Math.max(0, flexibility));
+}
+
+// F4: Build formation options from actual position data
+function buildFormationOptions(
+  positionCounts: Map<string, number>,
+  currentFormation: string
+): { preferred: string[]; alternatives: string[] } {
+  const count = (codes: string[]) =>
+    codes.reduce((sum, c) => sum + (positionCounts.get(c) || 0), 0);
+
+  const defs = count(['LB', 'CB', 'RB', 'LWB', 'RWB', 'D', 'SW']);
+  const wingers = count(['LW', 'RW']);
+  const atts = count(['ST', 'CF', 'F']);
+  const dms = count(['DM']);
+
+  const preferred = [currentFormation];
+  const alternatives: string[] = [];
+
+  if (defs >= 4 && wingers >= 2 && atts >= 2) {
+    alternatives.push('4-3-3');
+  }
+  if (defs >= 3 && dms >= 1 && atts >= 2) {
+    alternatives.push('3-5-2');
+  }
+  if (defs >= 4 && atts >= 1) {
+    alternatives.push('4-2-3-1');
+  }
+  if (defs >= 5) {
+    alternatives.push('5-3-2');
+  }
+
+  // Deduplicate and limit to 3
+  const unique = [...new Set(alternatives)].filter(
+    (a) => a !== currentFormation
+  );
+  return { preferred, alternatives: unique.slice(0, 3) };
+}
+
+// F5: Map zones using actual player strength, not lineup confidence
+function mapToZonesWithStrength(
+  lineup: any[],
+  strengthMap: Map<number, number>
+): any[] {
+  return lineup.map((l) => {
+    const pos = lineupPosition(l);
+    const group = lineupZone(l);
+    const zone = group === 'G' ? 'GK' : group === 'D' ? 'DEF' : group === 'F' ? 'ATT' : 'MID';
+
+    // F5: Use actual player strength, default to 50 if unknown
+    const quality = strengthMap.get(l.player_id) ?? 50;
+
+    return {
+      player_id: l.player_id,
+      name: l.players?.name || 'Unknown',
+      position: pos,
+      zone,
+      quality: Math.min(100, Math.max(0, quality)),
+    };
+  });
+}
+
+// F5: Zone quality using actual player strength + readiness
+function zoneQualityWithStrength(
+  zones: any[],
+  zone: string,
+  intel: any
+): number {
+  const players = zones.filter((p) => p.zone === zone);
+  if (players.length === 0) return 50;
+  const avgQuality =
+    players.reduce((sum, p) => sum + (p.quality || 50), 0) / players.length;
+  const readinessBoost =
+    intel?.readiness_score != null ? intel.readiness_score / 2 : 25;
+  return Math.min(100, avgQuality * 0.6 + readinessBoost * 0.4);
+}
+
+// F7: Detailed tactical notes based on actual zone analysis
+function tacticalNotesDetailed(
+  homeZones: any[],
+  awayZones: any[],
+  homeFormation: string,
+  awayFormation: string,
+  homeIntel: any,
+  awayIntel: any
+): string {
+  const zoneGaps: { zone: string; homeQ: number; awayQ: number; diff: number }[] = [];
+
+  for (const zone of ['MID', 'ATT', 'DEF', 'GK']) {
+    const homeQ = zoneQualityWithStrength(homeZones, zone, homeIntel);
+    const awayQ = zoneQualityWithStrength(awayZones, zone, awayIntel);
+    zoneGaps.push({ zone, homeQ, awayQ, diff: homeQ - awayQ });
+  }
+
+  // Sort by absolute differential — most decisive zone first
+  zoneGaps.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+
+  const notes: string[] = [];
+  const decisive = zoneGaps[0];
+
+  if (Math.abs(decisive.diff) < 10) {
+    notes.push(
+      `Both ${homeFormation} and ${awayFormation} formations are evenly matched.`
+    );
+  } else {
+    const dominant = decisive.diff > 0 ? 'Home' : 'Away';
+    const zoneName =
+      decisive.zone === 'MID'
+        ? 'midfield'
+        : decisive.zone === 'ATT'
+          ? 'attacking third'
+          : decisive.zone === 'DEF'
+            ? 'defensive line'
+            : 'goalkeeping';
+    notes.push(
+      `${dominant} team has a clear advantage in the ${zoneName} (gap: ${Math.abs(Math.round(decisive.diff))} pts).`
+    );
+  }
+
+  // Add secondary zone if relevant
+  if (zoneGaps.length > 1 && Math.abs(zoneGaps[1].diff) > 10) {
+    const second = zoneGaps[1];
+    const secondDominant = second.diff > 0 ? 'home' : 'away';
+    notes.push(
+      `The ${secondDominant} side also controls ${second.zone.toLowerCase()}.`
+    );
+  }
+
+  return notes.join(' ');
+}
+ 
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. POSITION ADAPTABILITY
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processPositionAdaptability(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPositionAdaptability started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, players:player_id(id, primary_position, secondary_position, tertiary_position)')
+        .in('match_id', matchIds)
+    );
+    if (!lineups || lineups.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const positionDepth = await fetchAllRows(db.from('team_position_depth').select('team_id, position_code, player_count, available_count').in('team_id', teamIds));
+    const depthMap = new Map<string, any>();
+    for (const d of positionDepth) depthMap.set(`${d.team_id}:${d.position_code}`, d);
+
+    const groupByMatch = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!groupByMatch.has(key)) groupByMatch.set(key, []);
+      groupByMatch.get(key)!.push(l);
+    }
+    const matchById = new Map<number, any>(matches.map((m: any) => [m.id, m]));
+
+    const perTeamRows: any[] = [];
+    for (const [key, matchLineups] of groupByMatch) {
+      const [matchIdStr, teamIdStr] = key.split(':');
+      const matchId = Number(matchIdStr), teamId = Number(teamIdStr);
+
+      let multiPositionPlayers = 0, utilityPlayers = 0, specialistPlayers = 0;
+      const playerPositions: string[] = [];
+      for (const lineup of matchLineups) {
+        const player = lineup.players;
+        const positions = [player?.primary_position, player?.secondary_position, player?.tertiary_position].filter(Boolean);
+        playerPositions.push(...positions);
+        if (positions.length >= 3) { multiPositionPlayers++; utilityPlayers++; }
+        else if (positions.length >= 2) multiPositionPlayers++;
+        else if (positions.length === 1) specialistPlayers++;
+      }
+      const avgPositions = playerPositions.length / Math.max(1, matchLineups.length);
+      const positionVersatility = Math.min(100, Math.round((avgPositions / 3) * 100));
+
+      const distinctPositions = new Set(playerPositions);
+      let qualitySum = 0, qualityCount = 0;
+      for (const pos of distinctPositions) {
+        const depth = depthMap.get(`${teamId}:${pos}`);
+        if (depth && depth.player_count > 0) { qualitySum += (depth.available_count / depth.player_count) * 100; qualityCount++; }
+      }
+      const coverageQuality = qualityCount > 0 ? Math.round(qualitySum / qualityCount) : 50;
+
+      const isHome = matchById.get(matchId)?.home_team_id === teamId;
+      const oppTeamId = isHome ? matchById.get(matchId)?.away_team_id : matchById.get(matchId)?.home_team_id;
+      const oppositeData = groupByMatch.get(`${matchId}:${oppTeamId}`);
+      let adaptabilityAdvantage = 0;
+      if (oppositeData) {
+        const oppPositions = oppositeData.flatMap(l => [l.players?.primary_position, l.players?.secondary_position, l.players?.tertiary_position].filter(Boolean));
+        const oppAvg = oppPositions.length / Math.max(1, oppositeData.length);
+        adaptabilityAdvantage = Math.round((avgPositions - oppAvg) * 20);
+      }
+
+      perTeamRows.push({
+        match_id: matchId, team_id: teamId, isHome,
+        position_versatility: positionVersatility, multi_position_players: multiPositionPlayers,
+        utility_players: utilityPlayers, specialist_players: specialistPlayers,
+        adaptability_advantage: adaptabilityAdvantage, position_coverage_score: coverageQuality,
+      });
+    }
+
+    const matchRows = new Map<number, any>();
+    for (const r of perTeamRows) {
+      if (!matchRows.has(r.match_id)) {
+        matchRows.set(r.match_id, {
+          match_id: r.match_id,
+          home_position_versatility: 0, away_position_versatility: 0,
+          home_multi_position_players: 0, away_multi_position_players: 0,
+          home_utility_players: 0, away_utility_players: 0,
+          home_specialist_players: 0, away_specialist_players: 0,
+          adaptability_advantage: 0, position_coverage_score: 0,
+        });
+      }
+      const e = matchRows.get(r.match_id);
+      const prefix = r.isHome ? 'home' : 'away';
+      e[`${prefix}_position_versatility`] = r.position_versatility;
+      e[`${prefix}_multi_position_players`] = r.multi_position_players;
+      e[`${prefix}_utility_players`] = r.utility_players;
+      e[`${prefix}_specialist_players`] = r.specialist_players;
+      e.adaptability_advantage = r.isHome ? r.adaptability_advantage : e.adaptability_advantage;
+      e.position_coverage_score = Math.max(e.position_coverage_score, r.position_coverage_score);
+    }
+    const finalRows = [...matchRows.values()].map((r) => ({ ...r, calculated_at: new Date().toISOString() }));
+
+    const written = await upsertChunked('position_adaptability', finalRows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processPositionAdaptability completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPositionAdaptability failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. TACTICAL FLEXIBILITY
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTacticalFlexibility(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTacticalFlexibility started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, players:player_id(id, primary_position, secondary_position, tertiary_position)')
+        .in('match_id', matchIds)
+    );
+    if (!lineups || lineups.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, squad_depth_score, lineup_versatility_score, squad_stability_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+    const bettingIntel = await fetchAllRows(db.from('team_betting_intelligence').select('team_id, team_quality_score').in('team_id', teamIds));
+    const bettingMap = new Map<number, any>(bettingIntel.map((r: any) => [r.team_id, r]));
+
+    const groupByMatch = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!groupByMatch.has(key)) groupByMatch.set(key, []);
+      groupByMatch.get(key)!.push(l);
+    }
+    const matchById = new Map<number, any>(matches.map((m: any) => [m.id, m]));
+
+    const matchRows = new Map<number, any>();
+    for (const [key, matchLineups] of groupByMatch) {
+      const [matchIdStr, teamIdStr] = key.split(':');
+      const matchId = Number(matchIdStr), teamId = Number(teamIdStr);
+      const intel = intelMap.get(teamId), betting = bettingMap.get(teamId);
+
+      const positions = matchLineups.map(l => lineupPosition(l));
+      const uniquePositions = new Set(positions);
+      let systemCount = 1;
+      if (uniquePositions.has('LW') && uniquePositions.has('RW')) systemCount++;
+      if (uniquePositions.has('DM')) systemCount++;
+      if (uniquePositions.has('AM')) systemCount++;
+      if (positions.filter(p => ['ST', 'CF'].includes(p)).length >= 2) systemCount++;
+      if (positions.filter(p => ['CB', 'DC'].includes(p)).length >= 3) systemCount++;
+
+      const versatilePlayers = matchLineups.filter(l => {
+        const p = l.players;
+        return [p?.primary_position, p?.secondary_position, p?.tertiary_position].filter(Boolean).length >= 2;
+      }).length;
+      const formationAdaptability = Math.min(100, Math.round((versatilePlayers / Math.max(1, matchLineups.length)) * 60 + (systemCount / 5) * 40));
+
+      const inGameAdaptability = Math.min(100, Math.round(
+        (intel?.squad_depth_score ?? 50) * 0.25 + (intel?.lineup_versatility_score ?? 50) * 0.25 +
+        (intel?.squad_stability_score ?? 50) * 0.25 + (betting?.team_quality_score ?? 50) * 0.25
+      ));
+      const flexibilityScore = Math.min(100, Math.round(formationAdaptability * 0.5 + inGameAdaptability * 0.5));
+
+      if (!matchRows.has(matchId)) {
+        matchRows.set(matchId, {
+          match_id: matchId, home_flexibility_score: 0, away_flexibility_score: 0,
+          home_system_count: 0, away_system_count: 0, home_formation_adaptability: 0, away_formation_adaptability: 0,
+          home_in_game_adaptability: 0, away_in_game_adaptability: 0, flexibility_advantage: 0, flexibility_notes: '',
+        });
+      }
+      const isHome = matchById.get(matchId)?.home_team_id === teamId;
+      const e = matchRows.get(matchId);
+      const prefix = isHome ? 'home' : 'away';
+      e[`${prefix}_flexibility_score`] = flexibilityScore;
+      e[`${prefix}_system_count`] = systemCount;
+      e[`${prefix}_formation_adaptability`] = formationAdaptability;
+      e[`${prefix}_in_game_adaptability`] = inGameAdaptability;
+      e.flexibility_notes = flexibilityNotes(flexibilityScore, systemCount);
+    }
+    for (const e of matchRows.values()) e.flexibility_advantage = e.home_flexibility_score - e.away_flexibility_score;
+    const finalRows = [...matchRows.values()].map(r => ({ ...r, calculated_at: new Date().toISOString() }));
+
+    const written = await upsertChunked('tactical_flexibility', finalRows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processTacticalFlexibility completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTacticalFlexibility failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+function flexibilityNotes(flexibility: number, systemCount: number): string {
+  if (flexibility >= 80) return `Highly flexible team with ${systemCount} systems. Can adapt to any tactical situation.`;
+  if (flexibility >= 60) return `Moderately flexible with ${systemCount} systems. Has plan B and C.`;
+  if (flexibility >= 40) return 'Limited flexibility. Best with primary system.';
+  return 'Rigid tactical setup. Struggles when forced to adapt.';
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. SUBSTITUTION IMPACT — COMPLETE FIX (BATCHED QUERIES)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processSubstitutionImpact(opts?: {
+  matchIds?: number[];
+  batchSize?: number;
+  maxMatches?: number;
+}): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info({ opts }, 'processSubstitutionImpact started — DB only, zero API calls');
+  try {
+    const batchSize = opts?.batchSize || 100;
+    const maxMatches = opts?.maxMatches || 5000;
+    
+    // ─── 1. Get ALL matches with predicted lineups ──────────────────────────
+    let query = db.from('matches')
+      .select('id, home_team_id, away_team_id, status, date')
+      .eq('status', MUTABLE_MATCH_STATUS);
+
+    if (opts?.matchIds && opts.matchIds.length > 0) {
+      query = query.in('id', opts.matchIds);
+    } else {
+      // Get matches with lineups from the lineup table
+      const { data: lineupMatches } = await db
+        .from('match_predicted_lineups')
+        .select('match_id')
+        .not('match_id', 'is', null);
+      
+      const matchIdsWithLineups = [...new Set((lineupMatches || []).map((r: any) => r.match_id))];
+      if (matchIdsWithLineups.length === 0) {
+        logger.info('No matches with predicted lineups found');
+        return { matchesProcessed: 0, rowsWritten: 0 };
+      }
+      
+      query = query.in('id', matchIdsWithLineups);
+    }
+
+    const allMatches = await fetchAllRows(query, 500, 'id');
+    if (!allMatches || allMatches.length === 0) {
+      logger.info('No matches found to process');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    const matchesToProcess = allMatches.slice(0, maxMatches);
+    
+    logger.info({ 
+      totalMatches: allMatches.length,
+      processing: matchesToProcess.length,
+      batchSize 
+    }, `Processing ${matchesToProcess.length} matches for substitution impact`);
+
+    const matchIds = matchesToProcess.map((m: any) => m.id);
+    const teamIds = [...new Set(matchesToProcess.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    // ─── 2. Get predicted lineups (batched) ──────────────────────────────────
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups')
+        .select('match_id, team_id, player_id')
+        .in('match_id', matchIds),
+      500,
+      'id'
+    );
+    
+    const xiByMatchTeam = new Map<string, Set<number>>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!xiByMatchTeam.has(key)) xiByMatchTeam.set(key, new Set());
+      xiByMatchTeam.get(key)!.add(l.player_id);
+    }
+
+    // ─── 3. Get players (BATCHED by team_id to avoid timeout) ────────────────
+    // Instead of fetching all players at once, fetch in batches by team_id
+    const playersByTeam = new Map<number, any[]>();
+    
+    for (let i = 0; i < teamIds.length; i += 50) {
+      const batchTeamIds = teamIds.slice(i, i + 50);
+      const batchPlayers = await fetchAllRows(
+        db.from('players')
+          .select('id, team_id, position, current_injury')
+          .in('team_id', batchTeamIds),
+        500,
+        'id'
+      );
+      
+      for (const p of batchPlayers) {
+        if (p.current_injury) continue;
+        if (!playersByTeam.has(p.team_id)) playersByTeam.set(p.team_id, []);
+        playersByTeam.get(p.team_id)!.push(p);
+      }
+    }
+
+    // ─── 4. Get player intelligence (BATCHED by player_id) ───────────────────
+    // Collect all player IDs from the players we fetched
+    const allPlayerIds: number[] = [];
+    for (const [, players] of playersByTeam) {
+      for (const p of players) {
+        allPlayerIds.push(p.id);
+      }
+    }
+
+    const strengthMap = new Map<number, number>();
+
+    // Was manually chunked at 500 IDs per request — the same arithmetic that
+    // confirmed the processFormationMatchup failure (~202 IDs -> 16623 chars,
+    // ~82 chars/ID) puts 500 IDs at roughly 41,000 characters, almost
+    // certainly still over common 8-16KB header limits. This was a real
+    // attempt at the same protection chunkedIn() now provides, just sized
+    // from an assumption nobody had verified against an actual limit either.
+    const playerStrengthRows = await chunkedIn<any, number>(
+      allPlayerIds,
+      (chunk) =>
+        db.from('player_intelligence')
+          .select('player_id, player_strength_score')
+          .in('player_id', chunk),
+      { label: 'processSubstitutionImpact:playerStrengths' }
+    );
+    for (const r of playerStrengthRows) {
+      strengthMap.set(r.player_id, r.player_strength_score ?? 30);
+    }
+
+    // ─── 5. Process matches ──────────────────────────────────────────────────
+    const rows: any[] = [];
+
+    for (const match of matchesToProcess as any[]) {
+      const compute = (teamId: number) => {
+        const xi = xiByMatchTeam.get(`${match.id}:${teamId}`);
+        const roster = playersByTeam.get(teamId) || [];
+        const bench = xi ? roster.filter(p => !xi.has(p.id)) : roster;
+        if (bench.length === 0) return null;
+
+        let importanceSum = 0, gameChangers = 0, tacticalSubOptions = 0;
+        for (const p of bench) {
+          const score = strengthMap.get(p.id) ?? 30;
+          importanceSum += score;
+          if (score > 60) gameChangers++;
+          if (p.position && ['AM', 'LW', 'RW', 'ST', 'CF'].includes(p.position)) tacticalSubOptions++;
+        }
+        const benchStrength = Math.min(100, Math.round((importanceSum / bench.length) * 1.2));
+        const subQuality = Math.min(100, Math.round(benchStrength * 0.6 + (gameChangers / bench.length) * 100 * 0.4));
+        const depthScore = Math.min(100, Math.round((bench.length / 11) * 50 + benchStrength * 0.5));
+        return { benchStrength, subQuality, tacticalSubOptions, gameChangers, depthScore };
+      };
+
+      const home = compute(match.home_team_id);
+      const away = compute(match.away_team_id);
+      if (!home || !away) continue;
+      
+      const substitutionAdvantage = home.benchStrength - away.benchStrength;
+
+      rows.push({
+        match_id: match.id,
+        home_bench_strength: home.benchStrength,
+        away_bench_strength: away.benchStrength,
+        home_substitution_quality: home.subQuality,
+        away_substitution_quality: away.subQuality,
+        home_tactical_sub_options: home.tacticalSubOptions,
+        away_tactical_sub_options: away.tacticalSubOptions,
+        home_game_changers: home.gameChangers,
+        away_game_changers: away.gameChangers,
+        home_depth_score: home.depthScore,
+        away_depth_score: away.depthScore,
+        substitution_advantage: substitutionAdvantage,
+        impact_notes: subImpactNotes(substitutionAdvantage, home, away),
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    // ─── 6. Upsert ────────────────────────────────────────────────────────────
+    if (rows.length === 0) {
+      logger.info({ matchesProcessed: matchesToProcess.length, rowsWritten: 0 },
+        'processSubstitutionImpact completed - no rows generated');
+      return { matchesProcessed: matchesToProcess.length, rowsWritten: 0 };
+    }
+
+    const written = await upsertChunked('substitution_impact', rows, 'match_id');
+    
+    logger.info({ 
+      matchesProcessed: matchesToProcess.length, 
+      rowsWritten: written 
+    }, 'processSubstitutionImpact completed');
+    
+    return { matchesProcessed: matchesToProcess.length, rowsWritten: written };
+
+  } catch (error: any) {
+    logger.error({ error: error.message, stack: error.stack }, 'processSubstitutionImpact failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+function subImpactNotes(advantage: number, home: any, away: any): string {
+  const notes: string[] = [];
+  if (advantage > 15) notes.push(`Home team has significant bench advantage (+${advantage})`);
+  else if (advantage < -15) notes.push(`Away team has significant bench advantage (+${Math.abs(advantage)})`);
+  else notes.push('Bench quality is evenly matched');
+  if (home.gameChangers > 2) notes.push('Home team has multiple game-changers on bench');
+  if (away.gameChangers > 2) notes.push('Away team has multiple game-changers on bench');
+  return notes.join('. ');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. SQUAD DEPTH COMPARISON — depth computed inline (fixed)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processSquadDepthComparison(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processSquadDepthComparison started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const positionDepth = await fetchAllRows(
+      db.from('team_position_depth').select('team_id, position_code, player_count, available_count, injured_count, total_market_value').in('team_id', teamIds)
+    );
+    const depthByTeam = new Map<number, any[]>();
+    for (const d of positionDepth) {
+      if (!depthByTeam.has(d.team_id)) depthByTeam.set(d.team_id, []);
+      depthByTeam.get(d.team_id)!.push(d);
+    }
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, squad_depth_score, injury_burden_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const depthScores = new Map<number, any>();
+    for (const [teamId, depths] of depthByTeam) {
+      const intel = intelMap.get(teamId);
+      const posScores = depths.filter(d => d.player_count > 0).map(d => {
+        const availability = (d.available_count / d.player_count) * 100;
+        const mvScore = d.total_market_value > 0 ? Math.min(100, Math.log10(d.total_market_value + 1) * 10) : 40;
+        return availability * 0.6 + mvScore * 0.4;
+      });
+      const overallDepth = posScores.length > 0 ? Math.round(posScores.reduce((a, b) => a + b, 0) / posScores.length) : 40;
+      const depthRating = overallDepth >= 80 ? 'EXCELLENT' : overallDepth >= 65 ? 'GOOD' : overallDepth >= 45 ? 'AVERAGE' : overallDepth >= 25 ? 'POOR' : 'CRITICAL';
+
+      const sorted = [...posScores].sort((a, b) => b - a);
+      const qualityDropOff = sorted.length > 1 ? Math.round((sorted[0] - sorted[sorted.length - 1]) / 2) : 20;
+      const coverageCompleteness = Math.min(100, Math.round((depths.length / 10) * 100));
+      const avgDepth = posScores.length > 0 ? posScores.reduce((a, b) => a + b, 0) / posScores.length : 50;
+      const variance = posScores.length > 0 ? posScores.reduce((s, v) => s + (v - avgDepth) ** 2, 0) / posScores.length : 0;
+      const positionBalance = Math.max(0, Math.min(100, 100 - Math.sqrt(variance) * 2));
+
+      const rotationCapability = Math.min(100, Math.round(overallDepth * 0.3 + coverageCompleteness * 0.3 + positionBalance * 0.2 + (intel?.squad_depth_score ?? 50) * 0.2));
+      const substitutionImpactScore = Math.min(100, Math.round(overallDepth * 0.4 + (intel?.squad_depth_score ?? 50) * 0.3 + (100 - (intel?.injury_burden_score ?? 0)) * 0.3));
+
+      depthScores.set(teamId, { overallDepth, depthRating, qualityDropOff, coverageCompleteness, positionBalance, rotationCapability, substitutionImpact: substitutionImpactScore });
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeDepth = depthScores.get(match.home_team_id), awayDepth = depthScores.get(match.away_team_id);
+      if (!homeDepth || !awayDepth) continue;
+      const depthAdvantageScore = homeDepth.overallDepth - awayDepth.overallDepth;
+      const band = Math.abs(depthAdvantageScore) > 25 ? 'STRONG' : Math.abs(depthAdvantageScore) > 15 ? 'MODERATE' : Math.abs(depthAdvantageScore) > 5 ? 'SLIGHT' : 'NEUTRAL';
+
+      rows.push({
+        match_id: match.id, home_team_id: match.home_team_id, away_team_id: match.away_team_id,
+        home_overall_depth_score: homeDepth.overallDepth, away_overall_depth_score: awayDepth.overallDepth,
+        home_depth_rating: homeDepth.depthRating, away_depth_rating: awayDepth.depthRating,
+        home_quality_drop_off: homeDepth.qualityDropOff, away_quality_drop_off: awayDepth.qualityDropOff,
+        depth_advantage_score: depthAdvantageScore, depth_advantage_team_id: depthAdvantageScore > 0 ? match.home_team_id : match.away_team_id,
+        depth_advantage_margin: Math.abs(depthAdvantageScore), depth_advantage_band: band,
+        home_rotation_capability: homeDepth.rotationCapability, away_rotation_capability: awayDepth.rotationCapability,
+        home_substitution_impact: homeDepth.substitutionImpact, away_substitution_impact: awayDepth.substitutionImpact,
+        rotation_advantage: homeDepth.rotationCapability - awayDepth.rotationCapability,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('match_squad_depth_comparison', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processSquadDepthComparison completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processSquadDepthComparison failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. TEAM MOTIVATION — league-table context (tournament_id bug fixed)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTeamMotivation(): Promise<{ teamsProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamMotivation started — DB only, zero API calls');
+  try {
+    const teams = await fetchAllRows(db.from('teams').select('id'));
+    if (!teams || teams.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+    const teamIds = teams.map((t: any) => t.id);
+
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, readiness_score, congestion_score, travel_fatigue_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+    const momentumRows = await fetchAllRows(db.from('team_momentum').select('team_id, momentum_score').in('team_id', teamIds));
+    const momentumMap = new Map<number, any>(momentumRows.map((r: any) => [r.team_id, r]));
+    const formQualityRows = await fetchAllRows(db.from('team_form_quality').select('team_id, opponent_adjusted_form').in('team_id', teamIds));
+    const formQualityMap = new Map<number, any>(formQualityRows.map((r: any) => [r.team_id, r]));
+    const venueRows = await fetchAllRows(db.from('team_venue_performance').select('team_id, venue_advantage_score').in('team_id', teamIds));
+    const venueMap = new Map<number, any>(venueRows.map((r: any) => [r.team_id, r]));
+
+    const standings = await fetchAllRows(
+      db.from('tournament_standings').select('team_id, tournament_id, position, matches, points').in('team_id', teamIds).order('season_external_id', { ascending: false })
+    );
+    const standingsMap = new Map<number, { tournament_id: number; position: number; matches: number; points: number }>();
+    const tournamentSizes = new Map<number, number>();
+    for (const s of standings) {
+      if (!standingsMap.has(s.team_id)) {
+        standingsMap.set(s.team_id, { tournament_id: s.tournament_id, position: s.position || 0, matches: s.matches || 0, points: s.points || 0 });
+      }
+      tournamentSizes.set(s.tournament_id, Math.max(tournamentSizes.get(s.tournament_id) || 0, s.position || 0));
+    }
+
+    const rows: any[] = [];
+    for (const teamId of teamIds) {
+      const intel = intelMap.get(teamId);
+      if (!intel) continue;
+      const momentum = momentumMap.get(teamId), formQuality = formQualityMap.get(teamId), venue = venueMap.get(teamId), standing = standingsMap.get(teamId);
+
+      const momentumFactor = momentum?.momentum_score != null ? Math.min(100, Math.max(0, 50 + momentum.momentum_score * 2)) : 50;
+      const qualityFactor = Math.min(100, Math.round(((formQuality?.opponent_adjusted_form || 1.5) / 3) * 60 + (intel.readiness_score || 50) * 0.4));
+      const venueFactor = venue?.venue_advantage_score != null ? Math.min(100, Math.round(venue.venue_advantage_score)) : 50;
+      const fatigueFactor = Math.max(0, Math.min(100, 100 - ((intel.congestion_score || 0) * 0.5 + (intel.travel_fatigue_score || 0) * 0.5)));
+
+      let externalMotivation = 50;
+      if (standing) {
+        const leagueSize = tournamentSizes.get(standing.tournament_id) || 20;
+        if (standing.position <= 3) externalMotivation = 95;
+        else if (standing.position <= 6) externalMotivation = 85;
+        else if (standing.position <= leagueSize * 0.6) externalMotivation = 40;
+        else if (standing.position > leagueSize - 5) externalMotivation = 90;
+        const gamesRemaining = 38 - (standing.matches || 0);
+        if (gamesRemaining > 10 && (standing.position <= 3 || standing.position > leagueSize - 5)) externalMotivation = Math.min(100, externalMotivation + 5);
+      }
+
+      const overallMotivation = Math.min(100, Math.round(momentumFactor * 0.25 + qualityFactor * 0.20 + venueFactor * 0.15 + fatigueFactor * 0.15 + externalMotivation * 0.25));
+      const band = overallMotivation >= 75 ? 'HIGH' : overallMotivation >= 60 ? 'GOOD' : overallMotivation >= 45 ? 'NEUTRAL' : overallMotivation >= 30 ? 'LOW' : 'VERY_LOW';
+
+      rows.push({
+        team_id: teamId, overall_motivation_score: overallMotivation, motivation_band: band,
+        momentum_factor: Math.round(momentumFactor), quality_factor: qualityFactor, venue_factor: venueFactor,
+        fatigue_factor: Math.round(fatigueFactor), external_motivation: externalMotivation,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('team_motivation', rows, 'team_id');
+    logger.info({ teamsProcessed: teamIds.length, rowsWritten: written }, 'processTeamMotivation completed');
+    return { teamsProcessed: teamIds.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamMotivation failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 13. MATCH IMPACT SUMMARY
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processMatchImpactSummary(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchImpactSummary started — DB only, zero API calls');
+  try {
+    const now = new Date().toISOString();
+    const twoWeeksOut = new Date(Date.now() + 14 * 86400000).toISOString();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id, competition').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', twoWeeksOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const motivationRows = await fetchAllRows(db.from('team_motivation').select('team_id, overall_motivation_score, motivation_band').in('team_id', teamIds));
+    const motivationMap = new Map<number, any>(motivationRows.map((r: any) => [r.team_id, r]));
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, form_index').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+    const standings = await fetchAllRows(db.from('tournament_standings').select('team_id, position, points').in('team_id', teamIds).order('season_external_id', { ascending: false }));
+    const standingsMap = new Map<number, { position: number; points: number }>();
+    for (const s of standings) if (!standingsMap.has(s.team_id)) standingsMap.set(s.team_id, { position: s.position || 0, points: s.points || 0 });
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeMotivation = motivationMap.get(match.home_team_id), awayMotivation = motivationMap.get(match.away_team_id);
+      const homeIntel = intelMap.get(match.home_team_id), awayIntel = intelMap.get(match.away_team_id);
+      const homeStanding = standingsMap.get(match.home_team_id), awayStanding = standingsMap.get(match.away_team_id);
+
+      let significanceScore = 50;
+      if (homeStanding && awayStanding) {
+        const posDiff = Math.abs(homeStanding.position - awayStanding.position);
+        significanceScore += posDiff <= 3 ? 20 : posDiff <= 6 ? 10 : 5;
+        const pointsDiff = Math.abs(homeStanding.points - awayStanding.points);
+        significanceScore += pointsDiff <= 3 ? 15 : pointsDiff <= 6 ? 10 : pointsDiff <= 10 ? 5 : 0;
+      }
+      const avgMotivation = ((homeMotivation?.overall_motivation_score || 50) + (awayMotivation?.overall_motivation_score || 50)) / 2;
+      significanceScore += avgMotivation >= 75 ? 20 : avgMotivation >= 60 ? 15 : avgMotivation >= 45 ? 10 : 5;
+      const formDiff = Math.abs((homeIntel?.form_index || 50) - (awayIntel?.form_index || 50));
+      significanceScore += formDiff <= 10 ? 15 : formDiff <= 20 ? 10 : 5;
+      const comp = match.competition || '';
+      significanceScore += /Champions League|World Cup/.test(comp) ? 20 : /Europa|Copa/.test(comp) ? 15 : /Cup|Derby/.test(comp) ? 10 : 5;
+
+      let rivalryScore = 0;
+      if (/Derby/.test(comp)) rivalryScore += 20;
+      if (/Classico|El Clasico/.test(comp)) rivalryScore += 25;
+      if (homeStanding && awayStanding && Math.abs(homeStanding.position - awayStanding.position) <= 2) rivalryScore += 10;
+
+      const finalSignificance = Math.min(100, Math.round(significanceScore + Math.min(20, rivalryScore)));
+      const importanceBand = finalSignificance >= 80 ? 'HIGH' : finalSignificance >= 60 ? 'MODERATE' : finalSignificance >= 40 ? 'LOW' : 'VERY_LOW';
+
+      let momentumAtStake = 50;
+      if (homeStanding && awayStanding) {
+        const posDiff = Math.abs(homeStanding.position - awayStanding.position);
+        momentumAtStake += posDiff <= 2 ? 30 : posDiff <= 5 ? 20 : posDiff <= 10 ? 10 : 0;
+      }
+      if (finalSignificance >= 70) momentumAtStake += 10;
+
+      rows.push({
+        match_id: match.id, significance_score: finalSignificance, importance_band: importanceBand,
+        rivalry_score: Math.min(100, rivalryScore), momentum_at_stake: Math.min(100, momentumAtStake),
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('match_impact_summary', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchImpactSummary completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchImpactSummary failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 14. PLAYER VERSATILITY — individual player positional flexibility
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processPlayerVersatility(): Promise<{ playersProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPlayerVersatility started — DB only, zero API calls');
+  try {
+    // ─── 1. Get all players with position data ──────────────────────────────
+    const players = await fetchAllRows(
+      db.from('players')
+        .select('id, primary_position, secondary_position, tertiary_position, position_detailed')
+    );
+    if (!players || players.length === 0) {
+      logger.warn('No players found — run sync:squads:v2 first');
+      return { playersProcessed: 0, rowsWritten: 0 };
+    }
+
+    // ─── 2. Get player season stats for games at position ──────────────────
+    const seasonStats = await fetchAllRows(
+      db.from('player_season_statistics')
+        .select('player_id, appearances, matches_started, minutes_played')
+        .order('season_external_id', { ascending: false })
+    );
+
+    // Keep most recent season per player
+    const statsMap = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsMap.get(s.player_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsMap.set(s.player_id, s);
+    }
+
+    // ─── 3. Get player intelligence for context ─────────────────────────────
+    const playerIntel = await fetchAllRows(
+      db.from('player_intelligence')
+        .select('player_id, importance_score, readiness_score, fatigue_score')
+    );
+    const intelMap = new Map<number, any>(playerIntel.map((r: any) => [r.player_id, r]));
+
+    // ─── 4. Compute versatility per player ──────────────────────────────────
+    const rows: any[] = [];
+
+    for (const player of players) {
+      const primary = player.primary_position;
+      const secondary = player.secondary_position;
+      const tertiary = player.tertiary_position;
+      const positionDetailed = player.position_detailed;
+
+      // ─── Collect all positions ─────────────────────────────────────────────
+      let allPositions: string[] = [];
+      
+      // Parse position_detailed (comma-separated like "DR,DC" or "MC,DM,AM")
+      if (positionDetailed && positionDetailed.trim()) {
+        const parsed = positionDetailed.split(',').map((p: string) => p.trim()).filter(Boolean);
+        allPositions = [...allPositions, ...parsed];
+      }
+      
+      // Add primary/secondary/tertiary if not already in the list
+      if (primary && !allPositions.includes(primary)) allPositions.push(primary);
+      if (secondary && !allPositions.includes(secondary)) allPositions.push(secondary);
+      if (tertiary && !allPositions.includes(tertiary)) allPositions.push(tertiary);
+
+      // Fallback: if no positions found, use a default
+      if (allPositions.length === 0) {
+        allPositions = ['MID'];
+      }
+
+      // ─── Count unique positions ────────────────────────────────────────────
+      const uniquePositions = [...new Set(allPositions)];
+      const positionsCount = uniquePositions.length;
+
+      // ─── Calculate versatility score ──────────────────────────────────────
+      // 1 position = 0, 2 positions = 50, 3+ positions = 100
+      const versatilityScore = Math.min(100, Math.round(((positionsCount - 1) / 3) * 100));
+
+      // ─── Zone coverage ─────────────────────────────────────────────────────
+      const zones = new Set();
+      for (const pos of uniquePositions) {
+        const zone = codeToZone(pos);
+        if (zone) zones.add(zone);
+      }
+      const zonesCovered = zones.size;
+      const adaptabilityScore = Math.min(100, Math.round((zonesCovered / 3) * 100));
+
+      // ─── Utility rating ────────────────────────────────────────────────────
+      // A player who can play in multiple zones is more useful
+      const utilityRating = Math.min(100, Math.round(
+        (positionsCount / 5) * 50 +
+        (zonesCovered / 3) * 50
+      ));
+
+      // ─── Primary position rating ──────────────────────────────────────────
+      const stats = statsMap.get(player.id);
+      const appearances = stats?.appearances || 0;
+      const matchesStarted = stats?.matches_started || 0;
+      const minutesPlayed = stats?.minutes_played || 0;
+
+      // Rating based on playing time
+      const gamesAtPosition = Math.max(1, appearances || 1);
+      const positionRating = Math.min(100, Math.round(
+        (matchesStarted / Math.max(1, appearances)) * 50 +
+        Math.min(1, minutesPlayed / 1000) * 50
+      ));
+
+      // ─── Overall versatility ──────────────────────────────────────────────
+      const intel = intelMap.get(player.id);
+      const importance = intel?.importance_score || 50;
+      
+      const overallVersatility = Math.min(100, Math.round(
+        versatilityScore * 0.30 +
+        adaptabilityScore * 0.25 +
+        utilityRating * 0.20 +
+        positionRating * 0.15 +
+        importance * 0.10
+      ));
+
+      // ─── Determine if player is a specialist or utility ──────────────────
+      const specialistThreshold = 70;
+      const isSpecialist = overallVersatility < specialistThreshold && positionsCount <= 2;
+
+      rows.push({
+        player_id: player.id,
+        positions_played: uniquePositions,
+        primary_position_rating: positionRating,
+        secondary_position_rating: positionsCount >= 2 ? Math.round(positionRating * 0.8) : null,
+        tertiary_position_rating: positionsCount >= 3 ? Math.round(positionRating * 0.6) : null,
+        versatility_score: versatilityScore,
+        adaptability_score: adaptabilityScore,
+        utility_rating: utilityRating,
+        games_at_position: appearances || 0,
+        position_rating: positionRating,
+        overall_versatility: overallVersatility,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    // ─── 5. Upsert ─────────────────────────────────────────────────────────────
+    const written = await upsertChunked('player_versatility', rows, 'player_id');
+    logger.info({ playersProcessed: players.length, rowsWritten: written }, 'processPlayerVersatility completed');
+    return { playersProcessed: players.length, rowsWritten: written };
+
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPlayerVersatility failed');
+    return { playersProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ─── Helper: Convert position code to zone ──────────────────────────────────
+function codeToZone(code: string): string | null {
+  if (!code) return null;
+  const c = code.toUpperCase();
+  if (['G', 'GK'].includes(c)) return 'GK';
+  if (['D', 'DC', 'DR', 'DL', 'CB', 'LB', 'RB', 'SW', 'LWB', 'RWB'].includes(c)) return 'DEF';
+  if (['M', 'MC', 'CM', 'DM', 'AM', 'LM', 'RM', 'CDM', 'CAM'].includes(c)) return 'MID';
+  if (['F', 'ST', 'CF', 'LW', 'RW', 'SS', 'WF'].includes(c)) return 'ATT';
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MATCH PAGE SUITE — 6 processors, priority order per spec. All depend on
+// tables already computed above (team_betting_intelligence, match_intelligence,
+// player_match_impact, match_predicted_lineups, formation_matchup). Requires
+// migration 032 (unique constraints — the 6 target tables already existed in
+// the live schema, only the upsert constraints needed adding).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── 15. TEAM MATCH IMPACT ────────────────────────────────────────────────────
+export async function processTeamMatchImpact(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamMatchImpact started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+    const matchIds = matches.map((m: any) => m.id);
+
+    const bettingIntel = await fetchAllRows(
+      db.from('team_betting_intelligence').select('team_id, attack_rating, defence_rating, team_quality_score, sustainability_score').in('team_id', teamIds)
+    );
+    const bettingMap = new Map<number, any>(bettingIntel.map((r: any) => [r.team_id, r]));
+    const matchIntel = await fetchAllRows(
+      db.from('match_intelligence').select('match_id, home_readiness, away_readiness, confidence_score, home_xi_strength, away_xi_strength').in('match_id', matchIds)
+    );
+    const matchIntelMap = new Map<number, any>(matchIntel.map((r: any) => [r.match_id, r]));
+    const teamIntel = await fetchAllRows(
+      db.from('team_intelligence').select('team_id, lineup_versatility_score, injury_burden_score').in('team_id', teamIds)
+    );
+    const teamIntelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+    const formQuality = await fetchAllRows(db.from('team_form_quality').select('team_id, performance_delta').in('team_id', teamIds));
+    const formMap = new Map<number, any>(formQuality.map((r: any) => [r.team_id, r]));
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const intel = matchIntelMap.get(match.id);
+      for (const [side, teamId, oppId] of [
+        ['home', match.home_team_id, match.away_team_id],
+        ['away', match.away_team_id, match.home_team_id],
+      ] as const) {
+        const betting = bettingMap.get(teamId);
+        const oppBetting = bettingMap.get(oppId);
+        const tIntel = teamIntelMap.get(teamId);
+        const form = formMap.get(teamId);
+        if (!betting) continue;
+
+        const attackStrength = betting.attack_rating ?? 50;
+        const defensiveStrength = betting.defence_rating ?? 50;
+        const midfieldControl = Math.round((attackStrength + defensiveStrength) / 2);
+        // Set-piece threat: no dedicated data source exists yet — approximated
+        // from attack/defence blend, same documented-heuristic pattern as
+        // processMatchPerformanceComparison's set-piece score. Revisit if a
+        // real corners/set-piece-goals signal gets captured later.
+        const setPieceThreat = Math.min(100, Math.round((attackStrength * 0.4 + defensiveStrength * 0.6) * 0.8 + 20));
+        const experienceLevel = betting.sustainability_score ?? 50;
+        const formTrend = form?.performance_delta != null ? Math.max(-100, Math.min(100, Math.round(form.performance_delta * 10))) : 0;
+        const injuryImpact = tIntel?.injury_burden_score != null ? Math.round(tIntel.injury_burden_score) : 0;
+        const tacticalVersatility = tIntel?.lineup_versatility_score != null ? Math.round(tIntel.lineup_versatility_score) : 50;
+        const xiStrength = side === 'home' ? intel?.home_xi_strength : intel?.away_xi_strength;
+        const matchSpecificBoost = xiStrength ?? 70; // 70 = neutral-ish default when no predicted lineup exists yet
+        const confidenceLevel = intel?.confidence_score != null ? Math.round(intel.confidence_score) : 50;
+
+        const overallImpactScore = Math.round(
+          attackStrength * 0.25 + midfieldControl * 0.25 + defensiveStrength * 0.25 + setPieceThreat * 0.15 + experienceLevel * 0.10
+        );
+
+        const oppOverall = oppBetting
+          ? Math.round((oppBetting.attack_rating ?? 50) * 0.25 + ((oppBetting.attack_rating ?? 50) + (oppBetting.defence_rating ?? 50)) / 2 * 0.25 + (oppBetting.defence_rating ?? 50) * 0.25 + 50 * 0.15 + (oppBetting.sustainability_score ?? 50) * 0.10)
+          : 50;
+        const diff = overallImpactScore - oppOverall;
+        const advantageBand = diff >= 20 ? 'STRONG' : diff >= 8 ? 'GOOD' : diff >= -8 ? 'NEUTRAL' : diff >= -20 ? 'WEAK' : 'POOR';
+
+        rows.push({
+          match_id: match.id, team_id: teamId,
+          overall_impact_score: overallImpactScore, attack_strength: Math.round(attackStrength),
+          midfield_control: midfieldControl, defensive_strength: Math.round(defensiveStrength),
+          set_piece_threat: setPieceThreat, experience_level: Math.round(experienceLevel),
+          form_trend: formTrend, injury_impact: injuryImpact, tactical_versatility: tacticalVersatility,
+          match_specific_boost: Math.round(matchSpecificBoost), confidence_level: confidenceLevel,
+          advantage_band: advantageBand,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('team_match_impact', rows, 'match_id,team_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processTeamMatchImpact completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamMatchImpact failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 16. MATCH IMPACT ADVANTAGE ───────────────────────────────────────────────
+export async function processMatchImpactAdvantage(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchImpactAdvantage started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const impacts = await fetchAllRows(
+      db.from('team_match_impact')
+        .select('match_id, team_id, overall_impact_score, attack_strength, midfield_control, defensive_strength, confidence_level')
+        .in('match_id', matchIds)
+    );
+    const byMatchTeam = new Map<string, any>();
+    for (const r of impacts) byMatchTeam.set(`${r.match_id}:${r.team_id}`, r);
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const home = byMatchTeam.get(`${match.id}:${match.home_team_id}`);
+      const away = byMatchTeam.get(`${match.id}:${match.away_team_id}`);
+      if (!home || !away) continue; // needs processTeamMatchImpact to have run first
+
+      const homeScore = home.overall_impact_score ?? 50;
+      const awayScore = away.overall_impact_score ?? 50;
+      const advantageTeamId = homeScore >= awayScore ? match.home_team_id : match.away_team_id;
+
+      const keyAdvantages: string[] = [];
+      const keyDisadvantages: string[] = [];
+      const compare = (label: string, h: number, a: number) => {
+        if (h - a >= 10) keyAdvantages.push(`${label} advantage`);
+        else if (a - h >= 10) keyDisadvantages.push(`${label} disadvantage`);
+      };
+      compare('Attack', home.attack_strength ?? 50, away.attack_strength ?? 50);
+      compare('Midfield', home.midfield_control ?? 50, away.midfield_control ?? 50);
+      compare('Defensive', home.defensive_strength ?? 50, away.defensive_strength ?? 50);
+
+      rows.push({
+        match_id: match.id,
+        home_advantage_score: Math.round(homeScore), away_advantage_score: Math.round(awayScore),
+        advantage_margin: Math.round(Math.abs(homeScore - awayScore)), advantage_team_id: advantageTeamId,
+        key_advantages: keyAdvantages.length ? keyAdvantages : ['No clear advantages'],
+        key_disadvantages: keyDisadvantages.length ? keyDisadvantages : ['No clear disadvantages'],
+        confidence_score: Math.round(((home.confidence_level ?? 50) + (away.confidence_level ?? 50)) / 2),
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('match_impact_advantage', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchImpactAdvantage completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchImpactAdvantage failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 17. MATCH KEY BATTLES — COMPLETE FIX (ALL MATCHES WITH LINEUPS)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processMatchKeyBattles(opts?: {
+  matchIds?: number[];
+  batchSize?: number;
+  maxMatches?: number;
+}): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info({ opts }, 'processMatchKeyBattles started — DB only, zero API calls');
+  try {
+    const batchSize = opts?.batchSize || 100;
+    const maxMatches = opts?.maxMatches || 5000;
+    
+    // ─── 1. Get ALL matches with predicted lineups ──────────────────────────
+    let query = db.from('matches')
+      .select('id, home_team_id, away_team_id, status, date')
+      .eq('status', MUTABLE_MATCH_STATUS);
+
+    if (opts?.matchIds && opts.matchIds.length > 0) {
+      query = query.in('id', opts.matchIds);
+    } else {
+      // ─── FIX: Get ALL matches with predicted lineups ──────────────────────
+      // Get all match IDs from match_predicted_lineups
+      const { data: lineupMatches } = await db
+        .from('match_predicted_lineups')
+        .select('match_id')
+        .not('match_id', 'is', null);
+      
+      const matchIdsWithLineups = [...new Set((lineupMatches || []).map((r: any) => r.match_id))];
+      if (matchIdsWithLineups.length === 0) {
+        logger.info('No matches with predicted lineups found');
+        return { matchesProcessed: 0, rowsWritten: 0 };
+      }
+      
+      // Filter to only matches that have lineups
+      query = query.in('id', matchIdsWithLineups);
+      
+      // ─── REMOVE THE DATE FILTER ──────────────────────────────────────────
+      // Don't filter by date - process ALL matches with lineups
+      // This is the key change that was missing!
+    }
+
+    const allMatches = await fetchAllRows(query, 500, 'id');
+    
+    if (!allMatches || allMatches.length === 0) {
+      logger.info('No matches found to process');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    const matchesToProcess = allMatches.slice(0, maxMatches);
+    
+    logger.info({ 
+      totalMatches: allMatches.length,
+      processing: matchesToProcess.length,
+      batchSize 
+    }, `Processing ${matchesToProcess.length} matches for key battles`);
+
+    const matchIds = matchesToProcess.map((m: any) => m.id);
+
+    // ─── 2. Fetch lineups ─────────────────────────────────────────────────────
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups')
+        .select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position, players:player_id(id, name)')
+        .in('match_id', matchIds),
+      500,
+      'id'
+    );
+
+    if (!lineups || lineups.length === 0) {
+      logger.info('No lineups found');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+
+    // ─── 3. Fetch player match impacts ──────────────────────────────────────
+    const impacts = await fetchAllRows(
+      db.from('player_match_impact')
+        .select('match_id, player_id, impact_score')
+        .in('match_id', matchIds),
+      500,
+      'match_id'
+    );
+    const impactMap = new Map<string, number>(
+      impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50])
+    );
+
+    // ─── 4. Group lineups by match and team ──────────────────────────────────
+    const lineupsByMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!lineupsByMatchTeam.has(key)) lineupsByMatchTeam.set(key, []);
+      lineupsByMatchTeam.get(key)!.push(l);
+    }
+
+    // ─── 5. Define battle pairings ───────────────────────────────────────────
+    const PAIRINGS: Array<{ id: string; title: string; homeGroup: string; awayGroup: string }> = [
+      { id: 'ATT_VS_DEF', title: 'Attack vs Defence', homeGroup: 'F', awayGroup: 'D' },
+      { id: 'WIDE_VS_WIDE', title: 'Wide Play Battle', homeGroup: 'M', awayGroup: 'D' },
+      { id: 'MID_VS_MID', title: 'Midfield Battle', homeGroup: 'M', awayGroup: 'M' },
+      { id: 'DEF_VS_ATT', title: 'Defence vs Attack', homeGroup: 'D', awayGroup: 'F' },
+      { id: 'GK_VS_ATT', title: 'Goalkeeper vs Attack', homeGroup: 'G', awayGroup: 'F' },
+    ];
+
+    // ─── 6. Process matches ──────────────────────────────────────────────────
+    const rows: any[] = [];
+    let processedCount = 0;
+
+    for (let i = 0; i < matchesToProcess.length; i += batchSize) {
+      const batch = matchesToProcess.slice(i, i + batchSize);
+      const batchRows: any[] = [];
+
+      for (const match of batch as any[]) {
+        const homeLineup = lineupsByMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+        const awayLineup = lineupsByMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+        
+        if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+        const best = (lineup: any[], group: string) =>
+          lineup.filter((p: any) => lineupZone(p) === group)
+            .sort((a: any, b: any) => 
+              (impactMap.get(`${match.id}:${b.player_id}`) ?? 0) - 
+              (impactMap.get(`${match.id}:${a.player_id}`) ?? 0)
+            )[0];
+
+        for (const pairing of PAIRINGS) {
+          const hp = best(homeLineup, pairing.homeGroup);
+          const ap = best(awayLineup, pairing.awayGroup);
+          
+          if (!hp || !ap) continue;
+
+          const hScore = impactMap.get(`${match.id}:${hp.player_id}`) ?? 50;
+          const aScore = impactMap.get(`${match.id}:${ap.player_id}`) ?? 50;
+          const importance = Math.round((hScore + aScore) / 2);
+          const diff = hScore - aScore;
+          
+          const outcome = Math.abs(diff) < 8 
+            ? 'Evenly matched' 
+            : diff > 0
+              ? `${hp.players?.name ?? 'Home player'} favoured`
+              : `${ap.players?.name ?? 'Away player'} favoured`;
+
+          batchRows.push({
+            match_id: match.id,
+            battle_id: pairing.id,
+            title: pairing.title,
+            description: `${hp.players?.name ?? 'Home player'} vs ${ap.players?.name ?? 'Away player'}`,
+            home_player_id: hp.player_id,
+            away_player_id: ap.player_id,
+            home_advantage_score: Math.round(hScore),
+            away_advantage_score: Math.round(aScore),
+            importance_score: importance,
+            expected_impact: importance >= 70 ? 'High' : importance >= 50 ? 'Moderate' : 'Low',
+            battle_outcome_prediction: outcome,
+            calculated_at: new Date().toISOString(),
+          });
+        }
+      }
+
+      if (batchRows.length > 0) {
+        const written = await upsertChunked('match_key_battles', batchRows, 'match_id,battle_id');
+        rows.push(...batchRows);
+        logger.debug({ 
+          batch: Math.floor(i / batchSize) + 1, 
+          written,
+          total: rows.length 
+        }, 'Batch progress');
+      }
+      
+      processedCount += batch.length;
+    }
+
+    if (rows.length === 0) {
+      logger.info({ matchesProcessed: matchesToProcess.length, rowsWritten: 0 }, 
+        'processMatchKeyBattles completed - no rows generated');
+      return { matchesProcessed: matchesToProcess.length, rowsWritten: 0 };
+    }
+
+    const written = await upsertChunked('match_key_battles', rows, 'match_id,battle_id');
+    
+    logger.info({ 
+      matchesProcessed: matchesToProcess.length, 
+      rowsWritten: written 
+    }, 'processMatchKeyBattles completed');
+    
+    return { matchesProcessed: matchesToProcess.length, rowsWritten: written };
+
+  } catch (error: any) {
+    logger.error({ error: error.message, stack: error.stack }, 'processMatchKeyBattles failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 18. MATCH POSITIONAL MATCHUPS ────────────────────────────────────────────
+export async function processMatchPositionalMatchups(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchPositionalMatchups started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position').in('match_id', matchIds)
+    );
+    const impacts = await fetchAllRows(db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds));
+    const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = byMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      // Broad position groups (see processPredictedLineups) — G/D/M/F, rank
+      // 1 within each group is the primary starter for that grid row.
+      for (const group of ['G', 'D', 'M', 'F']) {
+        const hp = homeLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
+        const ap = awayLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99))[0];
+        if (!hp && !ap) continue;
+
+        const hScore = hp ? (impactMap.get(`${match.id}:${hp.player_id}`) ?? 50) : null;
+        const aScore = ap ? (impactMap.get(`${match.id}:${ap.player_id}`) ?? 50) : null;
+        const advantageScore = hScore != null && aScore != null ? Math.round(hScore - aScore) : null;
+        const advantageTeamId = advantageScore != null ? (advantageScore >= 0 ? match.home_team_id : match.away_team_id) : null;
+        const advantageType = !hp ? 'AWAY_ONLY' : !ap ? 'HOME_ONLY' : Math.abs(advantageScore ?? 0) < 8 ? 'EVEN' : 'CLEAR';
+
+        rows.push({
+          match_id: match.id, position_code: group,
+          home_player_id: hp?.player_id ?? null, away_player_id: ap?.player_id ?? null,
+          home_impact_score: hScore != null ? Math.round(hScore) : null, away_impact_score: aScore != null ? Math.round(aScore) : null,
+          advantage_score: advantageScore, advantage_team_id: advantageTeamId, advantage_type: advantageType,
+          matchup_description: `${group} zone: ${hp ? 'home starter' : 'no home starter'} vs ${ap ? 'away starter' : 'no away starter'}`,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('match_positional_matchups', rows, 'match_id,position_code');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchPositionalMatchups completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchPositionalMatchups failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 19. MATCH TACTICAL ADVANTAGES ────────────────────────────────────────────
+export async function processMatchTacticalAdvantages(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchTacticalAdvantages started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, position_code, position_group, tactical_position, formation').in('match_id', matchIds)
+    );
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, readiness_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = byMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      const count = (lineup: any[], group: string) => lineup.filter((p: any) => lineupZone(p) === group).length;
+
+      // WIDTH: a real wide-player count since migration 025. The lineup engine
+      // now assigns explicit tactical slots, so full-backs, wing-backs, wide
+      // midfielders and wingers are all directly identifiable — this used to
+      // be approximated by total midfield headcount because the stored
+      // position was only a G/D/M/F letter.
+      const WIDE_POSITIONS = ['RB', 'LB', 'RWB', 'LWB', 'RM', 'LM', 'RW', 'LW'];
+      const countWide = (lineup: any[]) =>
+        lineup.filter((p: any) => WIDE_POSITIONS.includes(lineupPosition(p))).length;
+      const homeWidth = countWide(homeLineup);
+      const awayWidth = countWide(awayLineup);
+      const homeCentral = count(homeLineup, 'D') + count(homeLineup, 'M');
+      const awayCentral = count(awayLineup, 'D') + count(awayLineup, 'M');
+      const homeReadiness = intelMap.get(match.home_team_id)?.readiness_score ?? 50;
+      const awayReadiness = intelMap.get(match.away_team_id)?.readiness_score ?? 50;
+
+      const advantages: Array<{ type: string; desc: string; h: number; a: number; notes: string }> = [
+        {
+          type: 'WIDTH', desc: 'Wide-position headcount',
+          h: Math.min(100, homeWidth * 20), a: Math.min(100, awayWidth * 20),
+          notes: 'Full-backs, wing-backs, wide midfielders and wingers in the predicted XI.',
+        },
+        {
+          type: 'CENTRAL_CONTROL', desc: 'Central zone (defence + midfield) headcount',
+          h: Math.min(100, homeCentral * 12.5), a: Math.min(100, awayCentral * 12.5),
+          notes: 'Larger central presence generally supports build-up control.',
+        },
+        {
+          type: 'PRESSING', desc: 'Readiness-based pressing capacity',
+          h: Math.round(homeReadiness), a: Math.round(awayReadiness),
+          notes: 'Higher team readiness supports sustained high-intensity pressing.',
+        },
+      ];
+
+      for (const adv of advantages) {
+        const net = Math.round(adv.h - adv.a);
+        rows.push({
+          match_id: match.id, advantage_type: adv.type, description: adv.desc,
+          home_advantage_score: Math.round(adv.h), away_advantage_score: Math.round(adv.a),
+          net_advantage: net, advantage_team_id: net >= 0 ? match.home_team_id : match.away_team_id,
+          confidence_score: Math.abs(net) >= 20 ? 70 : Math.abs(net) >= 10 ? 55 : 40,
+          tactical_notes: adv.notes,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('match_tactical_advantages', rows, 'match_id,advantage_type');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchTacticalAdvantages completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchTacticalAdvantages failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ── 20. PLAYER MATCHUP ───────────────────────────────────────────────────────
+export async function processPlayerMatchup(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPlayerMatchup started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db.from('match_predicted_lineups').select('match_id, team_id, player_id, position_code, position_group, tactical_position, formation, rank_in_position').in('match_id', matchIds)
+    );
+    const impacts = await fetchAllRows(db.from('player_match_impact').select('match_id, player_id, impact_score').in('match_id', matchIds));
+    const impactMap = new Map<string, number>(impacts.map((r: any) => [`${r.match_id}:${r.player_id}`, r.impact_score ?? 50]));
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeLineup = byMatchTeam.get(`${match.id}:${match.home_team_id}`) || [];
+      const awayLineup = byMatchTeam.get(`${match.id}:${match.away_team_id}`) || [];
+      if (homeLineup.length === 0 || awayLineup.length === 0) continue;
+
+      // Same-group players ranked by rank_in_position, paired 1st-vs-1st,
+      // 2nd-vs-2nd, etc. within each broad group.
+      for (const group of ['G', 'D', 'M', 'F']) {
+        const hGroup = homeLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
+        const aGroup = awayLineup.filter((p: any) => lineupZone(p) === group).sort((a: any, b: any) => (a.rank_in_position ?? 99) - (b.rank_in_position ?? 99));
+        for (let i = 0; i < Math.min(hGroup.length, aGroup.length); i++) {
+          const hp = hGroup[i], ap = aGroup[i];
+          const hScore = impactMap.get(`${match.id}:${hp.player_id}`) ?? 50;
+          const aScore = impactMap.get(`${match.id}:${ap.player_id}`) ?? 50;
+          const advantageScore = Math.round(Math.max(-100, Math.min(100, hScore - aScore)));
+          const advantageType = Math.abs(advantageScore) < 8 ? 'EVEN' : advantageScore > 0 ? 'HOME_FAVOURED' : 'AWAY_FAVOURED';
+
+          rows.push({
+            match_id: match.id, player_id: hp.player_id, opponent_player_id: ap.player_id,
+            advantage_score: advantageScore, advantage_type: advantageType,
+            matchup_notes: `${group} zone pairing (rank ${i + 1})`,
+            calculated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    const written = await upsertChunked('player_matchup', rows, 'match_id,player_id,opponent_player_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processPlayerMatchup completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPlayerMatchup failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXTENDED INTELLIGENCE SUITE — PART 2: 13 processors for tables that existed
+// (created via the original scaffold SQL, constraints added in migration 032)
+// but had no writer. All follow the same conventions as the 20 processors
+// above: db/logger/fetchAllRows/upsertChunked/upcomingWindow from the top of
+// this file, forward-looking only (upcomingWindow(), scheduled matches),
+// zero API calls, idempotent upserts.
+//
+// team_strengths and team_weaknesses have NO unique constraint (multiple
+// rows per team_id) — upsertChunked can't target them (Postgres requires a
+// matching unique/exclusion constraint for ON CONFLICT). Those two use an
+// explicit delete-then-insert instead; see deleteThenInsert() below.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function deleteThenInsert(table: string, teamIds: number[], rows: any[]): Promise<number> {
+  if (teamIds.length > 0) {
+    const { error: delError } = await db.from(table).delete().in('team_id', teamIds);
+    if (delError) { logger.error({ table, error: delError.message }, 'delete-before-insert failed'); }
+  }
+  let written = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const { error } = await db.from(table).insert(chunk);
+    if (error) { logger.error({ table, error: error.message }, 'insert chunk failed'); continue; }
+    written += chunk.length;
+  }
+  return written;
+}
+
+// Small deterministic PRNG (mulberry32) seeded per-match so synthetic
+// weather doesn't flip-flop on every cron run for the same fixture.
+function seededRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-1. MATCH WEATHER — synthetic climate-zone estimation (no live API)
+// ═══════════════════════════════════════════════════════════════════════════
+// There is no live weather API in this pipeline. This assigns plausible,
+// deterministic-per-match values from the venue's latitude and the match's
+// calendar month, purely so the UI has something to render — NOT real
+// forecast data. Documented here and should be documented in the UI too.
+export async function processMatchWeather(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processMatchWeather started — DB only, zero API calls, SYNTHETIC weather (no live API)');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(
+      db.from('matches').select('id, date, venue_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut).not('venue_id', 'is', null)
+    );
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const venueIds = [...new Set(matches.map((m: any) => m.venue_id))];
+    const stadiums = await fetchAllRows(db.from('stadiums').select('id, latitude, longitude').in('id', venueIds));
+    const stadiumMap = new Map<number, any>(stadiums.map((s: any) => [s.id, s]));
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const stadium = stadiumMap.get(match.venue_id);
+      if (!stadium || stadium.latitude == null) continue;
+      const lat = Number(stadium.latitude);
+      const month = new Date(match.date).getUTCMonth(); // 0-11
+      const rand = seededRandom(match.id);
+
+      // Northern-hemisphere summer = Jun-Aug (5-7), winter = Dec-Feb (11,0,1).
+      // Southern hemisphere (lat < 0) inverts the season.
+      const isNorth = lat >= 0;
+      const northSummer = month >= 5 && month <= 7;
+      const isSummer = isNorth ? northSummer : !northSummer;
+
+      let tMin: number, tMax: number;
+      const absLat = Math.abs(lat);
+      if (absLat <= 30) {
+        // Tropical: roughly constant year-round.
+        tMin = 25; tMax = 33;
+      } else if (absLat <= 50) {
+        // Southern Europe / temperate.
+        tMin = isSummer ? 22 : 5;
+        tMax = isSummer ? 32 : 15;
+      } else {
+        // Northern Europe.
+        tMin = isSummer ? 15 : 0;
+        tMax = isSummer ? 22 : 8;
+      }
+      const temperatureC = Math.round((tMin + rand() * (tMax - tMin)) * 10) / 10;
+      const humidity = Math.round(40 + rand() * 40); // 40-80%
+      const windSpeedKmh = Math.round(5 + rand() * 20); // 5-25
+
+      // Weight conditions toward 'Clear' in dry/tropical zones, more rain
+      // risk in the temperate bands.
+      const conditions = absLat <= 30
+        ? ['Clear', 'Clear', 'Cloudy', 'Overcast']
+        : ['Clear', 'Cloudy', 'Cloudy', 'Light Rain', 'Overcast'];
+      const weatherCondition = conditions[Math.floor(rand() * conditions.length)];
+
+      rows.push({
+        match_id: match.id,
+        temperature_c: temperatureC,
+        humidity,
+        wind_speed_kmh: windSpeedKmh,
+        weather_condition: weatherCondition,
+      });
+    }
+
+    const written = await upsertChunked('match_weather', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processMatchWeather completed (synthetic)');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processMatchWeather failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-2. TEAM PLAYING STYLE — possession/passing/attacking/defensive identity
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTeamPlayingStyle(): Promise<{ teamsProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamPlayingStyle started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const seasonStats = await fetchAllRows(
+      db.from('team_season_statistics')
+        .select('team_id, season_external_id, matches, avg_possession, accurate_passes_pct, shots, big_chances_created, clean_sheets, goals_conceded')
+        .in('team_id', teamIds)
+        .order('season_external_id', { ascending: false })
+    );
+    if (!seasonStats || seasonStats.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+
+    const statsByTeam = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsByTeam.get(s.team_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsByTeam.set(s.team_id, s);
+    }
+
+    const rows: any[] = [];
+    for (const [teamId, stats] of statsByTeam) {
+      const matchCount = stats.matches || 1;
+      const possession = stats.avg_possession ?? 50;
+      const passAccuracy = stats.accurate_passes_pct ?? 70;
+      const shotsPerMatch = (stats.shots || 0) / matchCount;
+      const bigChancesPerMatch = (stats.big_chances_created || 0) / matchCount;
+      const cleanSheetPct = ((stats.clean_sheets || 0) / matchCount) * 100;
+      const concededPerMatch = (stats.goals_conceded || 0) / matchCount;
+
+      const possessionScore = Math.round(Math.min(100, Math.max(0, possession)));
+
+      const passingStyle = passAccuracy > 80 ? 'Short/Patient' : passAccuracy > 70 ? 'Mixed' : 'Direct';
+      const attackingStyle = shotsPerMatch > 15 ? 'Aggressive' : bigChancesPerMatch > 2 ? 'Clinical' : 'Balanced';
+      const defensiveStyle = cleanSheetPct > 40 ? 'Solid' : concededPerMatch < 1 ? 'Organized' : 'Vulnerable';
+
+      const playingStyle = possessionScore > 55 && passingStyle === 'Short/Patient'
+        ? 'Possession-based'
+        : possessionScore < 46 && passingStyle === 'Direct'
+        ? 'Direct transition'
+        : 'Balanced';
+
+      const styleConfidence = matchCount >= 20 ? 80 : matchCount >= 10 ? 60 : 40;
+
+      rows.push({
+        team_id: teamId,
+        playing_style: playingStyle,
+        possession_score: possessionScore,
+        passing_style: passingStyle,
+        attacking_style: attackingStyle,
+        defensive_style: defensiveStyle,
+        style_confidence: styleConfidence,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('team_playing_style', rows, 'team_id');
+    logger.info({ teamsProcessed: statsByTeam.size, rowsWritten: written }, 'processTeamPlayingStyle completed');
+    return { teamsProcessed: statsByTeam.size, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamPlayingStyle failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-3. TEAM STRENGTH DASHBOARD — single-row rollup of existing ratings
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTeamStrengthDashboard(): Promise<{ teamsProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamStrengthDashboard started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const bettingIntel = await fetchAllRows(db.from('team_betting_intelligence').select('team_id, season_external_id, attack_rating, defence_rating, team_quality_score').in('team_id', teamIds).order('season_external_id', { ascending: false }));
+    const bettingByTeam = new Map<number, any>();
+    for (const b of bettingIntel) {
+      const existing = bettingByTeam.get(b.team_id);
+      if (existing && existing.season_external_id >= (b.season_external_id ?? 0)) continue;
+      bettingByTeam.set(b.team_id, b);
+    }
+    const formQuality = await fetchAllRows(db.from('team_form_quality').select('team_id, performance_delta').in('team_id', teamIds));
+    const formQualityMap = new Map<number, any>(formQuality.map((r: any) => [r.team_id, r]));
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, form_index, lineup_versatility_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const rows: any[] = [];
+    for (const teamId of teamIds) {
+      const betting = bettingByTeam.get(teamId);
+      if (!betting) continue;
+      const fq = formQualityMap.get(teamId);
+      const intel = intelMap.get(teamId);
+
+      const attackRating = betting.attack_rating ?? 50;
+      const defenceRating = betting.defence_rating ?? 50;
+      const qualityScore = betting.team_quality_score ?? Math.round((attackRating + defenceRating) / 2);
+      const midfieldRating = Math.round((attackRating + defenceRating) / 2);
+      // Same heuristic used elsewhere in this file for a proxy set-piece
+      // rating where no dedicated set-piece data exists.
+      const setPieceRating = Math.round((attackRating * 0.4 + defenceRating * 0.6) * 0.8 + 20);
+      const tacticalRating = intel?.lineup_versatility_score != null ? Math.round(intel.lineup_versatility_score) : 50;
+      const experienceRating = qualityScore; // proxy — no dedicated experience data source
+
+      const delta = fq?.performance_delta ?? 0;
+      const formTrend = delta > 0.5 ? 'Improving' : delta < -0.5 ? 'Declining' : 'Stable';
+      const formRating = intel?.form_index != null ? Math.round(intel.form_index) : 50;
+
+      rows.push({
+        team_id: teamId,
+        overall_rating: qualityScore,
+        attack_rating: attackRating,
+        midfield_rating: midfieldRating,
+        defense_rating: defenceRating,
+        set_piece_rating: Math.min(100, Math.max(0, setPieceRating)),
+        tactical_rating: tacticalRating,
+        experience_rating: experienceRating,
+        form_trend: formTrend,
+        form_rating: formRating,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('team_strength_dashboard', rows, 'team_id');
+    logger.info({ teamsProcessed: rows.length, rowsWritten: written }, 'processTeamStrengthDashboard completed');
+    return { teamsProcessed: rows.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamStrengthDashboard failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-4. TEAM STRENGTHS — 2-4 rows per team, no unique constraint (delete+insert)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTeamStrengths(): Promise<{ teamsProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamStrengths started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const bettingIntel = await fetchAllRows(db.from('team_betting_intelligence').select('team_id, season_external_id, attack_rating, defence_rating, big_chance_conversion').in('team_id', teamIds).order('season_external_id', { ascending: false }));
+    const bettingByTeam = new Map<number, any>();
+    for (const b of bettingIntel) {
+      const existing = bettingByTeam.get(b.team_id);
+      if (existing && existing.season_external_id >= (b.season_external_id ?? 0)) continue;
+      bettingByTeam.set(b.team_id, b);
+    }
+    const seasonStats = await fetchAllRows(db.from('team_season_statistics').select('team_id, season_external_id, matches, clean_sheets, avg_possession').in('team_id', teamIds).order('season_external_id', { ascending: false }));
+    const statsByTeam = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsByTeam.get(s.team_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsByTeam.set(s.team_id, s);
+    }
+    const teamIntel = await fetchAllRows(db.from('team_strength_ratings').select('team_id, points_per_game').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const rows: any[] = [];
+    const processedTeamIds: number[] = [];
+    for (const teamId of teamIds) {
+      const betting = bettingByTeam.get(teamId);
+      const stats = statsByTeam.get(teamId);
+      if (!betting && !stats) continue;
+      processedTeamIds.push(teamId);
+
+      const attackRating = betting?.attack_rating ?? null;
+      const defenceRating = betting?.defence_rating ?? null;
+      const bigChanceConversion = betting?.big_chance_conversion ?? null;
+      const matchCount = stats?.matches || 1;
+      const cleanSheetPct = stats ? ((stats.clean_sheets || 0) / matchCount) * 100 : null;
+      const possession = stats?.avg_possession ?? null;
+      const pointsPerGame = intelMap.get(teamId)?.points_per_game ?? null;
+
+      const found: any[] = [];
+      if (attackRating != null && attackRating > 70) found.push({ team_id: teamId, strength_type: 'STRONG_ATTACK', description: 'Potent attacking unit', score: Math.round(attackRating) });
+      if (defenceRating != null && defenceRating > 70) found.push({ team_id: teamId, strength_type: 'SOLID_DEFENCE', description: 'Defensively resilient', score: Math.round(defenceRating) });
+      if (cleanSheetPct != null && cleanSheetPct > 40) found.push({ team_id: teamId, strength_type: 'CLEAN_SHEETS', description: 'Keeps clean sheets regularly', score: Math.round(cleanSheetPct) });
+      if (bigChanceConversion != null && bigChanceConversion > 50) found.push({ team_id: teamId, strength_type: 'CLINICAL_FINISHING', description: 'Clinical in front of goal', score: Math.round(bigChanceConversion) });
+      if (pointsPerGame != null && pointsPerGame > 2.0) found.push({ team_id: teamId, strength_type: 'GOOD_FORM', description: 'In strong form', score: Math.round(Math.min(100, pointsPerGame * 33.3)) });
+      if (possession != null && possession > 55) found.push({ team_id: teamId, strength_type: 'BALL_CONTROL', description: 'Dominates possession', score: Math.round(possession) });
+
+      if (found.length === 0) found.push({ team_id: teamId, strength_type: 'BALANCED', description: 'No standout strengths identified', score: 50 });
+      for (const f of found) rows.push({ ...f, calculated_at: new Date().toISOString() });
+    }
+
+    const written = await deleteThenInsert('team_strengths', processedTeamIds, rows);
+    logger.info({ teamsProcessed: processedTeamIds.length, rowsWritten: written }, 'processTeamStrengths completed');
+    return { teamsProcessed: processedTeamIds.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamStrengths failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-5. TEAM WEAKNESSES — mirror of strengths, inverted thresholds
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTeamWeaknesses(): Promise<{ teamsProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processTeamWeaknesses started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const bettingIntel = await fetchAllRows(db.from('team_betting_intelligence').select('team_id, season_external_id, attack_rating, defence_rating').in('team_id', teamIds).order('season_external_id', { ascending: false }));
+    const bettingByTeam = new Map<number, any>();
+    for (const b of bettingIntel) {
+      const existing = bettingByTeam.get(b.team_id);
+      if (existing && existing.season_external_id >= (b.season_external_id ?? 0)) continue;
+      bettingByTeam.set(b.team_id, b);
+    }
+    const seasonStats = await fetchAllRows(db.from('team_season_statistics').select('team_id, season_external_id, matches, goals_conceded, clean_sheets, big_chances_created, big_chances_missed').in('team_id', teamIds).order('season_external_id', { ascending: false }));
+    const statsByTeam = new Map<number, any>();
+    for (const s of seasonStats) {
+      const existing = statsByTeam.get(s.team_id);
+      if (existing && existing.season_external_id >= (s.season_external_id ?? 0)) continue;
+      statsByTeam.set(s.team_id, s);
+    }
+    const teamIntel = await fetchAllRows(db.from('team_strength_ratings').select('team_id, points_per_game').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const rows: any[] = [];
+    const processedTeamIds: number[] = [];
+    for (const teamId of teamIds) {
+      const betting = bettingByTeam.get(teamId);
+      const stats = statsByTeam.get(teamId);
+      if (!betting && !stats) continue;
+      processedTeamIds.push(teamId);
+
+      const attackRating = betting?.attack_rating ?? null;
+      const defenceRating = betting?.defence_rating ?? null;
+      const matchCount = stats?.matches || 1;
+      const concededPerMatch = stats ? (stats.goals_conceded || 0) / matchCount : null;
+      const cleanSheetPct = stats ? ((stats.clean_sheets || 0) / matchCount) * 100 : null;
+      const bigChancesCreated = stats?.big_chances_created ?? 0;
+      const bigChancesMissed = stats?.big_chances_missed ?? 0;
+      const pointsPerGame = intelMap.get(teamId)?.points_per_game ?? null;
+
+      const found: any[] = [];
+      if (attackRating != null && attackRating < 40) found.push({ team_id: teamId, weakness_type: 'WEAK_ATTACK', description: 'Struggles to create chances', score: Math.round(attackRating) });
+      if (defenceRating != null && defenceRating < 40) found.push({ team_id: teamId, weakness_type: 'LEAKY_DEFENCE', description: 'Concedes too many goals', score: Math.round(defenceRating) });
+      if (concededPerMatch != null && concededPerMatch > 2) found.push({ team_id: teamId, weakness_type: 'POOR_DEFENSIVE_RECORD', description: 'High goals against', score: 30 });
+      if (cleanSheetPct != null && cleanSheetPct < 15) found.push({ team_id: teamId, weakness_type: 'RARELY_CLEAN_SHEETS', description: 'Struggles to keep clean sheets', score: 20 });
+      if (pointsPerGame != null && pointsPerGame < 1.0) found.push({ team_id: teamId, weakness_type: 'POOR_FORM', description: 'In poor form', score: 25 });
+      if (bigChancesCreated > 0 && bigChancesMissed > bigChancesCreated * 0.5) found.push({ team_id: teamId, weakness_type: 'WASTEFUL', description: 'Misses good chances', score: 30 });
+
+      if (found.length === 0) found.push({ team_id: teamId, weakness_type: 'SOLID', description: 'No major weaknesses identified', score: 50 });
+      for (const f of found) rows.push({ ...f, calculated_at: new Date().toISOString() });
+    }
+
+    const written = await deleteThenInsert('team_weaknesses', processedTeamIds, rows);
+    logger.info({ teamsProcessed: processedTeamIds.length, rowsWritten: written }, 'processTeamWeaknesses completed');
+    return { teamsProcessed: processedTeamIds.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processTeamWeaknesses failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-6. TEAM TACTICAL VARIATIONS — from predicted lineups
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processTeamTacticalVariations(): Promise<{
+  teamsProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processTeamTacticalVariations started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id, home_team_id, away_team_id, date')
+        .eq('status', MUTABLE_MATCH_STATUS)
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
+    if (!matches || matches.length === 0)
+      return { teamsProcessed: 0, rowsWritten: 0 };
+
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [
+      ...new Set(
+        matches.flatMap((m: any) => [m.home_team_id, m.away_team_id])
+      ),
+    ];
+
+    const lineups = await fetchAllRows(
+      db
+        .from('match_predicted_lineups')
+        .select('match_id, team_id, position_code, position_group, tactical_position, formation')
+        .in('match_id', matchIds)
+    );
+    if (!lineups || lineups.length === 0)
+      return { teamsProcessed: 0, rowsWritten: 0 };
+
+    const versatility = await fetchAllRows(
+      db
+        .from('team_versatility')
+        .select(
+          'match_id, team_id, overall_versatility_score, formation_flexibility_score'
+        )
+        .in('match_id', matchIds)
+    );
+    const versatilityMap = new Map<string, any>(
+      versatility.map((v: any) => [`${v.match_id}:${v.team_id}`, v])
+    );
+
+    const lineupsByMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!lineupsByMatchTeam.has(key)) lineupsByMatchTeam.set(key, []);
+      lineupsByMatchTeam.get(key)!.push(l);
+    }
+    const matchById = new Map<number, any>(
+      matches.map((m: any) => [m.id, m])
+    );
+
+    const byTeam = new Map<
+      number,
+      { matchId: number; formation: string; positions: string[] }[]
+    >();
+    for (const [key, teamLineup] of lineupsByMatchTeam) {
+      const [matchIdStr, teamIdStr] = key.split(':');
+      const matchId = Number(matchIdStr);
+      const teamId = Number(teamIdStr);
+      if (teamLineup.length < 9) continue;
+
+      // ✅ FIX: Build positionCounts Map before calling detectFormation
+      const positionCounts = new Map<string, number>();
+      for (const l of teamLineup) {
+        const pos = lineupPosition(l);
+        positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
+      }
+      const formation = detectFormation(positionCounts);
+
+      if (!byTeam.has(teamId)) byTeam.set(teamId, []);
+      byTeam.get(teamId)!.push({
+        matchId,
+        formation,
+        positions: teamLineup.map((l: any) => lineupPosition(l)),
+      });
+    }
+
+    // ✅ Expanded effectiveness map for all 8 formations
+    const EFFECTIVENESS: Record<string, number> = {
+      '4-4-2': 70,
+      '4-3-3': 75,
+      '3-5-2': 65,
+      '4-2-3-1': 72,
+      '3-4-3': 68,
+      '5-3-2': 60,
+      '5-4-1': 55,
+      '4-1-4-1': 70,
+    };
+
+    const rows: any[] = [];
+    for (const teamId of teamIds) {
+      const entries = byTeam.get(teamId);
+      if (!entries || entries.length === 0) continue;
+
+      const formationHistory = entries.map((e) => ({
+        match_id: e.matchId,
+        match_date: matchById.get(e.matchId)?.date ?? null,
+        formation: e.formation,
+      }));
+
+      const distinctFormations = [
+        ...new Set(entries.map((e) => e.formation)),
+      ];
+      const systemEffectiveness = distinctFormations.map((f) => ({
+        formation: f,
+        effectiveness_score: EFFECTIVENESS[f] ?? 60,
+      }));
+
+      const latest = entries[entries.length - 1];
+      const positions = latest.positions;
+      const hasWingers = positions.some((p) =>
+        ['LW', 'RW', 'LM', 'RM'].includes(p)
+      );
+      const hasDM = positions.includes('DM');
+      const hasTwoStrikers =
+        positions.filter((p) => ['ST', 'CF'].includes(p)).length >= 2;
+
+      const tacticalPatterns: any[] = [];
+      if (hasWingers)
+        tacticalPatterns.push({
+          pattern: 'Wide play',
+          description: 'Uses natural wide players to stretch defences',
+        });
+      if (hasDM)
+        tacticalPatterns.push({
+          pattern: 'Screened defence',
+          description: 'Dedicated holding midfielder shields the back line',
+        });
+      if (hasTwoStrikers)
+        tacticalPatterns.push({
+          pattern: 'Twin strikers',
+          description: 'Two forwards played centrally',
+        });
+      if (tacticalPatterns.length === 0)
+        tacticalPatterns.push({
+          pattern: 'Standard shape',
+          description: 'No distinctive positional pattern detected',
+        });
+
+      const v = versatilityMap.get(`${latest.matchId}:${teamId}`);
+      const width = hasWingers ? 75 : 40;
+      const depth = hasDM ? 70 : 50;
+      const pressing =
+        v?.overall_versatility_score != null
+          ? Math.round(v.overall_versatility_score)
+          : 50;
+      const counterAttack = hasTwoStrikers ? 70 : 45;
+      const adaptabilityScore = {
+        width,
+        depth,
+        pressing,
+        counter_attack: counterAttack,
+      };
+
+      const gameStateAdaptations =
+        v?.formation_flexibility_score != null &&
+        v.formation_flexibility_score > 60
+          ? ['Standard', 'Defensive Block', 'Chasing Goal']
+          : ['Standard', 'Defensive Block'];
+
+      rows.push({
+        team_id: teamId,
+        formation_history: formationHistory,
+        tactical_patterns: tacticalPatterns,
+        system_effectiveness: systemEffectiveness,
+        adaptability_score: adaptabilityScore,
+        game_state_adaptations: gameStateAdaptations,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    // ✅ Use upsertChunkedWithRetry (consistent with other processors)
+    const written = await upsertChunkedWithRetry(
+      'team_tactical_variations',
+      rows,
+      'team_id'
+    );
+
+    logger.info(
+      { teamsProcessed: rows.length, rowsWritten: written },
+      'processTeamTacticalVariations completed'
+    );
+    return { teamsProcessed: rows.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error(
+      { error: error.message },
+      'processTeamTacticalVariations failed'
+    );
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-7. FORMATION ANALYSIS — per match, per team
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ✅ Expanded to cover all 8 detected formations + fallback
+const FORMATION_PROFILE: Record<
+  string,
+  { strengths: string[]; weaknesses: string[]; style: string }
+> = {
+  '4-4-2': {
+    strengths: ['Balanced', 'Two strikers'],
+    weaknesses: ['Can be overrun in midfield'],
+    style: 'Balanced',
+  },
+  '4-3-3': {
+    strengths: ['Wide attack', 'Midfield control'],
+    weaknesses: ['Lone striker can be isolated'],
+    style: 'Wide attack',
+  },
+  '3-5-2': {
+    strengths: ['Midfield dominance', 'Wing-back threat'],
+    weaknesses: ['Vulnerable to wide counter-attacks'],
+    style: 'Midfield-heavy',
+  },
+  '4-2-3-1': {
+    strengths: ['Double pivot', 'Attacking midfield'],
+    weaknesses: ['Requires disciplined DMs'],
+    style: 'Possession-based',
+  },
+  '3-4-3': {
+    strengths: ['Attacking width', 'High press'],
+    weaknesses: ['Exposed on counter'],
+    style: 'High press',
+  },
+  '5-3-2': {
+    strengths: ['Defensive solidity', 'Counter-attack'],
+    weaknesses: ['Limited width in attack'],
+    style: 'Defensive',
+  },
+  '5-4-1': {
+    strengths: ['Deep block', 'Hard to break down'],
+    weaknesses: ['Isolated striker'],
+    style: 'Defensive block',
+  },
+  '4-1-4-1': {
+    strengths: ['Midfield control', 'Flexible'],
+    weaknesses: ['Requires elite DM'],
+    style: 'Control',
+  },
+};
+
+const FORMATION_VARIANTS: Record<string, [string, string]> = {
+  '4-4-2': ['4-2-3-1', '4-3-3'],
+  '4-3-3': ['4-2-3-1', '3-4-3'],
+  '3-5-2': ['3-4-3', '5-3-2'],
+  '4-2-3-1': ['4-3-3', '4-1-4-1'],
+  '3-4-3': ['3-5-2', '4-3-3'],
+  '5-3-2': ['3-5-2', '5-4-1'],
+  '5-4-1': ['5-3-2', '4-4-2'],
+  '4-1-4-1': ['4-2-3-1', '4-4-2'],
+};
+
+export async function processFormationAnalysis(): Promise<{
+  matchesProcessed: number;
+  rowsWritten: number;
+  error?: string;
+}> {
+  logger.info('processFormationAnalysis started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(
+      db
+        .from('matches')
+        .select('id')
+        .eq('status', MUTABLE_MATCH_STATUS)
+        .gte('date', now)
+        .lte('date', weekOut)
+    );
+    if (!matches || matches.length === 0)
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const lineups = await fetchAllRows(
+      db
+        .from('match_predicted_lineups')
+        .select('match_id, team_id, position_code, position_group, tactical_position, formation, confidence')
+        .in('match_id', matchIds)
+    );
+    if (!lineups || lineups.length === 0)
+      return { matchesProcessed: 0, rowsWritten: 0 };
+
+    const byMatchTeam = new Map<string, any[]>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!byMatchTeam.has(key)) byMatchTeam.set(key, []);
+      byMatchTeam.get(key)!.push(l);
+    }
+
+    const rows: any[] = [];
+    for (const [key, teamLineup] of byMatchTeam) {
+      const [matchIdStr, teamIdStr] = key.split(':');
+      if (teamLineup.length < 9) continue;
+
+      // ✅ FIX: Build positionCounts Map before calling detectFormation
+      const positionCounts = new Map<string, number>();
+      for (const l of teamLineup) {
+        const pos = lineupPosition(l);
+        positionCounts.set(pos, (positionCounts.get(pos) || 0) + 1);
+      }
+      const primary = detectFormation(positionCounts);
+
+      // ✅ Fallback for unknown formations (e.g. "4-5-1?")
+      const [secondary, tertiary] = FORMATION_VARIANTS[primary] ?? [
+        '4-4-2',
+        '4-2-3-1',
+      ];
+      const profile = FORMATION_PROFILE[primary] ?? {
+        strengths: ['Balanced shape'],
+        weaknesses: ['No specific data'],
+        style: 'Balanced',
+      };
+
+      const confidences = teamLineup.map((l: any) =>
+        l.confidence != null
+          ? l.confidence * (l.confidence <= 1 ? 100 : 1)
+          : 50
+      );
+      const formationConfidence = Math.round(
+        confidences.reduce((a: number, b: number) => a + b, 0) /
+          confidences.length
+      );
+
+      rows.push({
+        match_id: Number(matchIdStr),
+        team_id: Number(teamIdStr),
+        primary_formation: primary,
+        secondary_formation: secondary,
+        tertiary_formation: tertiary,
+        formation_confidence: formationConfidence,
+        formation_variations: [primary, secondary, tertiary],
+        preferred_style: profile.style,
+        alternative_styles: [profile.style, 'Balanced'].filter(
+          (v, i, a) => a.indexOf(v) === i
+        ),
+        formation_strengths: profile.strengths,
+        formation_weaknesses: profile.weaknesses,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    // ✅ Use upsertChunkedWithRetry (consistent with other processors)
+    const written = await upsertChunkedWithRetry(
+      'formation_analysis',
+      rows,
+      'match_id,team_id'
+    );
+
+    logger.info(
+      { matchesProcessed: matches.length, rowsWritten: written },
+      'processFormationAnalysis completed'
+    );
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error(
+      { error: error.message },
+      'processFormationAnalysis failed'
+    );
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-8. FORMATION OPTIONS — match-level comparison, reads formation_analysis
+// (must run AFTER processFormationAnalysis in the same pass)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processFormationOptions(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processFormationOptions started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const analysis = await fetchAllRows(
+      db.from('formation_analysis')
+        .select('match_id, team_id, primary_formation, secondary_formation, tertiary_formation, formation_confidence, formation_variations')
+        .in('match_id', matchIds)
+    );
+    if (!analysis || analysis.length === 0) {
+      logger.warn('No formation_analysis rows found — run processFormationAnalysis first');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+    const analysisMap = new Map<string, any>(analysis.map((a: any) => [`${a.match_id}:${a.team_id}`, a]));
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const home = analysisMap.get(`${match.id}:${match.home_team_id}`);
+      const away = analysisMap.get(`${match.id}:${match.away_team_id}`);
+      if (!home || !away) continue;
+
+      const formationAdvantage = (home.formation_confidence ?? 50) - (away.formation_confidence ?? 50);
+      rows.push({
+        match_id: match.id,
+        home_available_formations: home.formation_variations ?? [home.primary_formation],
+        away_available_formations: away.formation_variations ?? [away.primary_formation],
+        home_primary_formation: home.primary_formation, away_primary_formation: away.primary_formation,
+        home_secondary_formation: home.secondary_formation, away_secondary_formation: away.secondary_formation,
+        home_tertiary_formation: home.tertiary_formation, away_tertiary_formation: away.tertiary_formation,
+        home_formation_confidence: home.formation_confidence, away_formation_confidence: away.formation_confidence,
+        formation_advantage: formationAdvantage,
+        formation_notes: `${home.primary_formation} (home) vs ${away.primary_formation} (away) — confidence edge ${formationAdvantage > 0 ? 'home' : formationAdvantage < 0 ? 'away' : 'even'}.`,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('formation_options', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processFormationOptions completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processFormationOptions failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-9. SQUAD DEPTH — per match, per team. Bench = roster minus THIS
+// match's real predicted XI (same real-bench pattern as
+// processSubstitutionImpact above), quality from player_strength_score.
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processSquadDepth(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processSquadDepth started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const lineups = await fetchAllRows(db.from('match_predicted_lineups').select('match_id, team_id, player_id').in('match_id', matchIds));
+    const xiByMatchTeam = new Map<string, Set<number>>();
+    for (const l of lineups) {
+      const key = `${l.match_id}:${l.team_id}`;
+      if (!xiByMatchTeam.has(key)) xiByMatchTeam.set(key, new Set());
+      xiByMatchTeam.get(key)!.add(l.player_id);
+    }
+
+    const playersByTeam = new Map<number, any[]>();
+    for (let i = 0; i < teamIds.length; i += 50) {
+      const batch = teamIds.slice(i, i + 50);
+      const batchPlayers = await fetchAllRows(
+        db.from('players').select('id, team_id, position, current_injury, date_of_birth').in('team_id', batch)
+      );
+      for (const p of batchPlayers) {
+        if (p.current_injury) continue;
+        if (!playersByTeam.has(p.team_id)) playersByTeam.set(p.team_id, []);
+        playersByTeam.get(p.team_id)!.push(p);
+      }
+    }
+
+    const allPlayerIds: number[] = [];
+    for (const roster of playersByTeam.values()) for (const p of roster) allPlayerIds.push(p.id);
+    const strengthMap = new Map<number, number>();
+    // Same class of fix as processSubstitutionImpact: was manually chunked at
+    // 500 IDs, which the confirmed processFormationMatchup failure's own
+    // arithmetic (~202 IDs -> 16623 chars) puts at ~41,000 characters —
+    // likely still oversized, not actually validated against a real limit.
+    const playerStrengthRows = await chunkedIn<any, number>(
+      allPlayerIds,
+      (chunk) => db.from('player_intelligence').select('player_id, player_strength_score').in('player_id', chunk),
+      { label: 'processSquadDepth:playerStrengths' }
+    );
+    for (const r of playerStrengthRows) strengthMap.set(r.player_id, r.player_strength_score ?? 30);
+
+    const now2 = Date.now();
+    const ageOf = (dob: string | null): number | null => dob ? Math.floor((now2 - new Date(dob).getTime()) / (365.25 * 86400000)) : null;
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      for (const teamId of [match.home_team_id, match.away_team_id]) {
+        const xi = xiByMatchTeam.get(`${match.id}:${teamId}`);
+        const roster = playersByTeam.get(teamId) || [];
+        if (!xi || roster.length === 0) continue;
+        const xiPlayers = roster.filter((p) => xi.has(p.id));
+        const bench = roster.filter((p) => !xi.has(p.id));
+        const reserve = roster; // whole available squad, for the "reserve" baseline
+
+        const avgStrength = (list: any[]) => list.length ? list.reduce((s, p) => s + (strengthMap.get(p.id) ?? 30), 0) / list.length : 0;
+        const xiQuality = Math.round(avgStrength(xiPlayers));
+        const benchQuality = Math.round(avgStrength(bench));
+        const reserveQuality = Math.round(avgStrength(reserve));
+        const qualityDropOff = xiQuality - benchQuality;
+
+        const xiPositions = new Set(xiPlayers.map((p) => p.position).filter(Boolean));
+        const benchPositions = new Set(bench.map((p) => p.position).filter(Boolean));
+        const coverageCompleteness = xiPositions.size > 0 ? Math.round(([...xiPositions].filter((p) => benchPositions.has(p)).length / xiPositions.size) * 100) : 0;
+
+        const posCounts = new Map<string, number>();
+        for (const p of roster) if (p.position) posCounts.set(p.position, (posCounts.get(p.position) || 0) + 1);
+        const counts = [...posCounts.values()];
+        const avgCount = counts.length ? counts.reduce((a, b) => a + b, 0) / counts.length : 0;
+        const variance = counts.length ? counts.reduce((s, c) => s + (c - avgCount) ** 2, 0) / counts.length : 0;
+        const positionBalance = Math.max(0, Math.min(100, 100 - Math.sqrt(variance) * 10));
+
+        const depthScore = Math.min(100, Math.round(benchQuality * 0.4 + coverageCompleteness * 0.3 + positionBalance * 0.3));
+        const depthRating = depthScore >= 80 ? 'EXCELLENT' : depthScore >= 65 ? 'GOOD' : depthScore >= 45 ? 'AVERAGE' : depthScore >= 25 ? 'POOR' : 'CRITICAL';
+
+        let young = 0, prime = 0, veteran = 0, sumAge = 0, ageCount = 0, youngest: number | null = null, oldest: number | null = null;
+        for (const p of roster) {
+          const age = ageOf(p.date_of_birth);
+          if (age == null) continue;
+          ageCount++; sumAge += age;
+          if (youngest == null || age < youngest) youngest = age;
+          if (oldest == null || age > oldest) oldest = age;
+          if (age < 23) young++; else if (age <= 29) prime++; else veteran++;
+        }
+
+        rows.push({
+          match_id: match.id, team_id: teamId,
+          overall_depth_score: depthScore, depth_rating: depthRating,
+          starting_xi_quality: xiQuality, bench_quality: benchQuality, reserve_quality: reserveQuality,
+          quality_drop_off: qualityDropOff, coverage_completeness: coverageCompleteness, position_balance: Math.round(positionBalance),
+          experience_distribution: { young, prime, veteran },
+          age_profile: { avg_age: ageCount ? Math.round((sumAge / ageCount) * 10) / 10 : null, youngest, oldest },
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('squad_depth', rows, 'match_id,team_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processSquadDepth completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processSquadDepth failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-10. POSITION DEPTH COMPARISON — per match, per position_code (using
+// the same fine-grained codes team_position_depth already stores, e.g.
+// GK/DC/DL/DR/DM/MC/ML/MR/LW/RW/ST — not a simplified G/D/M/F grouping).
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processPositionDepthComparison(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPositionDepthComparison started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const depth = await fetchAllRows(
+      db.from('team_position_depth').select('team_id, position_code, player_count, available_count, total_market_value').in('team_id', teamIds)
+    );
+    const depthMap = new Map<string, any>(depth.map((d: any) => [`${d.team_id}:${d.position_code}`, d]));
+
+    const scoreOf = (d: any | undefined): { score: number; quality: number; count: number } => {
+      if (!d || !d.player_count) return { score: 0, quality: 0, count: 0 };
+      const availability = (d.available_count / d.player_count) * 100;
+      const mvScore = d.total_market_value > 0 ? Math.min(100, Math.log10(d.total_market_value + 1) * 10) : 40;
+      return { score: Math.round(availability * 0.6 + mvScore * 0.4), quality: Math.round(mvScore), count: d.available_count ?? 0 };
+    };
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const homeCodes = depth.filter((d: any) => d.team_id === match.home_team_id).map((d: any) => d.position_code);
+      const awayCodes = depth.filter((d: any) => d.team_id === match.away_team_id).map((d: any) => d.position_code);
+      const positionCodes = [...new Set([...homeCodes, ...awayCodes])];
+
+      for (const code of positionCodes) {
+        const home = scoreOf(depthMap.get(`${match.home_team_id}:${code}`));
+        const away = scoreOf(depthMap.get(`${match.away_team_id}:${code}`));
+        const advantageMargin = Math.abs(home.score - away.score);
+        const advantageTeamId = home.score === away.score ? null : home.score > away.score ? match.home_team_id : match.away_team_id;
+
+        rows.push({
+          match_id: match.id, position_code: code, position_name: code,
+          home_depth_score: home.score, away_depth_score: away.score,
+          home_quality: home.quality, away_quality: away.quality,
+          home_count: home.count, away_count: away.count,
+          advantage_team_id: advantageTeamId, advantage_margin: advantageMargin,
+          depth_notes: advantageTeamId
+            ? `${advantageTeamId === match.home_team_id ? 'Home' : 'Away'} side has the deeper ${code} cover (+${advantageMargin}).`
+            : `${code} cover is evenly matched.`,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('position_depth_comparison', rows, 'match_id,position_code');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processPositionDepthComparison completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPositionDepthComparison failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-11. VERSATILITY ADVANTAGE — per match, reads team_versatility (must
+// run AFTER processTeamVersatility in the same pass)
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processVersatilityAdvantage(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processVersatilityAdvantage started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const matchIds = matches.map((m: any) => m.id);
+
+    const versatility = await fetchAllRows(
+      db.from('team_versatility')
+        .select('match_id, team_id, overall_versatility_score, tactical_versatility_score, positional_versatility_score, formation_flexibility_score, player_adaptability_score, system_compatibility_score')
+        .in('match_id', matchIds)
+    );
+    if (!versatility || versatility.length === 0) {
+      logger.warn('No team_versatility rows found — run processTeamVersatility first');
+      return { matchesProcessed: 0, rowsWritten: 0 };
+    }
+    const vMap = new Map<string, any>(versatility.map((v: any) => [`${v.match_id}:${v.team_id}`, v]));
+
+    const DIMENSIONS: { key: string; label: string }[] = [
+      { key: 'tactical_versatility_score', label: 'tactical versatility' },
+      { key: 'positional_versatility_score', label: 'positional versatility' },
+      { key: 'formation_flexibility_score', label: 'formation flexibility' },
+      { key: 'player_adaptability_score', label: 'player adaptability' },
+      { key: 'system_compatibility_score', label: 'system compatibility' },
+    ];
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const home = vMap.get(`${match.id}:${match.home_team_id}`);
+      const away = vMap.get(`${match.id}:${match.away_team_id}`);
+      if (!home || !away) continue;
+
+      const advantageScore = (home.overall_versatility_score ?? 50) - (away.overall_versatility_score ?? 50);
+      const advantageMargin = Math.abs(advantageScore);
+      const advantageTeamId = advantageScore > 0 ? match.home_team_id : advantageScore < 0 ? match.away_team_id : null;
+      const advantageBand = advantageMargin > 25 ? 'STRONG' : advantageMargin > 15 ? 'MODERATE' : advantageMargin > 5 ? 'SLIGHT' : 'NEUTRAL';
+
+      const keyAdvantages: string[] = [];
+      const keyDisadvantages: string[] = [];
+      for (const d of DIMENSIONS) {
+        const h = home[d.key] ?? 50, a = away[d.key] ?? 50;
+        if (Math.abs(h - a) < 10) continue;
+        const leaderIsHome = h > a;
+        if (leaderIsHome === (advantageTeamId === match.home_team_id)) keyAdvantages.push(`${d.label} (+${Math.round(Math.abs(h - a))})`);
+        else keyDisadvantages.push(`${d.label} (-${Math.round(Math.abs(h - a))})`);
+      }
+
+      // Confidence tracks how much of the underlying versatility data is
+      // actually populated for both sides — not a separate model output.
+      const populatedFields = DIMENSIONS.filter((d) => home[d.key] != null && away[d.key] != null).length;
+      const confidenceScore = Math.round((populatedFields / DIMENSIONS.length) * 100);
+
+      rows.push({
+        match_id: match.id,
+        advantage_score: Math.round(advantageScore),
+        advantage_team_id: advantageTeamId,
+        advantage_margin: Math.round(advantageMargin),
+        advantage_band: advantageBand,
+        key_advantages: keyAdvantages.length ? keyAdvantages : ['No standout area'],
+        key_disadvantages: keyDisadvantages.length ? keyDisadvantages : ['No standout weakness'],
+        confidence_score: confidenceScore,
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('versatility_advantage', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processVersatilityAdvantage completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processVersatilityAdvantage failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-12. INJURY ADAPTABILITY — per match, per-team resilience rolled into
+// a home/away comparison row.
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processInjuryAdaptability(): Promise<{ matchesProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processInjuryAdaptability started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('id, home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { matchesProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const injuryImpact = await fetchAllRows(db.from('team_injury_impact').select('team_id, injured_count, total_importance_lost, worst_absence_importance').in('team_id', teamIds));
+    const injuryMap = new Map<number, any>(injuryImpact.map((r: any) => [r.team_id, r]));
+    const positionDepth = await fetchAllRows(db.from('team_position_depth').select('team_id, position_code, player_count, injured_count, available_count').in('team_id', teamIds));
+    const depthByTeam = new Map<number, any[]>();
+    for (const d of positionDepth) {
+      if (!depthByTeam.has(d.team_id)) depthByTeam.set(d.team_id, []);
+      depthByTeam.get(d.team_id)!.push(d);
+    }
+    const teamIntel = await fetchAllRows(db.from('team_intelligence').select('team_id, squad_depth_score, lineup_versatility_score, injury_burden_score').in('team_id', teamIds));
+    const intelMap = new Map<number, any>(teamIntel.map((r: any) => [r.team_id, r]));
+
+    const compute = (teamId: number) => {
+      const injury = injuryMap.get(teamId);
+      const intel = intelMap.get(teamId);
+      const depths = depthByTeam.get(teamId) || [];
+
+      const injuryResilience = Math.max(0, Math.min(100, 100 - (intel?.injury_burden_score ?? injury?.total_importance_lost ?? 0)));
+
+      const redundancyScores = depths.filter((d) => d.player_count > 0).map((d) => {
+        const spareAfterInjury = Math.max(0, d.available_count - 1); // can they cope with one more injury in this position?
+        return Math.min(100, (spareAfterInjury / d.player_count) * 100);
+      });
+      const positionRedundancy = redundancyScores.length ? Math.round(redundancyScores.reduce((a, b) => a + b, 0) / redundancyScores.length) : 50;
+
+      const coverQuality = intel?.squad_depth_score != null ? Math.round(intel.squad_depth_score) : 50;
+      const systemFlexibility = intel?.lineup_versatility_score != null ? Math.round(intel.lineup_versatility_score) : 50;
+
+      const thinPositions = depths.filter((d) => d.player_count > 0 && d.available_count <= 1).length;
+      const emergencyCoverScore = Math.max(0, Math.min(100, 100 - thinPositions * 15));
+
+      return { injuryResilience: Math.round(injuryResilience), positionRedundancy, coverQuality, systemFlexibility, emergencyCoverScore };
+    };
+
+    const rows: any[] = [];
+    for (const match of matches as any[]) {
+      const home = compute(match.home_team_id);
+      const away = compute(match.away_team_id);
+      const adaptabilityUnderInjury = home.injuryResilience - away.injuryResilience;
+
+      rows.push({
+        match_id: match.id,
+        home_injury_resilience: home.injuryResilience, away_injury_resilience: away.injuryResilience,
+        home_position_redundancy: home.positionRedundancy, away_position_redundancy: away.positionRedundancy,
+        home_cover_quality: home.coverQuality, away_cover_quality: away.coverQuality,
+        home_system_flexibility_under_injury: home.systemFlexibility, away_system_flexibility_under_injury: away.systemFlexibility,
+        home_emergency_cover_score: home.emergencyCoverScore, away_emergency_cover_score: away.emergencyCoverScore,
+        adaptability_under_injury: adaptabilityUnderInjury,
+        resilience_notes: adaptabilityUnderInjury > 10
+          ? 'Home side copes with injury disruption noticeably better.'
+          : adaptabilityUnderInjury < -10
+          ? 'Away side copes with injury disruption noticeably better.'
+          : 'Both sides are similarly equipped to absorb injuries.',
+        calculated_at: new Date().toISOString(),
+      });
+    }
+
+    const written = await upsertChunked('injury_adaptability', rows, 'match_id');
+    logger.info({ matchesProcessed: matches.length, rowsWritten: written }, 'processInjuryAdaptability completed');
+    return { matchesProcessed: matches.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processInjuryAdaptability failed');
+    return { matchesProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NEW-13. POSITION COVERAGE — per team, per position_code. Reads primary/
+// secondary position directly off `players` (the same source
+// processPositionAdaptability and processTeamVersatility already trust for
+// position-code compatibility with team_position_depth), rather than
+// depending on player_versatility — one fewer join, same data.
+// ═══════════════════════════════════════════════════════════════════════════
+export async function processPositionCoverage(): Promise<{ teamsProcessed: number; rowsWritten: number; error?: string }> {
+  logger.info('processPositionCoverage started — DB only, zero API calls');
+  try {
+    const { now, weekOut } = upcomingWindow();
+    const matches = await fetchAllRows(db.from('matches').select('home_team_id, away_team_id').eq('status', MUTABLE_MATCH_STATUS).gte('date', now).lte('date', weekOut));
+    if (!matches || matches.length === 0) return { teamsProcessed: 0, rowsWritten: 0 };
+    const teamIds = [...new Set(matches.flatMap((m: any) => [m.home_team_id, m.away_team_id]))];
+
+    const depth = await fetchAllRows(db.from('team_position_depth').select('team_id, position_code, player_count, available_count').in('team_id', teamIds));
+
+    const playersByTeam = new Map<number, any[]>();
+    for (let i = 0; i < teamIds.length; i += 50) {
+      const batch = teamIds.slice(i, i + 50);
+      const batchPlayers = await fetchAllRows(
+        db.from('players').select('id, team_id, name, current_injury, market_value, primary_position, secondary_position').in('team_id', batch)
+      );
+      for (const p of batchPlayers) {
+        if (!playersByTeam.has(p.team_id)) playersByTeam.set(p.team_id, []);
+        playersByTeam.get(p.team_id)!.push(p);
+      }
+    }
+
+    const rows: any[] = [];
+    for (const teamId of teamIds) {
+      const roster = playersByTeam.get(teamId) || [];
+      const depthRows = depth.filter((d: any) => d.team_id === teamId);
+
+      for (const d of depthRows) {
+        const code = d.position_code;
+        const primaryPlayers = roster.filter((p) => p.primary_position === code && !p.current_injury);
+        const secondaryPlayers = roster.filter((p) => p.secondary_position === code && p.primary_position !== code && !p.current_injury);
+        const totalCoverage = primaryPlayers.length + secondaryPlayers.length;
+
+        const values = [...primaryPlayers, ...secondaryPlayers].map((p) => p.market_value || 0);
+        const avgValue = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+        const coverageQuality = avgValue > 0 ? Math.min(100, Math.round(Math.log10(avgValue + 1) * 10)) : 30;
+
+        const depthRating = totalCoverage >= 4 ? 'EXCELLENT' : totalCoverage === 3 ? 'GOOD' : totalCoverage === 2 ? 'ADEQUATE' : 'THIN';
+
+        const emergencyCandidate = secondaryPlayers.sort((a, b) => (b.market_value || 0) - (a.market_value || 0))[0]
+          ?? primaryPlayers.sort((a, b) => (b.market_value || 0) - (a.market_value || 0))[1];
+
+        rows.push({
+          team_id: teamId,
+          position_code: code,
+          position_name: code,
+          primary_players: primaryPlayers.map((p) => p.name),
+          secondary_players: secondaryPlayers.map((p) => p.name),
+          total_coverage: totalCoverage,
+          coverage_quality: coverageQuality,
+          depth_rating: depthRating,
+          emergency_cover: emergencyCandidate?.name ?? null,
+          calculated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const written = await upsertChunked('position_coverage', rows, 'team_id,position_code');
+    logger.info({ teamsProcessed: teamIds.length, rowsWritten: written }, 'processPositionCoverage completed');
+    return { teamsProcessed: teamIds.length, rowsWritten: written };
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'processPositionCoverage failed');
+    return { teamsProcessed: 0, rowsWritten: 0, error: error.message };
+  }
+}

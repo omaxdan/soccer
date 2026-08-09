@@ -50,9 +50,9 @@ function buildPoolConfig(role: PipelineRole): PoolConfig {
     database: cfg.database.database,
     // The role name is the login name. Fixed by the architecture — see roles.ts
     // for why it is not configurable.
-    user: role,
+    user: `${role}.nwxafrvwimoyhcnvvuji`,
     password: requireCredential(role),
-    ssl: cfg.database.ssl ? { rejectUnauthorized: true } : undefined,
+    ssl: cfg.database.ssl ? { rejectUnauthorized: false } : undefined,
     max: cfg.poolMax[role],
     // A pipeline that cannot get a connection should fail rather than queue
     // behind a saturated pool: the scheduler will retry the job, and a hung
