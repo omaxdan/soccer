@@ -25,6 +25,10 @@
 // prevent. The only replay for a squad is "fetch this team again now".
 // ─────────────────────────────────────────────────────────────────────────────
 
+// FIRST IMPORT, DELIBERATELY. See `../config/env` — `.env` must be read before
+// any module that reads `process.env` at load time is evaluated.
+import '../config/env';
+
 import { ingestSchedule, ingestSquads } from './pipeline';
 import type { IngestionReport } from './pipeline';
 import { closeAllPools } from '../db/pool';

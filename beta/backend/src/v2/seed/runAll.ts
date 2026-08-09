@@ -34,6 +34,12 @@
 // not a convention this file invents; it is the reference graph.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// FIRST IMPORT, DELIBERATELY. Reads `.env` before anything else is evaluated —
+// including `src/utils/logger`, which V2 modules import and which evaluates V1's
+// config module on load. See `../config/env` for why this belongs at the entry
+// point and why it must be first.
+import '../config/env';
+
 import { withConnection, withRun } from '../db/tx';
 import { withPipelineRun } from '../operations/run';
 import { installOperationalLayer } from '../operations/jobLifecycle';

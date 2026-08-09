@@ -43,6 +43,16 @@ Not one V1 source file is modified. `src/db/client.ts` and its `supabase-js` cli
 
 Connection parameters are required; credentials are not. A process holds only the secrets for the roles it uses — `assertRolesConfigured()` at startup turns an absent one into a clear failure before any work begins.
 
+### Where they come from
+
+`config/env.ts` reads `.env` into `process.env`, and the three V2 entry points — `seed/runAll.ts`, `ingestion/cli.ts`, `feature/cli.ts` — import it **first**, before anything else. That ordering is load-bearing: `src/config/index.ts` computes its value at import time and is reached through the shared `src/utils/logger`, so a load placed second would run after the value that needed it had already been computed.
+
+Loading belongs at an entry point and nowhere else, because reading the file mutates process-global state. This is V1's existing pattern (`src/cli.ts:1`), so V2 adds no second convention and V1's own loading is untouched.
+
+Three properties are deliberate. A value already in the real environment **outranks the file**, so a CI secret or container definition wins. A **missing `.env` is not an error**, because a deployed environment injects real variables and usually has no file. And **no V2 variable falls back to a V1 one** — see the provider note under S-4.
+
+Copy what you need from [`.env.v2.example`](../../.env.v2.example).
+
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `PT_V2_DB_HOST` | yes | — | |
@@ -61,6 +71,12 @@ Connection parameters are required; credentials are not. A process holds only th
 | `PT_V2_DB_PASSWORD_RETENTION` | per role | — | `pt_retention` |
 | `PT_V2_DB_PASSWORD_ADMIN` | per role | — | `pt_platform_admin` |
 | `PT_V2_POOL_MAX_<SUFFIX>` | no | per role | Override after the §13 Stage 2 slot budget |
+| `PT_V2_PROVIDER_BASE_URL` | ingestion only | — | Required by `ingest:v2`; see [S-4](#s-4--ingestion) |
+| `PT_V2_PROVIDER_KEY` | ingestion only | — | Required by `ingest:v2` |
+| `PT_V2_PROVIDER_KEY_2` | no | — | A second key doubles the daily budget |
+| `PT_V2_PROVIDER_TIMEOUT_MS` | no | `30000` | |
+| `PT_V2_PROVIDER_DAILY_QUOTA` | no | `100` | Per key |
+| `PT_V2_PROVIDER_MIN_INTERVAL_MS` | no | `2000` | The squad endpoint requires two seconds |
 
 Role **names** are never configurable. The architecture names them, migration 016 attaches grants to them, and the conformance assertions look for them by name. A deployment able to rename a role could point the application at one the grants do not describe.
 

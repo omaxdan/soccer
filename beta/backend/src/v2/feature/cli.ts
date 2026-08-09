@@ -11,6 +11,10 @@
 // operation because there is nothing separate to drift.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// FIRST IMPORT, DELIBERATELY. See `../config/env` — `.env` must be read before
+// any module that reads `process.env` at load time is evaluated.
+import '../config/env';
+
 import { runFeaturePipeline, type FeatureRunReport } from './pipeline';
 import { runAllVerifications, type VerificationResult } from './verify';
 import { closeAllPools } from '../db/pool';
