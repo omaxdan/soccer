@@ -75,9 +75,11 @@ export interface RoleDefinition {
   readonly role: PipelineRole;
 
   /**
-   * Suffix of the environment variable holding this role's password:
-   * PT_V2_DB_PASSWORD_<envSuffix>. The username is NOT configurable, so only
-   * the secret varies per deployment.
+   * Historical suffix of this layer's password variable.
+   *
+   * NOT READ AT RUNTIME. The application holds one credential
+   * (PT_V2_DB_PASSWORD); this survives only as a record of the per-role secrets
+   * the physical design once required.
    */
   readonly envSuffix: string;
 
@@ -471,11 +473,10 @@ export function expectedModes(
  * — only the secret is deployment-specific. A deployment that could rename the
  * role could also point the application at a role the grants do not describe.
  */
-export function passwordEnvVar(role: PipelineRole): string {
-  return `PT_V2_DB_PASSWORD_${roleDefinition(role).envSuffix}`;
-}
-
-/** The pool-size override variable for this role, if a deployment sets one. */
-export function poolMaxEnvVar(role: PipelineRole): string {
-  return `PT_V2_POOL_MAX_${roleDefinition(role).envSuffix}`;
-}
+// passwordEnvVar() and poolMaxEnvVar() were REMOVED when the application
+// collapsed to one connection and one credential. This register is now
+// DOCUMENTATION AND TEST INPUT ONLY: `access` and `relationExceptions` are
+// asserted against the deployed grants by roles.test.ts, which is the reason it
+// is worth keeping. `envSuffix` and `defaultPoolMax` survive as a record of what
+// each layer was scoped to hold and how much concurrency it was sized for —
+// neither is read at runtime any more.

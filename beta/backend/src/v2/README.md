@@ -9,10 +9,11 @@ Implementation of the V2 application against the approved database architecture,
 | Path | Subsystem | Purpose |
 |---|---|---|
 | `config/index.ts` | S-1 | V2 environment configuration, validated and fail-fast |
-| `db/roles.ts` | S-1 | The seven pipeline roles, their capabilities, and lookup helpers |
-| `db/pool.ts` | S-1 | One session-mode PostgreSQL pool per role, health checks, graceful shutdown |
+| `db/roles.ts` | S-1 | Layer labels and the access register — **documentation and test input only** |
+| `db/pool.ts` | S-1 | One session-mode PostgreSQL pool, health checks, graceful shutdown |
 | `db/tx.ts` | S-1 | `withRun` / `withConnection` / `withSession` / `withSavepoint`, job lifecycle seam |
 | `db/index.ts` | S-1 | Public surface — import from here, not from the modules |
+| `db/doctor.ts` | — | `doctor:v2` — measures the path from `.env` to the startup packet |
 | `db/*.test.ts` | S-1 | Connection, permission, transaction and session-persistence suites |
 | `operations/` | S-2 | Pipeline runs, job lifecycle, write records, failures, API usage, schedules |
 | `seed/` | S-3 | Idempotent bootstrap of the governed vocabularies and registries |
@@ -43,7 +44,9 @@ Not one V1 source file is modified. `src/db/client.ts` and its `supabase-js` cli
 
 ## Environment variables
 
-Connection parameters are required; credentials are not. A process holds only the secrets for the roles it uses — `assertRolesConfigured()` at startup turns an absent one into a clear failure before any work begins.
+**One connection, one credential — as V1 operates.** V2 previously required seven manually provisioned LOGIN roles and seven secrets. Those roles came from the physical design ([doc 10](../../../../docs/db-v2/10-v2-physical-database-design-rev1.md)), not from the V2 requirements ([doc 04](../../../../docs/db-v2/04-database-v2-requirements.md)), which name no pipeline identity anywhere. Running V2 now needs nothing provisioned: `PT_V2_DB_USER` defaults to `postgres` and `PT_V2_DB_PASSWORD` is the ordinary database password.
+
+`assertDatabaseConfigured()` at startup turns an absent credential into a clear failure before any work begins.
 
 ### Where they come from
 
@@ -55,16 +58,16 @@ Three properties are deliberate. A value already in the real environment **outra
 
 Copy what you need from [`.env.v2.example`](../../.env.v2.example).
 
-**Quote every password.** dotenv truncates an *unquoted* value at the first `#`, silently. `PT_V2_DB_PASSWORD_ADMIN=Qx7pLm#4vZt2Rw9s` arrives as `Qx7pLm`, and the server answers `password authentication failed` — indistinguishable from a genuinely wrong password. Single quotes preserve the value exactly.
+**Quote the password.** dotenv truncates an *unquoted* value at the first `#`, silently. `PT_V2_DB_PASSWORD=Qx7pLm#4vZt2Rw9s` arrives as `Qx7pLm`, and the server answers `password authentication failed` — indistinguishable from a genuinely wrong password. Single quotes preserve the value exactly.
 
 ### Diagnosing a connection
 
 ```bash
 npm run doctor:v2            # configuration only, no connection
-npm run doctor:v2 -- --probe # one read-only connection per configured role
+npm run doctor:v2 -- --probe # one read-only connection
 ```
 
-It reports which `.env` files were read, the connection target and what the host implies, the exact login name that will be sent, and — per role — the credential's byte length, an eight-character SHA-256 fingerprint, and whether the file and the process **hold the same value**. No secret is printed. That last column is the one that matters: a wrong password and a *truncated* password produce the same server error, and only a length distinguishes them.
+It reports which `.env` files were read, the connection target and what the host implies, the exact login name that will be sent, and the credential's byte length, an eight-character SHA-256 fingerprint, and whether the file and the process **hold the same value**. No secret is printed. That last column is the one that matters: a wrong password and a *truncated* password produce the same server error, and only a length distinguishes them.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
@@ -74,19 +77,14 @@ It reports which `.env` files were read, the connection target and what the host
 | `PT_V2_DB_SSL` | no | `true` | `false` only for a local database |
 | `PT_V2_DB_SSL_REJECT_UNAUTHORIZED` | no | `true` | Keep on. Prefer a CA bundle over disabling |
 | `PT_V2_DB_SSL_CA` | no | — | Path to a PEM CA bundle |
-| `PT_V2_DB_USER_SUFFIX` | pooler only | — | Tenant sent as `<role>.<suffix>`; empty for a direct connection |
+| `PT_V2_DB_USER_SUFFIX` | pooler only | — | Tenant sent as `<user>.<suffix>`; empty for a direct connection |
 | `PT_V2_DB_CONNECT_TIMEOUT_MS` | no | `10000` | |
 | `PT_V2_DB_IDLE_TIMEOUT_MS` | no | `30000` | |
 | `PT_V2_ALLOW_NON_SESSION_PORT` | no | `false` | Local/CI only. Never in a deployed environment |
 | `PT_V2_APP_NAME` | no | `pitchterminal-v2` | Prefix for `application_name` |
-| `PT_V2_DB_PASSWORD_INGESTION` | per role | — | `pt_pipeline_ingestion` |
-| `PT_V2_DB_PASSWORD_FEATURE` | per role | — | `pt_pipeline_feature` |
-| `PT_V2_DB_PASSWORD_MODULE` | per role | — | `pt_pipeline_module` |
-| `PT_V2_DB_PASSWORD_CALIBRATION` | per role | — | `pt_pipeline_calibration` |
-| `PT_V2_DB_PASSWORD_PROJECTION` | per role | — | `pt_pipeline_projection` |
-| `PT_V2_DB_PASSWORD_RETENTION` | per role | — | `pt_retention` |
-| `PT_V2_DB_PASSWORD_ADMIN` | per role | — | `pt_platform_admin` |
-| `PT_V2_POOL_MAX_<SUFFIX>` | no | per role | Override after the §13 Stage 2 slot budget |
+| `PT_V2_DB_USER` | no | `postgres` | The one login. Set to run under a narrower role |
+| `PT_V2_DB_PASSWORD` | yes | — | The one credential. **Quote it** |
+| `PT_V2_POOL_MAX` | no | `10` | One pool. Minimum 2 for attributed work |
 | `PT_V2_PROVIDER_BASE_URL` | ingestion only | — | Required by `ingest:v2`; see [S-4](#s-4--ingestion) |
 | `PT_V2_PROVIDER_KEY` | ingestion only | — | Required by `ingest:v2` |
 | `PT_V2_PROVIDER_KEY_2` | no | — | A second key doubles the daily budget |
@@ -94,15 +92,19 @@ It reports which `.env` files were read, the connection target and what the host
 | `PT_V2_PROVIDER_DAILY_QUOTA` | no | `100` | Per key |
 | `PT_V2_PROVIDER_MIN_INTERVAL_MS` | no | `2000` | The squad endpoint requires two seconds |
 
-Role **names** are never configurable. The architecture names them, migration 016 attaches grants to them, and the conformance assertions look for them by name. A deployment able to rename a role could point the application at one the grants do not describe.
+### The seven roles still exist in the database
+
+Migrations 001–021 are unchanged and are **not** to be edited. `pt_owner`, `pt_migration` and the seven pipeline roles remain in the deployed database as `NOLOGIN` objects, referenced by ~107 policies. They are inert: nothing authenticates as them and the application never names them. Removing them would mean rewriting every policy for no product benefit, which is the opposite of what this re-anchoring is for.
+
+If a deployment later wants the application to run under a narrower login than `postgres`, the mechanism already exists — `operations.fn_apply_access(schema, relation, role, modes, using, check)` is parameterised by role, so a forward-only migration can grant a new role the union of the pipeline privileges *with* their policies, and `fn_assert_access_correspondence()` will verify it. That is a deliberate future decision, not a prerequisite.
 
 ## Usage
 
 ```ts
-import { withRun, withSession, requireJobRun, assertRolesConfigured } from './v2/db';
+import { withRun, withSession, requireJobRun, assertDatabaseConfigured } from './v2/db';
 
 // Once, at process start.
-assertRolesConfigured(['pt_pipeline_module']);
+assertDatabaseConfigured();
 
 // A transactional, attributed unit of work.
 await withRun('pt_pipeline_module', 'snapshot.seal', async (tx, job) => {
@@ -127,7 +129,7 @@ await withSession('pt_retention', async (session) => {
 
 ## Architectural decisions
 
-**One pool per role, not one pool with `SET ROLE`.** `SET ROLE` is reversible: any code holding that pool can `RESET ROLE` and recover the underlying login's full privileges. The separation of §B.7.1 would then hold only as long as nobody made a mistake. Seven authenticated logins make the boundary structural.
+**One pool, one credential.** The seven-role model was a design-phase construction, absent from the requirements, that made running V2 depend on provisioning seven database identities. It is gone from the connection layer. The `PipelineRole` values survive as **labels** — they record which layer a unit of work belongs to, attribute it in telemetry, and drive the access register that `roles.test.ts` checks against the deployed grants. What is lost is stated rather than glossed: the layer boundary was structural (ingestion *could not* write to `feature`) and is now a code convention. The database keeps its policies and its grants.
 
 **Two connections per attributed run.** The job lifecycle runs on its own connection, outside the work transaction. The illustrative sketch in Phase 8 §3.1 opens the job run *inside* the transaction, and implementing it exposed a flaw: the sketch's own justification for a separate failure connection — "a failure recorded inside the rolled-back transaction disappears with it" — applies identically to the job run. Opened inside, a failed run rolls back its own record, and the runs most worth recording are the ones leaving no trace. The composite foreign key still resolves, because the job run is committed before the work transaction references it. The cost is one extra connection per run, which is why `withRun` refuses a pool sized below two rather than self-deadlocking.
 
@@ -156,7 +158,7 @@ npm test
 
 # Full suite, including permissions, transactions and session persistence.
 export PT_V2_DB_HOST=127.0.0.1 PT_V2_DB_NAME=ptv2 PT_V2_DB_SSL=false
-export PT_V2_DB_PASSWORD_INGESTION=... # etc, per role
+export PT_V2_DB_USER=postgres PT_V2_DB_PASSWORD=...
 npm test
 ```
 

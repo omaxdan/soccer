@@ -19,7 +19,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { PIPELINE_ROLES, type PipelineRole } from './roles';
-import { configuredRoles, loadV2Config } from '../config/index';
+import { isDatabaseConfigured, loadV2Config } from '../config/index';
 
 /** True when this process has enough configuration to reach a V2 database. */
 export function hasV2Database(): boolean {
@@ -34,12 +34,10 @@ export function hasV2Database(): boolean {
  * failures about absent secrets.
  */
 export function testableRoles(): PipelineRole[] {
-  if (!hasV2Database()) return [];
-  try {
-    return configuredRoles();
-  } catch {
-    return [];
-  }
+  if (!hasV2Database() || !isDatabaseConfigured()) return [];
+  // One connection now serves every layer, so every role label is exercisable
+  // whenever the database is configured at all.
+  return [...PIPELINE_ROLES];
 }
 
 /** A one-line reason for a skip, so the runner output explains itself. */
@@ -48,7 +46,7 @@ export function skipReason(): string {
     return 'PT_V2_DB_HOST / PT_V2_DB_NAME not set — V2 integration tests skipped';
   }
   if (testableRoles().length === 0) {
-    return 'No PT_V2_DB_PASSWORD_* credentials configured — V2 integration tests skipped';
+    return 'PT_V2_DB_PASSWORD not set — V2 integration tests skipped';
   }
   return '';
 }
@@ -65,7 +63,7 @@ export function assertCiHasDatabase(): void {
     throw new Error(
       'CI is set but no V2 database is configured. The V2 integration suites would skip, ' +
         'and a skipped suite is not a passing suite (Phase 8 §12.1). Provision the test ' +
-        'database and set PT_V2_DB_HOST, PT_V2_DB_NAME and the PT_V2_DB_PASSWORD_* secrets.'
+        'database and set PT_V2_DB_HOST, PT_V2_DB_NAME and PT_V2_DB_PASSWORD.'
     );
   }
 }

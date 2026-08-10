@@ -24,8 +24,6 @@ import {
   roleDefinition,
   rolesWithAccessTo,
   expectedModes,
-  passwordEnvVar,
-  poolMaxEnvVar,
   type AccessMode,
   type DesignSchema,
 } from './roles';
@@ -159,8 +157,6 @@ describe('role register (no database required)', () => {
     assert.ok(!isPipelineRole('pt_owner'));
     assert.ok(!isPipelineRole(42));
     assert.throws(() => roleDefinition('nope' as never), /Unknown pipeline role/);
-    assert.equal(passwordEnvVar('pt_pipeline_module'), 'PT_V2_DB_PASSWORD_MODULE');
-    assert.equal(poolMaxEnvVar('pt_retention'), 'PT_V2_POOL_MAX_RETENTION');
     assert.ok(rolesWithAccessTo('snapshot').includes('pt_pipeline_module'));
     assert.ok(!rolesWithAccessTo('product').includes('pt_pipeline_ingestion'));
   });

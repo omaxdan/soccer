@@ -34,7 +34,7 @@ import { withPipelineRun } from '../operations/run';
 import { installOperationalLayer } from '../operations/jobLifecycle';
 import { recordWrite } from '../operations/writeRecord';
 import { buildDiagnostic } from '../operations/failure';
-import { assertRolesConfigured } from '../config/index';
+import { assertDatabaseConfigured } from '../config/index';
 import { ProviderClient, ProviderRequestError } from './provider/client';
 import { PROVIDER_CODE, dailyQuota, loadProviderConfig } from './provider/config';
 import { IngestionCounts } from './write/index';
@@ -96,7 +96,7 @@ function datesInRange(from: Date, to: Date): string[] {
  * independent, so one bad response does not cost the rest of the range.
  */
 export async function ingestSchedule(options: ScheduleIngestionOptions = {}): Promise<IngestionReport> {
-  assertRolesConfigured([INGESTION_ROLE]);
+  assertDatabaseConfigured();
   installOperationalLayer();
 
   const config = loadProviderConfig();
@@ -274,7 +274,7 @@ export async function selectSquadWorkList(
  * call whatever happened afterwards.
  */
 export async function ingestSquads(options: SquadIngestionOptions = {}): Promise<IngestionReport> {
-  assertRolesConfigured([INGESTION_ROLE]);
+  assertDatabaseConfigured();
   installOperationalLayer();
 
   const config = loadProviderConfig();

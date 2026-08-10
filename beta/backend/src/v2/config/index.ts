@@ -22,13 +22,21 @@
 // with a message naming the exact variable, never a silent fallback.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import {
-  PIPELINE_ROLES,
-  passwordEnvVar,
-  poolMaxEnvVar,
-  roleDefinition,
-  type PipelineRole,
-} from '../db/roles';
+// ─────────────────────────────────────────────────────────────────────────────
+// RE-ANCHORED. V2 connects the way V1 does: ONE database connection, ONE
+// credential, no PT-specific database identity to provision.
+//
+// The seven pipeline roles were a physical-design construction (R-57/R-58 in
+// docs/db-v2/10, a DESIGN document) and appear nowhere in the V2 requirements
+// (docs/db-v2/04). They required seven manually provisioned LOGIN roles, seven
+// secrets and seven pools to run a system whose product objective is football
+// intelligence. They are no longer part of how the application connects.
+//
+// `PipelineRole` survives as a LABEL — it names the layer a unit of work
+// belongs to, which is real and useful in telemetry and in the access register
+// that roles.test.ts checks against the deployed grants. It is no longer a
+// connection identity and no longer selects a credential.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * The PostgreSQL port that serves SESSION-MODE connections.
@@ -92,6 +100,8 @@ export interface V2DatabaseConfig {
    * Empty for a direct connection, which needs no tenant.
    */
   readonly userSuffix: string;
+  /** The login name. One, for the whole application. */
+  readonly user: string;
   /** Milliseconds to wait for a connection from the pool before failing. */
   readonly connectionTimeoutMs: number;
   /** Milliseconds an idle pooled connection is retained before release. */
@@ -108,13 +118,30 @@ export interface V2DatabaseConfig {
 
 export interface V2Config {
   readonly database: V2DatabaseConfig;
-  /** Role → password. Populated only for roles with a configured secret. */
-  readonly credentials: Readonly<Partial<Record<PipelineRole, string>>>;
-  /** Role → pool maximum, after applying any per-role override. */
-  readonly poolMax: Readonly<Record<PipelineRole, number>>;
+  /** The one application credential, absent until configured. */
+  readonly credential?: string;
+  /** Maximum pooled connections for the one pool. */
+  readonly poolMax: number;
   /** Value of application_name, so pg_stat_activity attributes sessions. */
   readonly applicationNamePrefix: string;
 }
+
+/**
+ * The default login name.
+ *
+ * `postgres` is the role a Supabase project already has and whose password the
+ * operator already holds — the same practical arrangement V1 operates under.
+ * Nothing needs provisioning for V2 to run.
+ *
+ * A deployment that wants the application to run under a narrower role sets
+ * PT_V2_DB_USER. That is a deployment decision with a real consequence either
+ * way, and `doctor:v2` reports which one is in force: on Supabase the `postgres`
+ * role typically carries BYPASSRLS, which makes row-level policies inert for
+ * THIS connection. Policies protecting `anon` and `authenticated` — the ones the
+ * requirements are about (doc 04 B8 #33) — are unaffected, because the frontend
+ * does not connect as this role.
+ */
+export const DEFAULT_DB_USER = 'postgres';
 
 let cached: V2Config | null = null;
 
@@ -190,13 +217,7 @@ export function loadV2Config(): V2Config {
   const port = intFromEnv('PT_V2_DB_PORT', SESSION_MODE_PORT);
   validateConnectionTarget(port, allowNonSessionPort);
 
-  const credentials: Partial<Record<PipelineRole, string>> = {};
-  const poolMax = {} as Record<PipelineRole, number>;
-  for (const role of PIPELINE_ROLES) {
-    const secret = process.env[passwordEnvVar(role)];
-    if (secret !== undefined && secret !== '') credentials[role] = secret;
-    poolMax[role] = intFromEnv(poolMaxEnvVar(role), roleDefinition(role).defaultPoolMax);
-  }
+  const secret = process.env.PT_V2_DB_PASSWORD;
 
   cached = {
     database: {
@@ -209,12 +230,13 @@ export function loadV2Config(): V2Config {
       // A leading dot is stripped so that pasting either `ref` or `.ref` from a
       // provider's connection string produces `role.ref` and never `role..ref`.
       userSuffix: (process.env.PT_V2_DB_USER_SUFFIX ?? '').trim().replace(/^\.+/, ''),
+      user: (process.env.PT_V2_DB_USER || DEFAULT_DB_USER).trim(),
       connectionTimeoutMs: intFromEnv('PT_V2_DB_CONNECT_TIMEOUT_MS', 10_000),
       idleTimeoutMs: intFromEnv('PT_V2_DB_IDLE_TIMEOUT_MS', 30_000),
       allowNonSessionPort,
     },
-    credentials,
-    poolMax,
+    credential: secret === undefined || secret === '' ? undefined : secret,
+    poolMax: intFromEnv('PT_V2_POOL_MAX', 10),
     applicationNamePrefix: process.env.PT_V2_APP_NAME ?? 'pitchterminal-v2',
   };
   return cached;
@@ -228,46 +250,36 @@ export function loadV2Config(): V2Config {
  * possibly written telemetry; failing at pool construction keeps the failure
  * clean and the message actionable.
  */
-export function requireCredential(role: PipelineRole): string {
-  const secret = loadV2Config().credentials[role];
+export function requireCredential(): string {
+  const secret = loadV2Config().credential;
   if (!secret) {
     throw new Error(
-      `No credential configured for role '${role}'. Set ${passwordEnvVar(role)}. ` +
-        'Roles are created NOLOGIN by migration 001; LOGIN and credentials are granted ' +
-        'through a secure channel outside version control — a migration file is not a ' +
-        'place for a credential.'
+      'No database credential configured. Set PT_V2_DB_PASSWORD. ' +
+        'This is the ordinary database password for the login named by PT_V2_DB_USER ' +
+        `(default '${DEFAULT_DB_USER}') — the same credential V1 operates with. ` +
+        'Quote it in .env: an unquoted value containing # is silently truncated.'
     );
   }
   return secret;
 }
 
-/**
- * Reports which of the seven roles this process can authenticate as.
- *
- * Startup diagnostic. A process logs this once so an operator can see at a
- * glance whether the host holds more secrets than the work requires — which is
- * a finding, not a convenience.
- */
-export function configuredRoles(): PipelineRole[] {
-  const { credentials } = loadV2Config();
-  return PIPELINE_ROLES.filter((r) => credentials[r] !== undefined);
+/** True when this process holds everything it needs to open a connection. */
+export function isDatabaseConfigured(): boolean {
+  try {
+    return loadV2Config().credential !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Asserts that every role in `required` has a credential.
+ * Asserts that the database is configured, before any work begins.
  *
- * Call once at process start with the roles the process will actually use, so a
- * misconfiguration surfaces before any work begins rather than midway through a
- * pipeline run.
+ * Call once at process start, so a misconfiguration surfaces immediately rather
+ * than midway through a pipeline run with an operational record already open.
  */
-export function assertRolesConfigured(required: readonly PipelineRole[]): void {
-  const absent = required.filter((r) => loadV2Config().credentials[r] === undefined);
-  if (absent.length > 0) {
-    throw new Error(
-      `V2 startup validation failed. Missing credentials for: ${absent.join(', ')}. ` +
-        `Set ${absent.map(passwordEnvVar).join(', ')}.`
-    );
-  }
+export function assertDatabaseConfigured(): void {
+  requireCredential();
 }
 
 /** Test-only. Clears the memoised configuration so env changes take effect. */

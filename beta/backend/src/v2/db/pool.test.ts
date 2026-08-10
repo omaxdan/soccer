@@ -17,8 +17,8 @@ import {
   validateConnectionTarget,
   loadV2Config,
   requireCredential,
-  configuredRoles,
-  assertRolesConfigured,
+  isDatabaseConfigured,
+  assertDatabaseConfigured,
   resetV2ConfigForTesting,
   SESSION_MODE_PORT,
 } from '../config/index';
@@ -29,7 +29,7 @@ import {
   checkAllConfiguredRoles,
   closeAllPools,
   poolStats,
-  openPoolRoles,
+  isPoolOpen,
   resetPoolsForTesting,
 } from './pool';
 import { roleDefinition } from './roles';
@@ -72,44 +72,45 @@ describe('configuration loading (no database required)', () => {
     assert.throws(() => loadV2Config(), /Missing: PT_V2_DB_HOST, PT_V2_DB_NAME/);
   });
 
-  test('a missing credential names the exact variable to set', () => {
+  test('a missing credential names the one variable to set', () => {
     resetV2ConfigForTesting();
     process.env.PT_V2_DB_HOST = 'localhost';
     process.env.PT_V2_DB_NAME = 'ptv2';
     process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
-    delete process.env.PT_V2_DB_PASSWORD_MODULE;
-    assert.throws(
-      () => requireCredential('pt_pipeline_module'),
-      /Set PT_V2_DB_PASSWORD_MODULE/
-    );
+    delete process.env.PT_V2_DB_PASSWORD;
+    // ONE credential, not seven. Nothing about running V2 requires provisioning
+    // a PT-specific database identity.
+    assert.throws(() => requireCredential(), /Set PT_V2_DB_PASSWORD/);
+    assert.throws(() => assertDatabaseConfigured(), /Set PT_V2_DB_PASSWORD/);
+    assert.equal(isDatabaseConfigured(), false);
   });
 
-  test('assertRolesConfigured reports every absent role at once', () => {
+  test('the login defaults to the one the project already has', () => {
     resetV2ConfigForTesting();
     process.env.PT_V2_DB_HOST = 'localhost';
     process.env.PT_V2_DB_NAME = 'ptv2';
     process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
-    delete process.env.PT_V2_DB_PASSWORD_MODULE;
-    delete process.env.PT_V2_DB_PASSWORD_FEATURE;
-    assert.throws(
-      () => assertRolesConfigured(['pt_pipeline_module', 'pt_pipeline_feature']),
-      /pt_pipeline_module, pt_pipeline_feature/
-    );
+    delete process.env.PT_V2_DB_USER;
+    assert.equal(loadV2Config().database.user, 'postgres');
+
+    resetV2ConfigForTesting();
+    process.env.PT_V2_DB_USER = 'something_narrower';
+    assert.equal(loadV2Config().database.user, 'something_narrower');
+    delete process.env.PT_V2_DB_USER;
   });
 
-  test('pool maxima default from the register and accept an override', () => {
+  test('one pool maximum, defaulted and overridable', () => {
     resetV2ConfigForTesting();
     process.env.PT_V2_DB_HOST = 'localhost';
     process.env.PT_V2_DB_NAME = 'ptv2';
     process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
-    process.env.PT_V2_POOL_MAX_MODULE = '9';
-    const cfg = loadV2Config();
-    assert.equal(cfg.poolMax.pt_pipeline_module, 9);
-    assert.equal(
-      cfg.poolMax.pt_pipeline_feature,
-      roleDefinition('pt_pipeline_feature').defaultPoolMax
-    );
-    delete process.env.PT_V2_POOL_MAX_MODULE;
+    delete process.env.PT_V2_POOL_MAX;
+    assert.equal(loadV2Config().poolMax, 10);
+
+    resetV2ConfigForTesting();
+    process.env.PT_V2_POOL_MAX = '9';
+    assert.equal(loadV2Config().poolMax, 9);
+    delete process.env.PT_V2_POOL_MAX;
   });
 
   test('a malformed numeric override is rejected rather than silently defaulted', () => {
@@ -117,9 +118,9 @@ describe('configuration loading (no database required)', () => {
     process.env.PT_V2_DB_HOST = 'localhost';
     process.env.PT_V2_DB_NAME = 'ptv2';
     process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
-    process.env.PT_V2_POOL_MAX_MODULE = 'lots';
+    process.env.PT_V2_POOL_MAX = 'lots';
     assert.throws(() => loadV2Config(), /must be a positive integer/);
-    delete process.env.PT_V2_POOL_MAX_MODULE;
+    delete process.env.PT_V2_POOL_MAX;
     resetV2ConfigForTesting();
   });
 });
@@ -198,57 +199,63 @@ describe('pools and health (requires a V2 database)', { skip: skipReason() || fa
   });
 
   test('an unknown credential fails to connect rather than falling back', async () => {
-    const saved = process.env.PT_V2_DB_PASSWORD_ADMIN;
+    const saved = process.env.PT_V2_DB_PASSWORD;
     try {
       await resetPoolsForTesting();
       resetV2ConfigForTesting();
-      process.env.PT_V2_DB_PASSWORD_ADMIN = 'definitely-not-the-password';
+      process.env.PT_V2_DB_PASSWORD = 'definitely-not-the-password';
       const report = await checkHealth('pt_platform_admin');
       assert.ok(!report.healthy, 'a wrong password must not produce a healthy connection');
     } finally {
-      if (saved === undefined) delete process.env.PT_V2_DB_PASSWORD_ADMIN;
-      else process.env.PT_V2_DB_PASSWORD_ADMIN = saved;
+      if (saved === undefined) delete process.env.PT_V2_DB_PASSWORD;
+      else process.env.PT_V2_DB_PASSWORD = saved;
       resetV2ConfigForTesting();
       await resetPoolsForTesting();
     }
   });
 
-  test('pools are lazy — importing this module opened nothing', async () => {
+  test('the pool is lazy — importing this module opened nothing', async () => {
     await resetPoolsForTesting();
-    assert.deepEqual(openPoolRoles(), []);
-    const role = testableRoles()[0];
-    poolFor(role);
-    assert.deepEqual(openPoolRoles(), [role]);
+    assert.equal(isPoolOpen(), false);
+    poolFor(testableRoles()[0]);
+    assert.equal(isPoolOpen(), true);
   });
 
-  test('health reporting covers every configured role', async () => {
+  test('every layer receives the SAME pool — one connection, one credential', async () => {
+    await resetPoolsForTesting();
+    const first = poolFor('pt_pipeline_ingestion');
+    for (const role of testableRoles()) {
+      assert.equal(poolFor(role), first, `${role} must not open a second pool`);
+    }
+  });
+
+  test('health reporting covers every layer over the one connection', async () => {
     const reports = await checkAllConfiguredRoles(testableRoles());
     assert.equal(reports.length, testableRoles().length);
-    assert.ok(reports.every((r) => r.healthy), 'at least one configured role is unhealthy');
+    assert.ok(reports.every((r) => r.healthy), 'the connection is unhealthy');
   });
 
   test('poolStats reports occupancy for the R-05 connection budget', async () => {
-    const role = testableRoles()[0];
-    await checkHealth(role);
+    await checkHealth(testableRoles()[0]);
     const stats = poolStats();
-    assert.ok(stats[role], 'no statistics for an open pool');
-    assert.ok(stats[role].total >= 1);
+    const user = loadV2Config().database.user;
+    assert.ok(stats[user], 'no statistics for an open pool');
+    assert.ok(stats[user].total >= 1);
   });
 
   test('closeAllPools is graceful and idempotent, and refuses late checkouts', async () => {
-    const role = testableRoles()[0];
-    await checkHealth(role);
-    assert.ok(openPoolRoles().length > 0);
+    await checkHealth(testableRoles()[0]);
+    assert.equal(isPoolOpen(), true);
 
     await closeAllPools();
-    assert.deepEqual(openPoolRoles(), []);
+    assert.equal(isPoolOpen(), false);
 
     // Second call is a no-op rather than an error — signal handlers fire twice
     // often enough to matter.
     await closeAllPools();
 
     // A job started after shutdown would leave an unattributed partial write.
-    assert.throws(() => poolFor(role), /shutdown is in progress/);
+    assert.throws(() => poolFor(testableRoles()[0]), /shutdown is in progress/);
 
     await resetPoolsForTesting();
   });

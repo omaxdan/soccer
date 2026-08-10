@@ -58,7 +58,7 @@ import { withPipelineRun, operationalNow } from '../operations/run';
 import { installOperationalLayer } from '../operations/jobLifecycle';
 import { recordWrite } from '../operations/writeRecord';
 import { buildDiagnostic } from '../operations/failure';
-import { assertRolesConfigured } from '../config/index';
+import { assertDatabaseConfigured } from '../config/index';
 import { loadRegistry, assertCalculatorCoverage, type Registry } from './registry/load';
 import { declareRegistryInputs } from './registry/declare';
 import { deriveExecutionPlan, featuresOfCalculator, type ExecutionPlan } from './registry/order';
@@ -147,7 +147,7 @@ function accumulate(into: Map<string, RelationCounts>, relation: string, delta: 
  * on how long the run took.
  */
 export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promise<FeatureRunReport> {
-  assertRolesConfigured([FEATURE_ROLE]);
+  assertDatabaseConfigured();
   installOperationalLayer();
 
   const now = options.now ?? new Date();

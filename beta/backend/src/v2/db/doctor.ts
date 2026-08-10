@@ -40,9 +40,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { Client } from 'pg';
 
 import { loadV2Env } from '../config/env';
-import { loadV2Config, SESSION_MODE_PORT } from '../config/index';
+import { DEFAULT_DB_USER, loadV2Config, SESSION_MODE_PORT } from '../config/index';
 import { buildPoolConfig, poolUsername } from './pool';
-import { PIPELINE_ROLES, passwordEnvVar, type PipelineRole } from './roles';
+
 
 /* eslint-disable no-console */
 
@@ -50,7 +50,6 @@ const SUPAVISOR_HOST = /\.pooler\.supabase\.com$/i;
 const SUPABASE_DIRECT_HOST = /^db\.([a-z0-9]+)\.supabase\.co$/i;
 
 interface CredentialReport {
-  readonly role: PipelineRole;
   readonly variable: string;
   readonly present: boolean;
   readonly bytes: number;
@@ -88,18 +87,14 @@ function fingerprint(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 8);
 }
 
-function inspectCredential(
-  role: PipelineRole,
-  envPaths: readonly string[]
-): CredentialReport {
-  const variable = passwordEnvVar(role);
+function inspectCredential(envPaths: readonly string[]): CredentialReport {
+  const variable = 'PT_V2_DB_PASSWORD';
   const loaded = process.env[variable];
   const raw = rawFromFiles(envPaths, variable);
   const notes: string[] = [];
 
   if (loaded === undefined || loaded === '') {
     return {
-      role,
       variable,
       present: false,
       bytes: 0,
@@ -156,7 +151,6 @@ function inspectCredential(
   }
 
   return {
-    role,
     variable,
     present: true,
     bytes: Buffer.byteLength(loaded, 'utf8'),
@@ -177,7 +171,17 @@ function describeTarget(): string[] {
     `  verify certificate   ${database.sslRejectUnauthorized ? 'yes' : 'NO — see below'}`
   );
   if (database.sslCaPath) lines.push(`  ca bundle            ${database.sslCaPath}`);
+  lines.push(`  login name           ${database.user}`);
   lines.push(`  username suffix      ${database.userSuffix === '' ? '(none)' : database.userSuffix}`);
+  if (database.user === DEFAULT_DB_USER) {
+    lines.push('');
+    lines.push(`  Running as '${DEFAULT_DB_USER}' — the login the project already has, which is`);
+    lines.push('  what makes V2 operable with no PT-specific identity to provision.');
+    lines.push('  On Supabase that role typically carries BYPASSRLS, so row-level policies');
+    lines.push('  are inert FOR THIS CONNECTION. Policies governing anon and authenticated');
+    lines.push('  are unaffected — the frontend does not connect as this role. Set');
+    lines.push('  PT_V2_DB_USER to run the application under a narrower login.');
+  }
 
   if (SUPAVISOR_HOST.test(database.host)) {
     lines.push('');
@@ -269,11 +273,9 @@ function classifyConnectionError(message: string): string {
   return 'UNCLASSIFIED — the message above is the whole of what the server said.';
 }
 
-async function probe(role: PipelineRole): Promise<void> {
-  const config = buildPoolConfig(role);
-  const username = String(config.user);
-  console.log(`\n  ${role}`);
-  console.log(`    sending username   "${username}"`);
+async function probe(): Promise<void> {
+  const config = buildPoolConfig();
+  console.log(`\n  sending username   "${String(config.user)}"`);
   const client = new Client({ ...config, connectionTimeoutMillis: 15_000 });
   const startedAt = Date.now();
   try {
@@ -282,18 +284,20 @@ async function probe(role: PipelineRole): Promise<void> {
       "SELECT current_user, current_setting('server_version') AS version"
     );
     console.log(
-      `    CONNECTED          ${Date.now() - startedAt}ms, ` +
+      `  CONNECTED          ${Date.now() - startedAt}ms, ` +
         `authenticated as "${rows[0].current_user}", server ${rows[0].version}`
     );
-    if (rows[0].current_user !== role) {
+    const expected = loadV2Config().database.user;
+    if (rows[0].current_user !== expected) {
       console.log(
-        `    MISMATCH           expected "${role}". Two variables may hold one secret.`
+        `  MISMATCH           PT_V2_DB_USER names "${expected}". The credential ` +
+          'belongs to a different login than the configuration claims.'
       );
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.log(`    FAILED             ${message}`);
-    console.log(`    meaning            ${classifyConnectionError(message)}`);
+    console.log(`  FAILED             ${message}`);
+    console.log(`  meaning            ${classifyConnectionError(message)}`);
   } finally {
     await client.end().catch(() => undefined);
   }
@@ -319,47 +323,37 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   console.log('\nconnection target');
   for (const line of describeTarget()) console.log(line);
 
-  console.log('\ncredentials — no value is printed');
-  console.log(
-    '  role                       variable                        bytes  sha256    file==process'
-  );
-  const reports = PIPELINE_ROLES.map((role) => inspectCredential(role, env.paths));
-  for (const report of reports) {
-    const status = !report.present
-      ? 'not set'
-      : report.rawMatchesLoaded === null
-        ? 'n/a'
-        : report.rawMatchesLoaded
-          ? 'yes'
-          : 'NO';
-    console.log(
-      `  ${report.role.padEnd(26)} ${report.variable.padEnd(30)} ` +
-        `${String(report.present ? report.bytes : '-').padStart(5)}  ` +
-        `${report.fingerprint.padEnd(8)}  ${status}`
-    );
-  }
-  for (const report of reports) {
-    if (report.notes.length === 0) continue;
-    if (!report.present && report.notes[0]?.startsWith('not set')) continue;
-    console.log(`\n  ${report.variable}`);
-    for (const note of report.notes) console.log(`    - ${note}`);
-  }
+  console.log('\ncredential — no value is printed');
+  const report = inspectCredential(env.paths);
+  const status = !report.present
+    ? 'not set'
+    : report.rawMatchesLoaded === null
+      ? 'n/a'
+      : report.rawMatchesLoaded
+        ? 'yes'
+        : 'NO';
+  console.log(`  variable             ${report.variable}`);
+  console.log(`  set                  ${report.present ? 'yes' : 'NO'}`);
+  console.log(`  bytes                ${report.present ? report.bytes : '-'}`);
+  console.log(`  sha256               ${report.fingerprint}`);
+  console.log(`  file == process      ${status}`);
+  for (const note of report.notes) console.log(`    - ${note}`);
 
-  console.log('\nlogin name that will be sent');
   const { database } = loadV2Config();
-  for (const report of reports.filter((r) => r.present)) {
-    console.log(`  ${report.role.padEnd(26)} "${poolUsername(report.role, database.userSuffix)}"`);
-  }
+  console.log('\nlogin name that will be sent');
+  console.log(`  "${poolUsername(database.user, database.userSuffix)}"`);
 
+  if (!report.present) {
+    console.log('\nNo credential configured, so no connection is possible.\n');
+    return;
+  }
   if (!shouldProbe) {
     console.log('\nNo connection attempted. Re-run with --probe to test authentication.\n');
     return;
   }
 
-  console.log('\nprobe — one connection per configured role, read only');
-  for (const report of reports.filter((r) => r.present)) {
-    await probe(report.role);
-  }
+  console.log('\nprobe — one read-only connection');
+  await probe();
   console.log('');
 }
 

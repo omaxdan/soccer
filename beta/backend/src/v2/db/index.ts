@@ -18,8 +18,6 @@ export {
   roleDefinition,
   rolesWithAccessTo,
   expectedModes,
-  passwordEnvVar,
-  poolMaxEnvVar,
   type PipelineRole,
   type DesignSchema,
   type AccessMode,
@@ -33,7 +31,7 @@ export {
   closeAllPools,
   installShutdownHandlers,
   poolStats,
-  openPoolRoles,
+  isPoolOpen,
   type HealthReport,
 } from './pool';
 
@@ -56,8 +54,8 @@ export {
 export {
   loadV2Config,
   requireCredential,
-  configuredRoles,
-  assertRolesConfigured,
+  isDatabaseConfigured,
+  assertDatabaseConfigured,
   validateConnectionTarget,
   SESSION_MODE_PORT,
   type V2Config,

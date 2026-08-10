@@ -2,26 +2,20 @@
 // SEED ORCHESTRATION
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// THERE IS NO SINGLE SEED ROLE, AND THAT IS THE ARCHITECTURE WORKING
+// FOUR STAGES, ONE CONNECTION
 //
-// Four roles are required, because the privilege matrix of migration 016 assigns
-// writes by LAYER rather than by task:
+// The four stages remain four stages. They no longer authenticate as four
+// different database roles — the seven-role model was a physical-design
+// construction absent from the V2 requirements, and V2 now connects with one
+// ordinary credential, as V1 does.
 //
-//     football vocabularies    -> pt_pipeline_ingestion
-//     product entitlements     -> pt_platform_admin
-//     feature registry         -> pt_pipeline_feature
-//     module registry          -> pt_pipeline_module
+// The role attached to each stage is a LABEL, kept because it records which
+// layer the stage writes and it attributes the work in operational telemetry:
 //
-// pt_platform_admin cannot seed the feature or module registries: it holds
-// SELECT, plus UPDATE on five feature registry relations, and no INSERT
-// anywhere in feature or module. pt_migration cannot either — it holds SIU on
-// three operations relations and nothing else.
-//
-// A "seed role" holding INSERT across four schemas would be a new principal with
-// broader privilege than any pipeline, which the S-3 constraints forbid and
-// which would undo the separation §B.7.1 exists to create. So the orchestrator
-// opens four connections in turn, each as the role that owns the layer it is
-// writing.
+//     football vocabularies    -> ingestion layer
+//     product entitlements     -> platform/administrative layer
+//     feature registry         -> feature layer
+//     module registry          -> module layer
 //
 // ORDER IS FORCED BY THE FOREIGN KEYS, not chosen:
 //
@@ -43,7 +37,7 @@ import '../config/env';
 import { withConnection, withRun } from '../db/tx';
 import { withPipelineRun } from '../operations/run';
 import { installOperationalLayer } from '../operations/jobLifecycle';
-import { assertRolesConfigured } from '../config/index';
+import { assertDatabaseConfigured } from '../config/index';
 import { closeAllPools } from '../db/pool';
 import { roleDefinition, type PipelineRole } from '../db/roles';
 import { summarise, type SeedOutcome, type SeedReport } from './helpers';
@@ -51,7 +45,7 @@ import { seedVocabularies, verifyMigrationVocabularies } from './vocabulary';
 import { seedFeatureRegistry } from './featureRegistry';
 import { seedEntitlementFeatures, seedModuleRegistry } from './moduleRegistry';
 
-/** Every role the bootstrap authenticates as. */
+/** The layers the bootstrap writes, in order. Labels, not credentials. */
 export const SEED_ROLES: readonly PipelineRole[] = [
   'pt_pipeline_ingestion',
   'pt_platform_admin',
@@ -97,19 +91,14 @@ const STAGES: readonly SeedStage[] = [
 /**
  * Whether a role may write its own operational telemetry.
  *
- * NOT EVERY SEED ROLE CAN. pt_platform_admin holds SELECT on operations — it
- * READS telemetry and does not produce it, which is a deliberate posture rather
- * than a gap: an administrative principal that could write pipeline runs could
- * also write ones that never happened.
+ * Derived from the access register, which records what each layer was scoped to
+ * hold. The entitlement stage's layer holds SELECT on operations and no INSERT,
+ * so that stage runs unattributed — finding S3-1 in
+ * docs/db-v2/18-phase8-s3-seed-report.md.
  *
- * The consequence is that the entitlement stage, which must run as that role
- * because it is the only one with INSERT on product, cannot open a pipeline run.
- * It executes unattributed. Recorded as finding S3-1 in
- * docs/db-v2/18-phase8-s3-seed-report.md rather than worked around by widening
- * the role.
- *
- * Derived from the role register rather than hard-coded, so a future grant
- * change is picked up without editing this file.
+ * With one connection this is no longer enforced by the server; it is retained
+ * as the recorded intent, so behaviour did not change silently when the roles
+ * did. Whether to attribute all four stages is a separate decision.
  */
 function canRecordTelemetry(role: PipelineRole): boolean {
   return (roleDefinition(role).access.operations ?? []).includes('I');
@@ -127,27 +116,25 @@ export interface SeedRunOptions {
 }
 
 /**
- * Runs every seed stage, in order, each as its own role.
+ * Runs every seed stage, in order.
  *
  * EACH STAGE IS ONE TRANSACTION. A stage that fails rolls back entirely and the
  * run stops — a half-seeded registry is worse than an unseeded one, because the
  * next attempt would find some rows present and skip them.
  *
- * Stages are NOT wrapped in a single transaction across roles, because they are
- * on different connections as different principals. A cross-stage failure
- * therefore leaves earlier stages committed; re-running is safe and is the
- * intended recovery, which is what makes idempotency load-bearing rather than a
- * nicety.
+ * Stages are NOT wrapped in one transaction across all four. That was originally
+ * forced by four connections; it is now a deliberate choice, because a failure
+ * partway leaves the earlier stages committed and re-running is the intended
+ * recovery — which is what makes idempotency load-bearing rather than a nicety.
  */
 export async function runAllSeeds(options: SeedRunOptions = {}): Promise<SeedReport> {
-  assertRolesConfigured(SEED_ROLES);
+  assertDatabaseConfigured();
   if (options.attributed !== false) installOperationalLayer();
 
   // Precondition. Thirteen vocabularies belong to the migrations, and the
   // registries reference them by foreign key — a missing code must be reported
   // as a missing code, not discovered as a foreign key violation halfway through
-  // a registry seed. Read-only, and run as the one role with SELECT across every
-  // design schema.
+  // a registry seed. Read-only.
   await withConnection('pt_platform_admin', verifyMigrationVocabularies);
 
   const outcomes: SeedOutcome[] = [];

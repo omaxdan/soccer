@@ -268,7 +268,7 @@ export async function withRun<T>(
   const ctx: JobContext = { role, jobKey, detail: options.detail };
   const attributed = !options.withoutAttribution;
 
-  if (attributed && loadV2Config().poolMax[role] < 2) {
+  if (attributed && loadV2Config().poolMax < 2) {
     // Refuse rather than deadlock. With max=1 the control connection takes the
     // only slot and the work connection waits until connectionTimeoutMillis —
     // which presents as an unrelated timeout minutes later.
@@ -276,7 +276,7 @@ export async function withRun<T>(
       `Role '${role}' has a pool maximum of 1, and an attributed run needs two ` +
         'connections: one for the transaction and one for the job lifecycle, which must ' +
         'commit outside it so a failed run still leaves a record. Raise ' +
-        `PT_V2_POOL_MAX_* for this role to at least 2, or pass { withoutAttribution: true }.`,
+        'PT_V2_POOL_MAX to at least 2, or pass { withoutAttribution: true }.',
       role,
       jobKey
     );

@@ -17,19 +17,29 @@
 // V1's supabase-js client in src/db/client.ts is untouched and keeps working.
 // This module is additive.
 //
-// WHY ONE POOL PER ROLE RATHER THAN ONE POOL WITH SET ROLE
-// SET ROLE on a shared connection would be cheaper in slots and is the obvious
-// shortcut. It is rejected because it is reversible: any code with access to
-// that pool can issue RESET ROLE and recover the full privileges of the
-// underlying login. The separation of §B.7.1 would then hold only as long as no
-// caller made a mistake, which is the property the architecture exists to
-// remove. Seven authenticated logins make the boundary structural.
+// ONE POOL, ONE CREDENTIAL — RE-ANCHORED
 //
-// CONNECTION BUDGET (Phase 8 R-05, High)
-// Session-mode connections are not multiplexed. Seven pools sized like ordinary
-// application pools will exhaust a Supabase direct-connection cap. Defaults here
-// total 20 across all seven roles and pools are created LAZILY, so a process
-// that uses two roles holds two pools. Size deliberately during §13 Stage 2.
+// This module previously opened one pool per pipeline role, each with its own
+// password, because the physical design (docs/db-v2/10) specified seven database
+// identities. Those identities are absent from the V2 REQUIREMENTS (docs/db-v2/
+// 04), and the arrangement made running V2 depend on manually provisioning seven
+// LOGIN roles and distributing seven secrets. V2's purpose is football
+// intelligence; that was infrastructure serving only itself.
+//
+// V2 now connects the way V1 does: one connection, one credential, whatever
+// login the deployment already has.
+//
+// WHAT IS LOST, STATED RATHER THAN GLOSSED. Seven logins made the layer boundary
+// STRUCTURAL — ingestion could not write to `feature` even by mistake, because
+// the grant did not exist. With one connection that boundary is a code
+// convention enforced by review and by tests, not by the server. The `role`
+// argument threaded through this module is what keeps the intent legible and
+// keeps `pg_stat_activity` attributable; it no longer selects a credential.
+//
+// The database keeps its policies and its grants. Nothing here removes RLS.
+//
+// CONNECTION BUDGET (Phase 8 R-05, High) is now trivially satisfied: one pool,
+// PT_V2_POOL_MAX (default 10), rather than seven pools totalling 20.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { readFileSync } from 'node:fs';
@@ -38,7 +48,8 @@ import { loadV2Config, requireCredential } from '../config/index';
 import { PIPELINE_ROLES, roleDefinition, type PipelineRole } from './roles';
 import { logger } from '../../utils/logger';
 
-const pools = new Map<PipelineRole, Pool>();
+/** The one pool. Created lazily, so importing this module opens nothing. */
+let pool: Pool | null = null;
 
 /** True once shutdown has begun, so a late caller gets a clear error. */
 let shuttingDown = false;
@@ -46,14 +57,13 @@ let shuttingDown = false;
 /**
  * The login name sent in the startup packet.
  *
- * The ROLE NAME is fixed by the architecture — see roles.ts for why it is not
- * configurable. The optional suffix is not part of the name: it is the tenant
- * identifier a shared pooler routes on, and PostgreSQL still authenticates and
- * reports the bare role. Empty suffix yields exactly the role name, which is
- * what a direct connection needs.
+ * The optional suffix is not part of the name: it is the tenant identifier a
+ * shared pooler routes on, and PostgreSQL still authenticates and reports the
+ * bare login. Empty suffix yields exactly the login name, which is what a direct
+ * connection needs.
  */
-export function poolUsername(role: PipelineRole, suffix: string): string {
-  return suffix === '' ? role : `${role}.${suffix}`;
+export function poolUsername(user: string, suffix: string): string {
+  return suffix === '' ? user : `${user}.${suffix}`;
 }
 
 /** The `ssl` option pg receives, or undefined when TLS is off entirely. */
@@ -67,24 +77,24 @@ export function buildSslConfig(
   };
 }
 
-export function buildPoolConfig(role: PipelineRole): PoolConfig {
+export function buildPoolConfig(): PoolConfig {
   const cfg = loadV2Config();
   return {
     host: cfg.database.host,
     port: cfg.database.port,
     database: cfg.database.database,
-    user: poolUsername(role, cfg.database.userSuffix),
-    password: requireCredential(role),
+    user: poolUsername(cfg.database.user, cfg.database.userSuffix),
+    password: requireCredential(),
     ssl: buildSslConfig(cfg.database),
-    max: cfg.poolMax[role],
+    max: cfg.poolMax,
     // A pipeline that cannot get a connection should fail rather than queue
     // behind a saturated pool: the scheduler will retry the job, and a hung
     // process produces no telemetry and no failure row.
     connectionTimeoutMillis: cfg.database.connectionTimeoutMs,
     idleTimeoutMillis: cfg.database.idleTimeoutMs,
-    // Attributes every session in pg_stat_activity to a role and a process, so
-    // the connection budget of R-05 is observable rather than inferred.
-    application_name: `${cfg.applicationNamePrefix}:${role}`,
+    // Attributes every session in pg_stat_activity, so the connection budget of
+    // R-05 is observable rather than inferred.
+    application_name: cfg.applicationNamePrefix,
     // search_path and TimeZone are pinned as CONNECTION STARTUP OPTIONS, not by
     // a SET after connect. See the note below for why that distinction matters,
     // and for why pinning them client-side is necessary at all.
@@ -147,39 +157,50 @@ export function isEmptySearchPath(value: string | undefined): boolean {
  */
 
 /**
- * The pool for `role`, created on first use.
+ * The application pool, created on first use.
  *
  * LAZY, matching the pattern V1 already uses in src/db/client.ts — a module
- * import must not open connections or throw on absent credentials, because a
- * process that imports this file to reach one role should not need the other
- * six secrets.
+ * import must not open connections or throw on an absent credential.
+ *
+ * `role` is a LABEL, not a credential selector: it records which layer asked, so
+ * the log line and any failure name the work rather than only the connection.
+ * Every caller receives the same pool.
  */
-export function poolFor(role: PipelineRole): Pool {
+export function poolFor(role?: PipelineRole): Pool {
   if (shuttingDown) {
     throw new Error(
-      `Refusing to create a pool for '${role}': shutdown is in progress. ` +
+      'Refusing to hand out a connection: shutdown is in progress. ' +
         'A job started after closeAllPools() would leave an unattributed partial write.'
     );
   }
 
-  const existing = pools.get(role);
-  if (existing) return existing;
+  if (pool) return pool;
 
-  const pool = new Pool(buildPoolConfig(role));
+  const created = new Pool(buildPoolConfig());
 
   // An idle-client error is not routed to any caller's await, so without this
   // handler pg would surface it as an unhandled rejection and take the process
   // down. Log it and let the pool discard the connection.
-  pool.on('error', (err) => {
-    logger.error({ role, err: err.message }, 'v2: idle pool client error');
+  created.on('error', (err) => {
+    logger.error({ err: err.message }, 'v2: idle pool client error');
   });
 
-  pools.set(role, pool);
+  pool = created;
+  const cfg = loadV2Config();
   logger.info(
-    { role, max: loadV2Config().poolMax[role], purpose: roleDefinition(role).purpose },
+    {
+      user: cfg.database.user,
+      max: cfg.poolMax,
+      ...(role ? { openedFor: role, purpose: roleDefinition(role).purpose } : {}),
+    },
     'v2: pool created'
   );
-  return pool;
+  return created;
+}
+
+/** True once the pool exists. Test and diagnostic seam. */
+export function isPoolOpen(): boolean {
+  return pool !== null;
 }
 
 export interface HealthReport {
@@ -232,7 +253,8 @@ export async function checkHealth(role: PipelineRole): Promise<HealthReport> {
               current_setting('TimeZone')           AS timezone`
     );
     const row = rows[0];
-    const healthy = row.current_user === role;
+    const expected = loadV2Config().database.user;
+    const healthy = row.current_user === expected;
     const report: HealthReport = {
       role,
       healthy,
@@ -246,8 +268,8 @@ export async function checkHealth(role: PipelineRole): Promise<HealthReport> {
         ? {}
         : {
             error:
-              `Authenticated as '${row.current_user}' but expected '${role}'. ` +
-              'Check that each PT_V2_DB_PASSWORD_* variable holds its own role\'s secret.',
+              `Authenticated as '${row.current_user}' but PT_V2_DB_USER names '${expected}'. ` +
+              'The credential belongs to a different login than the configuration claims.',
           }),
     };
     if (!healthy) logger.error(report, 'v2: health check failed — role mismatch');
@@ -262,12 +284,11 @@ export async function checkHealth(role: PipelineRole): Promise<HealthReport> {
 }
 
 /**
- * Health-checks every role this process holds a credential for.
+ * Startup gate: one connection, checked once.
  *
- * Startup gate. A process that cannot reach the database as the roles it needs
- * should not begin work — R-05's failure mode is slot exhaustion, which
- * presents as intermittent connection errors mid-run and is far harder to
- * diagnose there than at startup.
+ * A process that cannot reach the database should not begin work. `roles` is
+ * accepted so callers can record which layers they intend to exercise; every
+ * check uses the same connection.
  */
 export async function checkAllConfiguredRoles(
   roles: readonly PipelineRole[]
@@ -289,21 +310,17 @@ export async function closeAllPools(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
 
-  const open = [...pools.entries()];
-  pools.clear();
-  if (open.length === 0) return;
+  const open = pool;
+  pool = null;
+  if (!open) return;
 
-  logger.info({ pools: open.map(([r]) => r) }, 'v2: closing pools');
-  const results = await Promise.allSettled(open.map(([, pool]) => pool.end()));
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      logger.error(
-        { role: open[index][0], err: String(result.reason) },
-        'v2: pool did not close cleanly'
-      );
-    }
-  });
-  logger.info('v2: all pools closed');
+  logger.info('v2: closing pool');
+  try {
+    await open.end();
+    logger.info('v2: pool closed');
+  } catch (err) {
+    logger.error({ err: String(err) }, 'v2: pool did not close cleanly');
+  }
 }
 
 /**
@@ -325,22 +342,20 @@ export function installShutdownHandlers(): void {
 
 /** Diagnostic: current pool occupancy, for the connection budget of R-05. */
 export function poolStats(): Record<string, { total: number; idle: number; waiting: number }> {
-  const stats: Record<string, { total: number; idle: number; waiting: number }> = {};
-  for (const [role, pool] of pools) {
-    stats[role] = { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount };
-  }
-  return stats;
+  if (!pool) return {};
+  return {
+    [loadV2Config().database.user]: {
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount,
+    },
+  };
 }
 
 /** Test-only. Closes pools and clears shutdown state so a suite can rebuild. */
 export async function resetPoolsForTesting(): Promise<void> {
-  const open = [...pools.values()];
-  pools.clear();
-  await Promise.allSettled(open.map((p) => p.end()));
+  const open = pool;
+  pool = null;
+  if (open) await open.end().catch(() => undefined);
   shuttingDown = false;
-}
-
-/** Roles with a live pool. Used by the shutdown and diagnostic tests. */
-export function openPoolRoles(): PipelineRole[] {
-  return PIPELINE_ROLES.filter((r) => pools.has(r));
 }

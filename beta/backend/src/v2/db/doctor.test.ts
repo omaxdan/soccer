@@ -26,21 +26,18 @@ describe('the login name sent to the server', () => {
   test('an empty suffix yields exactly the role name', () => {
     // A direct connection has no tenant. Appending anything would produce a
     // login name matching no role.
-    assert.equal(poolUsername('pt_platform_admin', ''), 'pt_platform_admin');
+    assert.equal(poolUsername('postgres', ''), 'postgres');
   });
 
   test('a suffix is appended after a dot, which is what a shared pooler routes on', () => {
-    assert.equal(
-      poolUsername('pt_platform_admin', 'abcdef123456'),
-      'pt_platform_admin.abcdef123456'
-    );
+    assert.equal(poolUsername('postgres', 'abcdef123456'), 'postgres.abcdef123456');
   });
 
-  test('the role name is never altered, only wrapped', () => {
+  test('the login name is never altered, only wrapped', () => {
     for (const suffix of ['', 'tenant']) {
       assert.ok(
-        poolUsername('pt_pipeline_ingestion', suffix).startsWith('pt_pipeline_ingestion'),
-        'the role must remain the leading component — PostgreSQL authenticates it'
+        poolUsername('postgres', suffix).startsWith('postgres'),
+        'the login must remain the leading component — PostgreSQL authenticates it'
       );
     }
   });
@@ -50,17 +47,17 @@ describe('dotenv truncation — the defect that produced two weeks of wrong pass
   // Measured against the installed dotenv, not assumed. If a future version
   // stops truncating, this test says so rather than leaving stale guidance.
   test('an unquoted value is silently cut at the first #', () => {
-    const parsed = parseDotenv(Buffer.from('PT_V2_DB_PASSWORD_ADMIN=Qx7pLm#4vZt2Rw9s\n'));
+    const parsed = parseDotenv(Buffer.from('PT_V2_DB_PASSWORD=Qx7pLm#4vZt2Rw9s\n'));
     assert.equal(
-      parsed.PT_V2_DB_PASSWORD_ADMIN,
+      parsed.PT_V2_DB_PASSWORD,
       'Qx7pLm',
       'sixteen characters on disk become six in the process, with no warning'
     );
   });
 
   test('single quotes preserve the whole value', () => {
-    const parsed = parseDotenv(Buffer.from("PT_V2_DB_PASSWORD_ADMIN='Qx7pLm#4vZt2Rw9s'\n"));
-    assert.equal(parsed.PT_V2_DB_PASSWORD_ADMIN, 'Qx7pLm#4vZt2Rw9s');
+    const parsed = parseDotenv(Buffer.from("PT_V2_DB_PASSWORD='Qx7pLm#4vZt2Rw9s'\n"));
+    assert.equal(parsed.PT_V2_DB_PASSWORD, 'Qx7pLm#4vZt2Rw9s');
   });
 
   test('double quotes preserve it too, but interpret \\n', () => {
@@ -88,6 +85,7 @@ describe('TLS posture', () => {
     idleTimeoutMs: 1000,
     allowNonSessionPort: false,
     userSuffix: '',
+    user: 'postgres',
   };
 
   test('verification is ON unless a deployment turns it off', () => {
@@ -149,8 +147,8 @@ describe('configuration defaults for the new variables', () => {
     try {
       assert.equal(loadV2Config().database.userSuffix, 'abcdef123456');
       assert.equal(
-        poolUsername('pt_platform_admin', loadV2Config().database.userSuffix),
-        'pt_platform_admin.abcdef123456'
+        poolUsername(loadV2Config().database.user, loadV2Config().database.userSuffix),
+        'postgres.abcdef123456'
       );
     } finally {
       for (const [name, value] of [
@@ -174,7 +172,7 @@ describe('no deployment-specific literal remains in source', () => {
     // configuration and invisible to `doctor:v2`.
     assert.doesNotMatch(
       source,
-      /user:\s*`\$\{role\}\.[a-z0-9]+`/,
+      /\.[a-z0-9]{15,}`/,
       'the tenant belongs in PT_V2_DB_USER_SUFFIX, not in the source'
     );
     assert.doesNotMatch(
