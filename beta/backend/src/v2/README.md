@@ -29,6 +29,8 @@ Not one V1 source file is modified. `src/db/client.ts` and its `supabase-js` cli
 
 **2. Session mode, port 5432.** Not the transaction pooler. R-58 requires it because the retention marker (R-21) and the timeouts (A.15) are session-scoped. Configuration refuses port 6543 outright, because a pooled connection does not fail loudly — retention would delete nothing and report success.
 
+> The rule is **session mode**, not "direct connection". A managed *session-mode* pooler satisfies R-58 — it holds one server connection per client session, so session-scoped state survives. On Supabase both are port 5432: `db.<ref>.supabase.co` is direct (IPv6 only without the IPv4 add-on) and `aws-0-<region>.pooler.supabase.com` is session mode over IPv4. The pooler needs `PT_V2_DB_USER_SUFFIX`; the direct host must not have one.
+
 **3. A constraint violation is never retried.** It means the application attempted something the architecture forbids. `withRun` lets it propagate; §8.2 is explicit that retrying repeats it.
 
 **4. Anything referencing a job run must call `requireJobRun()`.** `snapshot.match_snapshot` pairs compositely on `(pipeline_job_run_id, pipeline_job_run_occurred_at)` and the both-or-neither CHECK rejects a partial reference (P-04). With S-2 installed this now returns a real attribution; without `installOperationalLayer()` it still fails with a message naming the missing call.
@@ -53,12 +55,26 @@ Three properties are deliberate. A value already in the real environment **outra
 
 Copy what you need from [`.env.v2.example`](../../.env.v2.example).
 
+**Quote every password.** dotenv truncates an *unquoted* value at the first `#`, silently. `PT_V2_DB_PASSWORD_ADMIN=Qx7pLm#4vZt2Rw9s` arrives as `Qx7pLm`, and the server answers `password authentication failed` — indistinguishable from a genuinely wrong password. Single quotes preserve the value exactly.
+
+### Diagnosing a connection
+
+```bash
+npm run doctor:v2            # configuration only, no connection
+npm run doctor:v2 -- --probe # one read-only connection per configured role
+```
+
+It reports which `.env` files were read, the connection target and what the host implies, the exact login name that will be sent, and — per role — the credential's byte length, an eight-character SHA-256 fingerprint, and whether the file and the process **hold the same value**. No secret is printed. That last column is the one that matters: a wrong password and a *truncated* password produce the same server error, and only a length distinguishes them.
+
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `PT_V2_DB_HOST` | yes | — | |
 | `PT_V2_DB_NAME` | yes | — | |
 | `PT_V2_DB_PORT` | no | `5432` | 6543 is refused; see rule 2 |
 | `PT_V2_DB_SSL` | no | `true` | `false` only for a local database |
+| `PT_V2_DB_SSL_REJECT_UNAUTHORIZED` | no | `true` | Keep on. Prefer a CA bundle over disabling |
+| `PT_V2_DB_SSL_CA` | no | — | Path to a PEM CA bundle |
+| `PT_V2_DB_USER_SUFFIX` | pooler only | — | Tenant sent as `<role>.<suffix>`; empty for a direct connection |
 | `PT_V2_DB_CONNECT_TIMEOUT_MS` | no | `10000` | |
 | `PT_V2_DB_IDLE_TIMEOUT_MS` | no | `30000` | |
 | `PT_V2_ALLOW_NON_SESSION_PORT` | no | `false` | Local/CI only. Never in a deployed environment |

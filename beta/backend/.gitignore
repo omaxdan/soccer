@@ -26,3 +26,8 @@ out/
 # themselves.
 docs/api-samples/**/*.json
 !docs/api-samples/README.md
+
+# Committed by mistake in e3ed901 — real API keys and a service key.
+# Untracked here; the values still exist in history and must be rotated.
+.env2
+.env*.txt

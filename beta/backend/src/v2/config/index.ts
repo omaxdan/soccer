@@ -57,6 +57,41 @@ export interface V2DatabaseConfig {
   readonly database: string;
   /** 'require' in every environment reachable over a network. */
   readonly ssl: boolean;
+  /**
+   * Whether TLS certificate verification is enforced. TRUE by default.
+   *
+   * Exists so that turning verification OFF is a deployment decision that
+   * appears in configuration and in `doctor:v2` output, rather than a literal
+   * compiled into pool.ts where nothing reports it. A connection that does not
+   * verify the server certificate is not protected against interception, and
+   * the credential it presents is the one thing on the wire worth stealing.
+   */
+  readonly sslRejectUnauthorized: boolean;
+  /**
+   * Optional path to a PEM certificate authority bundle.
+   *
+   * The correct fix when a managed provider presents a certificate the system
+   * trust store does not chain to — as opposed to disabling verification, which
+   * is the incorrect fix for the same symptom.
+   */
+  readonly sslCaPath?: string;
+  /**
+   * Appended to the login name as `<role>.<suffix>`, or empty for none.
+   *
+   * WHY THIS EXISTS, AND WHY IT IS NOT A ROLE NAME.
+   * Supabase's shared pooler (Supavisor) multiplexes many projects behind one
+   * hostname and routes on a tenant identifier carried in the username: without
+   * it the pooler answers `ENOIDENTIFIER no tenant identifier provided`. The
+   * suffix is therefore CONNECTION ROUTING, not identity — PostgreSQL still
+   * authenticates and reports the bare role, which is why `current_user` in the
+   * health check is still compared against the role name.
+   *
+   * Role names remain non-configurable, exactly as roles.ts requires. This
+   * configures the envelope the name travels in, not the name.
+   *
+   * Empty for a direct connection, which needs no tenant.
+   */
+  readonly userSuffix: string;
   /** Milliseconds to wait for a connection from the pool before failing. */
   readonly connectionTimeoutMs: number;
   /** Milliseconds an idle pooled connection is retained before release. */
@@ -169,6 +204,11 @@ export function loadV2Config(): V2Config {
       port,
       database: database as string,
       ssl: boolFromEnv('PT_V2_DB_SSL', true),
+      sslRejectUnauthorized: boolFromEnv('PT_V2_DB_SSL_REJECT_UNAUTHORIZED', true),
+      sslCaPath: process.env.PT_V2_DB_SSL_CA || undefined,
+      // A leading dot is stripped so that pasting either `ref` or `.ref` from a
+      // provider's connection string produces `role.ref` and never `role..ref`.
+      userSuffix: (process.env.PT_V2_DB_USER_SUFFIX ?? '').trim().replace(/^\.+/, ''),
       connectionTimeoutMs: intFromEnv('PT_V2_DB_CONNECT_TIMEOUT_MS', 10_000),
       idleTimeoutMs: intFromEnv('PT_V2_DB_IDLE_TIMEOUT_MS', 30_000),
       allowNonSessionPort,

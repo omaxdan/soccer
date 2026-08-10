@@ -40,6 +40,7 @@ const ENTRY_POINTS = [
   join(SRC, 'v2', 'seed', 'runAll.ts'),
   join(SRC, 'v2', 'ingestion', 'cli.ts'),
   join(SRC, 'v2', 'feature', 'cli.ts'),
+  join(SRC, 'v2', 'db', 'doctor.ts'),
 ];
 
 /** TypeScript import specifiers use forward slashes on every platform. */

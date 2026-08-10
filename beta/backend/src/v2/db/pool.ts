@@ -32,6 +32,7 @@
 // that uses two roles holds two pools. Size deliberately during §13 Stage 2.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { readFileSync } from 'node:fs';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 import { loadV2Config, requireCredential } from '../config/index';
 import { PIPELINE_ROLES, roleDefinition, type PipelineRole } from './roles';
@@ -42,17 +43,39 @@ const pools = new Map<PipelineRole, Pool>();
 /** True once shutdown has begun, so a late caller gets a clear error. */
 let shuttingDown = false;
 
-function buildPoolConfig(role: PipelineRole): PoolConfig {
+/**
+ * The login name sent in the startup packet.
+ *
+ * The ROLE NAME is fixed by the architecture — see roles.ts for why it is not
+ * configurable. The optional suffix is not part of the name: it is the tenant
+ * identifier a shared pooler routes on, and PostgreSQL still authenticates and
+ * reports the bare role. Empty suffix yields exactly the role name, which is
+ * what a direct connection needs.
+ */
+export function poolUsername(role: PipelineRole, suffix: string): string {
+  return suffix === '' ? role : `${role}.${suffix}`;
+}
+
+/** The `ssl` option pg receives, or undefined when TLS is off entirely. */
+export function buildSslConfig(
+  database: ReturnType<typeof loadV2Config>['database']
+): PoolConfig['ssl'] {
+  if (!database.ssl) return undefined;
+  return {
+    rejectUnauthorized: database.sslRejectUnauthorized,
+    ...(database.sslCaPath ? { ca: readFileSync(database.sslCaPath, 'utf8') } : {}),
+  };
+}
+
+export function buildPoolConfig(role: PipelineRole): PoolConfig {
   const cfg = loadV2Config();
   return {
     host: cfg.database.host,
     port: cfg.database.port,
     database: cfg.database.database,
-    // The role name is the login name. Fixed by the architecture — see roles.ts
-    // for why it is not configurable.
-    user: `${role}.nwxafrvwimoyhcnvvuji`,
+    user: poolUsername(role, cfg.database.userSuffix),
     password: requireCredential(role),
-    ssl: cfg.database.ssl ? { rejectUnauthorized: false } : undefined,
+    ssl: buildSslConfig(cfg.database),
     max: cfg.poolMax[role],
     // A pipeline that cannot get a connection should fail rather than queue
     // behind a saturated pool: the scheduler will retry the job, and a hung
