@@ -67,7 +67,11 @@ npm run doctor:v2            # configuration only, no connection
 npm run doctor:v2 -- --probe # one read-only connection
 ```
 
-It reports which `.env` files were read, the connection target and what the host implies, the exact login name that will be sent, and the credential's byte length, an eight-character SHA-256 fingerprint, and whether the file and the process **hold the same value**. No secret is printed. That last column is the one that matters: a wrong password and a *truncated* password produce the same server error, and only a length distinguishes them.
+It reports which `.env` files were read, the connection target and what the host implies, whether the CA bundle loaded, the exact login name that will be sent, and — for the credential — byte length, an eight-character SHA-256 fingerprint, and whether the file and the process **hold the same value**. No secret and no certificate content is printed.
+
+`file == process` is the measurement that matters, because a wrong password, a *truncated* password and a *shadowed* password all produce the same server error. Three causes are distinguished by name: an unquoted `#` truncating the value; **a variable defined twice in one file**, where dotenv keeps the last and the earlier line is dead; and the real environment outranking the file.
+
+**On a managed host, connect through the provider's CA.** Supabase signs with its own authority, so a first connection fails `self-signed certificate in certificate chain`. Download the project certificate (Project Settings → Database → SSL Configuration) and set `PT_V2_DB_SSL_CA`. Verification stays on.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
@@ -76,13 +80,13 @@ It reports which `.env` files were read, the connection target and what the host
 | `PT_V2_DB_PORT` | no | `5432` | 6543 is refused; see rule 2 |
 | `PT_V2_DB_SSL` | no | `true` | `false` only for a local database |
 | `PT_V2_DB_SSL_REJECT_UNAUTHORIZED` | no | `true` | Keep on. Prefer a CA bundle over disabling |
-| `PT_V2_DB_SSL_CA` | no | — | Path to a PEM CA bundle |
+| `PT_V2_DB_SSL_CA` | managed hosts | — | Path to a PEM CA bundle, or the PEM itself |
 | `PT_V2_DB_USER_SUFFIX` | pooler only | — | Tenant sent as `<user>.<suffix>`; empty for a direct connection |
 | `PT_V2_DB_CONNECT_TIMEOUT_MS` | no | `10000` | |
 | `PT_V2_DB_IDLE_TIMEOUT_MS` | no | `30000` | |
 | `PT_V2_ALLOW_NON_SESSION_PORT` | no | `false` | Local/CI only. Never in a deployed environment |
 | `PT_V2_APP_NAME` | no | `pitchterminal-v2` | Prefix for `application_name` |
-| `PT_V2_DB_USER` | no | `postgres` | The one login. Set to run under a narrower role |
+| `PT_V2_DB_USER` | no | `postgres` | The **base** login. The tenant goes in `PT_V2_DB_USER_SUFFIX` |
 | `PT_V2_DB_PASSWORD` | yes | — | The one credential. **Quote it** |
 | `PT_V2_POOL_MAX` | no | `10` | One pool. Minimum 2 for attributed work |
 | `PT_V2_PROVIDER_BASE_URL` | ingestion only | — | Required by `ingest:v2`; see [S-4](#s-4--ingestion) |

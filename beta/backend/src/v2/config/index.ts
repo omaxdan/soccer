@@ -143,6 +143,29 @@ export interface V2Config {
  */
 export const DEFAULT_DB_USER = 'postgres';
 
+/**
+ * The BASE login, with any pooler tenant already present removed.
+ *
+ * THE CONFIGURATION MODEL IS EXPLICIT: `PT_V2_DB_USER` is the base login and
+ * `PT_V2_DB_USER_SUFFIX` is the Supavisor tenant, and the two are joined once at
+ * connection time. A provider's dashboard hands out the JOINED form
+ * (`postgres.<project-ref>`), so an operator who pastes that into
+ * `PT_V2_DB_USER` while also setting the suffix would otherwise get
+ * `postgres.<ref>.<ref>` — a login matching no role, and a failure that reads as
+ * an authentication problem rather than a configuration one.
+ *
+ * Normalising here rather than at the join keeps the model intact: whichever
+ * form was pasted, `database.user` is the base login and the suffix is applied
+ * exactly once. It is also idempotent — normalising an already-normal value
+ * changes nothing.
+ */
+export function baseLogin(configured: string, suffix: string): string {
+  const user = configured.trim();
+  if (suffix === '') return user;
+  const joined = `.${suffix}`;
+  return user.endsWith(joined) ? user.slice(0, -joined.length) : user;
+}
+
 let cached: V2Config | null = null;
 
 function intFromEnv(name: string, fallback: number): number {
@@ -218,6 +241,7 @@ export function loadV2Config(): V2Config {
   validateConnectionTarget(port, allowNonSessionPort);
 
   const secret = process.env.PT_V2_DB_PASSWORD;
+  const userSuffix = (process.env.PT_V2_DB_USER_SUFFIX ?? '').trim().replace(/^\.+/, '');
 
   cached = {
     database: {
@@ -229,8 +253,8 @@ export function loadV2Config(): V2Config {
       sslCaPath: process.env.PT_V2_DB_SSL_CA || undefined,
       // A leading dot is stripped so that pasting either `ref` or `.ref` from a
       // provider's connection string produces `role.ref` and never `role..ref`.
-      userSuffix: (process.env.PT_V2_DB_USER_SUFFIX ?? '').trim().replace(/^\.+/, ''),
-      user: (process.env.PT_V2_DB_USER || DEFAULT_DB_USER).trim(),
+      userSuffix,
+      user: baseLogin(process.env.PT_V2_DB_USER || DEFAULT_DB_USER, userSuffix),
       connectionTimeoutMs: intFromEnv('PT_V2_DB_CONNECT_TIMEOUT_MS', 10_000),
       idleTimeoutMs: intFromEnv('PT_V2_DB_IDLE_TIMEOUT_MS', 30_000),
       allowNonSessionPort,

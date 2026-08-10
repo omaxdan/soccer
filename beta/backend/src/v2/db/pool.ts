@@ -43,6 +43,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 import { loadV2Config, requireCredential } from '../config/index';
 import { PIPELINE_ROLES, roleDefinition, type PipelineRole } from './roles';
@@ -63,7 +65,55 @@ let shuttingDown = false;
  * connection needs.
  */
 export function poolUsername(user: string, suffix: string): string {
-  return suffix === '' ? user : `${user}.${suffix}`;
+  if (suffix === '') return user;
+  // IDEMPOTENT. Configuration normalises the base login (see baseLogin), and
+  // this refuses to append a tenant that is already there — so the suffix is
+  // applied exactly once no matter which form reached this function.
+  const joined = `.${suffix}`;
+  return user.endsWith(joined) ? user : `${user}${joined}`;
+}
+
+const PEM_HEADER = '-----BEGIN CERTIFICATE-----';
+
+/**
+ * The certificate authority bundle named by PT_V2_DB_SSL_CA.
+ *
+ * ACCEPTS EITHER A PATH OR THE PEM ITSELF. A container or CI system commonly
+ * injects a certificate as an environment variable rather than a file, and
+ * requiring a file there means writing a temporary one — so a value that already
+ * looks like PEM is used directly.
+ *
+ * A relative path resolves against the working directory, which is the package
+ * root under every `npm run` script.
+ *
+ * FAILS WITH THE PATH AND THE REMEDY. The alternative is an ENOENT thrown from
+ * inside pool construction, which reads as a database problem rather than a
+ * missing file, and which no amount of connection debugging explains.
+ */
+export function loadCaBundle(value: string): string {
+  if (value.includes(PEM_HEADER)) return value;
+
+  const path = resolve(value.replace(/^~(?=[/\\])/, homedir()));
+  let contents: string;
+  try {
+    contents = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new Error(
+      `PT_V2_DB_SSL_CA names '${value}', which could not be read (resolved to ${path}: ` +
+        `${error instanceof Error ? error.message : String(error)}). ` +
+        'Supply the provider CA bundle — for Supabase, download the project certificate ' +
+        'from Project Settings > Database > SSL Configuration and point this at the .crt ' +
+        'file. The variable may also hold the PEM text itself. Certificate verification ' +
+        'is not disabled to work around this.'
+    );
+  }
+  if (!contents.includes(PEM_HEADER)) {
+    throw new Error(
+      `PT_V2_DB_SSL_CA resolved to ${path}, which contains no '${PEM_HEADER}' block. ` +
+        'It is not a PEM certificate bundle.'
+    );
+  }
+  return contents;
 }
 
 /** The `ssl` option pg receives, or undefined when TLS is off entirely. */
@@ -73,7 +123,7 @@ export function buildSslConfig(
   if (!database.ssl) return undefined;
   return {
     rejectUnauthorized: database.sslRejectUnauthorized,
-    ...(database.sslCaPath ? { ca: readFileSync(database.sslCaPath, 'utf8') } : {}),
+    ...(database.sslCaPath ? { ca: loadCaBundle(database.sslCaPath) } : {}),
   };
 }
 

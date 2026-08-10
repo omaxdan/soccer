@@ -19,8 +19,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse as parseDotenv } from 'dotenv';
 
-import { poolUsername, buildSslConfig } from './pool';
-import { loadV2Config, resetV2ConfigForTesting } from '../config/index';
+import { poolUsername, buildSslConfig, loadCaBundle } from './pool';
+import { baseLogin, loadV2Config, resetV2ConfigForTesting } from '../config/index';
 
 describe('the login name sent to the server', () => {
   test('an empty suffix yields exactly the role name', () => {
@@ -31,6 +31,32 @@ describe('the login name sent to the server', () => {
 
   test('a suffix is appended after a dot, which is what a shared pooler routes on', () => {
     assert.equal(poolUsername('postgres', 'abcdef123456'), 'postgres.abcdef123456');
+  });
+
+  test('a suffix is never appended twice — the field bug', () => {
+    // OBSERVED: `postgres.<ref>.<ref>`, a login matching no role, produced when
+    // PT_V2_DB_USER held the JOINED form a provider dashboard hands out while
+    // PT_V2_DB_USER_SUFFIX was also set. Two independent guards.
+    assert.equal(
+      baseLogin('postgres.nwxafrvwimoyhcnvvuji', 'nwxafrvwimoyhcnvvuji'),
+      'postgres',
+      'configuration normalises the base login'
+    );
+    assert.equal(
+      poolUsername('postgres.nwxafrvwimoyhcnvvuji', 'nwxafrvwimoyhcnvvuji'),
+      'postgres.nwxafrvwimoyhcnvvuji',
+      'and the join refuses to append a tenant that is already present'
+    );
+    // Both are idempotent under repetition.
+    assert.equal(baseLogin(baseLogin('postgres.abc', 'abc'), 'abc'), 'postgres');
+    assert.equal(poolUsername(poolUsername('postgres', 'abc'), 'abc'), 'postgres.abc');
+  });
+
+  test('a base login is left alone, including one that merely contains a dot', () => {
+    assert.equal(baseLogin('postgres', 'abc'), 'postgres');
+    // Only the CONFIGURED suffix is stripped, never an arbitrary trailing part.
+    assert.equal(baseLogin('my.service.account', 'abc'), 'my.service.account');
+    assert.equal(baseLogin('postgres.abc', ''), 'postgres.abc', 'no suffix, nothing to strip');
   });
 
   test('the login name is never altered, only wrapped', () => {
@@ -103,6 +129,96 @@ describe('TLS posture', () => {
   });
 });
 
+describe('the CA bundle', () => {
+  test('inline PEM is accepted as-is, because CI injects certificates as variables', () => {
+    const pem = '-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n';
+    assert.equal(loadCaBundle(pem), pem);
+  });
+
+  test('a path that cannot be read fails with the path and the remedy, not ENOENT', () => {
+    assert.throws(
+      () => loadCaBundle('/definitely/not/here/prod-ca.crt'),
+      (error: Error) => {
+        assert.match(error.message, /PT_V2_DB_SSL_CA names/);
+        assert.match(error.message, /\/definitely\/not\/here\/prod-ca\.crt/);
+        assert.match(error.message, /SSL Configuration/, 'must say where to get the bundle');
+        assert.match(error.message, /not disabled/, 'must not suggest disabling verification');
+        return true;
+      }
+    );
+  });
+
+  test('a file that is not a certificate is rejected rather than passed to pg', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'ptv2-ca-'));
+    try {
+      const path = join(dir, 'not-a-cert.txt');
+      writeFileSync(path, 'this is not a certificate\n');
+      assert.throws(() => loadCaBundle(path), /contains no .*BEGIN CERTIFICATE/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a real bundle reaches the ssl option with verification still ON', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'ptv2-ca-'));
+    try {
+      const path = join(dir, 'prod-ca.crt');
+      const pem = '-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n';
+      writeFileSync(path, pem);
+      const ssl = buildSslConfig({
+        host: 'example.invalid',
+        port: 5432,
+        database: 'postgres',
+        connectionTimeoutMs: 1000,
+        idleTimeoutMs: 1000,
+        allowNonSessionPort: false,
+        userSuffix: '',
+        user: 'postgres',
+        ssl: true,
+        sslRejectUnauthorized: true,
+        sslCaPath: path,
+      });
+      assert.deepEqual(ssl, { rejectUnauthorized: true, ca: pem });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('dotenv precedence — why file and process can disagree without truncation', () => {
+  test('within one file the LAST definition wins, not the first', () => {
+    // The field report was `file 16 characters, process 33 characters`. Longer,
+    // not shorter, so not truncation. This is the mechanism.
+    const parsed = parseDotenv(
+      Buffer.from("PT_V2_DB_PASSWORD='sixteen_chars_16'\nPT_V2_DB_PASSWORD='a_much_longer_second_definition33'\n")
+    );
+    assert.equal(parsed.PT_V2_DB_PASSWORD, 'a_much_longer_second_definition33');
+  });
+
+  test('across files the FIRST file wins', async () => {
+    const { config: readEnvFiles } = await import('dotenv');
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'ptv2-env-'));
+    try {
+      writeFileSync(join(dir, 'a.env'), 'PW=from_file_a\n');
+      writeFileSync(join(dir, 'b.env'), 'PW=from_file_b\n');
+      const target: Record<string, string> = {};
+      readEnvFiles({ path: [join(dir, 'a.env'), join(dir, 'b.env')], processEnv: target, quiet: true });
+      assert.equal(target.PW, 'from_file_a');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('configuration defaults for the new variables', () => {
   test('the secure default holds when nothing is set', () => {
     const saved = {
@@ -150,6 +266,18 @@ describe('configuration defaults for the new variables', () => {
         poolUsername(loadV2Config().database.user, loadV2Config().database.userSuffix),
         'postgres.abcdef123456'
       );
+
+      // And the end-to-end field case: the joined form in PT_V2_DB_USER.
+      resetV2ConfigForTesting();
+      process.env.PT_V2_DB_USER = 'postgres.abcdef123456';
+      const { database } = loadV2Config();
+      assert.equal(database.user, 'postgres', 'the tenant is stripped from the base login');
+      assert.equal(
+        poolUsername(database.user, database.userSuffix),
+        'postgres.abcdef123456',
+        'and appears exactly once in what is sent'
+      );
+      delete process.env.PT_V2_DB_USER;
     } finally {
       for (const [name, value] of [
         ['PT_V2_DB_HOST', saved.host],

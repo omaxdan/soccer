@@ -41,7 +41,7 @@ import { Client } from 'pg';
 
 import { loadV2Env } from '../config/env';
 import { DEFAULT_DB_USER, loadV2Config, SESSION_MODE_PORT } from '../config/index';
-import { buildPoolConfig, poolUsername } from './pool';
+import { buildPoolConfig, loadCaBundle, poolUsername } from './pool';
 
 
 /* eslint-disable no-console */
@@ -59,28 +59,48 @@ interface CredentialReport {
   readonly notes: readonly string[];
 }
 
+interface Definition {
+  readonly path: string;
+  readonly line: number;
+  readonly raw: string;
+}
+
 /**
- * The raw text to the right of `=` for `name`, from the first file that has it.
+ * EVERY definition of `name` across the files, in file order then line order.
  *
- * Deliberately naive: it reads the FILE, not dotenv's interpretation of it, so
- * the two can be compared. A trailing carriage return is removed because a
- * Windows-authored file has one on every line and its presence tells us nothing
- * — whereas a `#` or a quote tells us a great deal.
+ * ALL of them, not the first. dotenv's precedence is subtle in exactly the way
+ * that produces an unexplainable mismatch: ACROSS files the FIRST file wins, but
+ * WITHIN a file the LAST definition wins. A `.env` that defines a password twice
+ * therefore yields the second value while a reader — and the first version of
+ * this diagnostic — sees the first. That reads as "the loader transformed my
+ * password" when the truth is "your file says it twice".
+ *
+ * Deliberately naive parsing: it reads the FILE, not dotenv's interpretation of
+ * it, so the two can be compared.
  */
-function rawFromFiles(paths: readonly string[], name: string): string | null {
+function definitionsOf(paths: readonly string[], name: string): Definition[] {
   const pattern = new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=(.*)$`);
+  const found: Definition[] = [];
   for (const path of paths) {
     if (!existsSync(path)) continue;
     // Split on /\r?\n/ rather than '\n'. A Windows-authored file leaves a
     // trailing \r on every line, and in JavaScript `.` does not match \r — it is
     // a line terminator — so `(.*)$` would fail to match every line of a CRLF
     // file and the comparison would silently report "nothing to compare".
-    for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-      const match = pattern.exec(line);
-      if (match) return match[1];
-    }
+    readFileSync(path, 'utf8')
+      .split(/\r?\n/)
+      .forEach((line, index) => {
+        const match = pattern.exec(line);
+        if (match) found.push({ path, line: index + 1, raw: match[1] });
+      });
   }
-  return null;
+  return found;
+}
+
+/** Strips one layer of matching wrapping quotes, as dotenv does. */
+function unquote(raw: string): string {
+  const trimmed = raw.trim();
+  return /^(["']).*\1$/.test(trimmed) ? trimmed.slice(1, -1) : trimmed;
 }
 
 function fingerprint(value: string): string {
@@ -90,8 +110,34 @@ function fingerprint(value: string): string {
 function inspectCredential(envPaths: readonly string[]): CredentialReport {
   const variable = 'PT_V2_DB_PASSWORD';
   const loaded = process.env[variable];
-  const raw = rawFromFiles(envPaths, variable);
+  const definitions = definitionsOf(envPaths, variable);
   const notes: string[] = [];
+
+  // WHICH definition dotenv would have used: within a file the last wins, and
+  // across files the first file wins. Reproducing that here is what makes the
+  // comparison below meaningful.
+  const firstFileWithOne = definitions[0]?.path;
+  const winning = [...definitions].reverse().find((d) => d.path === firstFileWithOne) ?? null;
+  const raw = winning === null ? null : winning.raw;
+
+  if (definitions.length > 1) {
+    const sameFile = definitions.filter((d) => d.path === firstFileWithOne);
+    if (sameFile.length > 1) {
+      notes.push(
+        `DEFINED ${sameFile.length} TIMES in ${firstFileWithOne} — lines ` +
+          `${sameFile.map((d) => d.line).join(', ')}. Within one file dotenv keeps the ` +
+          `LAST, so line ${winning?.line} is the value in force and the earlier ones are ` +
+          'dead. Delete them.'
+      );
+    }
+    const otherFiles = definitions.filter((d) => d.path !== firstFileWithOne);
+    if (otherFiles.length > 0) {
+      notes.push(
+        `also defined in ${[...new Set(otherFiles.map((d) => d.path))].join(', ')} — ` +
+          'ignored, because across files dotenv keeps the first file that defines it'
+      );
+    }
+  }
 
   if (loaded === undefined || loaded === '') {
     return {
@@ -107,10 +153,18 @@ function inspectCredential(envPaths: readonly string[]): CredentialReport {
   let rawMatchesLoaded: boolean | null = null;
   if (raw !== null) {
     const quoted = /^\s*(["']).*\1\s*$/.test(raw);
-    const bare = quoted ? raw.trim().slice(1, -1) : raw.trim();
+    const bare = unquote(raw);
     rawMatchesLoaded = bare === loaded;
 
     if (!rawMatchesLoaded) {
+      // A value already in the real environment OUTRANKS the file — dotenv never
+      // overrides. That is deliberate, and it is the other way a file and a
+      // process legitimately disagree.
+      notes.push(
+        'the real environment may hold this variable, which outranks the file. ' +
+          'Check with `echo %PT_V2_DB_PASSWORD%` (cmd) or `$env:PT_V2_DB_PASSWORD` ' +
+          '(PowerShell); if it is set there, unset it or make it match.'
+      );
       if (bare.startsWith(loaded)) {
         const dropped = bare.slice(loaded.length);
         notes.push(
@@ -246,8 +300,10 @@ function classifyConnectionError(message: string): string {
     ],
     [
       /self.signed|unable to verify|certificate/i,
-      'TLS — the certificate did not verify. Set PT_V2_DB_SSL_CA to the provider CA ' +
-        'bundle. Do not disable verification.',
+      'TLS — the certificate did not chain to a trusted authority. The provider signs ' +
+        'with its own CA, which the system trust store does not carry. Download the ' +
+        'project certificate (Supabase: Project Settings > Database > SSL Configuration) ' +
+        'and set PT_V2_DB_SSL_CA to it. Do not disable verification.',
     ],
     [
       /ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|ENOTFOUND/i,
@@ -274,7 +330,15 @@ function classifyConnectionError(message: string): string {
 }
 
 async function probe(): Promise<void> {
-  const config = buildPoolConfig();
+  let config;
+  try {
+    // Building the configuration can fail on its own — an unreadable CA bundle,
+    // for one. Report it here rather than letting it abort the whole command.
+    config = buildPoolConfig();
+  } catch (error) {
+    console.log(`\n  FAILED             ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
   console.log(`\n  sending username   "${String(config.user)}"`);
   const client = new Client({ ...config, connectionTimeoutMillis: 15_000 });
   const startedAt = Date.now();
@@ -323,6 +387,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   console.log('\nconnection target');
   for (const line of describeTarget()) console.log(line);
 
+  const { database: database0 } = loadV2Config();
+
   console.log('\ncredential — no value is printed');
   const report = inspectCredential(env.paths);
   const status = !report.present
@@ -339,9 +405,30 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   console.log(`  file == process      ${status}`);
   for (const note of report.notes) console.log(`    - ${note}`);
 
-  const { database } = loadV2Config();
+  // The CA bundle, verified now rather than at connection time — a bad path here
+  // otherwise surfaces as an ENOENT thrown from pool construction.
+  if (database0.ssl && database0.sslCaPath) {
+    console.log('\ncertificate authority');
+    console.log(`  PT_V2_DB_SSL_CA      ${database0.sslCaPath}`);
+    try {
+      const bundle = loadCaBundle(database0.sslCaPath);
+      const count = bundle.split('-----BEGIN CERTIFICATE-----').length - 1;
+      console.log(`  loaded               yes, ${count} certificate(s), ${bundle.length} bytes`);
+    } catch (error) {
+      console.log(`  loaded               NO`);
+      console.log(`    - ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else if (database0.ssl && database0.sslRejectUnauthorized) {
+    console.log('\ncertificate authority');
+    console.log('  PT_V2_DB_SSL_CA      (not set)');
+    console.log('    - verification uses the system trust store. A managed provider');
+    console.log('      presenting its own CA will fail with "self-signed certificate in');
+    console.log('      certificate chain" — supply its bundle rather than disabling');
+    console.log('      verification.');
+  }
+
   console.log('\nlogin name that will be sent');
-  console.log(`  "${poolUsername(database.user, database.userSuffix)}"`);
+  console.log(`  "${poolUsername(database0.user, database0.userSuffix)}"`);
 
   if (!report.present) {
     console.log('\nNo credential configured, so no connection is possible.\n');
