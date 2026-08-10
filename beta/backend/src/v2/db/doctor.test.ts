@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { parse as parseDotenv } from 'dotenv';
 
 import { poolUsername, buildSslConfig, loadCaBundle } from './pool';
+import { SSL_REQUEST, describeHandshakeStall, type HandshakeStage } from './doctor';
 import { baseLogin, loadV2Config, resetV2ConfigForTesting } from '../config/index';
 
 describe('the login name sent to the server', () => {
@@ -308,5 +309,47 @@ describe('no deployment-specific literal remains in source', () => {
       /rejectUnauthorized:\s*false/,
       'certificate verification must not be disabled by a literal'
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAGED HANDSHAKE TRACE
+//
+// PostgreSQL TLS is not HTTPS. A TLS handshake attempted WITHOUT first sending
+// the SSLRequest and reading the server's reply byte sends a ClientHello where
+// the server expects a startup packet; the server closes the connection and the
+// client reports "unexpected EOF from the transport stream". That message reads
+// as a TLS rejection and is nothing of the sort, and a hand-built probe that
+// skips the SSLRequest produces it every time against a perfectly healthy
+// server. These pin the packet and the guidance so the trace cannot drift.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('the staged handshake trace', () => {
+  test('the SSLRequest packet is the one the protocol defines', () => {
+    // Int32 length = 8, Int32 code = 80877103 (0x04D2162F). Any other bytes and
+    // the server does not reply 'S'.
+    assert.equal(SSL_REQUEST.length, 8);
+    assert.equal(SSL_REQUEST.readInt32BE(0), 8, 'length field');
+    assert.equal(SSL_REQUEST.readInt32BE(4), 80877103, 'SSLRequest code');
+    assert.deepEqual([...SSL_REQUEST], [0x00, 0x00, 0x00, 0x08, 0x04, 0xd2, 0x16, 0x2f]);
+  });
+
+  test('every stage has guidance, and each names its own layer', () => {
+    const stages: readonly HandshakeStage[] = ['tcp', 'sslrequest', 'sslreply', 'tls'];
+    for (const stage of stages) {
+      const text = describeHandshakeStall(stage);
+      assert.ok(text.length > 40, `${stage} needs real guidance`);
+    }
+    assert.match(describeHandshakeStall('tcp'), /TCP connection never completed/);
+    assert.match(describeHandshakeStall('sslreply'), /never answered the SSLRequest/);
+  });
+
+  test('a stall at the TLS stage is not reported as a TLS rejection', () => {
+    // The distinction this whole trace exists to draw. Silence after 'S' points
+    // at large-packet loss; a rejection arrives promptly as an alert.
+    const text = describeHandshakeStall('tls');
+    assert.match(text, /AFTER THE SERVER SAID 'S'/);
+    assert.match(text, /path-MTU black hole/);
+    assert.match(text, /REJECTION would arrive/);
   });
 });

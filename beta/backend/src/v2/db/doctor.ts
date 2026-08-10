@@ -37,6 +37,8 @@ import '../config/env';
 
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { Socket } from 'node:net';
+import { connect as tlsConnect, type TLSSocket } from 'node:tls';
 import { Client } from 'pg';
 
 import { loadV2Env } from '../config/env';
@@ -329,6 +331,163 @@ function classifyConnectionError(message: string): string {
   return 'UNCLASSIFIED — the message above is the whole of what the server said.';
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STAGED HANDSHAKE TRACE
+//
+// POSTGRESQL TLS IS NOT HTTPS, AND THAT DISTINCTION HAS COST DAYS.
+//
+// An HTTPS client opens a socket and sends a ClientHello. A PostgreSQL client
+// must not. The sequence is:
+//
+//   1. TCP connect
+//   2. client sends the 8-byte SSLRequest       00 00 00 08 04 D2 16 2F
+//   3. server replies ONE byte, 'S' or 'N'
+//   4. only THEN does the TLS handshake begin, on the same socket
+//
+// A TLS handshake attempted on a fresh socket WITHOUT step 2 sends a ClientHello
+// where the server expects a startup packet. It cannot parse it and closes the
+// connection, which a TLS client reports as "Received an unexpected EOF or 0
+// bytes from the transport stream" — a message that reads as "the server
+// rejected my TLS" and means nothing of the sort.
+//
+// This trace performs all four steps in order, on one socket, with the real
+// host, port and TLS options from buildPoolConfig(), and times each. It exists
+// so the answer to "which layer stalled" is one command rather than a chain of
+// hand-built probes that may each test a different thing.
+//
+// It reports the negotiated protocol and cipher NAME. No certificate content is
+// printed, and no key material can be.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The PostgreSQL SSLRequest packet: Int32 length 8, Int32 code 80877103. */
+export const SSL_REQUEST = Buffer.from([0x00, 0x00, 0x00, 0x08, 0x04, 0xd2, 0x16, 0x2f]);
+
+export type HandshakeStage = 'tcp' | 'sslrequest' | 'sslreply' | 'tls';
+
+/**
+ * What a stall at `stage` means. Pure, so the guidance is testable and cannot
+ * drift from the stage names the trace actually emits.
+ */
+export function describeHandshakeStall(stage: HandshakeStage): string {
+  switch (stage) {
+    case 'tcp':
+      return (
+        'The TCP connection never completed. Nothing accepted the socket — a ' +
+        'firewall, a blocked port, or an unreachable address.'
+      );
+    case 'sslrequest':
+      return 'The 8-byte SSLRequest could not be written. The socket died immediately.';
+    case 'sslreply':
+      return (
+        "The server never answered the SSLRequest with 'S' or 'N'. It accepted the " +
+        'connection and then said nothing, which points at something in the path ' +
+        'terminating the session rather than at the database.'
+      );
+    case 'tls':
+      return (
+        "STALLED AFTER THE SERVER SAID 'S'. The protocol negotiation succeeded and " +
+        'the TLS handshake did not. The server certificate flight is several ' +
+        'kilobytes across full-size segments, where everything up to this point was ' +
+        'a handful of bytes — so a path that drops large packets (a path-MTU black ' +
+        'hole, common behind a VPN or a tunnelling router) produces exactly this: ' +
+        'small packets fine, handshake silent. A TLS REJECTION would arrive ' +
+        'promptly as an alert or a certificate error, not as silence.'
+      );
+  }
+}
+
+function withDeadline<T>(work: Promise<T>, ms: number, stage: HandshakeStage): Promise<T> {
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error(`stalled at ${stage}`), { stage })), ms)
+    ),
+  ]);
+}
+
+async function traceHandshake(): Promise<void> {
+  let config;
+  try {
+    config = buildPoolConfig();
+  } catch (error) {
+    console.log(`  FAILED             ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  const host = String(config.host);
+  const port = Number(config.port);
+  const socket = new Socket();
+  const started = Date.now();
+  const since = (): string => `${String(Date.now() - started).padStart(5)}ms`;
+  let stage: HandshakeStage = 'tcp';
+
+  try {
+    await withDeadline(
+      new Promise<void>((resolve, reject) => {
+        socket.once('error', reject);
+        socket.connect(port, host, () => resolve());
+      }),
+      15_000,
+      'tcp'
+    );
+    console.log(`  ${since()}  TCP connected to ${host}:${port}`);
+
+    stage = 'sslrequest';
+    await withDeadline(
+      new Promise<void>((resolve, reject) => {
+        socket.write(SSL_REQUEST, (err) => (err ? reject(err) : resolve()));
+      }),
+      15_000,
+      'sslrequest'
+    );
+    console.log(`  ${since()}  SSLRequest sent (8 bytes)`);
+
+    stage = 'sslreply';
+    const reply = await withDeadline(
+      new Promise<string>((resolve, reject) => {
+        socket.once('error', reject);
+        socket.once('data', (buffer: Buffer) => resolve(buffer.toString('utf8', 0, 1)));
+      }),
+      15_000,
+      'sslreply'
+    );
+    console.log(`  ${since()}  server replied '${reply}'`);
+    if (reply !== 'S') {
+      console.log(`  the server refused TLS ('${reply}'). PT_V2_DB_SSL expects it to accept.`);
+      return;
+    }
+
+    stage = 'tls';
+    const secure = await withDeadline(
+      new Promise<TLSSocket>((resolve, reject) => {
+        const options: Record<string, unknown> = { socket, servername: host };
+        // The SAME TLS options production uses, so this cannot pass where the
+        // application fails for a certificate reason.
+        if (config.ssl && typeof config.ssl === 'object') Object.assign(options, config.ssl);
+        const tlsSocket = tlsConnect(options as never, () => resolve(tlsSocket));
+        tlsSocket.once('error', reject);
+      }),
+      20_000,
+      'tls'
+    );
+    console.log(
+      `  ${since()}  TLS established — ${secure.getProtocol() ?? 'unknown'}, ` +
+        `cipher ${secure.getCipher()?.name ?? 'unknown'}, authorized=${secure.authorized}`
+    );
+    if (!secure.authorized && secure.authorizationError) {
+      console.log(`             certificate not authorized: ${String(secure.authorizationError)}`);
+    }
+    console.log('  the handshake completes; any remaining failure is authentication or later');
+    secure.destroy();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`  ${since()}  FAILED at ${stage}: ${message}`);
+    console.log(`  meaning    ${describeHandshakeStall(stage)}`);
+  } finally {
+    socket.destroy();
+  }
+}
+
 async function probe(): Promise<void> {
   let config;
   try {
@@ -438,6 +597,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     console.log('\nNo connection attempted. Re-run with --probe to test authentication.\n');
     return;
   }
+
+  // The staged trace runs FIRST. When the pg attempt fails with a bare timeout,
+  // this is what says which of the four steps it got to.
+  console.log('\nhandshake trace — TCP, SSLRequest, reply, TLS, in order');
+  await traceHandshake();
 
   console.log('\nprobe — one read-only connection');
   await probe();
