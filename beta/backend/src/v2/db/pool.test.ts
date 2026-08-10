@@ -22,9 +22,15 @@ import {
   resetV2ConfigForTesting,
   SESSION_MODE_PORT,
 } from '../config/index';
+import type { PoolClient } from 'pg';
+
 import {
   poolFor,
   checkHealth,
+  retryAcquisition,
+  isTransientAcquisitionError,
+  ACQUIRE_ATTEMPTS,
+  ACQUIRE_BACKOFF_MS,
   isEmptySearchPath,
   checkAllConfiguredRoles,
   closeAllPools,
@@ -122,6 +128,201 @@ describe('configuration loading (no database required)', () => {
     assert.throws(() => loadV2Config(), /must be a positive integer/);
     delete process.env.PT_V2_POOL_MAX;
     resetV2ConfigForTesting();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONNECTION ACQUISITION RETRY (no database required)
+//
+// V2 previously had no retry at all: a single transient blip during acquisition
+// ended a run permanently, while V1 absorbed the same blip silently through
+// fetchAllRows. These tests pin V1's policy and, more importantly, pin what must
+// NEVER be retried.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Enough of a PoolClient to prove the helper returns what connect() gave it. */
+const FAKE_CLIENT = { release: () => undefined } as unknown as PoolClient;
+
+/** No real waiting. The policy itself is asserted from the exported constants. */
+const INSTANT: readonly number[] = [0, 0];
+
+function transient(message: string): Error {
+  return new Error(message);
+}
+
+/** An error as the SERVER produces it: carrying a SQLSTATE. */
+function serverError(message: string, code: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+describe('connection acquisition retry (no database required)', () => {
+  test('the policy is V1s, taken from its implementation not its comment', () => {
+    // fetchAllRows.ts:88 loops `attempt <= 3`; :103 sleeps 2000 then 5000, and
+    // its 10000 branch is unreachable because attempt 3 throws first. The
+    // comment there claims "1s/3s" and is stale.
+    assert.equal(ACQUIRE_ATTEMPTS, 3, 'V1 makes three attempts');
+    assert.deepEqual([...ACQUIRE_BACKOFF_MS], [2000, 5000], 'V1 waits 2s then 5s');
+  });
+
+  test('a transient failure is retried and the connection is returned', async () => {
+    let calls = 0;
+    const client = await retryAcquisition(
+      async () => {
+        calls += 1;
+        if (calls === 1) throw transient('read ECONNRESET');
+        return FAKE_CLIENT;
+      },
+      'pt_platform_admin',
+      INSTANT
+    );
+    assert.equal(client, FAKE_CLIENT, 'the successful attempt yields its client');
+    assert.equal(calls, 2, 'exactly one retry was needed');
+  });
+
+  test('it recovers on the LAST permitted attempt', async () => {
+    let calls = 0;
+    const client = await retryAcquisition(
+      async () => {
+        calls += 1;
+        if (calls < ACQUIRE_ATTEMPTS) throw transient('timeout exceeded when trying to connect');
+        return FAKE_CLIENT;
+      },
+      undefined,
+      INSTANT
+    );
+    assert.equal(client, FAKE_CLIENT);
+    assert.equal(calls, ACQUIRE_ATTEMPTS);
+  });
+
+  test('exhaustion propagates the FINAL error, unchanged', async () => {
+    let calls = 0;
+    const last = transient('Connection terminated due to connection timeout');
+    await assert.rejects(
+      () =>
+        retryAcquisition(
+          async () => {
+            calls += 1;
+            throw calls === ACQUIRE_ATTEMPTS ? last : transient('ETIMEDOUT');
+          },
+          undefined,
+          INSTANT
+        ),
+      (error: Error) => {
+        assert.equal(error, last, 'the caller sees the last failure, not a wrapper');
+        return true;
+      }
+    );
+    assert.equal(calls, ACQUIRE_ATTEMPTS, 'no attempt beyond the policy');
+  });
+
+  test('AUTHENTICATION FAILURE IS NOT RETRIED', async () => {
+    // The one that matters most. Three identical rejections take seven seconds
+    // to say what the first said immediately, and a wrong password is a decision
+    // rather than a blip.
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        retryAcquisition(
+          async () => {
+            calls += 1;
+            throw serverError('password authentication failed for user "postgres"', '28P01');
+          },
+          undefined,
+          INSTANT
+        ),
+      /password authentication failed/
+    );
+    assert.equal(calls, 1, 'exactly one attempt');
+  });
+
+  test('no SQLSTATE-bearing error is retried', async () => {
+    const decisions: readonly (readonly [string, string])[] = [
+      ['duplicate key value violates unique constraint', '23505'],
+      ['new row violates row-level security policy', '42501'],
+      ['syntax error at or near "slect"', '42601'],
+      ['relation "football.nope" does not exist', '42P01'],
+    ];
+    for (const [message, code] of decisions) {
+      let calls = 0;
+      await assert.rejects(
+        () =>
+          retryAcquisition(
+            async () => {
+              calls += 1;
+              throw serverError(message, code);
+            },
+            undefined,
+            INSTANT
+          ),
+        (error: Error) => error.message === message
+      );
+      assert.equal(calls, 1, `${code} must not be retried`);
+    }
+  });
+
+  test('a SQLSTATE outranks a transient-looking message', () => {
+    // Belt and braces: were a server error ever to contain one of V1s network
+    // words, the SQLSTATE still disqualifies it.
+    assert.equal(
+      isTransientAcquisitionError(serverError('network policy violation', '42501')),
+      false
+    );
+    // Node errno codes land on `code` too, and those ARE transient.
+    assert.equal(
+      isTransientAcquisitionError(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })),
+      true
+    );
+  });
+
+  test('every message V1 treats as transient is treated as transient here', () => {
+    for (const message of [
+      'fetch failed',
+      'read ECONNRESET',
+      'connect ETIMEDOUT 1.2.3.4:5432',
+      'connect ECONNREFUSED 1.2.3.4:5432',
+      'getaddrinfo EAI_AGAIN example.invalid',
+      'write EPIPE',
+      'socket hang up',
+      'network error',
+      'Connection terminated unexpectedly',
+      // pg-pools own acquisition timeouts. V1 cannot produce these because it
+      // holds no pool; here they are unambiguously transient.
+      'timeout exceeded when trying to connect',
+      'Connection terminated due to connection timeout',
+    ]) {
+      assert.equal(isTransientAcquisitionError(new Error(message)), true, message);
+    }
+  });
+
+  test('a non-Error rejection is not retried', async () => {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        retryAcquisition(
+          async () => {
+            calls += 1;
+            throw 'a bare string';
+          },
+          undefined,
+          INSTANT
+        )
+    );
+    assert.equal(calls, 1);
+  });
+
+  test('it actually waits between attempts', async () => {
+    let calls = 0;
+    const startedAt = Date.now();
+    await retryAcquisition(
+      async () => {
+        calls += 1;
+        if (calls === 1) throw transient('socket hang up');
+        return FAKE_CLIENT;
+      },
+      undefined,
+      [40, 40]
+    );
+    assert.ok(Date.now() - startedAt >= 35, 'the backoff was observed, not skipped');
   });
 });
 

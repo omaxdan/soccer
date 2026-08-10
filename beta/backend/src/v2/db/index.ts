@@ -32,6 +32,10 @@ export {
   installShutdownHandlers,
   poolStats,
   isPoolOpen,
+  acquireConnection,
+  isTransientAcquisitionError,
+  ACQUIRE_ATTEMPTS,
+  ACQUIRE_BACKOFF_MS,
   type HealthReport,
 } from './pool';
 

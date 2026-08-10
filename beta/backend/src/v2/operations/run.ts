@@ -25,8 +25,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Pool, PoolClient } from 'pg';
-import { poolFor } from '../db/pool';
+import type { PoolClient } from 'pg';
+import { acquireConnection } from '../db/pool';
 import type { PipelineRole } from '../db/roles';
 import { logger } from '../../utils/logger';
 
@@ -316,8 +316,7 @@ export async function withPipelineRun<T>(
   // two round trips of checkout and reduces steady-state pressure to withRun's
   // two connections, so a pool of four supports two concurrent pipelines rather
   // than deadlocking on one.
-  const pool = poolFor(role);
-  const opener = await pool.connect();
+  const opener = await acquireConnection(role);
   let ref: PipelineRunRef;
   try {
     ref = await insertPipelineRun(
@@ -338,14 +337,14 @@ export async function withPipelineRun<T>(
     const failed = context.jobOutcomes.filter((o) => o === 'FAILED').length;
     outcome =
       failed === 0 ? 'SUCCEEDED' : failed === context.jobOutcomes.length ? 'FAILED' : 'PARTIAL';
-    await closeRun(pool, ref, outcome);
+    await closeRun(ref, outcome);
     logger.info(
       { role, runKey: ref.runKey, runId: ref.id, jobs: context.jobOutcomes.length, outcome },
       'v2: pipeline run finished'
     );
     return result;
   } catch (err) {
-    await closeRun(pool, ref, 'FAILED');
+    await closeRun(ref, 'FAILED');
     logger.error(
       {
         role,
@@ -364,10 +363,10 @@ export async function withPipelineRun<T>(
  *
  * Never throws: telemetry must not decide the fate of the work it describes.
  */
-async function closeRun(pool: Pool, ref: PipelineRunRef, outcome: RunOutcome): Promise<void> {
+async function closeRun(ref: PipelineRunRef, outcome: RunOutcome): Promise<void> {
   let closer: PoolClient | undefined;
   try {
-    closer = await pool.connect();
+    closer = await acquireConnection();
     await appendCompletion(closer, 'pipeline_run', ref.id, ref.occurredAt, outcome);
   } catch (err) {
     logger.warn(

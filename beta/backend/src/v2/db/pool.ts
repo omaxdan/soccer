@@ -253,6 +253,135 @@ export function isPoolOpen(): boolean {
   return pool !== null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONNECTION ACQUISITION, WITH THE RETRY V1 ALREADY HAS
+//
+// V1's resilience does not come from its transport. It comes from
+// src/db/fetchAllRows.ts, through which every multi-row read funnels, and whose
+// own comment states the reason: "Transient network failures (stale keep-alive
+// sockets, connection resets, DNS blips) are a fact of life on shared hosting.
+// Since every read funnels through here, one retry policy hardens the whole
+// pipeline."
+//
+// V2 had no equivalent. The comment at connectionTimeoutMillis says "the
+// scheduler will retry the job" — but the orchestrator that would do so exists
+// only as a plan (doc 29), so in practice a single transient blip during
+// acquisition ended a run permanently. That made V2 strictly LESS resilient than
+// V1 on the same network, by omission rather than by decision.
+//
+// THE POLICY IS V1's, COPIED FROM THE IMPLEMENTATION RATHER THAN ITS COMMENT.
+// fetchAllRows.ts:88 loops `attempt <= 3` and sleeps
+// `attempt === 1 ? 2000 : attempt === 2 ? 5000 : 10000` — but attempt 3 throws
+// before it can sleep, so the 10000 branch is dead and the real backoff is
+// 2000 then 5000. Its own comment claims "1s/3s" and is stale. Three attempts,
+// 2s then 5s, is what V1 actually does and therefore what this does.
+//
+// WHAT IS DELIBERATELY NOT RETRIED
+//
+// Only network-shaped failures. An authentication failure, a constraint
+// violation, an RLS denial, a syntax error — anything the SERVER decided — is
+// returned unchanged on the first attempt. Retrying a decision repeats it, and
+// three identical rejections take eight seconds to tell you what one told you
+// immediately. Presence of a SQLSTATE `code` is the discriminator: pg attaches
+// one to every error the server generated and to none it invented locally.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Total attempts, including the first. V1: `attempt <= 3`. */
+export const ACQUIRE_ATTEMPTS = 3;
+
+/** Milliseconds to wait after attempt 1 and after attempt 2. V1: 2000, 5000. */
+export const ACQUIRE_BACKOFF_MS: readonly number[] = [2_000, 5_000];
+
+/**
+ * V1's transient test, verbatim from fetchAllRows.ts:77, plus the two messages
+ * pg-pool raises for its own acquisition timeouts — which V1 cannot produce
+ * because it holds no pool, and which are unambiguously transient here.
+ */
+const TRANSIENT_MESSAGE =
+  /fetch failed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|EPIPE|socket|network|terminat|timeout exceeded when trying to connect|Connection terminated due to connection timeout/i;
+
+/**
+ * Whether `error` is a transient network failure rather than a decision.
+ *
+ * A SQLSTATE disqualifies it outright, before the message is even considered: an
+ * error carrying `code` came from the server, and `28P01` (password
+ * authentication failed) contains the substring "network" in no locale but would
+ * be a catastrophe to retry if it ever did.
+ */
+export function isTransientAcquisitionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as { code?: unknown }).code;
+  // pg gives a SQLSTATE as a five-character string. Node's own errno codes
+  // (ECONNRESET and friends) also land on `code`, and those ARE transient, so
+  // only a SQLSTATE-shaped value disqualifies.
+  if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return false;
+  return TRANSIENT_MESSAGE.test(error.message);
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Acquires a pooled connection, retrying only transient failures.
+ *
+ * THE SINGLE ACQUISITION POINT for every production path: withRun's control and
+ * work connections, withConnection, withSession, the pipeline-run opener and
+ * closer, and the health check. Centralised so the policy cannot differ between
+ * them, which is exactly how the doctor came to be more forgiving than the seed.
+ *
+ * Transaction semantics are untouched. This returns a client and nothing more —
+ * no BEGIN, no COMMIT, no release. The caller owns the connection exactly as it
+ * did when it called `pool.connect()` directly.
+ *
+ * A retry acquires a FRESH connection, because a failed acquisition never
+ * yielded one to reuse. Nothing is left checked out by an attempt that failed.
+ */
+export async function acquireConnection(role?: PipelineRole): Promise<PoolClient> {
+  const target = poolFor(role);
+  return retryAcquisition(() => target.connect(), role);
+}
+
+/**
+ * The retry loop, separated from the pool so it is testable without a database.
+ *
+ * `backoffMs` exists for tests only — production always uses V1's values, and
+ * the test that proves the policy asserts the exported constants rather than
+ * these arguments, so a suite running fast cannot hide a changed policy.
+ */
+export async function retryAcquisition(
+  connect: () => Promise<PoolClient>,
+  role?: PipelineRole,
+  backoffMs: readonly number[] = ACQUIRE_BACKOFF_MS
+): Promise<PoolClient> {
+  for (let attempt = 1; attempt <= ACQUIRE_ATTEMPTS; attempt++) {
+    try {
+      return await connect();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (!isTransientAcquisitionError(error) || attempt === ACQUIRE_ATTEMPTS) {
+        logger.error(
+          { role, attempt, attempts: ACQUIRE_ATTEMPTS, err: message },
+          isTransientAcquisitionError(error)
+            ? 'v2: connection acquisition failed after every attempt'
+            : 'v2: connection acquisition failed and is not retryable'
+        );
+        throw error;
+      }
+
+      const waitMs = backoffMs[attempt - 1] ?? 0;
+      logger.warn(
+        { role, attempt, attempts: ACQUIRE_ATTEMPTS, waitMs, err: message },
+        'v2: transient connection failure — retrying'
+      );
+      await sleep(waitMs);
+    }
+  }
+
+  // Unreachable: the loop either returns or throws. Present so the function has
+  // no implicit undefined path.
+  throw new Error('retryAcquisition exhausted its loop without returning');
+}
+
 export interface HealthReport {
   readonly role: PipelineRole;
   readonly healthy: boolean;
@@ -288,7 +417,7 @@ export async function checkHealth(role: PipelineRole): Promise<HealthReport> {
   const startedAt = Date.now();
   let client: PoolClient | undefined;
   try {
-    client = await poolFor(role).connect();
+    client = await acquireConnection(role);
     const { rows } = await client.query<{
       current_user: string;
       server_version: string;

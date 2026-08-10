@@ -56,7 +56,7 @@
 
 import type { PoolClient } from 'pg';
 import { loadV2Config } from '../config/index';
-import { poolFor } from './pool';
+import { acquireConnection } from './pool';
 import type { PipelineRole } from './roles';
 import { logger } from '../../utils/logger';
 
@@ -282,12 +282,11 @@ export async function withRun<T>(
     );
   }
 
-  const pool = poolFor(role);
   let control: PoolClient | undefined;
   let job: JobRunRef | null = null;
 
   if (attributed) {
-    control = await pool.connect();
+    control = await acquireConnection(role);
     try {
       job = await lifecycle.openJobRun(control, ctx);
     } catch (err) {
@@ -302,7 +301,7 @@ export async function withRun<T>(
     }
   }
 
-  const work = await pool.connect();
+  const work = await acquireConnection(role);
   const startedAt = Date.now();
   try {
     await work.query('BEGIN');
@@ -347,7 +346,7 @@ export async function withConnection<T>(
   role: PipelineRole,
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  const client = await poolFor(role).connect();
+  const client = await acquireConnection(role);
   try {
     return await fn(client);
   } finally {
@@ -373,7 +372,7 @@ export async function withSession<T>(
   role: PipelineRole,
   fn: (session: PoolClient) => Promise<T>
 ): Promise<T> {
-  const client = await poolFor(role).connect();
+  const client = await acquireConnection(role);
   try {
     return await fn(client);
   } finally {
