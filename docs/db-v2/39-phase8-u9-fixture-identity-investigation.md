@@ -711,4 +711,45 @@ design solved rescheduling before the writer existed; the writer never
 implemented the solution. The database cannot catch this class of error on its
 own, which is the reason the gate was worth holding.
 
-**Awaiting approval before implementing anything in §10.**
+---
+
+## Implementation status
+
+| | |
+|---|---|
+| **U-9 writer fix** | **IMPLEMENTED** — `entities/fixtures.ts`. §10.1 as specified. No migration, no schema change |
+| **U-9 tests** | **IMPLEMENTED** — `__tests__/fixtureIdentity.test.ts`, 25 tests. §10.2 as specified |
+| **U-9 quality assertion** (§10.3) | **NOT IMPLEMENTED.** Deferred — it is a new migration and is not authorised |
+| **U-10** (§10.4) | **OPEN.** Not handled, deliberately. See below |
+| Wiring into the ingestion sweep | **NOT DONE.** Still gated |
+
+`resolveFixture` now resolves by provider identity across every partition before
+constructing the conflict target, reuses the stored partition for an existing
+fixture, derives one only for a new fixture, and raises
+`AmbiguousFixtureIdentityError` — carrying every id and partition found —
+when one provider fixture resolves to more than one row. The lookup is
+`findFixtureByProviderIdentity`, and it deliberately carries **no partition
+predicate**; a test asserts the absence of one, because adding it would
+reintroduce the defect exactly.
+
+`currentLifecycleState` is gone. The previous state now comes from the same
+cross-partition lookup, so a fixture the writer meets for the first time reports
+its **stored** state rather than `null`, and no `null → SCHEDULED` is fabricated
+for a fixture months old.
+
+Both halves are **mutation-tested**: reintroducing the partition recomputation
+fails 7 tests including the year-boundary case, and forcing the previous state to
+`null` fails 3 including the fabricated-transition case.
+
+### U-10 remains a separate, open integrity case
+
+`ck_fixture__partition_not_after_kickoff` is **unchanged and unweakened.** A
+fixture rescheduled *earlier* than its original date still fails it, with
+SQLSTATE `23514` and the constraint named. Two tests hold that posture: one
+asserts the failure is raised rather than accommodated, and one asserts the
+constraint definition still reads `fixture_partition_on <=`, so that a later
+attempt to "fix" U-10 by weakening the check breaks a test that says why.
+
+No silent path was introduced. The decision recorded in §10.4 — abort the page,
+or count it as a stated rejection and continue — is still to be made, and is
+still a writer concern rather than a schema one.

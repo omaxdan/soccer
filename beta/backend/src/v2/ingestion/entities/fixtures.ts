@@ -59,13 +59,165 @@ export interface FixtureRef {
   readonly lifecycleState: string;
 }
 
+/** A fixture already stored, found by provider identity alone. */
+export interface StoredFixtureIdentity {
+  readonly id: string;
+  /** The partition this fixture was FILED IN at creation. Never recomputed. */
+  readonly partitionOn: string;
+  readonly lifecycleState: string;
+}
+
+/**
+ * Raised when one provider fixture resolves to more than one stored row.
+ *
+ * THIS IS THE CORRUPTION U-9 DESCRIBES, caught in the act. It cannot be
+ * resolved here: picking a row would attach today's result to an arbitrary half
+ * of the fixture's history, and merging would need a DELETE that
+ * `pt_pipeline_ingestion` does not hold. The identities and partitions are
+ * carried on the error so the condition can be investigated with the two rows in
+ * hand rather than rediscovered.
+ */
+export class AmbiguousFixtureIdentityError extends Error {
+  constructor(
+    readonly providerCode: string,
+    readonly providerExternalId: string,
+    readonly occurrences: readonly { readonly id: string; readonly partitionOn: string }[]
+  ) {
+    super(
+      `Provider fixture ${providerCode}/${providerExternalId} resolves to ${occurrences.length} rows: ` +
+        occurrences.map((row) => `id=${row.id} partition=${row.partitionOn}`).join(', ') +
+        '. One provider fixture must have exactly one row. See doc 39 (U-9).'
+    );
+    this.name = 'AmbiguousFixtureIdentityError';
+  }
+}
+
+/**
+ * Finds a stored fixture by its provider identity, ACROSS EVERY PARTITION.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS QUERY IS THE APPLICATION'S ENFORCEMENT POINT FOR AN INVARIANT POSTGRESQL
+ * CANNOT ENFORCE.
+ *
+ * `uq_fixture__provider_external_id` is
+ * `(provider_code, provider_external_id, fixture_partition_on)`, and the
+ * partition key is in it because PostgreSQL requires every unique constraint on
+ * a partitioned relation to contain every partition key column. `football.fixture`
+ * is a hub entity with no parent to bind the dependency to, so nothing in the
+ * database enforces that one provider fixture has one row. C-02 permits the
+ * three-column constraint only on PD-05's premise — that the partition key is
+ * functionally determined by the business key — and THIS FUNCTION IS WHAT MAKES
+ * THAT PREMISE TRUE.
+ *
+ * There is deliberately NO PARTITION PREDICATE. Adding one would reintroduce
+ * exactly the defect this exists to remove: a rescheduled fixture would be
+ * looked for in the partition its NEW kickoff implies, found absent, and
+ * inserted a second time. PostgreSQL scans every partition, each using the local
+ * index behind the unique constraint, whose leading columns are precisely the
+ * two searched here.
+ *
+ * The partition date is returned as TEXT, formatted in SQL. `date` arrives from
+ * the driver as a JavaScript Date at LOCAL midnight, and converting that back to
+ * a UTC calendar date shifts a day in any zone ahead of UTC — ER-01's hazard,
+ * on the one column where a one-day error silently files the row in the wrong
+ * partition.
+ */
+export async function findFixtureByProviderIdentity(
+  tx: PoolClient,
+  providerExternalId: string
+): Promise<StoredFixtureIdentity | null> {
+  const { rows } = await tx.query<{
+    id: string;
+    fixture_partition_on: string;
+    lifecycle_state_code: string;
+  }>(
+    `SELECT id::text,
+            to_char(fixture_partition_on, 'YYYY-MM-DD') AS fixture_partition_on,
+            lifecycle_state_code
+       FROM football.fixture
+      WHERE provider_code = $1 AND provider_external_id = $2
+      ORDER BY fixture_partition_on`,
+    [PROVIDER_CODE, providerExternalId]
+  );
+
+  if (rows.length > 1) {
+    throw new AmbiguousFixtureIdentityError(
+      PROVIDER_CODE,
+      providerExternalId,
+      rows.map((row) => ({ id: row.id, partitionOn: row.fixture_partition_on }))
+    );
+  }
+
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    partitionOn: row.fixture_partition_on,
+    lifecycleState: row.lifecycle_state_code,
+  };
+}
+
+/**
+ * The partition a fixture is written to.
+ *
+ * An EXISTING fixture keeps the partition it already has, whatever its kickoff
+ * has since become. A NEW fixture derives one from the kickoff it was first
+ * announced with. Pure, and separated from the write so the rule that U-9 turned
+ * on can be tested without a database.
+ */
+export function partitionForWrite(
+  existing: StoredFixtureIdentity | null,
+  scheduledKickoffAt: Date
+): string {
+  return existing ? existing.partitionOn : fixturePartitionOn(scheduledKickoffAt);
+}
+
+/**
+ * Whether this write is a lifecycle transition, and from what.
+ *
+ * FIVE CASES, and the vocabulary already distinguishes all five — no new model
+ * is introduced here:
+ *
+ *   genuinely new         previous null → a creation transition to whatever
+ *                         state it arrived in. A backfilled fixture that is
+ *                         already finished records `null → COMPLETED`, not a
+ *                         SCHEDULED it was never in.
+ *   refreshed, unchanged  previous equals current → NO transition. A feed
+ *                         restating a state has reported no change.
+ *   postponed → reopened  POSTPONED → SCHEDULED, which is the reschedule the
+ *                         vocabulary means by "until rescheduled and reopened".
+ *   already played        COMPLETED restated → no transition.
+ *   already known         previous is the STORED state, never null, so no
+ *                         `null → SCHEDULED` is fabricated for a fixture the
+ *                         writer is merely meeting for the first time this run.
+ *
+ * That last case is the second half of U-9: the old implementation looked for
+ * the previous state in the partition the NEW kickoff implied, found nothing,
+ * and wrote a creation transition for a fixture months old.
+ */
+export function lifecycleTransitionFor(
+  previous: string | null,
+  next: string
+): { readonly from: string | null; readonly to: string } | null {
+  return previous === next ? null : { from: previous, to: next };
+}
+
 /**
  * Resolves a fixture and records any lifecycle change.
  *
- * THE PARTITION KEY IS NEVER UPDATED. It is part of the conflict target and is
- * listed as immutable, so a rescheduled fixture keeps the partition it was
- * created in — which is what `ck_fixture__partition_not_after_kickoff` is built
- * to permit, and what every child's ON UPDATE RESTRICT enforces.
+ * THE PARTITION KEY IS NEVER RECOMPUTED. It is derived once, from the kickoff a
+ * fixture was first announced with, and every later write reuses the stored
+ * value — which is what `ck_fixture__partition_not_after_kickoff` is built to
+ * permit, what `immutableColumns` guards in the update branch, and what every
+ * child's ON UPDATE RESTRICT enforces.
+ *
+ * U-10, and it is NOT handled here. A fixture rescheduled EARLIER than its
+ * original date has a kickoff below its immutable partition date, and
+ * `ck_fixture__partition_not_after_kickoff` rejects the update. That failure is
+ * left to PostgreSQL, loudly and by name. Catching it would mean either
+ * advancing the partition — the corruption this function exists to prevent — or
+ * swallowing a scheduling change the platform would then be wrong about. A loud
+ * abort is the correct posture until U-10 is decided on its own terms.
  *
  * `ck_fixture__participants_distinct` refuses home = away. Not re-checked here:
  * PostgreSQL owns it, and a provider feed that reports a team playing itself is
@@ -77,7 +229,6 @@ export async function resolveFixture(
   fixture: ProviderFixture,
   counts: IngestionCounts
 ): Promise<FixtureRef> {
-  const partitionOn = fixturePartitionOn(fixture.scheduledKickoffAt);
   const lifecycleState = mapLifecycleState(fixture.providerStatusCode);
 
   if (isUnmappedLifecycle(fixture.providerStatusCode)) {
@@ -89,8 +240,12 @@ export async function resolveFixture(
     );
   }
 
-  // The state before this write, needed to decide whether a transition occurred.
-  const previous = await currentLifecycleState(tx, fixture.externalId, partitionOn);
+  // IDENTITY FIRST, PARTITION SECOND. The stored row is found by what identifies
+  // the fixture — provider and external id — before anything derived from the
+  // kickoff is consulted, because the kickoff is the part that moves.
+  const existing = await findFixtureByProviderIdentity(tx, fixture.externalId);
+  const partitionOn = partitionForWrite(existing, fixture.scheduledKickoffAt);
+  const previous = existing?.lifecycleState ?? null;
 
   const row = await upsertMutable(tx, {
     relation: 'football.fixture',
@@ -131,25 +286,12 @@ export async function resolveFixture(
   counts.examined += 1;
   counts.written += 1;
 
-  if (previous === null || previous !== lifecycleState) {
-    await recordLifecycleTransition(tx, ref, previous, lifecycleState, counts);
+  const transition = lifecycleTransitionFor(previous, lifecycleState);
+  if (transition) {
+    await recordLifecycleTransition(tx, ref, transition.from, transition.to, counts);
   }
 
   return ref;
-}
-
-/** The stored lifecycle state, or null when the fixture is new. */
-async function currentLifecycleState(
-  tx: PoolClient,
-  providerExternalId: string,
-  partitionOn: string
-): Promise<string | null> {
-  const { rows } = await tx.query<{ lifecycle_state_code: string }>(
-    `SELECT lifecycle_state_code FROM football.fixture
-      WHERE provider_code = $1 AND provider_external_id = $2 AND fixture_partition_on = $3`,
-    [PROVIDER_CODE, providerExternalId, partitionOn]
-  );
-  return rows[0]?.lifecycle_state_code ?? null;
 }
 
 /**
