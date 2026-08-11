@@ -1,0 +1,180 @@
+{
+  "capturedAt": "2026-08-11T04:30:43.956Z",
+  "provider": "SPORTSAPI_API",
+  "endpointKey": "tournament_seasons",
+  "method": "GET",
+  "url": "https://v2.football.sportsapipro.com/api/tournaments/325/seasons",
+  "path": "/tournaments/325/seasons",
+  "parameters": {
+    "tournamentId": "325"
+  },
+  "status": 200,
+  "success": true,
+  "attempts": 1,
+  "quotaRemaining": 99,
+  "responseSha256": "9acd845d92f01a217b3e9815aab33aae1c6ba774879a5c716046714571417da6",
+  "bodyBytes": 2187,
+  "body": {
+    "success": true,
+    "source": "live",
+    "tournamentId": 325,
+    "seasons": [
+      {
+        "id": 87678,
+        "name": "Brasileiro Serie A 2026",
+        "year": "2026",
+        "tournamentId": 325
+      },
+      {
+        "id": 72034,
+        "name": "Brasileiro Serie A 2025",
+        "year": "2025",
+        "tournamentId": 325
+      },
+      {
+        "id": 58766,
+        "name": "Brasileirão Betano 2024",
+        "year": "2024",
+        "tournamentId": 325
+      },
+      {
+        "id": 48982,
+        "name": "Brasileirão Série A 2023",
+        "year": "2023",
+        "tournamentId": 325
+      },
+      {
+        "id": 40557,
+        "name": "Brasileirão Série A 2022",
+        "year": "2022",
+        "tournamentId": 325
+      },
+      {
+        "id": 36166,
+        "name": "Brasileirão Série A 2021",
+        "year": "2021",
+        "tournamentId": 325
+      },
+      {
+        "id": 27591,
+        "name": "Brasileirão Série A 20/21",
+        "year": "20/21",
+        "tournamentId": 325
+      },
+      {
+        "id": 22931,
+        "name": "Brasileirão Série A 2019",
+        "year": "2019",
+        "tournamentId": 325
+      },
+      {
+        "id": 16183,
+        "name": "Brasileirão Série A 2018",
+        "year": "2018",
+        "tournamentId": 325
+      },
+      {
+        "id": 13100,
+        "name": "Brasileirão Série A 2017",
+        "year": "2017",
+        "tournamentId": 325
+      },
+      {
+        "id": 11429,
+        "name": "Brasileirão Série A 2016",
+        "year": "2016",
+        "tournamentId": 325
+      },
+      {
+        "id": 10173,
+        "name": "Brasileirão Série A 2015",
+        "year": "2015",
+        "tournamentId": 325
+      },
+      {
+        "id": 7778,
+        "name": "Brasileirão Série A 2014",
+        "year": "2014",
+        "tournamentId": 325
+      },
+      {
+        "id": 6075,
+        "name": "Brasileirão Série A 2013",
+        "year": "2013",
+        "tournamentId": 325
+      },
+      {
+        "id": 4438,
+        "name": "Brasileirão Série A 2012",
+        "year": "2012",
+        "tournamentId": 325
+      },
+      {
+        "id": 3311,
+        "name": "Brasileirão Série A 2011",
+        "year": "2011",
+        "tournamentId": 325
+      },
+      {
+        "id": 2684,
+        "name": "Brasileirão Série A 2010",
+        "year": "2010",
+        "tournamentId": 325
+      },
+      {
+        "id": 2079,
+        "name": "Brasileirão Série A 2009",
+        "year": "2009",
+        "tournamentId": 325
+      },
+      {
+        "id": 1223,
+        "name": "Brasileirão Série A 2008",
+        "year": "2008",
+        "tournamentId": 325
+      },
+      {
+        "id": 89936,
+        "name": "Brasileirão Série A 2007",
+        "year": "2007",
+        "tournamentId": 325
+      },
+      {
+        "id": 90145,
+        "name": "Brasileirão Série A 2006",
+        "year": "2006",
+        "tournamentId": 325
+      },
+      {
+        "id": 10050,
+        "name": "Brasileirão Série A 2005",
+        "year": "2005",
+        "tournamentId": 325
+      },
+      {
+        "id": 90149,
+        "name": "Brasileirão Série A 2004",
+        "year": "2004",
+        "tournamentId": 325
+      },
+      {
+        "id": 90151,
+        "name": "Brasileirão Série A 2003",
+        "year": "2003",
+        "tournamentId": 325
+      },
+      {
+        "id": 90153,
+        "name": "Brasileirão Série A 2001",
+        "year": "2001",
+        "tournamentId": 325
+      }
+    ],
+    "timezone": {
+      "name": "Europe/Paris",
+      "utcOffset": "+02:00",
+      "source": "auto",
+      "country": "FR"
+    }
+  }
+}
