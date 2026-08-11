@@ -237,6 +237,7 @@ describe('U-9 · the cross-partition lookup', () => {
           providerStatusCode: 100,
           providerStatusRaw: { code: 100 },
         },
+        new IngestionCounts(),
         new IngestionCounts()
       )
     );

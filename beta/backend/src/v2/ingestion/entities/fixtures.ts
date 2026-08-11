@@ -227,7 +227,8 @@ export function lifecycleTransitionFor(
 export async function resolveFixture(
   tx: PoolClient,
   fixture: ProviderFixture,
-  counts: IngestionCounts
+  counts: IngestionCounts,
+  transitionCounts: IngestionCounts
 ): Promise<FixtureRef> {
   const lifecycleState = mapLifecycleState(fixture.providerStatusCode);
 
@@ -288,7 +289,12 @@ export async function resolveFixture(
 
   const transition = lifecycleTransitionFor(previous, lifecycleState);
   if (transition) {
-    await recordLifecycleTransition(tx, ref, transition.from, transition.to, counts);
+    // ITS OWN COUNTER. Handing it `counts` attributed every transition write to
+    // football.fixture, so a first-ever run reported 94 examined over 47
+    // fixtures while fixture_lifecycle_transition reported 0 with 47 rows on
+    // disk (F-2, doc 47 §5). Nothing about the write changed — only which bucket
+    // the count lands in.
+    await recordLifecycleTransition(tx, ref, transition.from, transition.to, transitionCounts);
   }
 
   return ref;

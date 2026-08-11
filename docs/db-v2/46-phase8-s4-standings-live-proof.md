@@ -153,13 +153,22 @@ Other relations on both runs — and none of these indicates duplication:
 | `football.venue` | 20 | 20 | |
 | `football.team` | 20 | 20 | upserts, not inserts — see §5 |
 | `football.team_registration` | 94 | 94 | two per fixture; **20 distinct rows** |
-| `football.fixture` | 47 | 47 | **F-2**: a first-ever run reads 94 here because transition writes land on the fixture counter |
-| `football.fixture_lifecycle_transition` | 0 | 0 | **F-2** |
+| `football.fixture` | 47 | 47 | **F-2, since FIXED** — see below |
+| `football.fixture_lifecycle_transition` | 0 | 0 | **F-2, since FIXED** — see below |
 | `football.result` | 47 | 43 | 4 skipped — the postponed fixtures |
 
 `rows_written = 20` on `football.team` is an **update** count, not an insert
 count (**F-3**), and must not be read as duplication. §5 settles it from the
 database instead.
+
+**F-2 has since been fixed, and runs 52 and 53 predate the fix.** They ran with
+the transition writer sharing the fixture's counter, so their records read
+`fixture 47` beside `transition 0` while 47 transition rows existed. That is
+retained as the accurate record of those runs, not corrected. **A run after the
+fix reports `fixture 47 / transition 47` on a first-ever ingest and `fixture 47 /
+transition 0` on a re-ingest** — so the two caveats above no longer apply to new
+runs, and a future reader comparing a fresh sweep against this table should
+expect the transition row to carry its own counts.
 
 ### §3 · Provider calls
 

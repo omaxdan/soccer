@@ -453,12 +453,9 @@ async function ingestEvent(
       providerStatusCode: typeof status?.code === 'number' ? status.code : null,
       providerStatusRaw: status ?? raw.status,
     },
-    stage.for('football.fixture')
+    stage.for('football.fixture'),
+    stage.for('football.fixture_lifecycle_transition')
   );
-
-  // The transition writer is called from resolveFixture, so its counts land on
-  // the fixture relation. Attribute them where they belong.
-  stage.for('football.fixture_lifecycle_transition');
 
   // ── 7. Result — only for a COMPLETED fixture ──────────────────────────────
   const homeScore = asRecord(raw.homeScore);

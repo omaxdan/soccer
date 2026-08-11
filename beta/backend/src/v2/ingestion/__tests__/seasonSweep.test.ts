@@ -346,6 +346,42 @@ describe('B-1 · writer sharing and endpoint discipline (requires a V2 database)
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F-2 — transition writes are counted against their own relation
+//
+// recordLifecycleTransition was handed the FIXTURE's counter, so its writes
+// landed on football.fixture. Live on runs 52/53: fixture reported 94 examined
+// over 47 fixtures while fixture_lifecycle_transition reported 0 with 47 rows on
+// disk. Telemetry only — the rows were always written to the right relation —
+// but operations.write_record is how an operator judges a sweep, and it reported
+// a fixture count roughly double the truth beside a permanent zero.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('F-2 · transition telemetry', () => {
+  it('16a. resolveFixture cannot pass the fixture counter to the transition writer', () => {
+    // STRUCTURAL, and the point of it: every behavioural assertion below would
+    // still pass if someone later re-wired `counts` into this call, because the
+    // rows would land in the same place. Only the bucket would silently move
+    // back. This is the assertion that catches that.
+    const source = readFileSync(resolve(__dirname, '..', 'entities', 'fixtures.ts'), 'utf8');
+    const call = source.match(/await recordLifecycleTransition\([^)]*\)/s);
+    assert.ok(call, 'the transition call must exist');
+    assert.match(call[0], /transitionCounts/, 'it takes the transition relation\'s own counter');
+    assert.ok(
+      !/,\s*counts\s*\)/.test(call[0]),
+      `the fixture counter must not reach the transition writer:\n${call[0]}`
+    );
+
+    // And the stage must hand it the right bucket.
+    const stage = readFileSync(resolve(__dirname, '..', 'stages', 'schedule.ts'), 'utf8');
+    assert.match(
+      stage,
+      /stage\.for\('football\.fixture'\),\s*\n\s*stage\.for\('football\.fixture_lifecycle_transition'\)/,
+      'the schedule stage passes both buckets, in order'
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // The operational lifecycle
 //
 // These call `ingestSeason` for real, so they COMMIT — `withPipelineRun` and
@@ -369,7 +405,7 @@ describe('B-1 · operational lifecycle (requires a V2 database)', { skip: !hasDa
   });
 
   /** One page, one in-window event, `hasNextPage: false` so the walk ends cleanly. */
-  function oneSeasonPage(options: { throwOn?: 'last' } = {}) {
+  function oneSeasonPage(options: { throwOn?: 'last'; fixtureId?: string } = {}) {
     let calls = 0;
     const seen: string[] = [];
     return {
@@ -412,7 +448,7 @@ describe('B-1 · operational lifecycle (requires a V2 database)', { skip: !hasDa
                 key === 'tournament_season_events_last'
                   ? [
                       {
-                        id: 'OPS-1',
+                        id: options.fixtureId ?? 'OPS-1',
                         startTimestamp: Math.floor(Date.UTC(2026, 6, 20, 18, 0) / 1000),
                         tournament: {
                           id: 83,
@@ -506,6 +542,55 @@ describe('B-1 · operational lifecycle (requires a V2 database)', { skip: !hasDa
       );
       assert.ok(Number(writes[0].n) >= 1, 'per-relation write records were attributed');
     });
+  });
+
+  it('16b. F-2 — a first-ever ingest counts N fixtures and N transitions, not 2N and 0', async () => {
+    const report = await ingestSeason({
+      competitionProviderId: COMPETITION,
+      seasonProviderId: SEASON,
+      ...WINDOW,
+      maxCalls: 4,
+      // A FIXTURE THIS RUN HAS NEVER SEEN. These tests COMMIT, and the cleanup
+      // cannot remove them — fixture_lifecycle_transition references fixture with
+      // ON DELETE RESTRICT — so a fixed id makes this a first-ever ingest exactly
+      // once per database and a re-ingest ever after. The assertion would then
+      // fail on the second execution for a reason that has nothing to do with F-2.
+      client: oneSeasonPage({ fixtureId: `OPS-F2A-${Date.now()}` }),
+    });
+
+    const fixture = report.byRelation.get('football.fixture');
+    const transition = report.byRelation.get('football.fixture_lifecycle_transition');
+    const events = report.eventsSelected;
+
+    assert.equal(fixture?.examined, events, 'the fixture count is the fixture count');
+    assert.equal(fixture?.written, events);
+    assert.equal(
+      transition?.examined,
+      events,
+      'and the transition relation reports its own writes rather than zero'
+    );
+    assert.equal(transition?.written, events);
+    assert.equal(transition?.skipped, 0);
+  });
+
+  it('16c. F-2 — a re-ingest with no state change reports the fixture, and no transition', async () => {
+    // The second half of the correction: an unchanged state is not a transition,
+    // so the transition relation must report nothing written — not inherit the
+    // fixture's activity.
+    const options = {
+      competitionProviderId: COMPETITION,
+      seasonProviderId: SEASON,
+      ...WINDOW,
+      maxCalls: 4,
+    };
+    const fixtureId = `OPS-F2B-${Date.now()}`;
+    await ingestSeason({ ...options, client: oneSeasonPage({ fixtureId }) });
+    const second = await ingestSeason({ ...options, client: oneSeasonPage({ fixtureId }) });
+
+    const fixture = second.byRelation.get('football.fixture');
+    const transition = second.byRelation.get('football.fixture_lifecycle_transition');
+    assert.equal(fixture?.examined, second.eventsSelected, 'the fixture is still examined');
+    assert.equal(transition?.written, 0, 'but nothing transitioned');
   });
 
   it('17a. WITHOUT the flag, the proven sweep is untouched — no standings call', async () => {
