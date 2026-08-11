@@ -1,46 +1,81 @@
 # Phase 8 S-6 — Operational Closure: Verification Block
 
-**THE GATE IS NOT CLOSED BY THIS DOCUMENT.** I could not perform the
-verification, because this container has no route to the real database. What
-follows is the exact SQL that closes it, written against the actual operational
-schema, plus the deferred-decision register that was requested.
+## Status
 
-**No production data was changed. No connection was opened. No provider call was
-made.**
+| Section | State |
+|---|---|
+| **§1 — runs and prevailing outcome** | **VERIFIED** by the operator against the real database, 2026-08-11. Evidence below |
+| §2 — job attribution | **OUTSTANDING** |
+| §3 — write records | **OUTSTANDING** |
+| §4 — provider calls | **OUTSTANDING** |
+| §5 — failure and lingering state | **OUTSTANDING** |
+| §6 — data-state invariants | **OUTSTANDING** |
+| **THE S-6 OPERATIONAL GATE** | **NOT CLOSED** |
+
+**Why §2–§6 are outstanding:** this session has no route to the real database.
+`PT_V2_DB_HOST`, `_NAME`, `_USER`, `_PASSWORD`, `_PORT`, `_SSL` and
+`_USER_SUFFIX` are all absent from the environment; no `.env` exists at the
+package root or the working directory; and the only file in the tree matching
+`PT_V2_DB_HOST=` is `.env.v2.example`, a template. The V2 connection doctor
+refuses to start. §1 was run by the operator, who supplied the results recorded
+below.
+
+**No production data has been changed by this document. No connection has been
+opened from this session, and no provider call has been made.**
 
 ---
 
-## Why the verification did not run
+## §1 — VERIFIED
 
-The V2 connection is not configured in this session, confirmed by the project's
-own diagnostic:
+Run against the real Supabase database on 2026-08-11.
 
-```
-$ npm run doctor:v2
-environment files
-  absent  /home/user/soccer/beta/backend/.env
-  0 variable name(s) supplied by file
-  PROBLEM: no PT_V2_* variable came from a file. Is this the right .env?
+| Field | Run 51 | Invariant |
+|---|---|---|
+| `run_key` | `v2.ingest.season` | **PASS** |
+| `trigger_kind` | `MANUAL` | **PASS** — a directly invoked pipeline |
+| `scope_text` | `competition 325 season 87678 2026-05-31..2026-08-11` | **PASS** — competition, season and window all present |
+| `started_at` | `2026-08-11 16:55:15.821+00` | |
+| `ended_at` | `2026-08-11 16:57:03.654+00` | **PASS** — not null |
+| **prevailing outcome** | **`SUCCEEDED`** | **PASS** |
+| `completion_ordinal` | `1` | **PASS** — one completion, no correction appended |
+| duration | `107.83 s` | see O-2 |
+| `code_revision` | **`unknown`** | see O-1 |
 
-v2 doctor FAILED: V2 database configuration incomplete.
-Missing: PT_V2_DB_HOST, PT_V2_DB_NAME.
-```
+Run 50 is also `SUCCEEDED` with the same scope. Runs 47–49 are earlier failed
+attempts, consistent with iterating on configuration before the first successful
+execution; §5 is what confirms they are attributed separately.
 
-| Checked | Result |
-|---|---|
-| `PT_V2_DB_HOST`, `_NAME`, `_USER`, `_PASSWORD`, `_PORT` in the environment | **all absent** |
-| `.env` at the package root or working directory | **does not exist** |
-| Any `.env*` in the tree carrying `PT_V2_*` | **none** — the only populated file, `.env2`, holds V1 keys (`SPORTSAPI_*`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`) and no V2 database variables |
+**The terminal outcome was resolved through the prevailing completion record, not
+through the stale `pipeline_run.outcome` column** — which is the trap this
+document warns about below, and it was avoided.
 
-The `SUPABASE_SERVICE_KEY` in `.env2` reaches PostgREST over HTTPS, not the
-`operations` schema over SQL — the two are different access paths, and schema
-`operations` is not exposed through PostgREST. **It is also a credential from the
-file that was committed in `e3ed901` and should be treated as compromised until
-rotated.** I did not use it.
+### O-1 — `code_revision = unknown`. Configuration gap, not a defect.
 
-**Everything listed in the task as "evidence already verified" is recorded below
-as REPORTED — your observation, not mine.** I have not seen a row of it, and I am
-not going to restate your numbers as though I had confirmed them.
+`codeRevision()` (`operations/run.ts:90`) reads `PT_V2_CODE_REVISION` and falls
+back to the literal `'unknown'`. The variable was not set on the machine that ran
+the sweep, so **the run ledger cannot tie runs 50 and 51 to the build that
+produced them** — which is the column's entire purpose.
+
+Harmless for a hand-run validation where the operator knows what they ran. It
+stops being harmless the moment a sweep is scheduled or repeated across a
+deployment, because a result whose producing revision is unrecorded cannot be
+reproduced or blamed. **Setting `PT_V2_CODE_REVISION` to the commit SHA is a
+one-line deployment change; no code change is needed.** Recorded so it is decided
+rather than inherited.
+
+### O-2 — 107.83 s for four provider calls. Explained, not anomalous.
+
+Four calls against a 2 000 ms minimum interval account for roughly 6–8 s. The
+remainder is database connection establishment: this programme measured a full
+connect to the Supabase pooler at **14 125 ms** (doc 39 lineage), and a season
+sweep opens several — `withPipelineRun`'s control connection, `withRun`'s control
+and work connections, and the usage-flush connection.
+
+Not a defect, and not worth optimising for one season. **Worth knowing before the
+56-competition sweep:** if roughly 100 s of each season's ~108 s is connection
+overhead rather than work, 56 competitions is ~100 minutes dominated by connect
+latency, and pooling across seasons would be the lever — not the pager, and not
+the writer. **Measure before optimising; recorded as an observation only.**
 
 ---
 
@@ -323,9 +358,10 @@ alone.
 
 ## What closing the gate requires
 
-1. Run §1–§6 against the real database.
-2. Paste the results into this document.
-3. If everything matches, state the gate satisfied here — **not before.**
+1. ~~Run §1 against the real database.~~ **Done — see the top of this document.**
+2. Run **§2–§6** against the real database.
+3. Paste the results into this document.
+4. If everything matches, state the gate satisfied here — **not before.**
 
 Any of these is a stop, to be reported before anything is changed:
 
