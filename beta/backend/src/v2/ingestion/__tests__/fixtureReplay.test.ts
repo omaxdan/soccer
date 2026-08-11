@@ -183,29 +183,32 @@ describe('replay · fixture ingestion against captured evidence', { skip: !runna
       assert.equal(counted.teams, 20);
       assert.equal(counted.venues, 20);
 
-      // F-1, AND IT IS A DEFECT. One provider season (season.id 87678,
-      // "Brasileiro Serie A 2026") became TWO editions. Asserted as OBSERVED so
-      // the count is honest; the invariant it violates is the `todo` below.
-      assert.equal(counted.editions, 2, 'F-1: the season was split — see the todo that follows');
+      // F-1, CLOSED (doc 42). season.id 87678 was two editions here, split at
+      // 1 July by a period derived from each fixture's own kickoff.
+      assert.equal(counted.editions, 1, 'one provider season is one edition');
     });
   });
 
-  it(
-    '6a. F-1 — one provider season must produce exactly one edition',
-    { todo: 'seasonPeriod() splits a calendar-year season at 1 July. Blocks the sweep.' },
-    async () => {
-      await scenario(async (tx) => {
-        await replay(tx);
-        const { rows } = await tx.query<{ provider_external_id: string; n: string }>(
-          `${SCOPE} SELECT ce.provider_external_id, count(*)::text AS n
-             FROM football.competition_edition ce
-            WHERE ce.id IN (SELECT id FROM scoped_edition)
-            GROUP BY 1 HAVING count(*) > 1`
-        );
-        assert.deepEqual(rows, [], 'season.id 87678 must resolve to one competition_edition');
-      });
-    }
-  );
+  it('6a. F-1 — one provider season produces exactly one edition', async () => {
+    await scenario(async (tx) => {
+      await replay(tx);
+      const { rows } = await tx.query<{ provider_external_id: string; n: string }>(
+        `${SCOPE} SELECT ce.provider_external_id, count(*)::text AS n
+           FROM football.competition_edition ce
+          WHERE ce.id IN (SELECT id FROM scoped_edition)
+          GROUP BY 1 HAVING count(*) > 1`
+      );
+      assert.deepEqual(rows, [], 'season.id 87678 resolves to one competition_edition');
+
+      // And it is dated from season.year, not from any fixture's kickoff.
+      const { rows: period } = await tx.query<{ ext: string; period: string }>(
+        `${SCOPE} SELECT ce.provider_external_id AS ext, ce.season_period::text AS period
+           FROM football.competition_edition ce WHERE ce.id IN (SELECT id FROM scoped_edition)`
+      );
+      assert.equal(period[0].ext, '87678');
+      assert.equal(period[0].period, '[2026-01-01,2027-01-01)');
+    });
+  });
 
   it('7. a completed fixture keeps its full-time and half-time score', async () => {
     await scenario(async (tx) => {

@@ -76,40 +76,79 @@ interface ScheduleResponse {
   readonly events?: readonly Record<string, unknown>[];
 }
 
+export interface SeasonPeriod {
+  readonly startsOn: string;
+  readonly endsOn: string;
+}
+
 /**
- * Derives a bounded season period from a provider season.
+ * Two digits to a year, on the standard pivot.
  *
- * `competition_edition.season_period` is a NOT NULL daterange with an exclusion
- * constraint forbidding overlap, because "a season is a BOUNDED PERIOD, not a
- * label. The previous platform stored season as free text, which made 'which
- * season was active on this date' unanswerable."
- *
- * The provider sends a label like '2025/2026' and often no dates. Deriving the
- * period from the label is a real inference, and it is stated as one: a split
- * season runs 1 July to 30 June, a calendar season 1 January to 31 December.
- * That is the convention the label encodes, and encoding it here is the only
- * alternative to refusing every edition the provider dates loosely.
- *
- * The kickoff date is the fallback when no label parses — the season containing
- * this fixture, bounded to the year around it. Wrong boundaries would surface as
- * an exclusion-constraint violation naming the overlap, which is loud.
+ * The provider writes some seasons as `20/21`. 50 is the conventional pivot and
+ * it is right for this data: the captured season list for competition 325 runs
+ * from 2001 to 2026, and the only two-digit form in it is `20/21`. A `99/00`
+ * season would resolve to 1999/2000, which is also correct.
  */
-function seasonPeriod(label: string, kickoff: Date): { startsOn: string; endsOn: string } {
-  const split = label.match(/(\d{4})\s*[/\-–]\s*(\d{2,4})/);
-  if (split) {
-    const start = Number(split[1]);
-    return { startsOn: `${start}-07-01`, endsOn: `${start + 1}-07-01` };
-  }
-  const calendar = label.match(/^(\d{4})$/);
+function pivotYear(twoDigits: string): number {
+  const value = Number(twoDigits);
+  return value < 50 ? 2000 + value : 1900 + value;
+}
+
+/**
+ * Derives a bounded season period FROM THE SEASON'S OWN YEAR TOKEN.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * IT TAKES NO KICKOFF, AND IT MUST NOT.
+ *
+ * This function previously accepted the fixture's kickoff and used it whenever a
+ * label failed to parse. That is F-1: `season.name` is prose — "Brasileiro Serie
+ * A 2026" — so it never parsed, every fixture derived a period from ITS OWN
+ * date, and one provider season became two editions split at 1 July. The
+ * signature is the fix. A period that cannot be derived from a fixture cannot be
+ * derived differently for two fixtures of one season.
+ *
+ * THE SOURCE IS `season.year`, NOT `season.name`. The provider ships both on
+ * every event and on every entry of `tournament_seasons`. `year` is the machine
+ * field and is one of exactly two shapes across all 25 captured seasons of
+ * competition 325 — `2026` and `20/21`. `name` is a display string carrying a
+ * sponsor ("Brasileirão Betano 2024"), and the old code preferred it. That
+ * preference was backwards.
+ *
+ * The captured `tournament_seasons` payload carries NO start or end dates —
+ * its keys are exactly `id`, `name`, `year`, `tournamentId` — so an authoritative
+ * period is not available from the provider and the year token is the strongest
+ * source there is. If a future endpoint supplies real dates, they replace this.
+ *
+ * NULL MEANS REFUSE, and the caller rejects the fixture with a stated reason.
+ * The alternative — guessing — is what F-1 was. A season the platform cannot
+ * date is a governance problem to be seen, not a period to be invented.
+ *
+ * The conventions themselves are unchanged: a split season runs 1 July to 1
+ * July, a calendar season 1 January to 1 January.
+ */
+export function seasonPeriod(yearToken: string | null | undefined): SeasonPeriod | null {
+  const token = (yearToken ?? '').trim();
+  if (token === '') return null;
+
+  const calendar = token.match(/^(\d{4})$/);
   if (calendar) {
     const year = Number(calendar[1]);
     return { startsOn: `${year}-01-01`, endsOn: `${year + 1}-01-01` };
   }
-  const year = kickoff.getUTCFullYear();
-  const julyOrLater = kickoff.getUTCMonth() >= 6;
-  return julyOrLater
-    ? { startsOn: `${year}-07-01`, endsOn: `${year + 1}-07-01` }
-    : { startsOn: `${year - 1}-07-01`, endsOn: `${year}-07-01` };
+
+  // `2025/2026`, `2025/26` and `20/21`, plus hyphen and en-dash separators.
+  const split = token.match(/^(\d{4}|\d{2})\s*[/\-–]\s*(\d{4}|\d{2})$/);
+  if (split) {
+    const start = split[1].length === 4 ? Number(split[1]) : pivotYear(split[1]);
+    const end = split[2].length === 4 ? Number(split[2]) : pivotYear(split[2]);
+    // A split season spans exactly one year boundary. `2025/2027` is not a
+    // season this platform can represent, and asserting a period for it would
+    // be inventing one.
+    if (end !== start + 1) return null;
+    return { startsOn: `${start}-07-01`, endsOn: `${start + 1}-07-01` };
+  }
+
+  return null;
 }
 
 /**
@@ -211,17 +250,45 @@ async function ingestEvent(
   }
 
   // ── 2. Edition ────────────────────────────────────────────────────────────
+  // THE EDITION IS IDENTIFIED BY `season.id` AND DATED BY `season.year`. Neither
+  // is derived from this fixture, which is what makes two fixtures of one season
+  // resolve to one edition however far apart they kick off (F-1).
   const season = asRecord(raw.season);
-  const seasonLabel = text(season?.name) ?? text(season?.year) ?? String(kickoff.getUTCFullYear());
-  const period = seasonPeriod(seasonLabel, kickoff);
-  const editionKey = `${competitionId}:${period.startsOn}`;
+  const seasonExternalId = externalId(season?.id);
+  // `year` FIRST, because it is the machine field: across all 25 captured
+  // seasons of competition 325 it is either `2026` or `20/21`, never prose.
+  // `name` is a fallback rather than a second chance — `seasonPeriod` accepts
+  // only a whole-string year token, so a prose name ("Brasileiro Serie A 2026",
+  // "Brasileirão Betano 2024") still refuses. Nothing is extracted from prose,
+  // which is the trap the tempting one-line fix falls into.
+  const period = seasonPeriod(text(season?.year)) ?? seasonPeriod(text(season?.name));
+  if (!seasonExternalId || !period) {
+    stage
+      .for('football.competition_edition')
+      .reject(
+        seasonExternalId
+          ? `season ${seasonExternalId} has no interpretable year token; the edition cannot be dated`
+          : 'event carries no season.id; the edition cannot be identified'
+      );
+    stage.for('football.fixture').reject('the fixture has no resolvable competition edition');
+    logger.warn(
+      { fixture: fixtureExternalId, season: seasonExternalId, year: text(season?.year) },
+      'v2 ingestion: season could not be identified and dated, fixture not written'
+    );
+    return;
+  }
+  const seasonLabel = text(season?.name) ?? text(season?.year) ?? seasonExternalId;
+  // Keyed on the PROVIDER SEASON, not on the derived period. The old cache key
+  // was the period, so two derived periods were two cache entries and the cache
+  // could not notice the split it was helping to create.
+  const editionKey = `${competitionId}:${seasonExternalId}`;
   let editionId = caches.editions.get(editionKey);
   if (!editionId) {
     editionId = await resolveCompetitionEdition(
       tx,
       competitionId,
       {
-        externalId: externalId(season?.id),
+        externalId: seasonExternalId,
         label: seasonLabel,
         startsOn: period.startsOn,
         endsOn: period.endsOn,

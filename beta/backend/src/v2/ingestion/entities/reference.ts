@@ -88,15 +88,39 @@ export async function resolveCompetition(
 }
 
 /**
- * Resolves a competition edition.
+ * Resolves a competition edition BY THE PROVIDER'S SEASON IDENTITY.
  *
- * CONFLICT TARGET IS (competition_id, season_period), not the provider id.
- * `competition_edition.provider_external_id` is nullable and carries no unique
- * constraint — the schema's identity for an edition is the competition plus the
- * period, which is the point of the entity. Keying on the provider id would let
- * two editions of one competition overlap, and
- * `ex_competition_edition__periods_do_not_overlap` would refuse the second with
- * a message about exclusion constraints rather than about seasons.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CONFLICT TARGET IS THE PROVIDER ALTERNATE KEY, NOT THE PERIOD.
+ *
+ * It used to be `(competition_id, season_period)` — the business key — and that
+ * is F-1. The period was derived per fixture, so one provider season resolved to
+ * two editions when its fixtures straddled 1 July, and (worse, and inevitable
+ * once more than one season is ingested) two provider seasons resolved to ONE
+ * edition when their derived periods coincided.
+ *
+ * RESOLUTION IS NOT IDENTITY. §5.6.6 forbids a provider identifier from being a
+ * business key and requires it to be a unique, enforced alternate key —
+ * `uq_competition_edition__provider_external_id`, migration 022. Targeting an
+ * alternate key is exactly what `resolveCompetition` above already does, and for
+ * the same reason: it is the one value the provider guarantees is stable for the
+ * thing being resolved.
+ *
+ * `(competition_id, season_period)` REMAINS the business key, remains enforced,
+ * and remains what `ex_competition_edition__periods_do_not_overlap` protects.
+ * Nothing is demoted; the resolver simply stops asking a derived value to
+ * identify a row.
+ *
+ * `season_period` IS IMMUTABLE HERE. It is half of the business key, and LC-02
+ * forbids reassigning an identity once established — so a period that could be
+ * widened by a later fixture would be a business key mutating under its own
+ * dependents. The same discipline `fixture_partition_on` carries, for the same
+ * reason (U-9, doc 39). A season genuinely re-dated by the provider is a
+ * governed correction, not an ingestion side effect.
+ *
+ * `externalId` is REQUIRED. `ON CONFLICT (provider_external_id)` on a NULL never
+ * conflicts, so a null-identified season would insert a fresh edition on every
+ * sync. The caller refuses the fixture instead.
  */
 export async function resolveCompetitionEdition(
   tx: PoolClient,
@@ -104,6 +128,13 @@ export async function resolveCompetitionEdition(
   season: ProviderSeason,
   counts: IngestionCounts
 ): Promise<string> {
+  if (!season.externalId) {
+    throw new Error(
+      'resolveCompetitionEdition requires a provider season id: it is the conflict target, ' +
+        'and a null one would create a new edition on every sync'
+    );
+  }
+
   const row = await upsertMutable(tx, {
     relation: 'football.competition_edition',
     columns: ['competition_id', 'provider_external_id', 'season_label', 'season_period'],
@@ -113,8 +144,27 @@ export async function resolveCompetitionEdition(
       season.label,
       `[${season.startsOn},${season.endsOn})`,
     ],
-    conflictTarget: ['competition_id', 'season_period'],
+    conflictTarget: ['provider_external_id'],
+    immutableColumns: ['season_period', 'competition_id'],
+    returning: ['id', 'competition_id'],
   });
+
+  // The alternate key is GLOBAL — `UNIQUE (provider_external_id)`, matching venue
+  // and official — so a season id arriving under a second competition conflicts
+  // with the first rather than creating a row. Without this check the upsert
+  // would resolve it to the existing edition and say nothing, and every fixture,
+  // standing and statistic of one competition would file under another.
+  //
+  // `competition_id` is immutable above, so the stored parent has not moved; the
+  // disagreement is reported instead. It is a provider anomaly, not a condition
+  // ingestion can resolve.
+  if (String(row.competition_id) !== competitionId) {
+    throw new Error(
+      `provider season ${season.externalId} already belongs to competition ${row.competition_id} ` +
+        `and arrived under competition ${competitionId}. One provider season is one edition of one ` +
+        `competition; this is a provider identity anomaly and is not reconciled by ingestion.`
+    );
+  }
 
   counts.examined += 1;
   counts.written += 1;
