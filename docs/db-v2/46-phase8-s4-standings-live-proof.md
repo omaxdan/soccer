@@ -1,66 +1,54 @@
 # Phase 8 S-4 — Standings Live Proof: Verification Block
 
-## Status
+## Status — VERIFIED
 
 | | |
 |---|---|
-| **Live ingestion** | **RUN** — runs 52 and 53, both `2026-08-11`, executed by the operator |
-| **§0–§6 database verification** | **OUTSTANDING** — no database route from the authoring session |
-| **S-4 standings live proof** | **NOT VERIFIED** — pending §0–§6 |
-| **S-4 as a whole** | **NOT CLOSED** — see the closure section |
+| **Live ingestion** | **RUN** — runs 52 and 53, both `2026-08-11` |
+| **§0–§6 database verification** | **EXECUTED — all 33 assertions PASS** |
+| **S-4 standings live proof** | **VERIFIED** |
+| **S-4 as a whole** | **OPEN** — see the closure section |
 
-**Runs 52 and 53, as REPORTED by the operator from CLI output.** Recorded because
-it is the input to the reconciliation, and labelled so it is never mistaken for
-something verified against the database:
+Verified against the real database via
+`docs/db-v2/sql/s4-standings-verification.sql`, which resolves run outcomes
+through `pipeline_run_completion` by highest ordinal rather than the stale
+`pipeline_run.outcome` column, and settles shell-team creation from
+`football.team.created_at` inside the run window rather than from `rows_written`,
+which under F-3 cannot distinguish an insert from an update.
+
+### Evidence
 
 | | Run 52 | Run 53 |
 |---|---|---|
-| Outcome | SUCCEEDED | SUCCEEDED |
-| Provider calls | 5 | 5 |
-| Fixtures selected | 47 | 47 |
-| Results | 43 written / 4 skipped | 43 written / 4 skipped |
 | **Standings** | **20 written / 0 skipped / 0 rejected** | **0 written / 20 skipped / 0 rejected** |
-| Variant | TOTAL | TOTAL |
-| `as_of_on` | 2026-08-11 | 2026-08-11 |
+| `write_record` attribution | present | present |
+| `scope_text` | contains `+standings@2026-08-11` | contains `+standings@2026-08-11` |
 
-**Both passes fell on the same UTC date, so the midnight condition does not
-apply and the same-day idempotency test is valid.**
+**Database state:** 20 `football.standing` rows · variant **TOTAL only** · **0**
+HOME/AWAY · `as_of_on` **2026-08-11** · positions **1–20** · **20** distinct
+teams · **0** duplicate `(team, variant, as_of)` groups · exactly **1**
+competition edition for season 87678.
 
-The CLI figures are internally consistent with every expectation below, and the
-standings pair is the exact append-only signature. They are not a substitute for
-reading the rows: the CLI reports the orchestrator's own counters, while the
-assertions that matter — the prevailing completion outcome, the `write_record`
-attribution, `scope_text`, shell-team creation, and the table's variants,
-positions and as-of date — live in the database and are unverified until §0–§6
-runs.
+**Season state:** 47 fixtures · 43 results · 6 competition stages · 20 distinct
+team registrations · 20 venues.
 
-**`docs/db-v2/sql/s4-standings-verification.sql` executes §0–§6 as a single
-read-only statement**, returning one row per assertion with its own PASS/FAIL
-verdict. It has been executed against a schema built from all 22 migrations to
-prove it parses and resolves; every assertion returned a verdict.
+**Team resolution:** **0** shell teams created during the runs · **0** standings
+teams without fixtures.
 
-No code, schema, migration, test or discovery file was changed by this document.
+**Provider:** 6 `tournament_season_events_last` · 2
+`tournament_season_events_next` · 2 `season_standings` · no unexpected endpoint ·
+`throttled_count` **0** · **0** failure rows.
+
+**The idempotency proof is run 53's `20 examined / 0 written / 20 skipped / 0
+rejected`.** `standing` is append-only, so `insertAppendOnly` derives `skipped`
+from what it offered — the telemetry is honest here in a way it is not for
+fixtures, and **F-3 does not reach this relation**.
+
+**S-4 standings: COMPLETE and LIVE-PROVEN.**
 
 ---
 
-## Why it did not run
-
-| Required | State |
-|---|---|
-| `PT_V2_DB_HOST`, `_NAME`, `_USER`, `_PASSWORD` | **absent** |
-| `PT_V2_PROVIDER_BASE_URL`, `PT_V2_PROVIDER_KEY` | **absent** |
-| `.env` at the package root or working directory | **does not exist** |
-
-`npm run doctor:v2` → *"V2 database configuration incomplete. Missing:
-PT_V2_DB_HOST, PT_V2_DB_NAME."*
-
-The merge at `7fe44f8` brought `prod-ca-2021.crt` — the CA bundle
-`PT_V2_DB_SSL_CA` points at — but no credentials. V2 deliberately refuses to
-fall back to V1's `SPORTSAPI_*` (`provider/config.ts:71`), so `.env2` cannot
-serve, and it is in any case the file committed in `e3ed901` and compromised
-until rotated.
-
-**Two commands, run sequentially on the same UTC date:**
+## How it was produced
 
 ```
 cd beta/backend
@@ -69,8 +57,8 @@ npm run ingest:v2 -- season --tournament 325 --season 87678 \
                             --max-calls 10 --with-standings
 ```
 
-Then the identical command again. Everything below is read-only and verifies the
-result independently of the CLI output, as required.
+run twice on the same UTC date. The verification below is read-only and
+establishes the result independently of the CLI output.
 
 ---
 
