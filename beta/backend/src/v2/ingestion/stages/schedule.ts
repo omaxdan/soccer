@@ -42,7 +42,7 @@ import {
 } from '../entities/reference';
 import { recordTeamRegistration, resolveTeam } from '../entities/participants';
 import { recordResult, resolveFixture } from '../entities/fixtures';
-import { fromUnixSeconds, nonNegativeInt, text, utcDateString } from '../normalise';
+import { asRecord, externalId, fromUnixSeconds, nonNegativeInt, text, utcDateString } from '../normalise';
 import { logger } from '../../../utils/logger';
 
 /** Per-relation counts, which is the grain `operations.write_record` stores. */
@@ -74,16 +74,6 @@ class StageAccumulator {
 /** The provider's schedule payload, kept loose because it is external data. */
 interface ScheduleResponse {
   readonly events?: readonly Record<string, unknown>[];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-}
-
-function externalId(value: unknown): string | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
-  return null;
 }
 
 /**

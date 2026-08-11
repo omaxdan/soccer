@@ -34,6 +34,18 @@ So closing is **gated on the response having resolved at least one player**. A z
 
 **`closeResolvedSpells` still dates its closure with `now()`** while the stage carries the run's single observation date. When the two diverge the guard `lower(spell_period) < now()::date` silently refuses the update. That is doc 29 blocker **B-2**, it is **not** worked around here, and test 61 pins it down so that fixing it breaks a test that says why.
 
+## The season event pager — built, and deliberately not wired
+
+`provider/pager.ts` walks a season's event feed. It is the S-5 fixture-universe reader, implemented to the contract in [doc 38 §9](../../../../docs/db-v2/38-phase8-s4-provider-contract-final.md), and **nothing imports it yet** — that is the current gate, not an oversight.
+
+**One pager, both directions.** `events/last` and `events/next` were verified to share an envelope, an ordering rule, an event shape and a `hasNextPage` flag, so `direction` is a parameter selecting an endpoint key and which end of the window bounds the walk. Two implementations would be two places for the same bug.
+
+**Termination, in this order:** a 404 (proven terminal — the client breaks on 404 without retrying, so the last page costs one call) · `hasNextPage === false` · a page lying wholly outside the window · budget exhausted, which reports a resume page. A fifth, defensive and labelled as such, stops on a page carrying *zero* events — distinct from a **short** page, which is explicitly not evidence of the end.
+
+**What it refuses to know.** The number 30 does not appear in it, though every observed page held exactly 30: each was a page the provider could fill, so a fixed size and a maximum are indistinguishable from outside. No page count is derived from a size or a total. `roundInfo.round` is carried but never paged or filtered on — page 1 of the observed season holds rounds 19, 18, 17 **and 4**.
+
+**It does not write.** No database handle reaches it, by construction, so it cannot begin ingestion by accident and its tests run with no provider and no schema — every page they walk is a body committed under `docs/api-samples/v2-discovery/`.
+
 ## What this subsystem is, and is not
 
 **Is:** provider transport, quota accounting, provider→canonical mapping, entity resolution, duplicate handling, ingestion provenance.
@@ -120,10 +132,12 @@ Codes, foreign keys, uniqueness, participant distinctness, score non-negativity,
 ## Testing
 
 ```bash
-npm test                    # 38 declaration tests, no database needed
-PT_V2_DB_HOST=… npm test    # plus 20 persistence and end-to-end tests
+npm test                    # declaration tests, no database and no provider needed
+PT_V2_DB_HOST=… npm test    # plus the persistence and end-to-end tests
 ```
 
-Seventy tests. The end-to-end tests drive the real writers against a real database through a stubbed provider, so the composite foreign keys, the lifecycle transition and the result revision are exercised rather than reasoned about.
+The end-to-end tests drive the real writers against a real database through a stubbed provider, so the composite foreign keys, the lifecycle transition and the result revision are exercised rather than reasoned about.
+
+**The pager suite spends no quota.** It replays the six captured bodies in `docs/api-samples/v2-discovery/` through a stand-in that 404s on any page it was not given — which is not an invention, since page 999 was requested live and returned exactly that. Where a branch has never been observed live (`hasNextPage: false`, a page out of order, one fixture in both feeds) the payload is synthetic and the test says so.
 
 Two guarantees were **mutation-tested** — the code was deliberately broken and the suite confirmed to fail: removing the result-revision append (test 54) and removing the `COALESCE` guard (test 49).

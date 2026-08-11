@@ -108,6 +108,32 @@ export function nonNegativeInt(value: unknown): number | null {
   return rounded >= 0 ? rounded : null;
 }
 
+/**
+ * A provider object, or null for anything that is not one.
+ *
+ * External payloads are typed `unknown` deliberately. This is the single narrowing
+ * used everywhere a nested provider object is read, so a payload that changes
+ * shape produces a null and a counted rejection rather than a TypeError halfway
+ * through a transaction.
+ */
+export function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+/**
+ * A provider's external id as text, or null.
+ *
+ * Numbers and strings both appear in this feed — `season.id` is an integer,
+ * some ids arrive quoted — and every `provider_external_id` column is `text`,
+ * so the conversion happens once, here. Zero is a legitimate id and survives;
+ * an empty string does not.
+ */
+export function externalId(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  return null;
+}
+
 /** Trimmed text, or null for an empty or absent value. */
 export function text(value: unknown): string | null {
   if (typeof value !== 'string') return null;

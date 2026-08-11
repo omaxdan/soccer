@@ -141,11 +141,15 @@ describe('the fixture-universe endpoints are registered and resolvable', () => {
     );
   });
 
-  test('pagination semantics are declared UNVERIFIED until a live response says otherwise', () => {
-    // Doc 35 and this phase both turn on not assuming. If someone later writes a
-    // pager against an assumed page size, this test is where the assumption
-    // should have been caught.
-    assert.match(ENDPOINTS.tournament_season_events_last.description, /UNVERIFIED/);
+  test('the page size is still declared UNVERIFIED, now that the rest is not', () => {
+    // This began as a tripwire against writing a pager on assumed semantics.
+    // The semantics are now established from live bodies (doc 38 §3) — except
+    // the page size, which four pages of exactly 30 still do not prove, because
+    // every one of them was a page the provider could fill. That is the part
+    // worth keeping a tripwire on, so the assertion narrows rather than retires.
+    for (const key of ['tournament_season_events_last', 'tournament_season_events_next'] as const) {
+      assert.match(ENDPOINTS[key].description, /PAGE SIZE REMAINS UNVERIFIED/);
+    }
   });
 });
 

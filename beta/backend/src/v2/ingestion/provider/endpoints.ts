@@ -114,9 +114,13 @@ export const ENDPOINTS = {
     description:
       'Completed events for a season, paginated. One call returns many fixtures with their ' +
       'teams, which is why the fixture universe is built from here rather than from per-match ' +
-      'endpoints. PAGE SEMANTICS ARE UNVERIFIED — page numbering, page size, the termination ' +
-      'condition and empty-page behaviour are what the discovery runner exists to establish. ' +
-      'Nothing may assume them until a live response says so.',
+      'endpoints. PAGE SEMANTICS, doc 38 §3: paging is zero-based; the envelope is ' +
+      '{data:{events,hasNextPage}}; past-the-end is a 404, not an empty page; events are ' +
+      'non-strictly ascending within a page and each page is entirely earlier than the one ' +
+      'before. PAGE SIZE REMAINS UNVERIFIED — every observed page held 30, but every observed ' +
+      'page was one the provider had enough events to fill, so a fixed size and a maximum are ' +
+      'indistinguishable. Nothing may assume a page size, derive a page count from one, or ' +
+      'read a short page as the last page.',
     parameters: ['tournamentId', 'seasonId', 'page'],
   },
 
@@ -126,7 +130,10 @@ export const ENDPOINTS = {
     costClass: 'FEED',
     description:
       'Scheduled events for a season, paginated. The forward half of the fixture universe. ' +
-      'Same unverified pagination semantics as its `last` counterpart.',
+      'Envelope-identical to its `last` counterpart and verified so (doc 38 §4), which is why ' +
+      'one pager serves both. It runs the other way — each page entirely LATER than the one ' +
+      'before — and carries no winnerCode, no score and no red-card counts, because none of ' +
+      'its fixtures has been played. PAGE SIZE REMAINS UNVERIFIED, as for `last`.',
     parameters: ['tournamentId', 'seasonId', 'page'],
   },
 
