@@ -8,10 +8,11 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
+  EVIDENCE_DIR,
   parseArguments,
   evidenceFilename,
   firstSeasonId,
@@ -172,6 +173,32 @@ describe('no credential can reach the evidence files', () => {
   test('evidence is written beneath the existing sample area, not a new one', () => {
     const source = readFileSync(resolve(__dirname, '..', 'discover.ts'), 'utf8');
     assert.match(source, /'docs', 'api-samples', 'v2-discovery'/);
+  });
+
+  test('EVIDENCE_DIR is the REPOSITORY-level sample directory', () => {
+    // A relative-path assertion alone would have passed while the runner wrote
+    // to beta/backend/docs/api-samples/v2-discovery — two levels short of the
+    // repository root, and a different directory from every committed capture.
+    // So this asserts the resolved absolute path, and that it is the directory
+    // the committed evidence actually occupies.
+    assert.ok(
+      EVIDENCE_DIR.endsWith(join('docs', 'api-samples', 'v2-discovery')),
+      EVIDENCE_DIR
+    );
+    assert.ok(
+      !EVIDENCE_DIR.includes(join('beta', 'backend')),
+      `captures must not land under beta/backend: ${EVIDENCE_DIR}`
+    );
+
+    // Deliberately NOT compared against a second hand-counted `resolve(...)`.
+    // Re-deriving the path here would re-encode the very mistake being fixed —
+    // the first draft of this test miscounted the levels in exactly the way the
+    // source had. Existence of a committed capture proves the directory without
+    // anyone counting anything.
+    assert.ok(
+      existsSync(join(EVIDENCE_DIR, 'tournament_seasons__tournamentId-325.json')),
+      `EVIDENCE_DIR must be the directory holding the committed captures: ${EVIDENCE_DIR}`
+    );
   });
 });
 

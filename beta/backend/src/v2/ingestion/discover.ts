@@ -55,8 +55,19 @@ import { logger } from '../../utils/logger';
 
 /* eslint-disable no-console */
 
-/** Where evidence lands. Alongside V1's samples, in its own subdirectory. */
-export const EVIDENCE_DIR = resolve(__dirname, '..', '..', '..', 'docs', 'api-samples', 'v2-discovery');
+/**
+ * Where evidence lands — the REPOSITORY-LEVEL sample directory.
+ *
+ * Five levels up from `src/v2/ingestion`, which is the repository root, not
+ * `beta/backend`. The earlier form stopped two levels short and wrote to
+ * `beta/backend/docs/api-samples/v2-discovery`, so a capture landed in a
+ * different directory from every committed capture and from the directory the
+ * replay tests read. Evidence that is not beside its siblings is evidence
+ * nobody finds.
+ */
+export const EVIDENCE_DIR = resolve(
+  __dirname, '..', '..', '..', '..', '..', 'docs', 'api-samples', 'v2-discovery'
+);
 
 /** Minimum that answers the pagination question: seasons, page 0, page 1. */
 export const DEFAULT_MAX_CALLS = 3;
