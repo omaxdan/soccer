@@ -89,6 +89,13 @@ export interface DiscoveryArguments {
   readonly nextPages?: readonly number[];
   /** Force the seasons call even when other steps were named. */
   readonly wantSeasons: boolean;
+  /**
+   * Capture the season's league table.
+   *
+   * Not paged and not windowed — one call answers the whole question, which is
+   * why it takes a boolean rather than a page list.
+   */
+  readonly wantStandings: boolean;
 }
 
 /** Parses `0,1,999` into pages, refusing anything that is not a page number. */
@@ -102,11 +109,23 @@ export function parsePageList(raw: string, flag: string): number[] {
   });
 }
 
+/**
+ * Flags that stand alone, carrying no value.
+ *
+ * The parser otherwise demands a value after every `--flag`, which made
+ * `--seasons` unusable: it threw `--seasons expects a value` before
+ * `argv.includes('--seasons')` was ever consulted. That was a latent defect in a
+ * documented flag, found while adding `--standings`, which could not work
+ * without the same fix.
+ */
+const BOOLEAN_FLAGS = new Set(['--seasons', '--standings']);
+
 export function parseArguments(argv: readonly string[]): DiscoveryArguments {
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (!arg.startsWith('--')) continue;
+    if (BOOLEAN_FLAGS.has(arg)) continue;
     const next = argv[i + 1];
     if (next === undefined || next.startsWith('--')) throw new Error(`${arg} expects a value.`);
     values.set(arg, next);
@@ -148,6 +167,7 @@ export function parseArguments(argv: readonly string[]): DiscoveryArguments {
     lastPages: rawLast === undefined ? undefined : parsePageList(rawLast, '--last'),
     nextPages: rawNext === undefined ? undefined : parsePageList(rawNext, '--next'),
     wantSeasons: argv.includes('--seasons'),
+    wantStandings: argv.includes('--standings'),
   };
 }
 
@@ -163,11 +183,16 @@ export function parseArguments(argv: readonly string[]): DiscoveryArguments {
  * what was asked and nothing more.
  */
 export function planCalls(args: DiscoveryArguments): PlannedCall[] {
-  const named = args.lastPages !== undefined || args.nextPages !== undefined || args.wantSeasons;
+  const named =
+    args.lastPages !== undefined ||
+    args.nextPages !== undefined ||
+    args.wantSeasons ||
+    args.wantStandings;
   const plan: PlannedCall[] = [];
 
   const needsSeasons = args.wantSeasons || (!named && args.seasonId === undefined) ||
-    (named && args.seasonId === undefined && (args.lastPages !== undefined || args.nextPages !== undefined));
+    (named && args.seasonId === undefined &&
+      (args.lastPages !== undefined || args.nextPages !== undefined || args.wantStandings));
   if (needsSeasons) {
     plan.push({
       endpointKey: 'tournament_seasons',
@@ -189,6 +214,16 @@ export function planCalls(args: DiscoveryArguments): PlannedCall[] {
       endpointKey: 'tournament_season_events_next',
       parameters: { tournamentId: args.tournamentId, seasonId: '(resolved)', page },
       purpose: `scheduled events, page ${page}`,
+    });
+  }
+  if (args.wantStandings) {
+    // ONE CALL, NO PAGE. `season_standings` declares tournamentId and seasonId
+    // and nothing else, so there is no page to walk and no pagination question
+    // to answer — which is the whole reason this is a boolean.
+    plan.push({
+      endpointKey: 'season_standings',
+      parameters: { tournamentId: args.tournamentId, seasonId: '(resolved)' },
+      purpose: 'league table — the shape football.standing must be written from',
     });
   }
   return plan;
@@ -467,7 +502,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       await capture(step.endpointKey, {
         tournamentId: args.tournamentId,
         seasonId,
-        page: step.parameters.page,
+        // Only paged endpoints carry a page. Passing an undefined one would
+        // reach the filename as `page-undefined` — resolvePath ignores the
+        // extra key, but the evidence artifact would be misnamed.
+        ...(step.parameters.page === undefined ? {} : { page: step.parameters.page }),
       });
     }
   } catch (error) {

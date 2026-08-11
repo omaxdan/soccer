@@ -277,6 +277,73 @@ describe('a failure record reproduces the request that failed', () => {
   });
 });
 
+describe('standings capture', () => {
+  // `season_standings` declares tournamentId and seasonId and nothing else. It
+  // is not paged, so there is no pagination question to answer and one call
+  // settles the shape football.standing must be written from.
+  test('--standings with a known season plans EXACTLY ONE call', () => {
+    const plan = planCalls(parseArguments(['--tournament', '325', '--season', '87678', '--standings']));
+    assert.equal(plan.length, 1, 'one call, and no event pages alongside it');
+    assert.equal(plan[0].endpointKey, 'season_standings');
+    assert.deepEqual(plan[0].parameters, { tournamentId: '325', seasonId: '(resolved)' });
+    assert.ok(!('page' in plan[0].parameters), 'an unpaged endpoint carries no page');
+  });
+
+  test('naming standings suppresses the default event pages', () => {
+    // Without this, --standings would inherit the default last/0 and last/1 and
+    // spend three calls to answer a one-call question.
+    const plan = planCalls(parseArguments(['--tournament', '325', '--season', '87678', '--standings']));
+    assert.ok(!plan.some((step) => step.endpointKey.startsWith('tournament_season_events')));
+  });
+
+  test('without a season id the seasons call is planned first, and still only two', () => {
+    const plan = planCalls(parseArguments(['--tournament', '325', '--standings']));
+    assert.deepEqual(plan.map((step) => step.endpointKey), ['tournament_seasons', 'season_standings']);
+  });
+
+  test('the evidence artifact is named without a page component', () => {
+    assert.equal(
+      evidenceFilename('season_standings', { tournamentId: '325', seasonId: '87678' }),
+      'season_standings__seasonId-87678__tournamentId-325.json'
+    );
+  });
+
+  test('a standing-less run is completely unchanged', () => {
+    // The regression that matters: the proven default plan must not move.
+    const plan = planCalls(parseArguments(['--tournament', '325']));
+    assert.deepEqual(plan.map((step) => step.endpointKey), [
+      'tournament_seasons',
+      'tournament_season_events_last',
+      'tournament_season_events_last',
+    ]);
+  });
+});
+
+describe('flags that carry no value', () => {
+  test('a standalone boolean flag is accepted rather than demanding a value', () => {
+    // `--seasons` was documented and unusable: the parser threw
+    // "--seasons expects a value" before argv.includes() was ever reached.
+    // Found while adding --standings, which could not work without the fix.
+    assert.equal(parseArguments(['--tournament', '325', '--seasons']).wantSeasons, true);
+    assert.equal(parseArguments(['--tournament', '325', '--standings']).wantStandings, true);
+    assert.equal(
+      parseArguments(['--tournament', '325', '--standings', '--season', '87678']).seasonId,
+      '87678',
+      'a boolean flag does not swallow the flag that follows it'
+    );
+  });
+
+  test('a value-bearing flag still demands its value', () => {
+    assert.throws(() => parseArguments(['--tournament', '325', '--season']), /expects a value/);
+  });
+
+  test('neither flag is set unless asked for', () => {
+    const args = parseArguments(['--tournament', '325']);
+    assert.equal(args.wantSeasons, false);
+    assert.equal(args.wantStandings, false);
+  });
+});
+
 describe('the budget cannot be exceeded', () => {
   test('a plan larger than the budget is refusable before spending', () => {
     const args = parseArguments(['--tournament', '325', '--last', '0,1,2,3', '--max-calls', '2']);
