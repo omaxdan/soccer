@@ -15,7 +15,8 @@ migration, code, test or ingestion changed.
 
 ### Blocker 1 — no route to the provider
 
-The pilot's T1 observation was attempted exactly once:
+The pilot's BEFORE observation — the first of two identical requests — was
+attempted exactly once:
 
 ```
 GET https://v2.football.sportsapipro.com/api/teams/1963/tournament/325/season/87678/statistics
@@ -61,7 +62,7 @@ if (fs.existsSync(filePath)) return;
 
 | Property | Consequence for a T1/T2 pilot |
 |---|---|
-| **Skip-if-exists** | T1 writes `team-stats/MANDATED.json`. **T2 is silently skipped.** The second observation is never written, and the sync reports success |
+| **Skip-if-exists** | the first call writes `team-stats/MANDATED.json`. **The second is silently skipped.** The second observation is never written, and the sync reports success |
 | Path is `{endpoint}/{BAND}.json` | **no team, no season, no date in the filename.** Two captures could not be told apart or ordered even if both were written |
 | File content is the bare response body | `JSON.stringify(response, null, 2)` — **no capture timestamp, no URL, no parameters.** Nothing attributes a sample to a team-season or an instant |
 | `refresh:api-samples` deletes then recaptures | clearing before T2 yields **T2 only** — the baseline is destroyed, not preserved |
@@ -102,10 +103,11 @@ both the 21-day cooldown and the 40-team cap and issues exactly one call
 from [doc 51](./51-phase8-season-statistics-snapshot-delta-assessment.md) §0.1:
 both `api-samples` trees still contain only a `README.md`.
 
-### 2. T1 → T2 counter comparison
+### 2. Before → after counter comparison
 
-**NOT PERFORMED.** No T1, no T2, no deltas. Nothing in this section may be
-inferred from the V1 mapper, and nothing is.
+**NOT PERFORMED.** Neither observation exists, so there is nothing to compare —
+not byte-for-byte, not field-by-field. Nothing in this section may be inferred
+from the V1 mapper, and nothing is.
 
 ### 3. Fields demonstrating cumulative behaviour
 
@@ -210,10 +212,63 @@ Four things. The first is the only hard one.
    is a code change and deliberately not made here.
 3. **Supabase reachability**, only if the pilot is routed through the V1 job
    rather than a direct request. A direct request needs neither.
-4. **Time.** T1 and T2 must straddle a played match. **No single session can
-   produce both**, whatever the network policy.
+4. **Time.** The two identical requests must straddle a played match. **No
+   single session can produce both**, whatever the network policy — the interval
+   is the entire experiment.
 
 ## The pilot, fully specified and ready to run
+
+### What the experiment actually is
+
+**The two requests are byte-identical. That is not a limitation of the design —
+it IS the design.**
+
+```
+GET /api/teams/1963/tournament/325/season/87678/statistics
+```
+
+The path carries **no date, no round, no snapshot or as-of parameter**, and
+nothing in this repository suggests the endpoint accepts one. The provider is
+asked for the **current state** of one team-season, twice, with a known fixture
+played in between.
+
+So the labels mean exactly this and nothing more:
+
+| | |
+|---|---|
+| **T1** | the current team-season statistics **before** the fixture |
+| **T2** | the current team-season statistics **after** the fixture |
+
+Neither is "the statistics as of T1". There is no historical retrieval here, and
+any V2 dating of these observations is **V2 stamping when it looked**, never the
+provider stating when the figures applied.
+
+**The primary observation is a single question:** *what changed between two
+identical requests separated by a played match?*
+
+### Procedure — behaviour first, interpretation second
+
+1. **Compare the two raw bodies byte-for-byte first.** Record whether they are
+   identical, and their SHA-256s, before parsing anything. This is the result in
+   its own right.
+2. **Then compare field by field**, listing every field whose value differs, with
+   both values.
+3. **Only then** ask whether the observed changes are consistent with cumulative
+   season-to-date counters.
+
+Three guards, because the whole point is to avoid assuming the conclusion:
+
+- **A changed value is not cumulative merely because it increased.** A per-match
+  or per-90 figure also moves when a match is played, and can move upward.
+- **An unchanged value is not thereby non-cumulative.** A counter can legitimately
+  not advance — a team that took no corners adds no corners.
+- **If the bodies are identical, that is the result.** Record it plainly. Do not
+  explain it — caching, lag, a stale season, a wrong identifier and a
+  non-cumulative payload all produce the same observation, and none of them is
+  distinguishable from one pair. A further observation would be a **new**
+  experiment with its own authorisation.
+
+### The subject
 
 **Team-season: Palmeiras — provider team id `1963`, tournament `325`, season
 `87678`.**
@@ -224,36 +279,48 @@ Chosen because it minimises every source of ambiguity:
 |---|---|
 | Already in V2 | yes — one of the 20 clubs ingested for 325/87678 |
 | Next fixture in this competition | **2026-08-15 19:30Z, round 23, Fluminense v Palmeiras** — the earliest in the whole forward feed |
-| Matches accumulated at T1 | ~22 (round 23), so a cumulative reading is **trivially** distinguishable from a per-match or per-90 one. A team with 1–2 matches played would be ambiguous |
+| Matches played before the fixture | ~22 (round 23). If the payload is cumulative, its figures are large; if it is per-match or per-90, they are small. **A team with 1–2 matches played would make the two readings indistinguishable** |
 | Competition scoping | the endpoint is per tournament-season, so no cup fixture can contaminate the interval |
 
 Fluminense (`1961`) is the equally valid alternative — same fixture, same window.
 Capturing both would cost 4 calls and is out of the stated budget.
 
-**Exactly two calls:**
+**Exactly two calls — the same call, twice:**
 
 ```bash
-# T1 — any time before 2026-08-15 19:30Z
+# BEFORE the fixture — any time up to 2026-08-15 19:30Z
 curl -sS -H "x-api-key: $SPORTSAPI_KEY" \
   "https://v2.football.sportsapipro.com/api/teams/1963/tournament/325/season/87678/statistics"
 
-# T2 — on or after 2026-08-16, once the fixture has been played
+# AFTER the fixture — on or after 2026-08-16, once it has been played
 curl -sS -H "x-api-key: $SPORTSAPI_KEY" \
   "https://v2.football.sportsapipro.com/api/teams/1963/tournament/325/season/87678/statistics"
 ```
 
-**Preserve both raw bodies verbatim**, named so they cannot be confused —
-e.g. `team_statistics__teamId-1963__tournamentId-325__seasonId-87678__T1.json`
-and `…__T2.json` — in `docs/api-samples/v2-discovery/`, beside their siblings.
-Record the capture instant with each; the filename alone is not a timestamp.
+**Preserve both raw bodies verbatim and unformatted** — no pretty-printing, no
+key reordering, or the byte-for-byte comparison is destroyed before it is made.
+Name them so they cannot be confused, e.g.
+`team_statistics__teamId-1963__tournamentId-325__seasonId-87678__BEFORE.json`
+and `…__AFTER.json`, in `docs/api-samples/v2-discovery/` beside their siblings.
+**Record with each: the UTC instant of the request, the HTTP status, the response
+headers, and the SHA-256 of the body.** The filename is not a timestamp, and the
+capture instant is the only thing that dates these observations — the payload
+does not date itself.
 
-**What the pair settles, and nothing more:** whether `matches` advances by
-exactly 1; whether the 22 counters increase and by plausible single-match
-amounts; whether any counter decreases; whether `avgRating` and
-`averageBallPossession` move consistently with a mean over `matches`; whether the
-payload carries fields V1 never mapped, including the numerators that would make
-the six derived fields reconstructible; and whether any capability flag appears
-on this endpoint.
+**What the pair can settle:** whether the two bodies differ at all; if they do,
+exactly which fields differ and by how much; whether `matches` advances by
+exactly 1; whether the changes are of a size consistent with one match having
+been added to a season total; whether any value **decreases**; whether `avgRating`
+and `averageBallPossession` move consistently with a mean over `matches`; whether
+the payload carries fields V1 never mapped — including the numerators that would
+make the six derived fields reconstructible; and whether any capability flag
+appears on this endpoint at all.
+
+**What one pair cannot settle even if everything changes as hoped:** that the
+behaviour holds for a second interval, for another club, for another competition,
+or for a lower tier. **n = 1 interval, 1 team, 1 competition, 1 tier.** It is
+enough to justify a larger evidence step or to stop; it is not enough to design a
+schema on.
 
 **What it will not settle:** anything about the player endpoint (a separate
 capture, 2 more calls), anything about lower-tier coverage (doc 51 §14, still
