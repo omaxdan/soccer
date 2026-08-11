@@ -1,7 +1,7 @@
 {
   "name": "ninetydata-beta-backend",
   "version": "2.0.0",
-  "description": "NinetyData RIP beta backend — single-writer pipeline (audit-hardened)",
+  "description": "NinetyData RIP beta backend \u2014 single-writer pipeline (audit-hardened)",
   "main": "dist/cli.js",
   "scripts": {
     "build": "tsc",
@@ -11,7 +11,8 @@
     "seed:v2": "tsx src/v2/seed/runAll.ts",
     "ingest:v2": "tsx src/v2/ingestion/cli.ts",
     "feature:v2": "tsx src/v2/feature/cli.ts",
-    "doctor:v2": "tsx src/v2/db/doctor.ts"
+    "doctor:v2": "tsx src/v2/db/doctor.ts",
+    "discover:v2": "tsx src/v2/ingestion/discover.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

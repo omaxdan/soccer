@@ -39,7 +39,17 @@ export {
 export {
   ProviderClient,
   ProviderRequestError,
+  type ProviderObservation,
 } from './provider/client';
+
+export {
+  parseArguments as parseDiscoveryArguments,
+  evidenceFilename,
+  firstSeasonId,
+  describeShape,
+  EVIDENCE_DIR,
+  DEFAULT_MAX_CALLS,
+} from './discover';
 
 export {
   ENDPOINTS,

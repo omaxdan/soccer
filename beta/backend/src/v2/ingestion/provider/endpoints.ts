@@ -96,6 +96,40 @@ export const ENDPOINTS = {
       'Transfers in and out. A transfer is the BOUNDARY between two registrations, so this feeds player_registration succession — never a standalone transfer record.',
     parameters: ['id'],
   },
+  tournament_seasons: {
+    key: 'tournament_seasons',
+    path: '/tournaments/{tournamentId}/seasons',
+    costClass: 'DISCOVERY',
+    description:
+      'Every season a tournament has had. THE ENTRY POINT for the fixture universe: a season ' +
+      'id cannot be guessed, and football.competition_edition needs one per edition. One call ' +
+      'per tournament, and the answer changes once a year.',
+    parameters: ['tournamentId'],
+  },
+
+  tournament_season_events_last: {
+    key: 'tournament_season_events_last',
+    path: '/tournament/{tournamentId}/season/{seasonId}/events/last/{page}',
+    costClass: 'FEED',
+    description:
+      'Completed events for a season, paginated. One call returns many fixtures with their ' +
+      'teams, which is why the fixture universe is built from here rather than from per-match ' +
+      'endpoints. PAGE SEMANTICS ARE UNVERIFIED — page numbering, page size, the termination ' +
+      'condition and empty-page behaviour are what the discovery runner exists to establish. ' +
+      'Nothing may assume them until a live response says so.',
+    parameters: ['tournamentId', 'seasonId', 'page'],
+  },
+
+  tournament_season_events_next: {
+    key: 'tournament_season_events_next',
+    path: '/tournament/{tournamentId}/season/{seasonId}/events/next/{page}',
+    costClass: 'FEED',
+    description:
+      'Scheduled events for a season, paginated. The forward half of the fixture universe. ' +
+      'Same unverified pagination semantics as its `last` counterpart.',
+    parameters: ['tournamentId', 'seasonId', 'page'],
+  },
+
   season_standings: {
     key: 'season_standings',
     path: '/tournament/{tournamentId}/season/{seasonId}/standings',

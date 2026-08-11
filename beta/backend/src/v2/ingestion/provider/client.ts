@@ -65,6 +65,28 @@ export class ProviderRequestError extends Error {
   }
 }
 
+/**
+ * One request and what the transport saw, for evidence capture.
+ *
+ * NO CREDENTIAL APPEARS HERE. `url` is the base URL and the resolved path; the
+ * api key travels in a header and is never part of this record, so an
+ * observation is safe to write to disk verbatim.
+ */
+export interface ProviderObservation<T> {
+  readonly endpointKey: EndpointKey;
+  /** Path after parameter substitution, as sent. */
+  readonly path: string;
+  /** Base URL plus path. Reproduces the request exactly. */
+  readonly url: string;
+  readonly parameters: Record<string, string | number>;
+  readonly status: number;
+  /** Attempts consumed, including the successful one. */
+  readonly attempts: number;
+  /** What the provider said it had left, or null when it said nothing. */
+  readonly quotaRemaining: number | null;
+  readonly data: T;
+}
+
 export class ProviderClient {
   private readonly config: ProviderConfig;
   private readonly transports: AxiosInstance[];
@@ -148,6 +170,26 @@ export class ProviderClient {
    * wrong and stays wrong.
    */
   async get<T>(key: EndpointKey, params: Record<string, string | number> = {}): Promise<T> {
+    return (await this.getObserved<T>(key, params)).data;
+  }
+
+  /**
+   * The same request, with what the transport saw alongside the body.
+   *
+   * WHY THIS EXISTS. `get()` returns the payload and discards the status, the
+   * resolved path and the attempt count, which is right for ingestion — a writer
+   * has no use for them. Discovery has exactly the opposite need: the evidence
+   * of what was asked and what came back IS the deliverable, and a status
+   * reconstructed after the fact would be a fabricated observation.
+   *
+   * The retry, throttle, key rotation and usage accounting are the SAME code
+   * path; `get()` now delegates here. There is one request implementation, and
+   * this adds no second one.
+   */
+  async getObserved<T>(
+    key: EndpointKey,
+    params: Record<string, string | number> = {}
+  ): Promise<ProviderObservation<T>> {
     const path = resolvePath(key, params);
     const builder = this.accumulator(key);
     let transportIndex = this.roundRobin++ % this.transports.length;
@@ -158,8 +200,18 @@ export class ProviderClient {
       await this.throttle();
       try {
         const response = await this.transports[transportIndex].get<T>(path);
-        builder.observe({ remaining: ProviderClient.remainingFromHeaders(response.headers) });
-        return response.data;
+        const remaining = ProviderClient.remainingFromHeaders(response.headers);
+        builder.observe({ remaining });
+        return {
+          endpointKey: key,
+          path,
+          url: `${this.config.baseUrl}${path}`,
+          parameters: params,
+          status: response.status,
+          attempts: attempt + 1,
+          quotaRemaining: remaining,
+          data: response.data,
+        };
       } catch (error) {
         lastError = error;
         const axiosError = error as AxiosError;
