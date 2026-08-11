@@ -1,13 +1,45 @@
 # Phase 8 S-4 — Standings Live Proof: Verification Block
 
-**NOT RUN. The live proof has not been executed and nothing is verified by this
-document.** This session has no route to the provider or the database.
+## Status
 
-**S-4 standings live proof: NOT VERIFIED** — for want of execution, not for a
-failed assertion. No assertion has been tested.
+| | |
+|---|---|
+| **Live ingestion** | **RUN** — runs 52 and 53, both `2026-08-11`, executed by the operator |
+| **§0–§6 database verification** | **OUTSTANDING** — no database route from the authoring session |
+| **S-4 standings live proof** | **NOT VERIFIED** — pending §0–§6 |
+| **S-4 as a whole** | **NOT CLOSED** — see the closure section |
 
-No code, schema, migration, test or discovery file was changed. No database was
-touched. No provider call was made.
+**Runs 52 and 53, as REPORTED by the operator from CLI output.** Recorded because
+it is the input to the reconciliation, and labelled so it is never mistaken for
+something verified against the database:
+
+| | Run 52 | Run 53 |
+|---|---|---|
+| Outcome | SUCCEEDED | SUCCEEDED |
+| Provider calls | 5 | 5 |
+| Fixtures selected | 47 | 47 |
+| Results | 43 written / 4 skipped | 43 written / 4 skipped |
+| **Standings** | **20 written / 0 skipped / 0 rejected** | **0 written / 20 skipped / 0 rejected** |
+| Variant | TOTAL | TOTAL |
+| `as_of_on` | 2026-08-11 | 2026-08-11 |
+
+**Both passes fell on the same UTC date, so the midnight condition does not
+apply and the same-day idempotency test is valid.**
+
+The CLI figures are internally consistent with every expectation below, and the
+standings pair is the exact append-only signature. They are not a substitute for
+reading the rows: the CLI reports the orchestrator's own counters, while the
+assertions that matter — the prevailing completion outcome, the `write_record`
+attribution, `scope_text`, shell-team creation, and the table's variants,
+positions and as-of date — live in the database and are unverified until §0–§6
+runs.
+
+**`docs/db-v2/sql/s4-standings-verification.sql` executes §0–§6 as a single
+read-only statement**, returning one row per assertion with its own PASS/FAIL
+verdict. It has been executed against a schema built from all 22 migrations to
+prove it parses and resolves; every assertion returned a verdict.
+
+No code, schema, migration, test or discovery file was changed by this document.
 
 ---
 
