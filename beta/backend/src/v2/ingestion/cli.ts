@@ -176,7 +176,10 @@ function report(label: string, unit: string, result: IngestionReport): void {
       `${result.apiCalls} provider call(s), ${result.failures} failure(s)\n`
   );
   console.log(`  examined  ${String(result.counts.examined).padStart(6)}`);
-  console.log(`  written   ${String(result.counts.written).padStart(6)}`);
+  console.log(
+    `  written   ${String(result.counts.written).padStart(6)}   ` +
+      `(${result.counts.inserted} created, ${result.counts.updated} already existed)`
+  );
   console.log(`  skipped   ${String(result.counts.skipped).padStart(6)}   (already present, or not applicable)`);
   console.log(`  rejected  ${String(result.counts.rejected).padStart(6)}   (unmapped or refused — see the log)\n`);
   /* eslint-enable no-console */
@@ -230,11 +233,17 @@ function reportSeason(result: SeasonIngestionReport): void {
         `— variant TOTAL, as of ${result.standingsAsOfOn} (observed, not reconstructed)`
     );
   }
+  // `new` and `existing` split `written` (F-3), which is how "how much of this
+  // competition was new?" is answered from the run rather than by counting rows
+  // before and after. They are NOT in operations.write_record — it has no column
+  // for them — so this report is where the distinction lives.
   console.log('\n  per relation:');
   for (const [relation, counts] of result.byRelation) {
     console.log(
       `    ${relation.padEnd(42)} examined ${String(counts.examined).padStart(5)}  ` +
-        `written ${String(counts.written).padStart(5)}  skipped ${String(counts.skipped).padStart(5)}  ` +
+        `written ${String(counts.written).padStart(5)}  ` +
+        `new ${String(counts.inserted).padStart(5)}  existing ${String(counts.updated).padStart(5)}  ` +
+        `skipped ${String(counts.skipped).padStart(5)}  ` +
         `rejected ${String(counts.rejected).padStart(5)}`
     );
   }

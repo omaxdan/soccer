@@ -82,8 +82,7 @@ export async function resolveCompetition(
     conflictTarget: ['provider_code', 'provider_external_id'],
   });
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
   return String(row.id);
 }
 
@@ -166,8 +165,7 @@ export async function resolveCompetitionEdition(
     );
   }
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
   return String(row.id);
 }
 
@@ -196,8 +194,7 @@ export async function resolveCompetitionStage(
     conflictTarget: ['competition_edition_id', 'stage_ordinal'],
   });
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
   return String(row.id);
 }
 
@@ -247,7 +244,6 @@ export async function resolveVenue(
     conflictTarget: ['provider_external_id'],
   });
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
   return String(row.id);
 }

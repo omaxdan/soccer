@@ -139,7 +139,14 @@ export async function ingestSchedule(options: ScheduleIngestionOptions = {}): Pr
         );
         total.add(counts.total);
         logger.info(
-          { date, written: counts.total.written, skipped: counts.total.skipped, rejected: counts.total.rejected },
+          {
+            date,
+            written: counts.total.written,
+            inserted: counts.total.inserted,
+            updated: counts.total.updated,
+            skipped: counts.total.skipped,
+            rejected: counts.total.rejected,
+          },
           'v2 ingestion: date complete'
         );
       } catch (error) {

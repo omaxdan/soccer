@@ -281,11 +281,15 @@ export async function resolveFixture(
     conflictTarget: ['provider_code', 'provider_external_id', 'fixture_partition_on'],
     immutableColumns: ['fixture_partition_on'],
     returning: ['id'],
+    // F-3. `football.fixture` is PARTITIONED, so `RETURNING xmax` is refused
+    // outright and the primitive cannot ask which branch ran. It does not need
+    // to: the identity read above is the same question, already answered, and a
+    // null result means no row carries this provider identity in ANY partition.
+    existedBeforeWrite: existing !== null,
   });
 
   const ref: FixtureRef = { id: String(row.id), partitionOn, lifecycleState };
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
 
   const transition = lifecycleTransitionFor(previous, lifecycleState);
   if (transition) {
@@ -409,7 +413,7 @@ export async function recordResult(
     await appendResultRevision(tx, fixture, existing, counts);
   }
 
-  await upsertMutable(tx, {
+  const row = await upsertMutable(tx, {
     relation: 'football.result',
     columns: [
       'fixture_id',
@@ -439,10 +443,13 @@ export async function recordResult(
     ],
     conflictTarget: ['fixture_partition_on', 'fixture_id'],
     immutableColumns: ['fixture_id', 'fixture_partition_on'],
+    // F-3. Partitioned, like `fixture`. `existingResult` above already read the
+    // row — LC-17 needs it to decide whether a revision is owed — so the branch
+    // is known before the statement runs and costs nothing extra to state.
+    existedBeforeWrite: existing !== null,
   });
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
 }
 
 interface StoredResult {

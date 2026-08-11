@@ -86,8 +86,7 @@ export async function resolveTeam(
     conflictTarget: ['provider_code', 'provider_external_id'],
   });
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
   return String(row.id);
 }
 
@@ -116,7 +115,7 @@ export async function recordTeamRegistration(
   registeredOn: string,
   counts: IngestionCounts
 ): Promise<void> {
-  await upsertMutable(tx, {
+  const row = await upsertMutable(tx, {
     relation: 'football.team_registration',
     columns: ['team_id', 'competition_edition_id', 'registered_on'],
     values: [teamId, editionId, registeredOn],
@@ -125,8 +124,7 @@ export async function recordTeamRegistration(
     // the best evidence available, and a later fixture is not evidence against it.
     immutableColumns: ['registered_on'],
   });
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
 }
 
 export interface ProviderPlayer {
@@ -196,7 +194,6 @@ export async function resolvePlayer(
     conflictTarget: ['provider_code', 'provider_external_id'],
   });
 
-  counts.examined += 1;
-  counts.written += 1;
+  counts.countUpsert(row);
   return String(row.id);
 }

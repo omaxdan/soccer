@@ -30,7 +30,7 @@
 
 import type { PoolClient } from 'pg';
 import { PROVIDER_CODE } from '../../ingestion/provider/config';
-import { insertAppendOnly, upsertMutable } from '../../ingestion/write/index';
+import { findByProviderId, insertAppendOnly, upsertMutable } from '../../ingestion/write/index';
 
 /** Distinguishes this suite's rows from anything else in the rig. */
 export const TEST_PREFIX = 'S5TEST';
@@ -124,6 +124,17 @@ export async function seedWorld(tx: PoolClient): Promise<SeededWorld> {
     const kickoff = new Date(fixture.kickoffAt);
     const partitionOn = fixture.kickoffAt.slice(0, 10);
 
+    // F-3. `fixture` and `result` are PARTITIONED, so the primitive cannot ask
+    // the database which branch ran — `RETURNING xmax` is refused there. This
+    // seeder commits and is idempotent, so on a re-run both rows already exist;
+    // one read answers for both, because they are always written together.
+    const seeded = await findByProviderId(
+      tx,
+      'football.fixture',
+      PROVIDER_CODE,
+      `${TEST_PREFIX}-${fixture.externalId}`
+    );
+
     const stored = await upsertMutable(tx, {
       relation: 'football.fixture',
       columns: [
@@ -138,6 +149,7 @@ export async function seedWorld(tx: PoolClient): Promise<SeededWorld> {
       ],
       conflictTarget: ['provider_code', 'provider_external_id', 'fixture_partition_on'],
       immutableColumns: ['fixture_partition_on'],
+      existedBeforeWrite: seeded !== null,
     });
 
     await upsertMutable(tx, {
@@ -146,6 +158,7 @@ export async function seedWorld(tx: PoolClient): Promise<SeededWorld> {
       values: [stored.id, partitionOn, fixture.homeGoals, fixture.awayGoals, kickoff],
       conflictTarget: ['fixture_partition_on', 'fixture_id'],
       immutableColumns: ['fixture_id', 'fixture_partition_on'],
+      existedBeforeWrite: seeded !== null,
     });
 
     // The lifecycle transition every fixture needs; append-only, so a re-run

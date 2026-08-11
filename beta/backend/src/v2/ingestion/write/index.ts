@@ -37,6 +37,14 @@
 import type { PoolClient } from 'pg';
 import type { WriteCounts } from '../../operations/writeRecord';
 
+/**
+ * The column `upsertMutable` projects to say which branch of the upsert ran.
+ *
+ * Named once so the primitive, the counter and the tests cannot drift, and so a
+ * caller asking for a column of the same name is refused rather than shadowed.
+ */
+export const INSERTED_FLAG = 'inserted' as const;
+
 /** A mutable counter matching the shape `operations.write_record` stores. */
 export class IngestionCounts {
   examined = 0;
@@ -44,10 +52,55 @@ export class IngestionCounts {
   skipped = 0;
   rejected = 0;
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // F-3. `written` COUNTS BOTH BRANCHES; THESE SEPARATE THEM.
+  //
+  // A pass that inserted 47 fixtures and a pass that updated 47 reported
+  // identically — `examined 47, written 47, skipped 0` — so "how much of this
+  // competition was new?" could only be answered by counting rows before and
+  // after, which no operator reading a finished sweep can do.
+  //
+  // These are a PARTITION OF THE WRITES MADE THROUGH THE TWO PRIMITIVES in this
+  // file: for those, `inserted + updated === written`. `squad.ts` writes
+  // `player_registration` and `player_availability` with hand-written SQL and is
+  // deliberately untouched here, so a counter that includes those relations has
+  // `inserted + updated < written`. That residue is the unclassified raw-SQL
+  // path, not a lost row, and it is stated rather than papered over.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** Writes that created a row. */
+  inserted = 0;
+  /** Writes that landed on a row that already existed. */
+  updated = 0;
+
   /** Records a value the mapping layer refused, with the reason. */
   reject(_reason: string): void {
     this.examined += 1;
     this.rejected += 1;
+  }
+
+  /**
+   * Records one `upsertMutable` write, attributing it to the branch that ran.
+   *
+   * Takes the returned row rather than a boolean so the branch cannot be
+   * restated by hand at nine call sites — the only source is the statement that
+   * performed the write. A row without the flag is a wiring fault and throws:
+   * guessing would make `inserted + updated === written` quietly false, which is
+   * the exact class of defect F-3 exists to remove.
+   */
+  countUpsert(row: Record<string, unknown>): void {
+    const inserted = row[INSERTED_FLAG];
+    if (typeof inserted !== 'boolean') {
+      throw new Error(
+        `upsertMutable did not report '${INSERTED_FLAG}'. The insert/update split cannot ` +
+          'be inferred, and reporting one of them as the other would be worse than not ' +
+          'reporting it at all.'
+      );
+    }
+    this.examined += 1;
+    this.written += 1;
+    if (inserted) this.inserted += 1;
+    else this.updated += 1;
   }
 
   add(other: IngestionCounts): void {
@@ -55,8 +108,20 @@ export class IngestionCounts {
     this.written += other.written;
     this.skipped += other.skipped;
     this.rejected += other.rejected;
+    this.inserted += other.inserted;
+    this.updated += other.updated;
   }
 
+  /**
+   * The four quantities `operations.write_record` holds — UNCHANGED BY F-3.
+   *
+   * The ledger has `rows_examined`, `rows_written`, `rows_skipped` and
+   * `rows_rejected` and nothing else. Finding M-3 (`operations/writeRecord.ts`)
+   * records that the brief's "rows inserted / rows updated" were considered and
+   * deliberately not adopted, so the split lives in the run's own report and in
+   * the logs. Persisting it is a schema change and a governance decision, and is
+   * neither made nor pre-empted here.
+   */
   toWriteCounts(): WriteCounts {
     return {
       rowsExamined: this.examined,
@@ -88,6 +153,13 @@ export class IngestionCounts {
  * which is why this primitive uses it rather than `DO NOTHING` — a resolution
  * that returned no id on a re-run would make every dependent write fail on the
  * second execution.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * IT ALSO REPORTS WHICH BRANCH RAN  (F-3)
+ *
+ * The returned row carries `inserted`, so the caller's counter can separate a
+ * creation from an update. Two mechanisms, because one does not cover the
+ * schema — see `existedBeforeWrite`.
  */
 export async function upsertMutable(
   tx: PoolClient,
@@ -106,6 +178,25 @@ export async function upsertMutable(
      * instead of failing at runtime on a column that does not exist.
      */
     readonly hasUpdatedAt?: boolean;
+    /**
+     * Whether the row already existed, when the caller has ALREADY read it.
+     *
+     * `RETURNING (xmax = 0) AS inserted` is how this primitive normally tells an
+     * insert from an update, and it is free — the statement is already round
+     * tripping. It does not work on a PARTITIONED target: PostgreSQL answers
+     * `cannot retrieve a system column in this context`, because the tuple is
+     * routed to a leaf and the projection has no partition to read `xmax` from.
+     * `football.fixture` and `football.result` are the two partitioned relations
+     * this primitive writes, and BOTH ALREADY READ THE EXISTING ROW for reasons
+     * of their own — identity-before-partition in `resolveFixture` (U-9) and the
+     * LC-17 revision check in `recordResult` — so passing what they already know
+     * costs no extra statement.
+     *
+     * Omitting it on a partitioned relation FAILS THE STATEMENT with that error.
+     * That is the intended failure mode: this option can never be forgotten into
+     * a wrong count, only into a loud one.
+     */
+    readonly existedBeforeWrite?: boolean;
   }
 ): Promise<Record<string, unknown>> {
   const { relation, columns, values, conflictTarget } = options;
@@ -120,6 +211,13 @@ export async function upsertMutable(
     'updated_at',
   ]);
   const returning = options.returning ?? ['id'];
+  if (returning.includes(INSERTED_FLAG)) {
+    throw new Error(
+      `upsertMutable projects '${INSERTED_FLAG}' itself; a caller asking for a column of ` +
+        'that name would shadow the insert/update split with table data.'
+    );
+  }
+  const askDatabase = options.existedBeforeWrite === undefined;
   // The unqualified relation name is how PostgreSQL addresses the target row
   // inside ON CONFLICT DO UPDATE; the schema qualifier is not accepted there.
   const target = relation.split('.').pop()!;
@@ -139,14 +237,19 @@ export async function upsertMutable(
     assignments.push('updated_at = now()');
   }
 
+  const projection = askDatabase
+    ? [...returning, `(xmax = 0) AS ${INSERTED_FLAG}`]
+    : [...returning];
+
   const { rows } = await tx.query(
     `INSERT INTO ${relation} (${columns.join(', ')})
      VALUES (${placeholders.join(', ')})
      ON CONFLICT (${conflictTarget.join(', ')}) DO UPDATE SET ${assignments.join(', ')}
-     RETURNING ${returning.join(', ')}`,
+     RETURNING ${projection.join(', ')}`,
     values as unknown[]
   );
-  return rows[0] as Record<string, unknown>;
+  const row = rows[0] as Record<string, unknown>;
+  return askDatabase ? row : { ...row, [INSERTED_FLAG]: !options.existedBeforeWrite };
 }
 
 /**
@@ -197,6 +300,11 @@ export async function insertAppendOnly(
   counts.examined = options.rows.length;
   counts.written = rowCount ?? 0;
   counts.skipped = options.rows.length - counts.written;
+  // F-3. Every row this primitive lands is a creation — `DO NOTHING` cannot
+  // update, and the append guard of migration 015 would refuse it if it tried.
+  // Stated rather than left at zero, because a relation reporting 20 written and
+  // neither inserted nor updated reads as a third, unexplained kind of write.
+  counts.inserted = counts.written;
   return counts;
 }
 

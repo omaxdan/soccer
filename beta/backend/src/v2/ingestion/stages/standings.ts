@@ -234,6 +234,8 @@ export async function ingestStandings(
       variant: OBSERVED_VARIANT,
       offered: resolved.length,
       written: counts.written,
+      inserted: counts.inserted,
+      updated: counts.updated,
       skipped: counts.skipped,
       rejected: counts.rejected,
     },

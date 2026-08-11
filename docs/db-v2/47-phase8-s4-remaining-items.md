@@ -15,8 +15,8 @@ is blocked harder than the record suggests.
 
 | Item | Unblocked | Specified | Verdict |
 |---|---|---|---|
-| **F-2** transition telemetry | **yes** | **yes** | **DO NEXT** |
-| F-3 insert-vs-update | yes | yes | ready, larger blast radius |
+| **F-2** transition telemetry | **yes** | **yes** | **DONE** — fixed, `5647ac5` |
+| F-3 insert-vs-update | yes | yes | **DONE** — fixed, [doc 48](./48-phase8-s4-f3-insert-update-telemetry.md) |
 | U-10 earlier reschedule | yes | **no** — the behaviour is undecided | needs a decision first |
 | `appearance` + match-level family | **no** — G-1 | n/a | blocked |
 | `provider_statistic` | **no** — PD-16 conflict | **no** | blocked, and see §3 |
@@ -163,8 +163,10 @@ needed if it rides along with a sweep already planned.
 
 ## Recommended order
 
-1. **F-2** — small, unblocked, specified, and it makes every later sweep legible.
-2. **F-3** — same class, larger blast radius, its own step.
+1. ~~**F-2**~~ — done.
+2. ~~**F-3**~~ — done; see [doc 48](./48-phase8-s4-f3-insert-update-telemetry.md), which records
+   what §2 above did not state: the named `xmax` technique does not work on the
+   two partitioned relations, and the ledger has no column for the split.
 3. **U-10** — decide the behaviour, then implement.
 4. **`/match/{id}` discovery** — one call to settle whether G-1 is answerable,
    which is what gates `appearance` and everything below it.
@@ -172,4 +174,8 @@ needed if it rides along with a sweep already planned.
    carry a migration.
 
 **S-4 standings: COMPLETE and LIVE-PROVEN. S-4 as a whole: OPEN.**
-**Nothing here is implemented. Awaiting approval.**
+
+*This document was an assessment; nothing in it was implemented when it was
+written. F-2 and F-3 have since been implemented under their own steps — the
+table and the order above are annotated accordingly, and nothing else here has
+been restated.*
