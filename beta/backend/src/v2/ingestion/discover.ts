@@ -50,7 +50,7 @@ import { join, resolve } from 'node:path';
 
 import { ProviderClient, ProviderRequestError, type ProviderObservation } from './provider/client';
 import { dailyQuota, loadProviderConfig, PROVIDER_CODE } from './provider/config';
-import type { EndpointKey } from './provider/endpoints';
+import { resolvePath, type EndpointKey } from './provider/endpoints';
 import { logger } from '../../utils/logger';
 
 /* eslint-disable no-console */
@@ -217,6 +217,26 @@ export function evidenceFilename(
   return suffix ? `${endpointKey}__${suffix}.json` : `${endpointKey}.json`;
 }
 
+/**
+ * The path a request used, for the failure record.
+ *
+ * `resolvePath` is the same function the client calls, so a failure record
+ * reproduces the request byte for byte. It can itself throw — an unresolved
+ * parameter is one of the ways a call fails — and a throw inside the catch
+ * block would lose the original error, so an unresolvable path degrades to a
+ * marker rather than replacing the diagnosis with its own.
+ */
+export function requestPath(
+  endpointKey: EndpointKey,
+  parameters: Record<string, string | number>
+): string {
+  try {
+    return resolvePath(endpointKey, parameters);
+  } catch {
+    return '(path could not be resolved)';
+  }
+}
+
 interface EvidenceRecord {
   readonly capturedAt: string;
   readonly provider: string;
@@ -375,19 +395,23 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       const failure = error instanceof ProviderRequestError ? error : null;
       const message = error instanceof Error ? error.message : String(error);
       // A FAILURE IS EVIDENCE TOO. It is written with the same envelope so the
-      // request that produced it is as reproducible as a success.
+      // request that produced it is as reproducible as a success — which means
+      // the URL must be the one that was actually sent. It is recomputed from
+      // the same resolver the client used rather than scraped out of an error
+      // message, because a failure record whose URL cannot be replayed is not
+      // evidence of anything.
       written.push(
         write({
           capturedAt,
           provider: PROVIDER_CODE,
           endpointKey,
           method: 'GET',
-          url: `${config.baseUrl}${failure?.message ?? ''}`.split(' ')[0],
-          path: '(see error)',
+          url: `${config.baseUrl}${requestPath(endpointKey, parameters)}`,
+          path: requestPath(endpointKey, parameters),
           parameters,
           status: failure?.status ?? null,
           success: false,
-          attempts: 0,
+          attempts: failure?.attempts ?? 0,
           quotaRemaining: lastQuotaRemaining,
           responseSha256: '',
           bodyBytes: 0,

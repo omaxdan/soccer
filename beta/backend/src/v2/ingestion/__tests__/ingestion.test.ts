@@ -20,6 +20,8 @@
 
 import { before, after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { PoolClient } from 'pg';
 
 import {
@@ -33,7 +35,8 @@ import {
   isUnmappedLifecycle,
 } from '../mapping/index';
 import { ENDPOINTS, DELIBERATELY_NOT_INGESTED, resolvePath } from '../provider/endpoints';
-import { PROVIDER_CODE } from '../provider/config';
+import { PROVIDER_CODE, type ProviderConfig } from '../provider/config';
+import { ProviderClient, ProviderRequestError } from '../provider/client';
 import {
   fixturePartitionOn,
   fromUnixSeconds,
@@ -112,6 +115,76 @@ describe('endpoint registry', () => {
 
   it('8. encodes parameters', () => {
     assert.equal(resolvePath('schedule', { date: '2026-08-01' }), '/schedule/2026-08-01');
+  });
+});
+
+describe('provider client — what a failure reports having spent', () => {
+  // A 404 breaks out of the retry loop on the FIRST attempt, so it costs one
+  // call. The error nevertheless reported MAX_ATTEMPTS, and the S-4 discovery
+  // evidence recorded a four-attempt request pattern that never happened.
+  // Quota accounting is the one place an overstatement is not conservative:
+  // it makes the next run believe it has less budget than it does.
+  const serve = async (
+    status: number,
+    body: unknown
+  ): Promise<{ config: ProviderConfig; close: () => Promise<void>; hits: () => number }> => {
+    let hits = 0;
+    const server = createServer((_req, res) => {
+      hits += 1;
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    const port = (server.address() as AddressInfo).port;
+    return {
+      config: {
+        baseUrl: `http://127.0.0.1:${port}`,
+        keys: ['test-key'],
+        requestTimeoutMs: 2_000,
+        dailyQuotaPerKey: 100,
+        minRequestIntervalMs: 0,
+      },
+      close: () => new Promise<void>((done) => server.close(() => done())),
+      hits: () => hits,
+    };
+  };
+
+  it('8a. a 404 reports one attempt, because it made one request', async () => {
+    const { config, close, hits } = await serve(404, { message: 'no such page' });
+    try {
+      await assert.rejects(
+        () => new ProviderClient(config).get('team_squad', { id: 42 }),
+        (error: unknown) => {
+          assert.ok(error instanceof ProviderRequestError);
+          assert.equal(error.status, 404);
+          assert.ok(error.isNotFound);
+          assert.equal(error.attempts, 1, 'a 404 is not retried, so it costs one call');
+          return true;
+        }
+      );
+      assert.equal(hits(), 1, 'and exactly one request reached the provider');
+    } finally {
+      await close();
+    }
+  });
+
+  it('8b. a retried failure reports every attempt it actually made', async () => {
+    // 500 IS retryable, so this exercises the other side: the count must not be
+    // pinned at 1 either. It is the attempts spent, whatever that number is.
+    const { config, close, hits } = await serve(500, { message: 'upstream' });
+    try {
+      await assert.rejects(
+        () => new ProviderClient(config).get('team_squad', { id: 42 }),
+        (error: unknown) => {
+          assert.ok(error instanceof ProviderRequestError);
+          assert.equal(error.attempts, hits(), 'reported attempts equal requests sent');
+          assert.ok(error.attempts > 1, 'a 5xx is retried');
+          return true;
+        }
+      );
+    } finally {
+      await close();
+    }
   });
 });
 

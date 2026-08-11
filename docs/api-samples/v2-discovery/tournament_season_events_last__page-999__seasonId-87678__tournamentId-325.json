@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-08-11T04:50:04.620Z",
+  "provider": "SPORTSAPI_API",
+  "endpointKey": "tournament_season_events_last",
+  "method": "GET",
+  "url": "https://v2.football.sportsapipro.com/apitournament_season_events_last",
+  "path": "(see error)",
+  "parameters": {
+    "tournamentId": "325",
+    "seasonId": "87678",
+    "page": 999
+  },
+  "status": 404,
+  "success": false,
+  "attempts": 0,
+  "quotaRemaining": 97,
+  "responseSha256": "",
+  "bodyBytes": 0,
+  "body": null,
+  "error": "tournament_season_events_last /tournament/325/season/87678/events/last/999 failed with status 404"
+}

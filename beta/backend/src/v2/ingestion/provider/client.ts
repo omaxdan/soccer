@@ -195,8 +195,10 @@ export class ProviderClient {
     let transportIndex = this.roundRobin++ % this.transports.length;
     let lastStatus: number | undefined;
     let lastError: unknown;
+    let attemptsMade = 0;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      attemptsMade = attempt + 1;
       await this.throttle();
       try {
         const response = await this.transports[transportIndex].get<T>(path);
@@ -261,11 +263,15 @@ export class ProviderClient {
       }
     }
 
+    // The ATTEMPTS ACTUALLY SPENT, not the ceiling. A 404 breaks on the first
+    // attempt and costs one call; reporting MAX_ATTEMPTS would overstate the
+    // spend by four in exactly the case the quota accounting cares about, and
+    // the discovery evidence would record a request pattern that never happened.
     throw new ProviderRequestError(
       `${ENDPOINTS[key].key} ${path} failed` + (lastStatus ? ` with status ${lastStatus}` : ''),
       key,
       lastStatus,
-      MAX_ATTEMPTS,
+      attemptsMade,
       lastError
     );
   }

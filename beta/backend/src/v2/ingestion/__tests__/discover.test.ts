@@ -18,6 +18,7 @@ import {
   describeShape,
   parsePageList,
   planCalls,
+  requestPath,
   DEFAULT_MAX_CALLS,
   MAX_ALLOWED_CALLS,
 } from '../discover';
@@ -248,6 +249,27 @@ describe('the plan is built before anything is sent', () => {
     for (const step of planCalls(parseArguments(['--tournament', '325']))) {
       assert.ok(step.purpose.length > 10, `${step.endpointKey} needs a stated purpose`);
     }
+  });
+});
+
+describe('a failure record reproduces the request that failed', () => {
+  // The events/last/999 capture — the one that proved 404 is the terminal
+  // signal — was written with a URL of
+  // `https://…/apitournament_season_events_last`, scraped out of an error
+  // message. The 404 itself was sound; the record of how it was obtained was
+  // not, and a failure nobody can replay is not evidence.
+  test('the path is the one that was sent, not a fragment of the error text', () => {
+    assert.equal(
+      requestPath('tournament_season_events_last', { tournamentId: '325', seasonId: '87678', page: 999 }),
+      '/tournament/325/season/87678/events/last/999'
+    );
+  });
+
+  test('an unresolvable path degrades rather than throwing over the real error', () => {
+    // This runs inside the catch block. A throw here would replace the
+    // diagnosis with a second, less useful one.
+    assert.doesNotThrow(() => requestPath('tournament_season_events_last', { tournamentId: '325' }));
+    assert.match(requestPath('tournament_season_events_last', { tournamentId: '325' }), /could not be resolved/);
   });
 });
 
