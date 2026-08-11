@@ -64,6 +64,8 @@ interface SeasonArguments {
   readonly from: Date;
   readonly to: Date;
   readonly maxCalls: number;
+  /** Opt in to the league-table call. Default OFF. */
+  readonly withStandings: boolean;
 }
 
 export type Arguments = ScheduleArguments | SquadArguments | SeasonArguments;
@@ -94,6 +96,10 @@ export function parseArguments(argv: readonly string[]): Arguments {
     const arg = argv[i];
     if (arg === '--allow-over-budget') {
       enforceQuotaBudget = false;
+    } else if (arg === '--with-standings') {
+      // A standalone flag: it carries no value, so it must not consume the token
+      // that follows it.
+      continue;
     } else if (arg.startsWith('--')) {
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--')) {
@@ -132,6 +138,7 @@ export function parseArguments(argv: readonly string[]): Arguments {
       from,
       to,
       maxCalls: rawMaxCalls === undefined ? DEFAULT_SEASON_MAX_CALLS : Number(rawMaxCalls),
+      withStandings: argv.includes('--with-standings'),
     };
   }
 
@@ -183,7 +190,12 @@ function announceSeason(args: Extract<Arguments, { command: 'season' }>): void {
   console.log(`  season (season.id)                ${args.seasonProviderId}`);
   console.log(`  window                            ${iso(args.from)} .. ${iso(args.to)} (inclusive, UTC)`);
   console.log(`  call budget (whole sweep)         ${args.maxCalls}`);
-  console.log('  endpoints                         tournament_season_events_last | _next');
+  console.log(
+    `  standings                         ${args.withStandings ? 'YES — one season_standings call, variant TOTAL' : 'no (--with-standings to include)'}`
+  );
+  console.log(
+    `  endpoints                         tournament_season_events_last | _next${args.withStandings ? ' | season_standings' : ''}`
+  );
   console.log('  NOT used                          /schedule/{date}, match-level\n');
   /* eslint-enable no-console */
 }
@@ -210,6 +222,14 @@ function reportSeason(result: SeasonIngestionReport): void {
   console.log(`  events selected  ${String(result.eventsSelected).padStart(6)}`);
   console.log(`  quota remaining  ${String(result.quotaRemaining ?? 'not reported').padStart(6)}`);
   console.log(`  editions         ${String(result.editionsForSeason).padStart(6)}   (must be 1)`);
+  if (result.standingsRequested) {
+    const standings = result.standingsCounts;
+    console.log(
+      `  standings        ${String(standings?.written ?? 0).padStart(6)} written, ` +
+        `${standings?.skipped ?? 0} skipped, ${standings?.rejected ?? 0} rejected ` +
+        `— variant TOTAL, as of ${result.standingsAsOfOn} (observed, not reconstructed)`
+    );
+  }
   console.log('\n  per relation:');
   for (const [relation, counts] of result.byRelation) {
     console.log(
@@ -234,6 +254,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
         from: args.from,
         to: args.to,
         maxCalls: args.maxCalls,
+        withStandings: args.withStandings,
       });
       reportSeason(seasonResult);
       if (seasonResult.failed) process.exitCode = 1;
