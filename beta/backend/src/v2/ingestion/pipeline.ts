@@ -39,6 +39,7 @@ import { ProviderClient, ProviderRequestError } from './provider/client';
 import { PROVIDER_CODE, dailyQuota, loadProviderConfig } from './provider/config';
 import { IngestionCounts } from './write/index';
 import { ingestEvents, ingestScheduleDate, type IngestionScope } from './stages/schedule';
+import { fetchSeasonStandings, ingestStandings } from './stages/standings';
 import {
   sweepSeason,
   type EventDirection,
@@ -374,6 +375,13 @@ export interface SeasonIngestionOptions {
   readonly to: Date;
   /** Maximum provider calls for the WHOLE sweep, both directions. */
   readonly maxCalls: number;
+  /**
+   * Also capture the season's league table. OFF unless asked.
+   *
+   * Default-off is the point: the four-call sweep is proven, and a flag that
+   * quietly added a fifth call would change what "the proven sweep" means.
+   */
+  readonly withStandings?: boolean;
   /** Supplied by tests. Production passes nothing and gets a real client. */
   readonly client?: ProviderClient;
 }
@@ -402,6 +410,11 @@ export interface SeasonIngestionReport {
   readonly quotaRemaining: number | null;
   readonly counts: IngestionCounts;
   readonly byRelation: ReadonlyMap<string, IngestionCounts>;
+  /** Whether standings were requested — recorded so a run states its own scope. */
+  readonly standingsRequested: boolean;
+  /** The UTC date the standings snapshot was OBSERVED, or null when not asked. */
+  readonly standingsAsOfOn: string | null;
+  readonly standingsCounts: IngestionCounts | null;
   /** Editions resolved for this provider season. Must be exactly 1. */
   readonly editionsForSeason: number;
   readonly competitionEditionId: string | null;
@@ -472,14 +485,25 @@ export async function ingestSeason(
   let byRelation: ReadonlyMap<string, IngestionCounts> = new Map();
   let editionsForSeason = 0;
   let competitionEditionId: string | null = null;
+  let standingsCounts: IngestionCounts | null = null;
+  let standingsCallsSpent = 0;
   let failed = false;
 
   // `scopeText` is what an operator reads in the run ledger to know WHAT was
   // swept without opening the job's detail. A run key alone says only that a
   // season sweep happened.
+  const withStandings = options.withStandings === true;
+  // ONE DATE FOR THE RUN. `season_standings` takes no historical parameter and
+  // returns the CURRENT table whatever window was asked for, so the honest stamp
+  // is the UTC calendar date the snapshot was observed — not `--to`, which would
+  // date an August table as June on any backfill. Established here so twenty
+  // rows cannot disagree about when they were seen.
+  const standingsAsOfOn = withStandings ? utcDateString(new Date()) : null;
+
   const scopeText =
     `competition ${options.competitionProviderId} season ${options.seasonProviderId} ` +
-    `${utcDateString(options.from)}..${utcDateString(options.to)}`;
+    `${utcDateString(options.from)}..${utcDateString(options.to)}` +
+    (withStandings ? ` +standings@${standingsAsOfOn}` : '');
 
   await withPipelineRun(INGESTION_ROLE, 'v2.ingest.season', async () => {
     try {
@@ -488,10 +512,28 @@ export async function ingestSeason(
         competitionProviderId: options.competitionProviderId,
         seasonProviderId: options.seasonProviderId,
         window,
-        callBudget: options.maxCalls,
+        // The standings call is RESERVED out of the budget rather than added to
+        // it, so --max-calls bounds the whole run and not merely the pager.
+        callBudget: withStandings ? Math.max(0, options.maxCalls - 1) : options.maxCalls,
       });
 
       const selected = [...sweep.last.events, ...sweep.next.events];
+
+      // FETCHED OUTSIDE THE TRANSACTION, like the walk, for the same reason: a
+      // database transaction must not be held open across a network request.
+      let standingsResponse: Awaited<ReturnType<typeof fetchSeasonStandings>> | null = null;
+      if (withStandings) {
+        standingsResponse = await fetchSeasonStandings(
+          client,
+          options.competitionProviderId,
+          options.seasonProviderId
+        );
+        // COUNTED SEPARATELY AND ADDED TO THE TOTAL. The pager reports only its
+        // own walk, so a report summing directions alone would understate a
+        // standings run by exactly one call — the same shape of telemetry gap as
+        // F-2, and not worth repeating.
+        standingsCallsSpent = 1;
+      }
 
       // ── Write. One transaction for the whole season. ───────────────────────
       const stageCounts = await withRun(
@@ -522,6 +564,23 @@ export async function ingestSeason(
                 'competition editions; exactly one is required (F-1, doc 41)'
             );
           }
+          // STANDINGS LAST. It needs the edition the events resolved, and the
+          // assertion above has just proved there is exactly one.
+          if (standingsResponse && competitionEditionId && standingsAsOfOn) {
+            const standings = await ingestStandings(tx, {
+              competitionEditionId,
+              asOfOn: standingsAsOfOn,
+              response: standingsResponse,
+            });
+            await reportWrites(job, standings);
+            standingsCounts = standings.total;
+          } else if (standingsResponse) {
+            logger.warn(
+              { competition: options.competitionProviderId, season: options.seasonProviderId },
+              'v2 ingestion: standings fetched but no competition edition was resolved, table not written'
+            );
+          }
+
           return written;
         },
         {
@@ -531,6 +590,8 @@ export async function ingestSeason(
             from: utcDateString(options.from),
             to: utcDateString(options.to),
             maxCalls: options.maxCalls,
+            withStandings,
+            standingsAsOfOn,
           },
         }
       );
@@ -581,12 +642,16 @@ export async function ingestSeason(
     directions,
     eventsRead: directions.reduce((total, entry) => total + entry.eventsRead, 0),
     eventsSelected: directions.reduce((total, entry) => total + entry.eventsSelected, 0),
-    callsSpent: directions.reduce((total, entry) => total + entry.callsSpent, 0),
+    callsSpent:
+      directions.reduce((total, entry) => total + entry.callsSpent, 0) + standingsCallsSpent,
     quotaRemaining: result.next.quotaRemaining ?? result.last.quotaRemaining,
     counts,
     byRelation,
     editionsForSeason,
     competitionEditionId,
+    standingsRequested: withStandings,
+    standingsAsOfOn,
+    standingsCounts,
     failed,
   };
 }

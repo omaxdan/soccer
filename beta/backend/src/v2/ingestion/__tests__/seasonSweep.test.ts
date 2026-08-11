@@ -92,6 +92,17 @@ describe('B-1 · the season CLI states its own scope', () => {
     assert.throws(() => parseArguments([...FULL, '--max-calls', 'lots']), /whole number/);
   });
 
+  it('5a. --with-standings is OFF unless asked, and does not eat the next flag', () => {
+    assert.equal(season(FULL).withStandings, false, 'default OFF');
+    assert.equal(season([...FULL, '--with-standings']).withStandings, true);
+    // A standalone flag must not consume the token after it.
+    const mid = season(['season', '--tournament', '325', '--with-standings',
+      '--season', '87678', '--from', '2026-05-31', '--to', '2026-08-11']);
+    assert.equal(mid.withStandings, true);
+    assert.equal(mid.seasonProviderId, '87678');
+    assert.equal(mid.maxCalls, DEFAULT_SEASON_MAX_CALLS);
+  });
+
   it('6. `season` does not disturb the existing commands', () => {
     assert.equal(parseArguments([]).command, 'schedule');
     assert.equal(parseArguments(['--date', '2026-08-01']).command, 'schedule');
@@ -360,12 +371,29 @@ describe('B-1 · operational lifecycle (requires a V2 database)', { skip: !hasDa
   /** One page, one in-window event, `hasNextPage: false` so the walk ends cleanly. */
   function oneSeasonPage(options: { throwOn?: 'last' } = {}) {
     let calls = 0;
+    const seen: string[] = [];
     return {
       get calls() {
         return calls;
       },
+      seen,
+      // `get` is what the standings stage calls; `getObserved` is the pager's.
+      // Both record the endpoint, so a test can assert exactly what was reached.
+      async get<T>(key: EndpointKey) {
+        calls += 1;
+        seen.push(key);
+        return {
+          standings: [
+            {
+              teamId: 'OPS-H', position: 1, played: 1, won: 1, drawn: 0, lost: 0,
+              goalsFor: 2, goalsAgainst: 1, points: 3,
+            },
+          ],
+        } as T;
+      },
       async getObserved<T>(key: EndpointKey, params: Record<string, string | number>) {
         calls += 1;
+        seen.push(key);
         if (options.throwOn === 'last' && key === 'tournament_season_events_last') {
           throw new ProviderRequestError('upstream exploded', key, 500, 4);
         }
@@ -478,6 +506,70 @@ describe('B-1 · operational lifecycle (requires a V2 database)', { skip: !hasDa
       );
       assert.ok(Number(writes[0].n) >= 1, 'per-relation write records were attributed');
     });
+  });
+
+  it('17a. WITHOUT the flag, the proven sweep is untouched — no standings call', async () => {
+    const source = oneSeasonPage();
+    const report = await ingestSeason({
+      competitionProviderId: COMPETITION,
+      seasonProviderId: SEASON,
+      ...WINDOW,
+      maxCalls: 4,
+      client: source,
+    });
+
+    assert.equal(report.standingsRequested, false);
+    assert.equal(report.standingsAsOfOn, null);
+    assert.equal(report.standingsCounts, null);
+    assert.deepEqual(
+      (source as unknown as { seen: string[] }).seen,
+      ['tournament_season_events_last', 'tournament_season_events_next'],
+      'the season feed only — season_standings is never reached'
+    );
+    assert.equal(report.callsSpent, 2);
+  });
+
+  it('17b. WITH the flag, exactly one season_standings call is added', async () => {
+    const source = oneSeasonPage();
+    const report = await ingestSeason({
+      competitionProviderId: COMPETITION,
+      seasonProviderId: SEASON,
+      ...WINDOW,
+      maxCalls: 4,
+      withStandings: true,
+      client: source,
+    });
+
+    const seen = (source as unknown as { seen: string[] }).seen;
+    assert.equal(
+      seen.filter((key) => key === 'season_standings').length,
+      1,
+      'exactly one standings call'
+    );
+    assert.equal(report.standingsRequested, true);
+    assert.match(report.standingsAsOfOn ?? '', /^\d{4}-\d{2}-\d{2}$/, 'a UTC calendar date');
+    assert.equal(report.callsSpent, seen.length, 'the standings call is counted in the spend');
+  });
+
+  it('17c. the run ledger records that standings were requested', async () => {
+    await ingestSeason({
+      competitionProviderId: COMPETITION,
+      seasonProviderId: SEASON,
+      ...WINDOW,
+      maxCalls: 4,
+      withStandings: true,
+      client: oneSeasonPage(),
+    });
+
+    const { rows } = await withConnection('pt_pipeline_ingestion', (tx) =>
+      tx.query<{ scope_text: string }>(
+        `SELECT scope_text FROM operations.pipeline_run
+          WHERE run_key = 'v2.ingest.season' ORDER BY occurred_at DESC LIMIT 1`
+      )
+    );
+    // Auditable from the ledger alone: an enabled standings ingestion must not
+    // be invisible to anyone reading the run afterwards.
+    assert.match(rows[0].scope_text, /\+standings@\d{4}-\d{2}-\d{2}/);
   });
 
   it('18. a failing sweep is recorded as failed, not silently swallowed', async () => {
