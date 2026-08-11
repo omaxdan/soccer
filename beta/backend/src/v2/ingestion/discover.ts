@@ -61,10 +61,45 @@ export const EVIDENCE_DIR = resolve(__dirname, '..', '..', '..', 'docs', 'api-sa
 /** Minimum that answers the pagination question: seasons, page 0, page 1. */
 export const DEFAULT_MAX_CALLS = 3;
 
+/**
+ * An absolute ceiling on --max-calls, independent of what is typed.
+ *
+ * This is a DISCOVERY tool against a 200-call daily budget. A mistyped
+ * `--max-calls 500` would spend more than two days of quota before anyone could
+ * interrupt it, and no discovery question needs anything approaching this many
+ * requests. Bulk work belongs in an ingestion runner with its own accounting.
+ */
+export const MAX_ALLOWED_CALLS = 25;
+
+/** One planned request. The plan is built and priced BEFORE anything is sent. */
+export interface PlannedCall {
+  readonly endpointKey: EndpointKey;
+  readonly parameters: Record<string, string | number>;
+  /** What this call is meant to establish, printed so a run explains itself. */
+  readonly purpose: string;
+}
+
 export interface DiscoveryArguments {
   readonly tournamentId: string;
   readonly seasonId?: string;
   readonly maxCalls: number;
+  /** Pages to fetch from events/last. Undefined means "not requested". */
+  readonly lastPages?: readonly number[];
+  /** Pages to fetch from events/next. */
+  readonly nextPages?: readonly number[];
+  /** Force the seasons call even when other steps were named. */
+  readonly wantSeasons: boolean;
+}
+
+/** Parses `0,1,999` into pages, refusing anything that is not a page number. */
+export function parsePageList(raw: string, flag: string): number[] {
+  const pages = raw.split(',').map((part) => part.trim());
+  return pages.map((part) => {
+    if (!/^\d+$/.test(part)) {
+      throw new Error(`${flag} expects comma-separated page numbers, received '${part}'.`);
+    }
+    return Number(part);
+  });
 }
 
 export function parseArguments(argv: readonly string[]): DiscoveryArguments {
@@ -95,8 +130,68 @@ export function parseArguments(argv: readonly string[]): DiscoveryArguments {
   }
   const maxCalls = rawMax === undefined ? DEFAULT_MAX_CALLS : Number(rawMax);
   if (maxCalls < 1) throw new Error('--max-calls must be at least 1.');
+  if (maxCalls > MAX_ALLOWED_CALLS) {
+    throw new Error(
+      `--max-calls ${maxCalls} exceeds the discovery ceiling of ${MAX_ALLOWED_CALLS}. ` +
+        'Discovery answers questions; it does not ingest. Bulk work belongs in an ' +
+        'ingestion runner with its own quota accounting.'
+    );
+  }
 
-  return { tournamentId, seasonId: values.get('--season'), maxCalls };
+  const rawLast = values.get('--last');
+  const rawNext = values.get('--next');
+
+  return {
+    tournamentId,
+    seasonId: values.get('--season'),
+    maxCalls,
+    lastPages: rawLast === undefined ? undefined : parsePageList(rawLast, '--last'),
+    nextPages: rawNext === undefined ? undefined : parsePageList(rawNext, '--next'),
+    wantSeasons: argv.includes('--seasons'),
+  };
+}
+
+/**
+ * The steps this invocation will perform, in order, before any request is sent.
+ *
+ * Building the plan first is what lets the run be PRICED and refused up front
+ * rather than discovering halfway through that it cannot finish. A partial
+ * discovery run is worse than none: it spends quota and answers half a question.
+ *
+ * DEFAULT, when no step is named: the original three — seasons, last/0, last/1.
+ * Naming any step replaces the default entirely, so an explicit run does exactly
+ * what was asked and nothing more.
+ */
+export function planCalls(args: DiscoveryArguments): PlannedCall[] {
+  const named = args.lastPages !== undefined || args.nextPages !== undefined || args.wantSeasons;
+  const plan: PlannedCall[] = [];
+
+  const needsSeasons = args.wantSeasons || (!named && args.seasonId === undefined) ||
+    (named && args.seasonId === undefined && (args.lastPages !== undefined || args.nextPages !== undefined));
+  if (needsSeasons) {
+    plan.push({
+      endpointKey: 'tournament_seasons',
+      parameters: { tournamentId: args.tournamentId },
+      purpose: 'season catalogue and the season id every later step needs',
+    });
+  }
+
+  const lastPages = named ? (args.lastPages ?? []) : [0, 1];
+  for (const page of lastPages) {
+    plan.push({
+      endpointKey: 'tournament_season_events_last',
+      parameters: { tournamentId: args.tournamentId, seasonId: '(resolved)', page },
+      purpose: `completed events, page ${page}`,
+    });
+  }
+  for (const page of args.nextPages ?? []) {
+    plan.push({
+      endpointKey: 'tournament_season_events_next',
+      parameters: { tournamentId: args.tournamentId, seasonId: '(resolved)', page },
+      purpose: `scheduled events, page ${page}`,
+    });
+  }
+  return plan;
 }
 
 /**
@@ -251,7 +346,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   console.log(`  base url        ${config.baseUrl}`);
   console.log(`  keys            ${config.keys.length} configured (values never printed)`);
   console.log(`  daily budget    ${dailyQuota(config)} calls`);
-  console.log(`  this run        at most ${args.maxCalls}`);
+  console.log(`  this run        at most ${args.maxCalls} (ceiling ${MAX_ALLOWED_CALLS})`);
   console.log(`  evidence dir    ${EVIDENCE_DIR}\n`);
 
   const client = new ProviderClient(config);
@@ -305,33 +400,50 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     }
   };
 
+  const plan = planCalls(args);
+  console.log('  plan:');
+  for (const [index, step] of plan.entries()) {
+    console.log(`    ${index + 1}. ${step.endpointKey}  — ${step.purpose}`);
+  }
+  // PRICED BEFORE ANYTHING IS SENT. A run that cannot finish should not start:
+  // a partial discovery spends quota and answers half a question.
+  if (plan.length > args.maxCalls) {
+    console.log(
+      `\n  REFUSED — the plan needs ${plan.length} calls and --max-calls is ${args.maxCalls}.\n`
+    );
+    return;
+  }
+  console.log('');
+
   try {
-    // ── 1. Seasons, unless the operator already knows the season id ──────────
     let seasonId = args.seasonId;
-    if (!seasonId) {
-      const seasons = await capture('tournament_seasons', { tournamentId: args.tournamentId });
-      seasonId = firstSeasonId(seasons) ?? undefined;
+
+    for (const step of plan) {
+      if (step.endpointKey === 'tournament_seasons') {
+        const seasons = await capture('tournament_seasons', { tournamentId: args.tournamentId });
+        // Only adopt a resolved id when the operator did not supply one.
+        seasonId = seasonId ?? firstSeasonId(seasons) ?? undefined;
+        if (!seasonId) {
+          console.log('\n  STOPPING — no season id could be read from that payload, and this');
+          console.log('  runner does not guess. One call was spent and the response is saved.');
+          console.log(`  Read ${written[0]}`);
+          console.log('  then re-run with:  npm run discover:v2 -- --tournament <id> --season <id>\n');
+          return;
+        }
+        console.log(`        season id in force: ${seasonId}`);
+        continue;
+      }
+
       if (!seasonId) {
-        console.log('\n  STOPPING — no season id could be read from that payload, and this');
-        console.log('  runner does not guess. One call was spent and the response is saved.');
-        console.log(`  Read ${written[0]}`);
-        console.log('  then re-run with:  npm run discover:v2 -- --tournament <id> --season <id>\n');
+        console.log('\n  STOPPING — this step needs a season id and none is known.');
+        console.log('  Supply --season <id>, or let the plan include the seasons call.\n');
         return;
       }
-      console.log(`        season id resolved: ${seasonId}`);
-    } else {
-      console.log(`  season id supplied: ${seasonId} — skipping the seasons call\n`);
-    }
 
-    // ── 2 & 3. Two consecutive pages, which is what answers the question ─────
-    // One page shows the envelope. TWO show whether the page number advances,
-    // whether page size is fixed, whether ids repeat, and what an empty page
-    // looks like if page 1 is past the end. One page answers none of that.
-    for (const page of [0, 1]) {
-      await capture('tournament_season_events_last', {
+      await capture(step.endpointKey, {
         tournamentId: args.tournamentId,
         seasonId,
-        page,
+        page: step.parameters.page,
       });
     }
   } catch (error) {

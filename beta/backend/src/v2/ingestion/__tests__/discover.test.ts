@@ -16,7 +16,10 @@ import {
   evidenceFilename,
   firstSeasonId,
   describeShape,
+  parsePageList,
+  planCalls,
   DEFAULT_MAX_CALLS,
+  MAX_ALLOWED_CALLS,
 } from '../discover';
 import { ENDPOINTS, resolvePath } from '../provider/endpoints';
 
@@ -164,5 +167,102 @@ describe('no credential can reach the evidence files', () => {
   test('evidence is written beneath the existing sample area, not a new one', () => {
     const source = readFileSync(resolve(__dirname, '..', 'discover.ts'), 'utf8');
     assert.match(source, /'docs', 'api-samples', 'v2-discovery'/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PLANNED EXPERIMENT
+//
+// The five-call experiment closes U-2 (past-the-end behaviour) and U-3 (the
+// events/next envelope). These pin that the plan is built and priced BEFORE any
+// request, that naming a step replaces the default rather than adding to it, and
+// that a plan larger than the budget is refused rather than half-executed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('page lists', () => {
+  test('a comma-separated list becomes pages', () => {
+    assert.deepEqual(parsePageList('0,1,999', '--last'), [0, 1, 999]);
+    assert.deepEqual(parsePageList(' 2 ', '--last'), [2]);
+  });
+
+  test('anything that is not a page number is refused', () => {
+    for (const bad of ['0,x', '-1', '1.5', '', 'last']) {
+      assert.throws(() => parsePageList(bad, '--last'), /comma-separated page numbers/, bad);
+    }
+  });
+
+  test('the flags reach the parsed arguments', () => {
+    const args = parseArguments([
+      '--tournament', '325', '--season', '87678',
+      '--last', '2,999', '--next', '0', '--max-calls', '3',
+    ]);
+    assert.deepEqual(args.lastPages, [2, 999]);
+    assert.deepEqual(args.nextPages, [0]);
+    assert.equal(args.maxCalls, 3);
+  });
+});
+
+describe('the plan is built before anything is sent', () => {
+  test('with no step named, the default three-call sequence stands', () => {
+    const plan = planCalls(parseArguments(['--tournament', '325']));
+    assert.deepEqual(
+      plan.map((p) => p.endpointKey),
+      ['tournament_seasons', 'tournament_season_events_last', 'tournament_season_events_last']
+    );
+    assert.equal(plan.length, DEFAULT_MAX_CALLS, 'the default plan fits the default budget');
+  });
+
+  test('naming steps REPLACES the default rather than adding to it', () => {
+    // An explicit run must do exactly what was asked. Appending to the default
+    // would silently spend two extra calls on a question already answered.
+    const plan = planCalls(
+      parseArguments(['--tournament', '325', '--season', '87678', '--last', '2,999', '--next', '0'])
+    );
+    assert.deepEqual(plan.map((p) => p.endpointKey), [
+      'tournament_season_events_last',
+      'tournament_season_events_last',
+      'tournament_season_events_next',
+    ]);
+    assert.deepEqual(plan.map((p) => p.parameters.page), [2, 999, 0]);
+  });
+
+  test('a known season id removes the seasons call', () => {
+    const withSeason = planCalls(
+      parseArguments(['--tournament', '325', '--season', '87678', '--last', '0'])
+    );
+    assert.equal(withSeason.length, 1, 'no seasons call is needed');
+
+    const withoutSeason = planCalls(parseArguments(['--tournament', '999', '--last', '0']));
+    assert.equal(withoutSeason.length, 2, 'an unknown season must be resolved first');
+    assert.equal(withoutSeason[0].endpointKey, 'tournament_seasons');
+  });
+
+  test('the cup probe costs exactly two calls', () => {
+    // Seasons plus events/last/0, which is what makes the five-call experiment
+    // add up: three on the known season, two on a second competition.
+    const plan = planCalls(parseArguments(['--tournament', '1234', '--last', '0']));
+    assert.equal(plan.length, 2);
+  });
+
+  test('every planned call states what it is for', () => {
+    for (const step of planCalls(parseArguments(['--tournament', '325']))) {
+      assert.ok(step.purpose.length > 10, `${step.endpointKey} needs a stated purpose`);
+    }
+  });
+});
+
+describe('the budget cannot be exceeded', () => {
+  test('a plan larger than the budget is refusable before spending', () => {
+    const args = parseArguments(['--tournament', '325', '--last', '0,1,2,3', '--max-calls', '2']);
+    assert.ok(planCalls(args).length > args.maxCalls, 'main() refuses this rather than half-running it');
+  });
+
+  test('a mistyped budget cannot spend days of quota', () => {
+    assert.throws(
+      () => parseArguments(['--tournament', '325', '--max-calls', '500']),
+      /exceeds the discovery ceiling/
+    );
+    assert.equal(MAX_ALLOWED_CALLS, 25);
+    assert.doesNotThrow(() => parseArguments(['--tournament', '325', '--max-calls', '25']));
   });
 });
