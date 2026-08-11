@@ -10,6 +10,14 @@
 //   npm run ingest:v2 -- squads --limit 40
 //   npm run ingest:v2 -- squads --team 4501    exactly one team, by provider id
 //
+//   npm run ingest:v2 -- season --tournament 325 --season 87678 \
+//                               --from 2026-05-31 --to 2026-08-11 --max-calls 10
+//
+// THE SEASON WINDOW IS REQUIRED AND HAS NO DEFAULT. `FIXTURE_WINDOW` in the
+// pager is the evidence-derived value tests and exploration use; a production
+// run states its own, and the resolved configuration is printed before the first
+// provider call so a run record shows what was actually swept.
+//
 // BACKWARD COMPATIBLE BY CONSTRUCTION. An absent first positional, or one that
 // looks like a flag, still means `schedule` — so every command in the runbook
 // and every existing cron entry keeps working unchanged.
@@ -29,11 +37,11 @@
 // any module that reads `process.env` at load time is evaluated.
 import '../config/env';
 
-import { ingestSchedule, ingestSquads } from './pipeline';
-import type { IngestionReport } from './pipeline';
+import { ingestSchedule, ingestSeason, ingestSquads } from './pipeline';
+import type { IngestionReport, SeasonIngestionReport } from './pipeline';
 import { closeAllPools } from '../db/pool';
 
-type Command = 'schedule' | 'squads';
+type Command = 'schedule' | 'squads' | 'season';
 
 interface ScheduleArguments {
   readonly command: 'schedule';
@@ -49,7 +57,19 @@ interface SquadArguments {
   readonly enforceQuotaBudget: boolean;
 }
 
-export type Arguments = ScheduleArguments | SquadArguments;
+interface SeasonArguments {
+  readonly command: 'season';
+  readonly competitionProviderId: string;
+  readonly seasonProviderId: string;
+  readonly from: Date;
+  readonly to: Date;
+  readonly maxCalls: number;
+}
+
+export type Arguments = ScheduleArguments | SquadArguments | SeasonArguments;
+
+/** The whole sweep's budget. Four pages is the observed cost of one season. */
+export const DEFAULT_SEASON_MAX_CALLS = 10;
 
 function parseUtcDate(value: string, flag: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -67,7 +87,8 @@ export function parseArguments(argv: readonly string[]): Arguments {
   const positional = argv.filter((arg) => !arg.startsWith('--'));
   // The first positional is a command ONLY when it names one. Anything else is
   // left alone so an unrecognised token cannot silently change what runs.
-  const command: Command = positional[0] === 'squads' ? 'squads' : 'schedule';
+  const command: Command =
+    positional[0] === 'squads' ? 'squads' : positional[0] === 'season' ? 'season' : 'schedule';
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -81,6 +102,37 @@ export function parseArguments(argv: readonly string[]): Arguments {
       values.set(arg, next);
       i += 1;
     }
+  }
+
+  if (command === 'season') {
+    // EVERY ONE OF THESE IS REQUIRED. A season sweep with a defaulted window or
+    // a defaulted competition is a sweep whose scope nobody stated, and the
+    // refusal happens here — before a provider call is made, not after.
+    for (const flag of ['--tournament', '--season', '--from', '--to']) {
+      if (!values.has(flag)) {
+        throw new Error(
+          `${flag} is required for a season sweep. ` +
+            'Usage: ingest:v2 -- season --tournament 325 --season 87678 --from 2026-05-31 --to 2026-08-11'
+        );
+      }
+    }
+    const from = parseUtcDate(values.get('--from')!, '--from');
+    const to = parseUtcDate(values.get('--to')!, '--to');
+    if (to.getTime() < from.getTime()) {
+      throw new Error(`--to (${values.get('--to')}) precedes --from (${values.get('--from')}).`);
+    }
+    const rawMaxCalls = values.get('--max-calls');
+    if (rawMaxCalls !== undefined && !/^[1-9]\d*$/.test(rawMaxCalls)) {
+      throw new Error(`--max-calls expects a whole number of at least 1, received '${rawMaxCalls}'.`);
+    }
+    return {
+      command,
+      competitionProviderId: values.get('--tournament')!,
+      seasonProviderId: values.get('--season')!,
+      from,
+      to,
+      maxCalls: rawMaxCalls === undefined ? DEFAULT_SEASON_MAX_CALLS : Number(rawMaxCalls),
+    };
   }
 
   if (command === 'squads') {
@@ -123,9 +175,70 @@ function report(label: string, unit: string, result: IngestionReport): void {
   /* eslint-enable no-console */
 }
 
+/** Printed BEFORE the first provider call, so a run states its own scope. */
+function announceSeason(args: Extract<Arguments, { command: 'season' }>): void {
+  /* eslint-disable no-console */
+  console.log('\nv2 season sweep — resolved configuration');
+  console.log(`  competition (uniqueTournament.id)  ${args.competitionProviderId}`);
+  console.log(`  season (season.id)                ${args.seasonProviderId}`);
+  console.log(`  window                            ${iso(args.from)} .. ${iso(args.to)} (inclusive, UTC)`);
+  console.log(`  call budget (whole sweep)         ${args.maxCalls}`);
+  console.log('  endpoints                         tournament_season_events_last | _next');
+  console.log('  NOT used                          /schedule/{date}, match-level\n');
+  /* eslint-enable no-console */
+}
+
+const iso = (date: Date): string => date.toISOString().slice(0, 10);
+
+function reportSeason(result: SeasonIngestionReport): void {
+  /* eslint-disable no-console */
+  console.log(
+    `\nv2 season sweep complete: competition ${result.competitionProviderId}, ` +
+      `season ${result.seasonProviderId}, ${result.callsSpent} provider call(s)\n`
+  );
+  for (const direction of result.directions) {
+    console.log(
+      `  ${direction.direction.padEnd(5)} pages [${direction.pages.join(', ')}]  ` +
+        `read ${direction.eventsRead}  selected ${direction.eventsSelected}  ` +
+        `duplicates ${direction.duplicates}  calls ${direction.callsSpent}  ` +
+        `stopped ${direction.stoppedBecause}` +
+        (direction.resumeFromPage === null ? '' : `  resume-from ${direction.resumeFromPage}`)
+    );
+    for (const anomaly of direction.orderingAnomalies) console.log(`        ORDERING: ${anomaly}`);
+  }
+  console.log(`\n  events read      ${String(result.eventsRead).padStart(6)}`);
+  console.log(`  events selected  ${String(result.eventsSelected).padStart(6)}`);
+  console.log(`  quota remaining  ${String(result.quotaRemaining ?? 'not reported').padStart(6)}`);
+  console.log(`  editions         ${String(result.editionsForSeason).padStart(6)}   (must be 1)`);
+  console.log('\n  per relation:');
+  for (const [relation, counts] of result.byRelation) {
+    console.log(
+      `    ${relation.padEnd(42)} examined ${String(counts.examined).padStart(5)}  ` +
+        `written ${String(counts.written).padStart(5)}  skipped ${String(counts.skipped).padStart(5)}  ` +
+        `rejected ${String(counts.rejected).padStart(5)}`
+    );
+  }
+  console.log('');
+  /* eslint-enable no-console */
+}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   try {
     const args = parseArguments(argv);
+
+    if (args.command === 'season') {
+      announceSeason(args);
+      const seasonResult = await ingestSeason({
+        competitionProviderId: args.competitionProviderId,
+        seasonProviderId: args.seasonProviderId,
+        from: args.from,
+        to: args.to,
+        maxCalls: args.maxCalls,
+      });
+      reportSeason(seasonResult);
+      if (seasonResult.failed) process.exitCode = 1;
+      return;
+    }
 
     const result =
       args.command === 'squads'

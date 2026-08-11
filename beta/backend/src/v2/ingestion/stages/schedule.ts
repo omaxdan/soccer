@@ -152,35 +152,67 @@ export function seasonPeriod(yearToken: string | null | undefined): SeasonPeriod
 }
 
 /**
- * Ingests one UTC date of the schedule feed.
+ * The competition and season an ingestion run is permitted to write.
+ *
+ * Supplied by the season sweep, absent for the schedule feed — which is
+ * date-scoped by nature and legitimately carries every competition playing that
+ * day. An event whose identity contradicts the scope is REJECTED, not imported:
+ * a sweep asked for one season must not widen itself because the provider sent
+ * something else.
+ */
+export interface IngestionScope {
+  /** `tournament.uniqueTournament.id`. */
+  readonly competitionProviderId: string;
+  /** `season.id`. */
+  readonly seasonProviderId: string;
+}
+
+/**
+ * WRITES A SET OF EVENTS. The one writer implementation, and the only one.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY FETCHING WAS SEPARATED FROM WRITING
+ *
+ * `ingestScheduleDate` used to do both, so an event obtained any other way could
+ * not be written at all — which is why the season pager had no production
+ * caller. Splitting the fetch off is the smallest change that lets two feeds
+ * share one writer:
+ *
+ *   /schedule/{date}  ──fetch──┐
+ *                              ├──► ingestEvents ──► entities
+ *   season pager      ─────────┘
+ *
+ * Nothing about the writing changed. Both paths resolve the same entities, in
+ * the same order, through the same functions, with the same caches. A second
+ * writer would be a second place for every rule this file encodes — and the
+ * second one is the one nobody re-checks when a rule changes.
  *
  * Runs inside a `withRun` transaction as `pt_pipeline_ingestion`. Everything
- * this function writes commits together or not at all — a half-ingested day is
- * worse than an absent one, because the next attempt would find some fixtures
- * present and skip them.
+ * written commits together or not at all — a half-ingested set is worse than an
+ * absent one, because the next attempt would find some fixtures present.
  */
-export async function ingestScheduleDate(
+export async function ingestEvents(
   tx: PoolClient,
-  client: ProviderClient,
-  date: string
+  events: readonly Record<string, unknown>[],
+  options: { readonly label: string; readonly scope?: IngestionScope }
 ): Promise<StageCounts> {
-  const response = await client.get<ScheduleResponse>('schedule', { date });
-  const events = response.events ?? [];
   const stage = new StageAccumulator();
 
-  // Per-response, per-transaction. See the header for why these are not
+  // Per-call, per-transaction. See the header for why these are not
   // process-wide.
-  const competitions = new Map<string, string>();
-  const editions = new Map<string, string>();
-  const stages = new Map<string, string>();
-  const venues = new Map<string, string>();
-  const teams = new Map<string, string>();
+  const caches: ResolutionCaches = {
+    competitions: new Map<string, string>(),
+    editions: new Map<string, string>(),
+    stages: new Map<string, string>(),
+    venues: new Map<string, string>(),
+    teams: new Map<string, string>(),
+  };
 
   for (const raw of events) {
     try {
-      await ingestEvent(tx, raw, stage, { competitions, editions, stages, venues, teams });
+      await ingestEvent(tx, raw, stage, caches, options.scope);
     } catch (error) {
-      // One malformed event does not cost the rest of the day. The transaction
+      // One malformed event does not cost the rest of the set. The transaction
       // is still intact — a constraint violation would have aborted it, and this
       // catch handles shape failures before any statement is issued. A statement
       // that DID fail rethrows below, because the transaction is then poisoned
@@ -188,12 +220,31 @@ export async function ingestScheduleDate(
       // "current transaction is aborted".
       if (isPostgresError(error)) throw error;
       stage.for('football.fixture').reject('event payload could not be interpreted');
-      logger.warn({ date, error: (error as Error).message }, 'v2 ingestion: skipping malformed event');
+      logger.warn(
+        { label: options.label, error: (error as Error).message },
+        'v2 ingestion: skipping malformed event'
+      );
     }
   }
 
-  logger.info({ date, events: events.length }, 'v2 ingestion: schedule date processed');
+  logger.info({ label: options.label, events: events.length }, 'v2 ingestion: event set processed');
   return stage.seal();
+}
+
+/**
+ * Ingests one UTC date of the schedule feed.
+ *
+ * FETCH, THEN THE SHARED WRITER. Unchanged in behaviour: the same endpoint, the
+ * same envelope, the same writer, no scope — the date feed carries every
+ * competition playing that day and is right to.
+ */
+export async function ingestScheduleDate(
+  tx: PoolClient,
+  client: ProviderClient,
+  date: string
+): Promise<StageCounts> {
+  const response = await client.get<ScheduleResponse>('schedule', { date });
+  return ingestEvents(tx, response.events ?? [], { label: `schedule ${date}` });
 }
 
 /** A driver error carries a SQLSTATE; a shape error does not. */
@@ -213,7 +264,8 @@ async function ingestEvent(
   tx: PoolClient,
   raw: Record<string, unknown>,
   stage: StageAccumulator,
-  caches: ResolutionCaches
+  caches: ResolutionCaches,
+  scope?: IngestionScope
 ): Promise<void> {
   const fixtureExternalId = externalId(raw.id);
   const tournament = asRecord(raw.tournament);
@@ -227,6 +279,35 @@ async function ingestEvent(
     // appears in telemetry rather than vanishing.
     stage.for('football.fixture').reject('event lacks id, tournament, participants or kickoff');
     return;
+  }
+
+  // ── 0. Scope ──────────────────────────────────────────────────────────────
+  // BEFORE ANY WRITE. A run asked for one competition and one season writes that
+  // competition and that season or nothing. The competition is
+  // `uniqueTournament.id` and the edition is `season.id` — never `tournament.id`,
+  // which is the season's INSTANCE of the competition and is a third number
+  // (83 where the competition is 325).
+  if (scope) {
+    const eventCompetition = externalId(uniqueTournament.id);
+    const eventSeason = externalId(asRecord(raw.season)?.id);
+    if (eventCompetition !== scope.competitionProviderId || eventSeason !== scope.seasonProviderId) {
+      stage
+        .for('football.fixture')
+        .reject(
+          `event ${fixtureExternalId} is competition ${eventCompetition}/season ${eventSeason}, ` +
+            `outside the requested scope ${scope.competitionProviderId}/${scope.seasonProviderId}`
+        );
+      logger.warn(
+        {
+          fixture: fixtureExternalId,
+          eventCompetition,
+          eventSeason,
+          scope,
+        },
+        'v2 ingestion: event outside the requested scope, not written'
+      );
+      return;
+    }
   }
 
   // ── 1. Competition ────────────────────────────────────────────────────────

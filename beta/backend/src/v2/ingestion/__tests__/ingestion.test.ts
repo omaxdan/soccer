@@ -46,7 +46,7 @@ import {
   toIsoDate,
   utcDateString,
 } from '../normalise';
-import { parseArguments } from '../cli';
+import { parseArguments, type Arguments } from '../cli';
 import { IngestionCounts, insertAppendOnly, upsertMutable } from '../write/index';
 import { ingestScheduleDate } from '../stages/schedule';
 import { ingestTeamSquad, type SquadTeam } from '../stages/squad';
@@ -395,8 +395,15 @@ describe('CLI', () => {
 
   it('36. keeps the budget guard on unless explicitly waived', () => {
     // D-3. Historical replay is a deliberate act.
-    assert.equal(parseArguments(['--from', '2026-01-01', '--to', '2026-06-01']).enforceQuotaBudget, true);
-    assert.equal(parseArguments(['--allow-over-budget']).enforceQuotaBudget, false);
+    // Narrowed explicitly: `season` is a third command and carries its budget as
+    // --max-calls rather than a guard, so the union no longer shares this field.
+    const schedule = (argv: readonly string[]): Extract<Arguments, { command: 'schedule' }> => {
+      const args = parseArguments(argv);
+      assert.equal(args.command, 'schedule');
+      return args as Extract<Arguments, { command: 'schedule' }>;
+    };
+    assert.equal(schedule(['--from', '2026-01-01', '--to', '2026-06-01']).enforceQuotaBudget, true);
+    assert.equal(schedule(['--allow-over-budget']).enforceQuotaBudget, false);
   });
 
   it('37. refuses a reversed range and a malformed date', () => {

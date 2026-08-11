@@ -167,6 +167,15 @@ export interface SweepResult {
   readonly events: readonly PagedEvent[];
   readonly pages: readonly PageSummary[];
   readonly callsSpent: number;
+  /**
+   * What the provider last said it had left, or null when it said nothing.
+   *
+   * Carried so the orchestrator can record it without a second request. Null is
+   * reported as null and never as a computed estimate — `api_usage.quota_remaining`
+   * means "what the provider said", and a figure derived here would be a
+   * fabricated observation the next run would act on.
+   */
+  readonly quotaRemaining: number | null;
   readonly stoppedBecause: StopReason;
   /** The page to resume from, set only when the budget ran out mid-walk. */
   readonly resumeFromPage: number | null;
@@ -256,6 +265,7 @@ export async function pageSeasonEvents(
 
   let page = options.startPage ?? FIRST_PAGE;
   let callsSpent = 0;
+  let quotaRemaining: number | null = null;
   let stoppedBecause: StopReason = 'BUDGET_EXHAUSTED';
   let resumeFromPage: number | null = null;
   let previousPage: PageSummary | null = null;
@@ -269,6 +279,7 @@ export async function pageSeasonEvents(
         page,
       });
       callsSpent += 1;
+      if (observation.quotaRemaining !== null) quotaRemaining = observation.quotaRemaining;
       envelope = observation.data;
     } catch (error) {
       callsSpent += 1;
@@ -386,6 +397,7 @@ export async function pageSeasonEvents(
     events,
     pages,
     callsSpent,
+    quotaRemaining,
     stoppedBecause,
     resumeFromPage,
     orderingAnomalies,

@@ -38,7 +38,14 @@ import { assertDatabaseConfigured } from '../config/index';
 import { ProviderClient, ProviderRequestError } from './provider/client';
 import { PROVIDER_CODE, dailyQuota, loadProviderConfig } from './provider/config';
 import { IngestionCounts } from './write/index';
-import { ingestScheduleDate } from './stages/schedule';
+import { ingestEvents, ingestScheduleDate, type IngestionScope } from './stages/schedule';
+import {
+  sweepSeason,
+  type EventDirection,
+  type FixtureWindow,
+  type StopReason,
+  type SweepResult,
+} from './provider/pager';
 import { ingestTeamSquad, type SquadTeam } from './stages/squad';
 import { utcDateString } from './normalise';
 import { logger } from '../../utils/logger';
@@ -331,3 +338,255 @@ export async function ingestSquads(options: SquadIngestionOptions = {}): Promise
   return { datesProcessed: teams.length, counts: total, apiCalls, failures };
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SEASON INGESTION — the season feed, joined to the shared writer
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// WHY THIS EXISTS SEPARATELY FROM ingestSchedule
+//
+// Not because the writing differs — it does not, and `ingestEvents` is the same
+// function both paths call. It exists because the READING differs: the schedule
+// feed is one call per date and carries every competition playing, while the
+// season feed is a paged walk of one competition's one season. A date range and
+// a paged walk are different traversals, and folding them into one function
+// would mean a function whose arguments contradict each other.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// FETCH OUTSIDE THE TRANSACTION, WRITE INSIDE IT
+//
+// The pager makes up to `maxCalls` HTTP requests, each throttled to the
+// provider's minimum interval. Holding a database transaction open across that
+// would pin a pooled connection for the duration of a network walk and take row
+// locks nobody is contending for yet. So the walk completes first and the whole
+// season is written in ONE transaction: 47 fixtures either all land or none do,
+// and a re-run finds a clean slate rather than a half-season.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SeasonIngestionOptions {
+  /** `tournament.uniqueTournament.id` — THE COMPETITION. */
+  readonly competitionProviderId: string;
+  /** `season.id` — the edition. Not `tournament.id`. */
+  readonly seasonProviderId: string;
+  /** Window start, inclusive. Required: this is not a defaulted value. */
+  readonly from: Date;
+  /** Window end, inclusive to the end of that UTC day. */
+  readonly to: Date;
+  /** Maximum provider calls for the WHOLE sweep, both directions. */
+  readonly maxCalls: number;
+  /** Supplied by tests. Production passes nothing and gets a real client. */
+  readonly client?: ProviderClient;
+}
+
+export interface SeasonDirectionReport {
+  readonly direction: EventDirection;
+  readonly pages: readonly number[];
+  readonly eventsRead: number;
+  readonly eventsSelected: number;
+  readonly duplicates: number;
+  readonly callsSpent: number;
+  readonly stoppedBecause: StopReason;
+  readonly resumeFromPage: number | null;
+  readonly orderingAnomalies: readonly string[];
+}
+
+export interface SeasonIngestionReport {
+  readonly competitionProviderId: string;
+  readonly seasonProviderId: string;
+  readonly window: { readonly from: string; readonly to: string };
+  readonly directions: readonly SeasonDirectionReport[];
+  readonly eventsRead: number;
+  readonly eventsSelected: number;
+  readonly callsSpent: number;
+  /** What the provider last said. Null when it said nothing. */
+  readonly quotaRemaining: number | null;
+  readonly counts: IngestionCounts;
+  readonly byRelation: ReadonlyMap<string, IngestionCounts>;
+  /** Editions resolved for this provider season. Must be exactly 1. */
+  readonly editionsForSeason: number;
+  readonly competitionEditionId: string | null;
+  readonly failed: boolean;
+}
+
+/**
+ * Ingests one competition season, bounded by an explicit window and budget.
+ *
+ * THE WINDOW IS A PARAMETER, NOT A CONSTANT. `FIXTURE_WINDOW` remains in the
+ * pager as the evidence-derived default for tests and exploration; production
+ * passes its own, from the CLI, and the resolved values are printed before the
+ * first call. A window that lives only in a module constant cannot appear in a
+ * run record, and an operator cannot see what a run actually used.
+ *
+ * ONE BUDGET FOR THE WHOLE SWEEP. `sweepSeason` walks `last` first and hands the
+ * remainder to `next`, so a truncated sweep loses forward fixtures rather than
+ * historical ones — the half bounded by a hard date floor is the half whose cost
+ * is predictable.
+ *
+ * SCOPE IS ENFORCED AT THE WRITER, not here. Passing `scope` means every event
+ * is checked against the requested competition and season immediately before it
+ * would be written, so a provider response containing something else is rejected
+ * and counted rather than imported. Checking here would leave the writer
+ * trusting its caller.
+ */
+export async function ingestSeason(
+  options: SeasonIngestionOptions
+): Promise<SeasonIngestionReport> {
+  assertDatabaseConfigured();
+  installOperationalLayer();
+
+  if (!(options.from instanceof Date) || Number.isNaN(options.from.getTime())) {
+    throw new Error('ingestSeason requires a valid `from` date.');
+  }
+  if (!(options.to instanceof Date) || Number.isNaN(options.to.getTime())) {
+    throw new Error('ingestSeason requires a valid `to` date.');
+  }
+  if (options.to.getTime() < options.from.getTime()) {
+    throw new Error(
+      `Window end ${utcDateString(options.to)} precedes its start ${utcDateString(options.from)}.`
+    );
+  }
+  if (!Number.isInteger(options.maxCalls) || options.maxCalls < 1) {
+    throw new Error('ingestSeason requires --max-calls to be a whole number of at least 1.');
+  }
+
+  // Config is loaded ONLY to build a client. An injected one carries its own,
+  // so requiring PT_V2_PROVIDER_BASE_URL to run a sweep that makes no request of
+  // its own would be demanding configuration for a dependency already supplied.
+  const client = options.client ?? new ProviderClient(loadProviderConfig());
+
+  // Inclusive of the whole final day: a fixture kicking off at 22:30Z on the
+  // last date is inside the window, and a boundary at midnight would drop the
+  // evening round.
+  const window: FixtureWindow = {
+    startsAt: new Date(`${utcDateString(options.from)}T00:00:00.000Z`),
+    endsAt: new Date(`${utcDateString(options.to)}T23:59:59.999Z`),
+  };
+
+  const scope: IngestionScope = {
+    competitionProviderId: options.competitionProviderId,
+    seasonProviderId: options.seasonProviderId,
+  };
+
+  let sweep: Readonly<Record<EventDirection, SweepResult>> | null = null;
+  let counts = new IngestionCounts();
+  let byRelation: ReadonlyMap<string, IngestionCounts> = new Map();
+  let editionsForSeason = 0;
+  let competitionEditionId: string | null = null;
+  let failed = false;
+
+  // `scopeText` is what an operator reads in the run ledger to know WHAT was
+  // swept without opening the job's detail. A run key alone says only that a
+  // season sweep happened.
+  const scopeText =
+    `competition ${options.competitionProviderId} season ${options.seasonProviderId} ` +
+    `${utcDateString(options.from)}..${utcDateString(options.to)}`;
+
+  await withPipelineRun(INGESTION_ROLE, 'v2.ingest.season', async () => {
+    try {
+      // ── Read. No transaction is held across the network walk. ──────────────
+      sweep = await sweepSeason(client, {
+        competitionProviderId: options.competitionProviderId,
+        seasonProviderId: options.seasonProviderId,
+        window,
+        callBudget: options.maxCalls,
+      });
+
+      const selected = [...sweep.last.events, ...sweep.next.events];
+
+      // ── Write. One transaction for the whole season. ───────────────────────
+      const stageCounts = await withRun(
+        INGESTION_ROLE,
+        'ingest.season',
+        async (tx: PoolClient, job) => {
+          const written = await ingestEvents(tx, selected.map((event) => event.raw), {
+            label: `season ${options.competitionProviderId}/${options.seasonProviderId}`,
+            scope,
+          });
+          await reportWrites(job, written);
+
+          // THE F-1 ASSERTION, made from the database rather than assumed. If
+          // this is ever not 1, the run has produced the defect doc 41
+          // investigated and the transaction is rolled back rather than
+          // committed and reported.
+          const { rows } = await tx.query<{ id: string; n: string }>(
+            `SELECT id::text, count(*) OVER ()::text AS n
+               FROM football.competition_edition
+              WHERE provider_external_id = $1`,
+            [options.seasonProviderId]
+          );
+          editionsForSeason = rows.length;
+          competitionEditionId = rows[0]?.id ?? null;
+          if (selected.length > 0 && editionsForSeason !== 1) {
+            throw new Error(
+              `provider season ${options.seasonProviderId} resolved to ${editionsForSeason} ` +
+                'competition editions; exactly one is required (F-1, doc 41)'
+            );
+          }
+          return written;
+        },
+        {
+          detail: {
+            competition: options.competitionProviderId,
+            season: options.seasonProviderId,
+            from: utcDateString(options.from),
+            to: utcDateString(options.to),
+            maxCalls: options.maxCalls,
+          },
+        }
+      );
+
+      counts = stageCounts.total;
+      byRelation = stageCounts.byRelation;
+    } catch (error) {
+      failed = true;
+      // NOT recorded here. `withRun` already wrote the operations.failure row
+      // with the job attribution this scope no longer has, on the control
+      // connection, outside the transaction that rolled back.
+      logger.error(
+        {
+          competition: options.competitionProviderId,
+          season: options.seasonProviderId,
+          error: buildDiagnostic(error),
+        },
+        'v2 ingestion: season sweep failed'
+      );
+      throw error;
+    } finally {
+      // Flush what was spent even when the write rolled back. The provider
+      // charged for those calls whatever happened afterwards.
+      await withConnection(INGESTION_ROLE, (control) => client.flushUsage(control));
+    }
+  }, { scopeText });
+
+  const result = sweep as unknown as Readonly<Record<EventDirection, SweepResult>>;
+  const directions: SeasonDirectionReport[] = (['last', 'next'] as const).map((direction) => {
+    const walk = result[direction];
+    return {
+      direction,
+      pages: walk.pages.map((page) => page.page),
+      eventsRead: walk.pages.reduce((total, page) => total + page.eventCount, 0),
+      eventsSelected: walk.events.length,
+      duplicates: walk.pages.reduce((total, page) => total + page.duplicateCount, 0),
+      callsSpent: walk.callsSpent,
+      stoppedBecause: walk.stoppedBecause,
+      resumeFromPage: walk.resumeFromPage,
+      orderingAnomalies: walk.orderingAnomalies,
+    };
+  });
+
+  return {
+    competitionProviderId: options.competitionProviderId,
+    seasonProviderId: options.seasonProviderId,
+    window: { from: utcDateString(options.from), to: utcDateString(options.to) },
+    directions,
+    eventsRead: directions.reduce((total, entry) => total + entry.eventsRead, 0),
+    eventsSelected: directions.reduce((total, entry) => total + entry.eventsSelected, 0),
+    callsSpent: directions.reduce((total, entry) => total + entry.callsSpent, 0),
+    quotaRemaining: result.next.quotaRemaining ?? result.last.quotaRemaining,
+    counts,
+    byRelation,
+    editionsForSeason,
+    competitionEditionId,
+    failed,
+  };
+}
