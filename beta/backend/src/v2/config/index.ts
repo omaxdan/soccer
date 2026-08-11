@@ -144,6 +144,43 @@ export interface V2Config {
 export const DEFAULT_DB_USER = 'postgres';
 
 /**
+ * Milliseconds allowed for one connection attempt to complete.
+ *
+ * RAISED FROM 10 000 ON MEASUREMENT, not on preference. A staged handshake
+ * trace against the deployed Supabase pooler recorded:
+ *
+ *     1945 ms  TCP connected
+ *     2574 ms  server replied 'S' to the SSLRequest
+ *     3270 ms  TLS established (TLSv1.3, authorized)
+ *    14125 ms  authenticated as postgres, server 17.6
+ *
+ * The network handshake takes ~3.3 s; the remaining ~11 s is the pooler
+ * authenticating and opening its own connection to the tenant database. That is
+ * a property of a shared pooler on a cold tenant, not of the network, and no
+ * client setting shortens it.
+ *
+ * WHY 30 000 AND NOT 15 000. The two observed successful connections took
+ * 4 259 ms and 14 125 ms. A 15 000 ms budget clears the slower of them by
+ * 875 ms — six per cent — which is a coin toss dressed as a configuration
+ * value. 30 000 is roughly twice the observed worst case, so a run somewhat
+ * worse than anything yet measured still completes.
+ *
+ * THE ASYMMETRY THAT DECIDES IT. Since acquisition retries (3 attempts, 2s then
+ * 5s), a budget that is too SHORT guarantees failure — every attempt is killed
+ * at the same deadline, so three tries cannot succeed where one could not. A
+ * budget that is too LONG merely delays the report of a genuine outage. The
+ * worst case stays bounded at 3 x 30 s + 7 s of backoff.
+ *
+ * FOR SCALE: V1 sets no network timeout whatsoever, so its reads inherit
+ * undici's defaults — minutes, not seconds. 30 s is still an order of magnitude
+ * stricter than the path that has been in production all along.
+ *
+ * No design document specifies a connect timeout; the previous 10 000 was an
+ * implementation choice, so raising it contradicts no requirement.
+ */
+export const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
+
+/**
  * The BASE login, with any pooler tenant already present removed.
  *
  * THE CONFIGURATION MODEL IS EXPLICIT: `PT_V2_DB_USER` is the base login and
@@ -255,7 +292,7 @@ export function loadV2Config(): V2Config {
       // provider's connection string produces `role.ref` and never `role..ref`.
       userSuffix,
       user: baseLogin(process.env.PT_V2_DB_USER || DEFAULT_DB_USER, userSuffix),
-      connectionTimeoutMs: intFromEnv('PT_V2_DB_CONNECT_TIMEOUT_MS', 10_000),
+      connectionTimeoutMs: intFromEnv('PT_V2_DB_CONNECT_TIMEOUT_MS', DEFAULT_CONNECT_TIMEOUT_MS),
       idleTimeoutMs: intFromEnv('PT_V2_DB_IDLE_TIMEOUT_MS', 30_000),
       allowNonSessionPort,
     },

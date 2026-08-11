@@ -42,7 +42,12 @@ import { connect as tlsConnect, type TLSSocket } from 'node:tls';
 import { Client } from 'pg';
 
 import { loadV2Env } from '../config/env';
-import { DEFAULT_DB_USER, loadV2Config, SESSION_MODE_PORT } from '../config/index';
+import {
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_DB_USER,
+  loadV2Config,
+  SESSION_MODE_PORT,
+} from '../config/index';
 import { buildPoolConfig, loadCaBundle, poolUsername } from './pool';
 
 
@@ -227,6 +232,19 @@ function describeTarget(): string[] {
     `  verify certificate   ${database.sslRejectUnauthorized ? 'yes' : 'NO — see below'}`
   );
   if (database.sslCaPath) lines.push(`  ca bundle            ${database.sslCaPath}`);
+  lines.push(`  connect budget       ${database.connectionTimeoutMs} ms`);
+  if (database.connectionTimeoutMs < DEFAULT_CONNECT_TIMEOUT_MS) {
+    lines.push('');
+    lines.push(
+      `  PT_V2_DB_CONNECT_TIMEOUT_MS is ${database.connectionTimeoutMs} ms, below the ` +
+        `${DEFAULT_CONNECT_TIMEOUT_MS} ms default.`
+    );
+    lines.push('  A full connection through a shared pooler on a cold tenant has been');
+    lines.push('  measured at 14.1s here — the network handshake is only ~3.3s of that,');
+    lines.push('  the rest is the pooler opening its own connection to the database. A');
+    lines.push('  budget below that kills every attempt at the same deadline, so retrying');
+    lines.push('  cannot help. Raise it in .env or remove the line to take the default.');
+  }
   lines.push(`  login name           ${database.user}`);
   lines.push(`  username suffix      ${database.userSuffix === '' ? '(none)' : database.userSuffix}`);
   if (database.user === DEFAULT_DB_USER) {

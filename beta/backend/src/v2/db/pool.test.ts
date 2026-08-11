@@ -20,6 +20,7 @@ import {
   isDatabaseConfigured,
   assertDatabaseConfigured,
   resetV2ConfigForTesting,
+  DEFAULT_CONNECT_TIMEOUT_MS,
   SESSION_MODE_PORT,
 } from '../config/index';
 import type { PoolClient } from 'pg';
@@ -117,6 +118,52 @@ describe('configuration loading (no database required)', () => {
     process.env.PT_V2_POOL_MAX = '9';
     assert.equal(loadV2Config().poolMax, 9);
     delete process.env.PT_V2_POOL_MAX;
+  });
+
+  test('the connect budget defaults to 30s, measured rather than chosen', () => {
+    // MEASURED. A staged handshake trace against the deployed Supabase pooler
+    // recorded TLS established at 3270ms and the FULL connection — pooler auth
+    // plus its own connection to the tenant database — at 14125ms on a cold
+    // tenant. The earlier successful connection took 4259ms. A 10s budget killed
+    // every attempt before it could finish, so the 3-attempt retry could never
+    // succeed; a 15s budget clears the slower observation by 875ms, which is a
+    // coin toss. 30s is ~2x the observed worst case.
+    resetV2ConfigForTesting();
+    process.env.PT_V2_DB_HOST = 'localhost';
+    process.env.PT_V2_DB_NAME = 'ptv2';
+    process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
+    delete process.env.PT_V2_DB_CONNECT_TIMEOUT_MS;
+
+    assert.equal(DEFAULT_CONNECT_TIMEOUT_MS, 30_000);
+    assert.equal(loadV2Config().database.connectionTimeoutMs, 30_000);
+
+    // Strictly greater than the slowest connection actually observed, with real
+    // margin — not merely greater by a rounding error.
+    const OBSERVED_WORST_MS = 14_125;
+    assert.ok(
+      DEFAULT_CONNECT_TIMEOUT_MS >= OBSERVED_WORST_MS * 2,
+      'the budget must be at least twice the slowest connection measured in the field'
+    );
+  });
+
+  test('a deployment may still override the connect budget', () => {
+    resetV2ConfigForTesting();
+    process.env.PT_V2_DB_HOST = 'localhost';
+    process.env.PT_V2_DB_NAME = 'ptv2';
+    process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
+    process.env.PT_V2_DB_CONNECT_TIMEOUT_MS = '45000';
+    assert.equal(loadV2Config().database.connectionTimeoutMs, 45_000);
+    delete process.env.PT_V2_DB_CONNECT_TIMEOUT_MS;
+    resetV2ConfigForTesting();
+  });
+
+  test('the worst case stays bounded, with the retry policy unchanged', () => {
+    // 3 attempts at the budget, plus V1's 2s and 5s backoff. Stated as a test so
+    // a later change to either number has to face the total it produces.
+    const worstCaseMs = ACQUIRE_ATTEMPTS * DEFAULT_CONNECT_TIMEOUT_MS +
+      ACQUIRE_BACKOFF_MS.reduce((total, ms) => total + ms, 0);
+    assert.equal(worstCaseMs, 97_000, 'three 30s attempts plus 7s of backoff');
+    assert.ok(worstCaseMs <= 120_000, 'a CLI must still fail inside two minutes');
   });
 
   test('a malformed numeric override is rejected rather than silently defaulted', () => {

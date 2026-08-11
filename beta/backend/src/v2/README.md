@@ -82,7 +82,7 @@ It reports which `.env` files were read, the connection target and what the host
 | `PT_V2_DB_SSL_REJECT_UNAUTHORIZED` | no | `true` | Keep on. Prefer a CA bundle over disabling |
 | `PT_V2_DB_SSL_CA` | managed hosts | — | Path to a PEM CA bundle, or the PEM itself |
 | `PT_V2_DB_USER_SUFFIX` | pooler only | — | Tenant sent as `<user>.<suffix>`; empty for a direct connection |
-| `PT_V2_DB_CONNECT_TIMEOUT_MS` | no | `10000` | |
+| `PT_V2_DB_CONNECT_TIMEOUT_MS` | no | `30000` | One attempt's budget. ~2x the 14.1s measured against a cold Supabase pooler |
 | `PT_V2_DB_IDLE_TIMEOUT_MS` | no | `30000` | |
 | `PT_V2_ALLOW_NON_SESSION_PORT` | no | `false` | Local/CI only. Never in a deployed environment |
 | `PT_V2_APP_NAME` | no | `pitchterminal-v2` | Prefix for `application_name` |
