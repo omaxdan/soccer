@@ -44,6 +44,7 @@ import { summarise, type SeedOutcome, type SeedReport } from './helpers';
 import { seedVocabularies, verifyMigrationVocabularies } from './vocabulary';
 import { seedFeatureRegistry } from './featureRegistry';
 import { seedEntitlementFeatures, seedModuleRegistry } from './moduleRegistry';
+import { seedQualityCheckVersions } from './qualityRegistry';
 
 /** The layers the bootstrap writes, in order. Labels, not credentials. */
 export const SEED_ROLES: readonly PipelineRole[] = [
@@ -85,6 +86,14 @@ const STAGES: readonly SeedStage[] = [
     role: 'pt_pipeline_module',
     jobKey: 'seed.module_registry',
     run: seedModuleRegistry,
+  },
+  {
+    // LAST, and it depends on migration 018 having registered the checks it
+    // versions. Nothing else references it, so its position is otherwise free.
+    name: 'quality check versions',
+    role: 'pt_platform_admin',
+    jobKey: 'seed.quality_registry',
+    run: seedQualityCheckVersions,
   },
 ];
 

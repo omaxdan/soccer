@@ -12,7 +12,8 @@
     "ingest:v2": "tsx src/v2/ingestion/cli.ts",
     "feature:v2": "tsx src/v2/feature/cli.ts",
     "doctor:v2": "tsx src/v2/db/doctor.ts",
-    "discover:v2": "tsx src/v2/ingestion/discover.ts"
+    "discover:v2": "tsx src/v2/ingestion/discover.ts",
+    "quality:v2": "tsx src/v2/quality/cli.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.0",

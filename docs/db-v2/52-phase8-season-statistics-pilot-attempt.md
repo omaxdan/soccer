@@ -1,13 +1,37 @@
 # Phase 8 — Season-statistics pilot: attempted, not performed
 
-**Verdict: INCONCLUSIVE. Zero observations were obtained.** The pilot could not
-be run from this environment, and — separately — **V1's `logApiSample` mechanism
-cannot perform this experiment even where the network permits it.** Both reasons
-are recorded below with the evidence.
+**Verdict: INCONCLUSIVE — the BEFORE observation exists, the AFTER observation
+does not.** No comparison has been made and none is possible with one body.
 
-**Zero provider calls completed. Zero quota consumed.** One call was attempted
-and refused at the egress tunnel before it left this environment. No schema,
-migration, code, test or ingestion changed.
+**Zero provider calls were made from this environment.** One was attempted and
+refused at the egress tunnel; the capture below was taken by the operator on a
+machine that can reach the provider. No schema, migration, code, test or
+ingestion changed for this branch.
+
+---
+
+## Capture status
+
+| | |
+|---|---|
+| **BEFORE the fixture** | **CAPTURED**, by the operator |
+| file | `palmeiras-1963-season-87678-T1-20260811T224705Z.json` |
+| captured at | `2026-08-11T22:47:05Z` |
+| raw body length | `3283` bytes |
+| SHA-256 | `B06DE754464D5169DA56BE2668EFA0D64358DC9DD9BC951903FA9C8AFAF80A58` |
+| **AFTER the fixture** | **NOT CAPTURED.** Due after Fluminense v Palmeiras, 2026-08-15 19:30Z |
+
+**The body has not been read here, and nothing in this document is derived from
+it.** The metadata above is recorded so the two observations can be shown to be
+the same request against the same subject, and so the AFTER body can be verified
+as a *different* one when it arrives — a matching digest would mean the two
+responses are byte-identical, which §"Procedure" says is a result in its own
+right rather than a failed capture.
+
+Sections 1–8 below are unchanged: they report the state of the analysis, and no
+analysis can be performed on one observation. **Do not read the existence of a
+BEFORE capture as evidence about cumulativeness** — a single body cannot show a
+value changing.
 
 ---
 
