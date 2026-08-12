@@ -381,6 +381,17 @@ describe('scope', () => {
     }
   });
 
+  it('20a. declares travel_distance on fixture and venue, and NOT on team', () => {
+    // The absence of `team` is the assertion. `travel_impact` reads the home
+    // ground to measure every trip from it — the star topology S-0-a corrected —
+    // and this itinerary never does, so declaring `team` would assert a
+    // dependency the calculator does not have.
+    assert.deepEqual(FEATURE_SOURCES['team.travel_distance'], ['fixture', 'venue']);
+    assert.ok(!FEATURE_SOURCES['team.travel_distance']!.includes('team'));
+    // The superseded feature's own declaration is untouched.
+    assert.deepEqual(FEATURE_SOURCES['team.travel_impact'], ['fixture', 'venue', 'team']);
+  });
+
   it('21. gives the pure composite no source, only dependencies', () => {
     // readiness reads no football relation under the final ADR — it consumes two
     // features. Sources and dependencies are different things, and conflating

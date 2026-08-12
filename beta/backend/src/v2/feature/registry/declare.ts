@@ -66,6 +66,12 @@ export const FEATURE_SOURCES: Readonly<Record<string, readonly string[]>> = {
   // Distance needs the fixture's venue, the team's home venue, and the
   // coordinates of both.
   'team.travel_impact': ['fixture', 'venue', 'team'],
+  // The itinerary is built from successive fixture venues, so it needs the
+  // fixture for its venue and kickoff and the venue for its coordinates — and
+  // NOT `team`. Unlike `travel_impact` above it never reads the home ground:
+  // measuring every trip from home is the star topology S-0-a corrected, and a
+  // null venue is an unknown location rather than a fallback to it.
+  'team.travel_distance': ['fixture', 'venue'],
 };
 
 /** Feature → feature edges. The consumer, and what it consumes. */
