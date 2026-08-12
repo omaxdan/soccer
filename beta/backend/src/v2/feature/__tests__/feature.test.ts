@@ -55,6 +55,8 @@ import { runVerification, VERIFICATIONS } from '../verify';
 import { formBackfill } from '../calculators/formBackfill';
 import { fixtureLoad } from '../calculators/fixtureLoad';
 import { travelLoad } from '../calculators/travelLoad';
+import { haversineKm, itineraryNodes, travelItinerary } from '../calculators/travelItinerary';
+import { FEATURE_KEYS, CALCULATOR_KEYS } from '../../seed/featureRegistry';
 import { teamReadiness } from '../calculators/teamReadiness';
 import { CALCULATORS } from '../pipeline';
 import {
@@ -63,6 +65,7 @@ import {
   type CalculationContext,
   type CandidateValue,
   type CompletedFixture,
+  type VenueLocation,
   type ConsumedValueRef,
 } from '../calculators/types';
 import { parseArguments } from '../cli';
@@ -77,13 +80,21 @@ const FEATURE_DIR = join(__dirname, '..');
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The six features S-5 implements. Stated once so tests do not drift apart. */
+/**
+ * The features a calculator implements. Stated once so tests do not drift apart.
+ *
+ * `team.travel_distance` joins the original six under S-0-a-ii. It does NOT
+ * replace `team.travel_impact`, which keeps its registration and its calculator:
+ * one measures distance travelled, the other the mean distance of recent away
+ * grounds from home, and both remain implemented.
+ */
 const IMPLEMENTED_FEATURES = [
   'team.away_form',
   'team.congestion_index',
   'team.home_form',
   'team.readiness_score',
   'team.rest_advantage',
+  'team.travel_distance',
   'team.travel_impact',
 ] as const;
 
@@ -339,7 +350,7 @@ describe('execution ordering', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('scope', () => {
-  it('17. implements exactly six features', () => {
+  it('17. implements exactly the declared feature set', () => {
     const claimed = CALCULATORS.flatMap((calculator) => calculator.featureKeys).sort();
     assert.deepEqual(claimed, [...IMPLEMENTED_FEATURES]);
   });
@@ -654,6 +665,333 @@ describe('travel_load', () => {
       })
     );
     assert.equal(produced.length, 0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// travel_itinerary — team.travel_distance   (S-0-a-ii, docs/db-v2/63)
+//
+// The twenty-four approved adversarial cases. Four of them (C, I-vs-J, K, P) are
+// cases `travel_load` gets WRONG and this feature exists to fix; seven (D, H, S,
+// T, U, V, X) are cases a naive new implementation would get wrong in the other
+// direction, by turning an absence into a zero or by trusting input order.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('travel_itinerary · team.travel_distance', () => {
+  const teamId = '1';
+  const HOME = 'v-home';
+  const NEAR = 'v-near';
+  const FAR = 'v-far';
+  const NEUTRAL = 'v-neutral';
+  const NO_COORDS = 'v-unlocatable';
+
+  const venues = new Map<string, VenueLocation>([
+    [HOME, { venueId: HOME, latitude: '51.500000', longitude: '-0.120000' }],
+    [NEAR, { venueId: NEAR, latitude: '51.600000', longitude: '-0.200000' }],
+    [FAR, { venueId: FAR, latitude: '41.900000', longitude: '12.500000' }],
+    [NEUTRAL, { venueId: NEUTRAL, latitude: '48.856600', longitude: '2.352200' }],
+    // NO_COORDS is deliberately ABSENT: `read/venues.ts` filters out venues
+    // without coordinates, so an unlocatable venue simply is not in the map.
+  ]);
+
+  const DAY = 86_400_000;
+
+  /** A node, placed by days-before-`as_of`. `isHome` is set but never read. */
+  function at(daysBefore: number, venueId: string | null, isHome = false, id?: string) {
+    return fixture({
+      fixtureId: id ?? `t-${daysBefore}-${venueId ?? 'null'}`,
+      kickoffAt: new Date(REFERENCE_AS_OF.getTime() - daysBefore * DAY),
+      isHome,
+      venueId,
+    });
+  }
+
+  function run(fixtures: readonly CompletedFixture[]) {
+    return travelItinerary.calculate(
+      context({
+        subjects: [{ teamId, asOf: REFERENCE_AS_OF }],
+        fixturesByTeam: new Map([[teamId, { teamId, fixtures }]]),
+        // Supplied precisely so the test proves it is NOT used.
+        homeVenueByTeam: new Map([[teamId, HOME]]),
+        venuesById: venues,
+      })
+    );
+  }
+
+  const km = (produced: readonly CandidateValue[]): number =>
+    Number(toNumericString(roundHalfUp(produced[0].value, 6)));
+
+  /** The observation count, asserted non-null: this feature always sets one. */
+  const count = (produced: readonly CandidateValue[]): number => {
+    const value = produced[0].sampleObservationCount;
+    assert.notEqual(value, null, 'travel_distance always sets its own count');
+    return value as number;
+  };
+
+  // ── A–H · itinerary shape ────────────────────────────────────────────────
+
+  it('T-A. Home to Away to Home counts BOTH the outward and the observed return', () => {
+    const produced = run([at(3, HOME, true), at(2, NEAR), at(1, HOME, true)]);
+    assert.equal(produced.length, 1);
+    assert.equal(produced[0].sampleObservationCount, 2);
+    // Out and back over the same pair, so the total is twice the one-way leg.
+    const oneWay = km(run([at(3, HOME, true), at(2, NEAR)]));
+    assert.ok(Math.abs(km(produced) - 2 * oneWay) < 1e-6);
+  });
+
+  it('T-B. Away A to Away B is the DIRECT leg — no return home is invented', () => {
+    const produced = run([at(3, NEAR), at(2, FAR)]);
+    assert.equal(produced[0].sampleObservationCount, 1);
+    const viaHome = km(run([at(3, NEAR), at(2, HOME, true)])) + km(run([at(3, HOME, true), at(2, FAR)]));
+    assert.ok(km(produced) < viaHome, 'a direct leg must be shorter than routing via home');
+  });
+
+  it('T-C. Away to Home is NON-ZERO — the D-i case travel_load scores as nothing', () => {
+    const produced = run([at(3, FAR), at(1, HOME, true)]);
+    assert.equal(produced.length, 1);
+    assert.ok(km(produced) > 1000, 'Rome to London is a real journey');
+    assert.equal(produced[0].sampleObservationCount, 1);
+
+    // And the feature travel_load produces for the same history: nothing, because
+    // it discards home fixtures and this side played away only once.
+    const legacy = travelLoad.calculate(
+      context({
+        subjects: [{ teamId, asOf: REFERENCE_AS_OF }],
+        fixturesByTeam: new Map([[teamId, { teamId, fixtures: [at(3, FAR), at(1, HOME, true)] }]]),
+        homeVenueByTeam: new Map([[teamId, HOME]]),
+        venuesById: venues,
+      })
+    );
+    assert.equal(legacy[0].featureKey, 'team.travel_impact');
+    assert.notEqual(produced[0].featureKey, legacy[0].featureKey);
+  });
+
+  it('T-D. Home to Home is 0 km with count 1 — a measurement, not an absence', () => {
+    const produced = run([at(3, HOME, true), at(1, HOME, true)]);
+    assert.equal(produced.length, 1, 'a value MUST exist');
+    assert.equal(km(produced), 0);
+    assert.equal(produced[0].sampleObservationCount, 1);
+  });
+
+  it('T-E/F/G. Neutral venues are ordinary nodes, and is_neutral_venue is never read', () => {
+    const fromHome = run([at(3, HOME, true), at(1, NEUTRAL)]);
+    const fromAway = run([at(3, NEAR), at(1, NEUTRAL)]);
+    const toAway = run([at(3, NEUTRAL), at(1, NEAR)]);
+    for (const produced of [fromHome, fromAway, toAway]) {
+      assert.equal(produced.length, 1);
+      assert.equal(produced[0].sampleObservationCount, 1);
+      assert.ok(km(produced) > 0);
+    }
+    // G is F reversed: the same pair, the same distance.
+    assert.ok(Math.abs(km(fromAway) - km(toAway)) < 1e-6);
+
+    // STRUCTURAL: the calculator cannot be reading a flag it never receives.
+    const source = readFileSync(
+      join(__dirname, '..', 'calculators', 'travelItinerary.ts'),
+      'utf8'
+    );
+    // The CODE, not the header — the header explains why the flag is not needed.
+    assert.ok(!/isNeutral|is_neutral_venue/.test(source.slice(source.indexOf('import {'))));
+  });
+
+  it('T-H. Away to Away at the SAME venue is 0 km with count 1', () => {
+    const produced = run([at(3, FAR, false, 'a'), at(1, FAR, false, 'b')]);
+    assert.equal(km(produced), 0);
+    assert.equal(produced[0].sampleObservationCount, 1);
+  });
+
+  // ── I–K · the window and the aggregate ───────────────────────────────────
+
+  it('T-I vs T-J. Five in ten days and five over five months now DIFFER (D-iii)', () => {
+    const dense = run([at(10, NEAR), at(8, FAR), at(6, NEAR), at(4, FAR), at(2, NEAR)]);
+    const sparse = run([at(150, NEAR), at(120, FAR), at(90, NEAR), at(60, FAR), at(2, NEAR)]);
+
+    assert.equal(dense[0].sampleObservationCount, 4, 'four in-window legs');
+    // Only one fixture is in window; the 60-day-old one seeds it. One leg.
+    assert.equal(sparse[0].sampleObservationCount, 1);
+    assert.ok(km(dense) > km(sparse), 'dense congestion must read higher than sparse');
+  });
+
+  it('T-K. One long movement plus several short ones SUMS (D-iv)', () => {
+    const produced = run([at(20, HOME, true), at(15, FAR), at(10, NEAR), at(5, NEAR), at(2, NEAR)]);
+    const longLegAlone = km(run([at(20, HOME, true), at(15, FAR)]));
+    assert.equal(produced[0].sampleObservationCount, 4);
+    assert.ok(km(produced) > longLegAlone, 'a mean would have diluted the long leg; a sum cannot');
+  });
+
+  // ── L–P · edges ──────────────────────────────────────────────────────────
+
+  it('T-L. An unlocatable venue excludes BOTH adjacent legs and is never 0 km', () => {
+    // NEAR→NO_COORDS and NO_COORDS→FAR are both unmeasurable, so nothing
+    // survives and there is NO VALUE. A 0 km reading here would assert that a
+    // team we could not locate did not travel.
+    assert.equal(run([at(6, NEAR), at(4, NO_COORDS), at(2, FAR)]).length, 0);
+
+    // With a measurable leg either side of the gap, the measurable one survives
+    // and the two touching the unlocatable node do not.
+    const partial = run([at(8, HOME, true), at(6, NEAR), at(4, NO_COORDS), at(2, FAR)]);
+    assert.equal(partial.length, 1);
+    assert.equal(count(partial), 1, 'only HOME→NEAR is measurable');
+    assert.ok(Math.abs(km(partial) - km(run([at(8, HOME, true), at(6, NEAR)]))) < 1e-6);
+  });
+
+  it('T-M. A duplicate fixture adds a 0 km leg and inflates the count, not the distance', () => {
+    const clean = run([at(5, NEAR, false, 'x'), at(2, FAR, false, 'y')]);
+    const dup = run([at(5, NEAR, false, 'x'), at(5, NEAR, false, 'x-dup'), at(2, FAR, false, 'y')]);
+    assert.ok(Math.abs(km(clean) - km(dup)) < 1e-6, 'distance is unchanged');
+    assert.equal(count(dup), count(clean) + 1);
+  });
+
+  it('T-N. Exactly 28 x 86,400,000 ms is INSIDE the window — the bound is inclusive', () => {
+    const onBoundary = new Date(REFERENCE_AS_OF.getTime() - 28 * DAY);
+    const justOutside = new Date(REFERENCE_AS_OF.getTime() - 28 * DAY - 1);
+
+    const inside = itineraryNodes(
+      [fixture({ fixtureId: 'b', kickoffAt: onBoundary, venueId: NEAR })],
+      REFERENCE_AS_OF
+    );
+    assert.equal(inside.length, 1, 'a fixture exactly at the boundary is in window');
+
+    // One millisecond earlier it is the SEED rather than a member — still one
+    // node, but reached by the other path.
+    const seeded = itineraryNodes(
+      [fixture({ fixtureId: 'b', kickoffAt: justOutside, venueId: NEAR })],
+      REFERENCE_AS_OF
+    );
+    assert.equal(seeded.length, 1);
+    assert.equal(seeded[0].kickoffAt.getTime(), justOutside.getTime());
+  });
+
+  it('T-O/R. A pre-window fixture SEEDS the chain, contributing its venue only', () => {
+    const seeded = run([at(40, FAR), at(3, NEAR)]);
+    assert.equal(seeded.length, 1, 'one in-window fixture plus a seed yields a value');
+    assert.equal(seeded[0].sampleObservationCount, 1, 'exactly the seed leg');
+    assert.ok(km(seeded) > 1000);
+
+    // The seed's OWN history must not be recursed into: adding an older fixture
+    // behind it changes nothing.
+    const deeper = run([at(200, HOME, true), at(40, FAR), at(3, NEAR)]);
+    assert.equal(deeper[0].sampleObservationCount, 1);
+    assert.ok(Math.abs(km(deeper) - km(seeded)) < 1e-6);
+  });
+
+  it('T-P. A HOME fixture after recent away travel carries burden (the D-i headline)', () => {
+    // The subject moment is the upcoming home fixture; the history is away.
+    const produced = run([at(6, FAR), at(3, NEAR), at(1, HOME, true)]);
+    assert.ok(km(produced) > 0, 'travel is non-zero at a home fixture');
+    assert.equal(produced[0].sampleObservationCount, 2);
+
+    // The upcoming fixture is excluded twice over — not completed, and not
+    // before `as_of`. A node AT `as_of` must never appear.
+    const withReference = run([at(6, FAR), at(3, NEAR), at(1, HOME, true), at(0, NEAR)]);
+    assert.equal(withReference[0].sampleObservationCount, 2, 'the reference fixture is not a node');
+  });
+
+  // ── Q–X · the additional cases ───────────────────────────────────────────
+
+  it('T-Q. Two legs where one is 0 km: both counted, the zero contributes nothing', () => {
+    const produced = run([at(6, NEAR, false, 'p'), at(4, NEAR, false, 'q'), at(2, FAR)]);
+    assert.equal(produced[0].sampleObservationCount, 2);
+    const single = km(run([at(4, NEAR), at(2, FAR)]));
+    assert.ok(Math.abs(km(produced) - single) < 1e-6, '0 km adds distance but not length');
+  });
+
+  it('T-S. One in-window fixture with NO seed yields NO VALUE — not zero', () => {
+    const produced = run([at(3, NEAR)]);
+    assert.equal(produced.length, 0, 'one node is no journey, and no journey is not 0 km');
+  });
+
+  it('T-T. Fixtures exist but no leg is measurable — NO VALUE', () => {
+    const produced = run([at(6, NO_COORDS), at(3, null), at(1, NO_COORDS)]);
+    assert.equal(produced.length, 0);
+  });
+
+  it('T-U. Out-of-window fixtures contribute nothing beyond the single seed', () => {
+    const many = run([at(300, FAR), at(200, NEAR), at(100, FAR), at(40, NEAR), at(3, FAR)]);
+    assert.equal(many[0].sampleObservationCount, 1, 'only the seed leg — the rest are out of window');
+    const justSeed = run([at(40, NEAR), at(3, FAR)]);
+    assert.ok(Math.abs(km(many) - km(justSeed)) < 1e-6);
+  });
+
+  it('T-V. Unsorted input produces an identical result to sorted input', () => {
+    const chronological = [at(9, HOME, true), at(6, FAR), at(3, NEAR), at(1, HOME, true)];
+    const shuffled = [chronological[2], chronological[0], chronological[3], chronological[1]];
+    const a = run(chronological);
+    const b = run(shuffled);
+    assert.equal(a[0].sampleObservationCount, b[0].sampleObservationCount);
+    assert.equal(
+      toNumericString(roundHalfUp(a[0].value, 6)),
+      toNumericString(roundHalfUp(b[0].value, 6))
+    );
+  });
+
+  it('T-W. Distinct fixtures sharing a venue id give 0 km legs that still count', () => {
+    const produced = run([at(6, FAR, false, 'w1'), at(4, FAR, false, 'w2'), at(2, FAR, false, 'w3')]);
+    assert.equal(km(produced), 0);
+    assert.equal(produced[0].sampleObservationCount, 2, 'two legs, both measured, both zero');
+  });
+
+  it('T-X. The calculator returns UNROUNDED km; the write boundary rounds once', () => {
+    const produced = run([at(6, HOME, true), at(4, NEAR), at(2, FAR)]);
+    const exactKm = toNumericString(produced[0].value);
+    assert.ok(exactKm.includes('.'), 'the aggregate is returned with fractional kilometres');
+    // value_scale = 0 is what turns it into whole kilometres, at the boundary.
+    const stored = toNumericString(roundHalfUp(produced[0].value, 0));
+    assert.ok(!stored.includes('.'), 'the stored value is a whole number of kilometres');
+    assert.equal(stored, String(Math.round(Number(exactKm))));
+  });
+
+  // ── Parity, provenance and the untouched neighbour ───────────────────────
+
+  it('T-parity. Haversine matches travel_load to full double precision', () => {
+    // Reproduced rather than imported, because `haversineKm` is private to
+    // `travelLoad.ts` and that file must not change. This is what stops the two
+    // copies drifting.
+    const legacyDistanceKm = (a: VenueLocation, b: VenueLocation): number => {
+      const R = 6371;
+      const rad = (d: number): number => (d * Math.PI) / 180;
+      const lat1 = rad(Number(a.latitude));
+      const lat2 = rad(Number(b.latitude));
+      const dLat = lat2 - lat1;
+      const dLon = rad(Number(b.longitude) - Number(a.longitude));
+      const h =
+        Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    };
+    for (const [from, to] of [
+      [HOME, NEAR],
+      [HOME, FAR],
+      [NEAR, FAR],
+      [FAR, NEUTRAL],
+      [HOME, HOME],
+    ] as const) {
+      const a = venues.get(from)!;
+      const b = venues.get(to)!;
+      assert.equal(haversineKm(a, b), legacyDistanceKm(a, b));
+    }
+  });
+
+  it('T-structural. The calculator never reads isHome, the clock, or the home venue', () => {
+    const source = readFileSync(
+      join(__dirname, '..', 'calculators', 'travelItinerary.ts'),
+      'utf8'
+    );
+    const body = source.slice(source.indexOf('import {'));
+    assert.ok(!/\.isHome\b/.test(body), 'D-i: home/away status must not enter the itinerary');
+    assert.ok(!/homeVenueByTeam/.test(body), 'D-ii: no home-origin star topology');
+    assert.ok(
+      !/new Date\(|Date\.now\(|\bnow\(\)/.test(body),
+      'R-2 obligation 6: a calculator reads no clock'
+    );
+    assert.match(body, /28 \* 86_400_000/, 'the elapsed-time window, not calendar days');
+  });
+
+  it('T-registry. travel_distance is registered as a measurement, and travel_impact is untouched', () => {
+    assert.ok(FEATURE_KEYS.includes('team.travel_distance'));
+    assert.ok(CALCULATOR_KEYS.includes('travel_itinerary'));
+    // The superseded feature keeps its registration exactly as it was.
+    assert.ok(FEATURE_KEYS.includes('team.travel_impact'));
+    assert.ok(CALCULATOR_KEYS.includes('travel_load'));
   });
 });
 

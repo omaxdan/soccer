@@ -79,6 +79,7 @@ import { formBackfill } from './calculators/formBackfill';
 import { fixtureLoad } from './calculators/fixtureLoad';
 import { travelLoad } from './calculators/travelLoad';
 import { teamReadiness } from './calculators/teamReadiness';
+import { travelItinerary } from './calculators/travelItinerary';
 import { logger } from '../../utils/logger';
 
 /** The only role S-5 authenticates as. */
@@ -98,6 +99,7 @@ export const CALCULATORS: readonly Calculator[] = [
   fixtureLoad,
   travelLoad,
   teamReadiness,
+  travelItinerary,
 ];
 
 export interface FeatureRunOptions extends EligibilityOptions {

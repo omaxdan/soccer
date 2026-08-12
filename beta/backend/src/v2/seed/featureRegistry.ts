@@ -66,6 +66,16 @@ const CALCULATORS: readonly (readonly [string, string, string, string])[] = [
     '1.0.0',
     'Derived from V1 team_squads_snapshot, which records squad composition per sync.',
   ],
+  [
+    // NOT `travel_load`. That row is bound to `team.travel_impact` and stays
+    // exactly as it is; one calculator row claiming two semantically unrelated
+    // features would be a false statement about what produces what.
+    'travel_itinerary',
+    'Travel itinerary',
+    '1.0.0',
+    'V2 reconstruction of successive played-fixture venues. SUPERSEDES the V1 away-only, ' +
+      'home-origin travel model rather than porting it — see docs/db-v2/63.',
+  ],
 ];
 
 interface FeatureSeed {
@@ -83,7 +93,29 @@ interface FeatureSeed {
   readonly sampleThreshold: number;
   /** Context kinds this feature is defined at (A.11 binding relation). */
   readonly contextKinds: readonly string[];
+  /**
+   * What version 1.0.0 of this feature MEANS, when it is not the V1 computation.
+   *
+   * The default below says the feature carries a V1 computation across
+   * unchanged, which is true of the original seven and is the sentence doc 22
+   * showed to be load-bearing: the registry's rationale is what version 1.0.0
+   * means, so a rationale claiming an inheritance the calculator does not
+   * perform is a false statement about a governed version. A feature that
+   * SUPERSEDES V1 must therefore say so here rather than inherit that sentence.
+   */
+  readonly versionRationale?: string;
 }
+
+/**
+ * The rationale for a feature that carries its V1 computation across unchanged.
+ *
+ * Unchanged text, so the seven existing `feature_version` rows are byte
+ * identical to what S-3 already wrote. `seedRows` is insert-only, so a re-run
+ * offers them and writes none.
+ */
+const CARRIED_FROM_V1 =
+  'Initial registration. Represents the V1 computation named in the definition’s meaning, ' +
+  'carried across unchanged. The calculator that implements it arrives in S-5.';
 
 /**
  * The seven features, each traced to the V1 quantity it represents.
@@ -164,6 +196,44 @@ const FEATURES: readonly FeatureSeed[] = [
     maxProvenance: 'DERIVED',
     sampleThreshold: 3,
     contextKinds: ['ALL_COMPETITIONS'],
+  },
+  {
+    // S-0-a-ii. A MEASUREMENT, not a judgement. `team.travel_impact` above keeps
+    // its own meaning, its own calculator and its own registration; nothing here
+    // modifies, renames or retires it.
+    key: 'team.travel_distance',
+    calculator: 'travel_itinerary',
+    subjectKind: 'TEAM',
+    displayName: 'Travel distance',
+    meaning:
+      'Total distance between the venues of consecutively played fixtures over the previous ' +
+      '28 x 86,400,000 ms, seeded by the most recent fixture before that window. Follows ' +
+      'fixture.venue_id, so home, away and neutral fixtures are all nodes; no return-home leg ' +
+      'is assumed, because a fixture list records where matches were played and not where a ' +
+      'team was between them. SUPERSEDES the V1 away-only, home-origin travel model.',
+    // A physical unit, as `days` already is — not an index.
+    unit: 'km',
+    // Whole kilometres. ck_feature_definition__scale_bounded admits 0, and
+    // write/scale.ts performs the single rounding at the write boundary, so the
+    // calculator still returns an unrounded exact aggregate.
+    valueScale: 0,
+    // R-1. A distance is a measurement; whether more travel is worse is
+    // `travel_burden`'s judgement to make, not this primitive's.
+    direction: 'UNSIGNED',
+    maxProvenance: 'DERIVED',
+    // R-2. One measurable leg IS an observation — including a 0 km leg between
+    // two known venues. The threshold separates "at least one measurable leg"
+    // from "none", which is the only distinction this primitive needs; a
+    // statistical sample size would be borrowed from a different kind of
+    // quantity.
+    sampleThreshold: 1,
+    contextKinds: ['ALL_COMPETITIONS'],
+    versionRationale:
+      'Initial registration. NOT the V1 computation: S-0-a established that the V1 travel model ' +
+      'is away-only, measures every trip from the home ground, windows by fixture count rather ' +
+      'than elapsed time, and stores a mean per trip. This version measures observed ' +
+      'venue-to-venue movement over an elapsed 28-day window and supersedes it. The V1 ' +
+      'implementation is retained as historical evidence only.',
   },
   {
     key: 'team.congestion_index',
@@ -282,8 +352,10 @@ export async function seedFeatureRegistry(tx: PoolClient): Promise<SeedOutcome[]
         f.key,
         '1.0.0',
         openEffectivePeriod(),
-        'Initial registration. Represents the V1 computation named in the definition’s meaning, ' +
-          'carried across unchanged. The calculator that implements it arrives in S-5.',
+        // Per feature: a version that SUPERSEDES V1 must not inherit a sentence
+        // saying it carries V1 across. Doc 22 established that the rationale is
+        // what version 1.0.0 means.
+        f.versionRationale ?? CARRIED_FROM_V1,
       ]),
       ['feature_definition_id', 'designation']
     )
