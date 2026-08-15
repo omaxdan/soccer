@@ -45,6 +45,28 @@ import type { FeatureDefinition } from '../registry/load';
  */
 export const CALCULATION_CONTEXT_KIND = 'ALL_COMPETITIONS';
 
+/** The competition-scoped context kind — one value per competition edition. */
+export const COMPETITION_SCOPED_CONTEXT_KIND = 'COMPETITION_SCOPED';
+
+/**
+ * The context a batch of values is written under.
+ *
+ * ALL_COMPETITIONS carries no edition (`context_competition_edition_id` is NULL);
+ * COMPETITION_SCOPED carries exactly one, and `ck_feature_value__context_edition_
+ * conditional` enforces both-or-neither at the schema. A batch is one scope, so
+ * the scope travels alongside the batch rather than on each candidate — which is
+ * why `SubjectMoment` and `CandidateValue` are unchanged by the scoped path.
+ */
+export type CalculationScope =
+  | { readonly contextKind: typeof CALCULATION_CONTEXT_KIND; readonly contextEditionId: null }
+  | { readonly contextKind: typeof COMPETITION_SCOPED_CONTEXT_KIND; readonly contextEditionId: string };
+
+/** The default scope — the only one S-5 wrote before the scoped path existed. */
+export const ALL_COMPETITIONS_SCOPE: CalculationScope = {
+  contextKind: CALCULATION_CONTEXT_KIND,
+  contextEditionId: null,
+};
+
 /**
  * One (team, instant) pair to calculate for.
  *
@@ -167,6 +189,13 @@ export interface Calculator {
   readonly calculatorKey: string;
   /** The feature keys this calculator owns. Reconciled against the registry. */
   readonly featureKeys: readonly string[];
+  /**
+   * The context kind this calculator computes at. Omitted means ALL_COMPETITIONS
+   * — every existing calculator, unchanged. A COMPETITION_SCOPED calculator runs
+   * in the scoped pass against edition-scoped fixtures and its values are written
+   * with the edition; the two passes never mix.
+   */
+  readonly contextKind?: typeof CALCULATION_CONTEXT_KIND | typeof COMPETITION_SCOPED_CONTEXT_KIND;
   calculate(context: CalculationContext): readonly CandidateValue[];
 }
 

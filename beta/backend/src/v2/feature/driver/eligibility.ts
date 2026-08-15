@@ -51,6 +51,23 @@ export interface SubjectBatch {
   readonly snapshotPointCodes: readonly string[];
 }
 
+/**
+ * One instant within ONE competition edition, with every team needing it.
+ *
+ * The COMPETITION_SCOPED counterpart of `SubjectBatch`. A batch is one scope, so
+ * the edition is on the batch, not on each team — and it comes from the
+ * generating fixture's own `competition_edition_id`, never from a feature key. A
+ * team playing in two editions at one `as_of` (league + cup) appears in two
+ * batches, one per edition, which is exactly the distinction the scoped feature
+ * exists to keep.
+ */
+export interface ScopedSubjectBatch {
+  readonly asOf: Date;
+  readonly competitionEditionId: string;
+  readonly teamIds: readonly string[];
+  readonly snapshotPointCodes: readonly string[];
+}
+
 export interface EligibilityOptions {
   /**
    * Fixtures kicking off before `now` are still considered for this many days,
@@ -153,6 +170,88 @@ export async function selectBatches(
     .sort((a, b) => a.asOf.getTime() - b.asOf.getTime())
     .map((batch) => ({
       asOf: batch.asOf,
+      teamIds: [...batch.teamIds].sort(compareNumericId),
+      snapshotPointCodes: [...batch.points].sort(),
+    }));
+}
+
+/**
+ * Selects the COMPETITION_SCOPED batches to calculate.
+ *
+ * Identical eligibility to `selectBatches` — same fixtures, same offsets, same
+ * strict `as_of <= now` rule, same replay path — but keyed additionally by the
+ * generating fixture's `competition_edition_id`, so the unit of a batch is
+ * `(as_of, edition)` and the values it produces are one edition's venue identity.
+ *
+ * Deliberately a SIBLING of `selectBatches`, not a modification of it: the
+ * ALL_COMPETITIONS batches are produced by the untouched function, so the scoped
+ * path cannot alter them.
+ */
+export async function selectScopedBatches(
+  tx: PoolClient,
+  registry: Registry,
+  now: Date,
+  options: EligibilityOptions = {}
+): Promise<ScopedSubjectBatch[]> {
+  if (registry.snapshotPoints.length === 0) {
+    throw new Error(
+      'no snapshot points are in force. `as_of` is derived from football.snapshot_point, ' +
+        'and S-5 cannot select any subject without it.'
+    );
+  }
+
+  const maxOffsetSeconds = Math.max(...registry.snapshotPoints.map((point) => point.offsetSeconds));
+  const lookbackMs = (options.lookbackDays ?? DEFAULT_LOOKBACK_DAYS) * 86_400_000;
+
+  const from = options.replayFrom ?? new Date(now.getTime() - lookbackMs);
+  const to = options.replayTo ?? new Date(now.getTime() + maxOffsetSeconds * 1000);
+  if (to.getTime() < from.getTime()) {
+    throw new Error('the eligibility range ends before it begins');
+  }
+
+  const fixtures = await readFixturesForEligibility(tx, from, to);
+
+  // Keyed by (instant, edition). A fixture contributes its two teams to the
+  // batch of its OWN edition — the edition comes from the data, never from a
+  // feature.
+  const byKey = new Map<
+    string,
+    { asOf: Date; editionId: string; teamIds: Set<string>; points: Set<string> }
+  >();
+
+  for (const fixture of fixtures) {
+    for (const point of registry.snapshotPoints) {
+      const asOf = deriveAsOf(fixture.kickoffAt, point.offsetSeconds);
+      if (asOf.getTime() > now.getTime()) continue;
+
+      const key = `${asOf.toISOString()}|${fixture.competitionEditionId}`;
+      let batch = byKey.get(key);
+      if (!batch) {
+        batch = {
+          asOf,
+          editionId: fixture.competitionEditionId,
+          teamIds: new Set(),
+          points: new Set(),
+        };
+        byKey.set(key, batch);
+      }
+      batch.teamIds.add(fixture.homeTeamId);
+      batch.teamIds.add(fixture.awayTeamId);
+      batch.points.add(point.code);
+    }
+  }
+
+  // Deterministic: ascending by instant, then by numeric edition id, then teams
+  // ascending within a batch.
+  return [...byKey.values()]
+    .sort((a, b) => {
+      const byInstant = a.asOf.getTime() - b.asOf.getTime();
+      if (byInstant !== 0) return byInstant;
+      return compareNumericId(a.editionId, b.editionId);
+    })
+    .map((batch) => ({
+      asOf: batch.asOf,
+      competitionEditionId: batch.editionId,
       teamIds: [...batch.teamIds].sort(compareNumericId),
       snapshotPointCodes: [...batch.points].sort(),
     }));

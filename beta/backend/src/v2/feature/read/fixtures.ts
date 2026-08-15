@@ -179,18 +179,32 @@ export async function readFixturesForEligibility(
   fromKickoff: Date,
   toKickoff: Date
 ): Promise<
-  { fixtureId: string; kickoffAt: Date; homeTeamId: string; awayTeamId: string }[]
+  {
+    fixtureId: string;
+    kickoffAt: Date;
+    homeTeamId: string;
+    awayTeamId: string;
+    /**
+     * The edition the fixture belongs to. Carried so the scoped enumeration can
+     * derive `(as_of, team, edition)` from the generating fixture itself — the
+     * edition comes from the data, never from a feature key. The existing
+     * ALL_COMPETITIONS enumeration ignores it.
+     */
+    competitionEditionId: string;
+  }[]
 > {
   const { rows } = await tx.query<{
     fixture_id: string;
     scheduled_kickoff_at: Date;
     home_team_id: string;
     away_team_id: string;
+    competition_edition_id: string;
   }>(
     `SELECT id::text AS fixture_id,
             scheduled_kickoff_at,
             home_team_id::text,
-            away_team_id::text
+            away_team_id::text,
+            competition_edition_id::text
        FROM football.fixture
       WHERE lifecycle_state_code IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED')
         AND scheduled_kickoff_at >= $1
@@ -203,5 +217,6 @@ export async function readFixturesForEligibility(
     kickoffAt: row.scheduled_kickoff_at,
     homeTeamId: row.home_team_id,
     awayTeamId: row.away_team_id,
+    competitionEditionId: row.competition_edition_id,
   }));
 }

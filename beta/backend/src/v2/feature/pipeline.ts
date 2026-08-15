@@ -62,15 +62,24 @@ import { assertDatabaseConfigured } from '../config/index';
 import { loadRegistry, assertCalculatorCoverage, type Registry } from './registry/load';
 import { declareRegistryInputs } from './registry/declare';
 import { deriveExecutionPlan, featuresOfCalculator, type ExecutionPlan } from './registry/order';
-import { selectBatches, type EligibilityOptions, type SubjectBatch } from './driver/eligibility';
+import {
+  selectBatches,
+  selectScopedBatches,
+  type EligibilityOptions,
+  type ScopedSubjectBatch,
+  type SubjectBatch,
+} from './driver/eligibility';
 import { readCompletedFixtures } from './read/fixtures';
+import { readEditionVenueResults } from './read/editionVenueResults';
 import { readHomeVenues, readVenueLocations } from './read/venues';
 import { readPriorValues } from './read/featureValues';
 import { writeValues } from './write/values';
 import { writeLineage } from './write/lineage';
 import {
   CALCULATION_CONTEXT_KIND,
+  COMPETITION_SCOPED_CONTEXT_KIND,
   type CalculationContext,
+  type CalculationScope,
   type Calculator,
   type CandidateValue,
   type SubjectMoment,
@@ -109,6 +118,17 @@ export interface FeatureRunOptions extends EligibilityOptions {
   readonly declare?: boolean;
   /** Overrides the run clock. Tests supply it; production does not. */
   readonly now?: Date;
+  /**
+   * Overrides the calculator set. Tests supply it to exercise a path — e.g. the
+   * COMPETITION_SCOPED pass — with a calculator not yet in production. Production
+   * omits it and uses `CALCULATORS`.
+   */
+  readonly calculators?: readonly Calculator[];
+}
+
+/** ALL_COMPETITIONS by default; a calculator opts into the scoped pass explicitly. */
+function contextKindOf(calculator: Calculator): string {
+  return calculator.contextKind ?? CALCULATION_CONTEXT_KIND;
 }
 
 export interface RelationCounts {
@@ -156,22 +176,39 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
   const counts = new Map<string, RelationCounts>();
   let failures = 0;
 
+  // The effective calculator set. Split by context kind: the ALL_COMPETITIONS
+  // pass is the existing one, unchanged; COMPETITION_SCOPED calculators run in a
+  // separate pass (§9, doc 77). Production has no scoped calculators yet, so the
+  // ALL_COMPETITIONS pass is byte-identical and the scoped pass is a no-op.
+  const effective = options.calculators ?? CALCULATORS;
+  const allCompCalculators = effective.filter(
+    (calculator) => contextKindOf(calculator) === CALCULATION_CONTEXT_KIND
+  );
+  const scopedCalculators = effective.filter(
+    (calculator) => contextKindOf(calculator) === COMPETITION_SCOPED_CONTEXT_KIND
+  );
+
   // Registry and plan are loaded once, outside the write transactions. The
   // registry is "modified rarely and under governance", so a concurrent change
   // mid-run is not a case S-5 tries to detect — it is a case S-5 states it does
   // not handle.
-  const { registry, plan, batches } = await withConnection(FEATURE_ROLE, async (tx) => {
+  const { registry, plan, batches, scopedBatches } = await withConnection(FEATURE_ROLE, async (tx) => {
     const loaded = await loadRegistry(tx);
     assertCalculatorCoverage(
       loaded,
-      new Map(CALCULATORS.map((calculator) => [calculator.calculatorKey, calculator.featureKeys]))
+      new Map(effective.map((calculator) => [calculator.calculatorKey, calculator.featureKeys]))
     );
+    // The plan orders the ALL_COMPETITIONS calculators by their dependency graph.
+    // Scoped Layer-1 calculators consume no feature, so they need no plan — they
+    // run in their own flat pass.
     const derived = deriveExecutionPlan(
       loaded,
-      CALCULATORS.map((calculator) => calculator.calculatorKey)
+      allCompCalculators.map((calculator) => calculator.calculatorKey)
     );
     const selected = await selectBatches(tx, loaded, now, options);
-    return { registry: loaded, plan: derived, batches: selected };
+    const selectedScoped =
+      scopedCalculators.length > 0 ? await selectScopedBatches(tx, loaded, now, options) : [];
+    return { registry: loaded, plan: derived, batches: selected, scopedBatches: selectedScoped };
   });
 
   logger.info(
@@ -199,7 +236,7 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
     });
   }
 
-  const byKey = new Map(CALCULATORS.map((calculator) => [calculator.calculatorKey, calculator]));
+  const byKey = new Map(allCompCalculators.map((calculator) => [calculator.calculatorKey, calculator]));
 
   await withPipelineRun(FEATURE_ROLE, 'v2.feature.calculate', async () => {
     // Stages strictly in sequence. Stage N+1 reads what stage N committed.
@@ -226,10 +263,35 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
         }
       }
     }
+
+    // THE SCOPED PASS — separate, additive, and run ONCE after all
+    // ALL_COMPETITIONS stages, never interleaved with them. Each scoped batch is
+    // one edition, so its scope carries that edition into the write. A batch
+    // failure is isolated, exactly as in the ALL_COMPETITIONS pass. Empty in
+    // production until a COMPETITION_SCOPED calculator is registered.
+    for (const calculator of scopedCalculators) {
+      for (const batch of scopedBatches) {
+        try {
+          const result = await runScopedBatch(registry, calculator, batch, options.dryRun === true);
+          for (const [relation, delta] of result) accumulate(counts, relation, delta);
+        } catch (error) {
+          failures += 1;
+          logger.error(
+            {
+              calculatorKey: calculator.calculatorKey,
+              asOf: batch.asOf.toISOString(),
+              competitionEditionId: batch.competitionEditionId,
+              error: buildDiagnostic(error),
+            },
+            'v2 feature: scoped batch failed, continuing'
+          );
+        }
+      }
+    }
   });
 
   return {
-    batches: batches.length,
+    batches: batches.length + scopedBatches.length,
     stages: plan.stages.map((stage) => stage.calculatorKeys),
     sequence: plan.sequence,
     counts,
@@ -302,6 +364,115 @@ async function runBatch(
     'v2 feature: batch complete'
   );
   return relationCounts;
+}
+
+/**
+ * One (scoped calculator × scoped batch) transaction — the COMPETITION_SCOPED
+ * counterpart of `runBatch`.
+ *
+ * Identical transaction discipline (read + write in one tx; lineage after
+ * values; telemetry on the control connection), but the context is built from
+ * the edition-cumulative read and the values are written under the batch's
+ * edition scope. `runBatch` is deliberately untouched, so the ALL_COMPETITIONS
+ * path cannot change.
+ */
+export async function runScopedBatch(
+  registry: Registry,
+  calculator: Calculator,
+  batch: ScopedSubjectBatch,
+  dryRun: boolean
+): Promise<Map<string, RelationCounts>> {
+  const relationCounts = new Map<string, RelationCounts>();
+  const scope: CalculationScope = {
+    contextKind: COMPETITION_SCOPED_CONTEXT_KIND,
+    contextEditionId: batch.competitionEditionId,
+  };
+
+  const candidates = await withRun(
+    FEATURE_ROLE,
+    `feature.${calculator.calculatorKey}`,
+    async (tx: PoolClient, job) => {
+      const context = await buildScopedContext(tx, registry, batch);
+      const produced = calculator.calculate(context);
+
+      if (dryRun) {
+        accumulate(relationCounts, 'feature.feature_value', {
+          examined: produced.length,
+          skipped: produced.length,
+        });
+        return produced;
+      }
+
+      const calculatedAt = operationalNow();
+      const valueResult = await writeValues(tx, registry, produced, calculatedAt, scope);
+      accumulate(relationCounts, 'feature.feature_value', {
+        examined: valueResult.examined,
+        written: valueResult.written,
+        skipped: valueResult.skipped,
+      });
+
+      const lineageResult = await writeLineage(tx, valueResult.writtenValues);
+      accumulate(relationCounts, 'feature.feature_lineage', {
+        examined: lineageResult.examined,
+        written: lineageResult.written,
+        skipped: lineageResult.skipped,
+      });
+
+      await reportWrites(job, relationCounts);
+      return produced;
+    },
+    {
+      detail: {
+        calculator: calculator.calculatorKey,
+        asOf: batch.asOf.toISOString(),
+        competitionEditionId: batch.competitionEditionId,
+      },
+    }
+  );
+
+  logger.debug(
+    {
+      calculator: calculator.calculatorKey,
+      asOf: batch.asOf.toISOString(),
+      competitionEditionId: batch.competitionEditionId,
+      candidates: candidates.length,
+    },
+    'v2 feature: scoped batch complete'
+  );
+  return relationCounts;
+}
+
+/**
+ * Assembles what a COMPETITION_SCOPED calculator may read.
+ *
+ * `fixturesByTeam` is the EDITION-CUMULATIVE population — every completed fixture
+ * of each team in this batch's edition, before `as_of`, with no rank cap and no
+ * time window (`readEditionVenueResults`). The venue maps and `priorValues` are
+ * empty: the first scoped consumer (venue win rate) is a Layer-1 feature that
+ * reads only fixtures and consumes no other feature. A future scoped composite
+ * would extend this the same way `buildContext` does.
+ */
+export async function buildScopedContext(
+  tx: PoolClient,
+  registry: Registry,
+  batch: ScopedSubjectBatch
+): Promise<CalculationContext> {
+  const subjects: SubjectMoment[] = batch.teamIds.map((teamId) => ({ teamId, asOf: batch.asOf }));
+  const fixturesByTeam = await readEditionVenueResults(
+    tx,
+    batch.teamIds,
+    batch.competitionEditionId,
+    batch.asOf
+  );
+
+  return {
+    definitions: registry.definitionsByKey,
+    subjects,
+    fixturesByTeam,
+    homeVenueByTeam: new Map(),
+    venuesById: new Map(),
+    priorValues: new Map(),
+  };
 }
 
 /**

@@ -37,7 +37,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg';
-import { CALCULATION_CONTEXT_KIND, type CandidateValue } from '../calculators/types';
+import {
+  ALL_COMPETITIONS_SCOPE,
+  type CalculationScope,
+  type CandidateValue,
+} from '../calculators/types';
 import type { FeatureDefinition, Registry } from '../registry/load';
 import { resolve } from './provenance';
 import { roundHalfUp, toNumericString } from './scale';
@@ -85,7 +89,8 @@ export async function writeValues(
   tx: PoolClient,
   registry: Registry,
   candidates: readonly CandidateValue[],
-  calculatedAt: Date
+  calculatedAt: Date,
+  scope: CalculationScope = ALL_COMPETITIONS_SCOPE
 ): Promise<ValueWriteResult> {
   if (candidates.length === 0) {
     return { examined: 0, written: 0, skipped: 0, writtenValues: [] };
@@ -109,13 +114,19 @@ export async function writeValues(
     // means of components already bounded to 0–100, congestion and travel select
     // from fixed band tables. NOT clamped here deliberately: a clamp would
     // silently repair a calculator defect that should instead be visible.
+    //
+    // context_kind_code and context_competition_edition_id come from the batch's
+    // SCOPE, not from a hardcoded constant. For ALL_COMPETITIONS the edition is
+    // NULL (the default scope), reproducing exactly the prior behaviour;
+    // ck_feature_value__context_edition_conditional enforces the pairing.
     const values = [
       candidate.asOf,
       calculatedAt,
       definition.id,
       definition.versionId,
       candidate.teamId,
-      CALCULATION_CONTEXT_KIND,
+      scope.contextKind,
+      scope.contextEditionId,
       toNumericString(rounded),
       resolved.provenanceClassCode,
       resolved.sampleObservationCount,
@@ -129,13 +140,15 @@ export async function writeValues(
     tuples.push(
       `($${base + 1}::timestamptz, $${base + 2}::timestamptz, $${base + 3}::bigint, ` +
         `$${base + 4}::bigint, 'TEAM'::text, $${base + 5}::bigint, $${base + 6}::text, ` +
-        `$${base + 7}::numeric, $${base + 8}::text, $${base + 9}::integer, $${base + 10}::boolean)`
+        `$${base + 7}::bigint, $${base + 8}::numeric, $${base + 9}::text, ` +
+        `$${base + 10}::integer, $${base + 11}::boolean)`
     );
   }
 
   const { rows } = await tx.query<{ id: string; row_index: number }>(
     `WITH candidate (as_of, calculated_at, feature_definition_id, feature_version_id,
-                     subject_kind_code, subject_team_id, context_kind_code, value,
+                     subject_kind_code, subject_team_id, context_kind_code,
+                     context_competition_edition_id, value,
                      provenance_class_code, sample_observation_count, sample_meets_threshold)
        AS (VALUES ${tuples.join(', ')}),
      numbered AS (
@@ -149,13 +162,14 @@ export async function writeValues(
           sample_observation_count, sample_meets_threshold)
        SELECT n.as_of, n.calculated_at, n.feature_definition_id, n.feature_version_id,
               n.subject_kind_code, n.subject_team_id, n.context_kind_code,
-              NULL, n.value, n.provenance_class_code,
+              n.context_competition_edition_id, n.value, n.provenance_class_code,
               n.sample_observation_count, n.sample_meets_threshold
          FROM numbered n
          ORDER BY n.row_index
        ON CONFLICT ON CONSTRAINT uq_feature_value__subject_context_definition_asof_version
        DO NOTHING
-       RETURNING id, feature_definition_id, subject_team_id, as_of
+       RETURNING id, feature_definition_id, subject_team_id, as_of,
+                 context_kind_code, context_competition_edition_id
      )
      SELECT i.id::text, n.row_index::int
        FROM inserted i
@@ -163,6 +177,12 @@ export async function writeValues(
          ON n.feature_definition_id = i.feature_definition_id
         AND n.subject_team_id = i.subject_team_id
         AND n.as_of = i.as_of
+        AND n.context_kind_code = i.context_kind_code
+        -- The edition is nullable (NULL for ALL_COMPETITIONS), so the
+        -- correlation must match NULL to NULL. Without IS NOT DISTINCT FROM a
+        -- scoped team with two editions at one as_of would mis-join, and an
+        -- ALL_COMPETITIONS row would fail to join at all.
+        AND n.context_competition_edition_id IS NOT DISTINCT FROM i.context_competition_edition_id
       ORDER BY n.row_index`,
     parameters
   );
