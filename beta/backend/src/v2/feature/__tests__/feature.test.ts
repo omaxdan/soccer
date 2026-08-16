@@ -90,8 +90,10 @@ const FEATURE_DIR = join(__dirname, '..');
  */
 const IMPLEMENTED_FEATURES = [
   'team.away_form',
+  'team.away_win_rate',
   'team.congestion_index',
   'team.home_form',
+  'team.home_win_rate',
   'team.readiness_score',
   'team.rest_advantage',
   'team.travel_distance',

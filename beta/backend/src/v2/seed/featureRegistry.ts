@@ -76,6 +76,14 @@ const CALCULATORS: readonly (readonly [string, string, string, string])[] = [
     'V2 reconstruction of successive played-fixture venues. SUPERSEDES the V1 away-only, ' +
       'home-origin travel model rather than porting it — see docs/db-v2/63.',
   ],
+  [
+    'venue_win_rate',
+    'Venue win rate',
+    '1.0.0',
+    'V2 competition-edition win rate by venue side. Carries the V1 win% FORMULA ' +
+      '(processDbOnly.ts processTeamVenuePerformance) but SUPERSEDES its lifetime, ' +
+      'all-competition population with an edition-cumulative one — see docs/db-v2/76.',
+  ],
 ];
 
 interface FeatureSeed {
@@ -154,6 +162,53 @@ const FEATURES: readonly FeatureSeed[] = [
     maxProvenance: 'DERIVED',
     sampleThreshold: 5,
     contextKinds: ['ALL_COMPETITIONS', 'COMPETITION_SCOPED'],
+  },
+  {
+    // COMPETITION_SCOPED venue win rate. NOT home_form: this is an unweighted
+    // win% over the whole edition, a venue-identity signal, whereas home_form is
+    // a weighted points% over a rolling ten. Separate features, separate
+    // calculators; neither derives from the other.
+    key: 'team.home_win_rate',
+    calculator: 'venue_win_rate',
+    subjectKind: 'TEAM',
+    displayName: 'Home win rate',
+    meaning:
+      'Percentage of the team’s completed home fixtures won, within one competition edition, cumulatively before as_of (wins / matches × 100; draws and losses in the denominator). V1: team_venue_performance.home_win_pct, but SUPERSEDING V1’s lifetime all-competition population with an edition-scoped one (docs/db-v2/76).',
+    unit: 'index',
+    valueScale: 2,
+    direction: 'HIGHER_IS_STRONGER',
+    maxProvenance: 'DERIVED',
+    // No feature-level sample gate: doc 75 records the feature’s minimum sample
+    // as "none" (FROZEN); the schema encodes "no gate" as 0, the same as
+    // module_version.minimum_sample_observation_count. matches = 0 already yields
+    // NO VALUE, so every persisted row rests on at least one match; significance
+    // is the Home/Away Split module’s |disparity| >= 40, not a feature threshold.
+    sampleThreshold: 0,
+    contextKinds: ['COMPETITION_SCOPED'],
+    versionRationale:
+      'Initial registration. Carries the V1 win% FORMULA (wins / matches × 100 by venue side, ' +
+      'processDbOnly.ts processTeamVenuePerformance) but SUPERSEDES V1’s lifetime, all-competition ' +
+      'population with an edition-cumulative one (Gate C-i, docs/db-v2/76). Not a V1 golden: the ' +
+      'population differs deliberately.',
+  },
+  {
+    key: 'team.away_win_rate',
+    calculator: 'venue_win_rate',
+    subjectKind: 'TEAM',
+    displayName: 'Away win rate',
+    meaning:
+      'Percentage of the team’s completed away fixtures won, within one competition edition, cumulatively before as_of (wins / matches × 100; draws and losses in the denominator). V1: team_venue_performance.away_win_pct, but SUPERSEDING V1’s lifetime all-competition population with an edition-scoped one (docs/db-v2/76). Held separately from home win rate, as the split is the whole point.',
+    unit: 'index',
+    valueScale: 2,
+    direction: 'HIGHER_IS_STRONGER',
+    maxProvenance: 'DERIVED',
+    sampleThreshold: 0,
+    contextKinds: ['COMPETITION_SCOPED'],
+    versionRationale:
+      'Initial registration. Carries the V1 win% FORMULA (wins / matches × 100 by venue side, ' +
+      'processDbOnly.ts processTeamVenuePerformance) but SUPERSEDES V1’s lifetime, all-competition ' +
+      'population with an edition-cumulative one (Gate C-i, docs/db-v2/76). Not a V1 golden: the ' +
+      'population differs deliberately.',
   },
   {
     key: 'team.readiness_score',

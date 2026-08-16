@@ -72,6 +72,11 @@ export const FEATURE_SOURCES: Readonly<Record<string, readonly string[]>> = {
   // measuring every trip from home is the star topology S-0-a corrected, and a
   // null venue is an unknown location rather than a fallback to it.
   'team.travel_distance': ['fixture', 'venue'],
+  // Win rate over completed edition fixtures by venue side — the fixture for the
+  // participation and side, the result for the score. Same two football sources
+  // as form, a different quantity computed from them.
+  'team.home_win_rate': ['fixture', 'result'],
+  'team.away_win_rate': ['fixture', 'result'],
 };
 
 /** Feature → feature edges. The consumer, and what it consumes. */

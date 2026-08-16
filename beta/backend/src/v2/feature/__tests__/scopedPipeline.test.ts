@@ -36,7 +36,8 @@ import {
   type Calculator,
   type CandidateValue,
 } from '../calculators/types';
-import { fromInt } from '../write/scale';
+import { fromInt, roundHalfUp, toNumericString } from '../write/scale';
+import { venueWinRate } from '../calculators/venueWinRate';
 import { seedWorld, TEST_PREFIX, type SeededWorld } from './fixtures';
 
 const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
@@ -424,16 +425,162 @@ describe('S-6 Gate C-ii — COMPETITION_SCOPED capability', { skip: !hasDatabase
 
   // ── Regression: the ALL_COMPETITIONS pipeline is untouched ──────────────────
 
-  it('11. production has no scoped calculator, so the scoped pass is a no-op', () => {
-    // The regression guarantee that ALL_COMPETITIONS values are byte-identical is
-    // the existing 126-test feature suite, which runs the untouched ALL_COMP
-    // path. This test pins the complementary fact: no production calculator opts
-    // into COMPETITION_SCOPED, so `runFeaturePipeline` skips scoped enumeration
-    // entirely and writes zero scoped rows. `venue_win_rate` (Gate C) will be the
-    // first, at which point this expectation is updated deliberately.
-    assert.equal(
-      CALCULATORS.some((c) => c.contextKind === COMPETITION_SCOPED_CONTEXT_KIND),
-      false
-    );
+  it('11. venue_win_rate is the first — and only — COMPETITION_SCOPED calculator', () => {
+    // Updated at Gate C (as the C-ii version of this test foretold). The scoped
+    // pass now has exactly one production consumer; every other calculator stays
+    // ALL_COMPETITIONS. The ALL_COMPETITIONS byte-identical guarantee remains the
+    // existing feature suite, which runs the untouched ALL_COMP path.
+    const scoped = CALCULATORS.filter((c) => c.contextKind === COMPETITION_SCOPED_CONTEXT_KIND);
+    assert.deepEqual(scoped.map((c) => c.calculatorKey), ['venue_win_rate']);
+    for (const c of CALCULATORS) {
+      if (c.calculatorKey !== 'venue_win_rate') {
+        assert.notEqual(c.contextKind, COMPETITION_SCOPED_CONTEXT_KIND, `${c.calculatorKey} stays ALL_COMPETITIONS`);
+      }
+    }
+  });
+
+  // ── Gate C: venue_win_rate against the real seeded editions ─────────────────
+
+  const stored = (v: ReturnType<typeof fromInt>) => toNumericString(roundHalfUp(v, 2));
+  const rateOf = (produced: readonly CandidateValue[], featureKey: string, teamId: string) =>
+    produced.find((c) => c.featureKey === featureKey && c.teamId === teamId);
+
+  it('12. edition 1 win rates are edition-cumulative and correct (V1 formula, V2 population)', async () => {
+    await asFeature(async (tx, registry) => {
+      const batch = {
+        asOf: afterAll,
+        competitionEditionId: world.editionId,
+        teamIds: [world.alphaTeamId],
+        snapshotPointCodes: ['KICKOFF'],
+      };
+      const produced = venueWinRate.calculate(await buildScopedContext(tx, registry, batch));
+      // Alpha in edition 1: home F01 W, F03 L, F05 D, F07 W → 2/4 = 50.00 (count 4).
+      // away F02 D, F04 L, F06 W, F08 D → 1/4 = 25.00 (count 4).
+      const home = rateOf(produced, 'team.home_win_rate', world.alphaTeamId);
+      const away = rateOf(produced, 'team.away_win_rate', world.alphaTeamId);
+      assert.equal(stored(home!.value), '50.00');
+      assert.equal(home!.sampleObservationCount, 4);
+      assert.equal(stored(away!.value), '25.00');
+      assert.equal(away!.sampleObservationCount, 4);
+    });
+  });
+
+  it('13. edition 2 retains >10 fixtures and excludes the other competition', async () => {
+    await asFeature(async (tx, registry) => {
+      const batch = {
+        asOf: afterAll,
+        competitionEditionId: second.editionId,
+        teamIds: [world.alphaTeamId],
+        snapshotPointCodes: ['KICKOFF'],
+      };
+      const produced = venueWinRate.calculate(await buildScopedContext(tx, registry, batch));
+      const home = rateOf(produced, 'team.home_win_rate', world.alphaTeamId);
+      const away = rateOf(produced, 'team.away_win_rate', world.alphaTeamId);
+      // 12 home wins → 100.00 over 12 (proves no rank-10 cap, no 28-day window).
+      assert.equal(stored(home!.value), '100.00');
+      assert.equal(home!.sampleObservationCount, second.alphaHomeCount);
+      assert.ok(second.alphaHomeCount > 10);
+      // No away fixtures in edition 2 → NO VALUE, and edition 1's fixtures do not leak in.
+      assert.equal(away, undefined);
+    });
+  });
+
+  it('14. same team + same as_of + different editions produce distinct values', async () => {
+    await asFeature(async (tx, registry) => {
+      const e1 = venueWinRate.calculate(await buildScopedContext(tx, registry, {
+        asOf: afterAll, competitionEditionId: world.editionId,
+        teamIds: [world.alphaTeamId], snapshotPointCodes: ['KICKOFF'],
+      }));
+      const e2 = venueWinRate.calculate(await buildScopedContext(tx, registry, {
+        asOf: afterAll, competitionEditionId: second.editionId,
+        teamIds: [world.alphaTeamId], snapshotPointCodes: ['KICKOFF'],
+      }));
+      // Edition 1 home 50.00 vs edition 2 home 100.00 — the population isolation
+      // that V1's lifetime all-competition calculation would have contaminated.
+      assert.equal(stored(rateOf(e1, 'team.home_win_rate', world.alphaTeamId)!.value), '50.00');
+      assert.equal(stored(rateOf(e2, 'team.home_win_rate', world.alphaTeamId)!.value), '100.00');
+    });
+  });
+
+  it('15. strict boundary: a fixture exactly at as_of is excluded', async () => {
+    await asFeature(async (tx, registry) => {
+      // as_of exactly at edition 2's first kickoff → that fixture excluded; the
+      // remaining 11 are all wins → still 100.00 but over 11, not 12.
+      const batch = {
+        asOf: second.firstKickoff,
+        competitionEditionId: second.editionId,
+        teamIds: [world.alphaTeamId],
+        snapshotPointCodes: ['KICKOFF'],
+      };
+      const produced = venueWinRate.calculate(await buildScopedContext(tx, registry, batch));
+      const home = rateOf(produced, 'team.home_win_rate', world.alphaTeamId);
+      // Everything is before the first kickoff except… nothing: as_of = first
+      // kickoff excludes it and there is nothing earlier → NO VALUE.
+      assert.equal(home, undefined, 'as_of at the earliest kickoff leaves no qualifying fixture');
+      const after1ms = venueWinRate.calculate(await buildScopedContext(tx, registry, {
+        ...batch, asOf: new Date(second.firstKickoff.getTime() + 1),
+      }));
+      // 1 ms later, the first fixture qualifies → 100.00 over 1.
+      const home1 = rateOf(after1ms, 'team.home_win_rate', world.alphaTeamId);
+      assert.equal(stored(home1!.value), '100.00');
+      assert.equal(home1!.sampleObservationCount, 1);
+    });
+  });
+
+  it('16. scoped venue values persist under the edition, at scale 2, idempotently', async () => {
+    await inRolledBackTx(async (tx, registry) => {
+      const batch = {
+        asOf: afterAll, competitionEditionId: world.editionId,
+        teamIds: [world.alphaTeamId], snapshotPointCodes: ['KICKOFF'],
+      };
+      const produced = venueWinRate.calculate(await buildScopedContext(tx, registry, batch));
+      const scope: CalculationScope = {
+        contextKind: COMPETITION_SCOPED_CONTEXT_KIND,
+        contextEditionId: world.editionId,
+      };
+      const first = await writeValues(tx, registry, produced, afterAll, scope);
+      assert.equal(first.written, produced.length);
+      // Stored at value_scale = 2, under the edition.
+      const { rows } = await tx.query(
+        `SELECT d.feature_key, v.value::text AS value, v.context_kind_code,
+                v.context_competition_edition_id::text AS ed, v.sample_observation_count
+           FROM feature.feature_value v
+           JOIN feature.feature_definition d ON d.id = v.feature_definition_id
+          WHERE v.subject_team_id = $1 AND v.as_of = $2
+          ORDER BY d.feature_key`,
+        [world.alphaTeamId, afterAll]
+      );
+      const byKey = Object.fromEntries(rows.map((r: any) => [r.feature_key, r]));
+      assert.equal(byKey['team.home_win_rate'].value, '50.00');
+      assert.equal(byKey['team.home_win_rate'].context_kind_code, COMPETITION_SCOPED_CONTEXT_KIND);
+      assert.equal(byKey['team.home_win_rate'].ed, world.editionId);
+      assert.equal(byKey['team.away_win_rate'].value, '25.00');
+      // Idempotent rerun.
+      const again = await writeValues(tx, registry, produced, afterAll, scope);
+      assert.equal(again.written, 0);
+      assert.equal(again.skipped, produced.length);
+    });
+  });
+
+  it('17. ALL_COMPETITIONS home_form is unaffected by a scoped venue write', async () => {
+    await inRolledBackTx(async (tx, registry) => {
+      // A scoped venue write for alpha must not touch any ALL_COMPETITIONS row.
+      const batch = {
+        asOf: afterAll, competitionEditionId: world.editionId,
+        teamIds: [world.alphaTeamId], snapshotPointCodes: ['KICKOFF'],
+      };
+      const produced = venueWinRate.calculate(await buildScopedContext(tx, registry, batch));
+      const scope: CalculationScope = {
+        contextKind: COMPETITION_SCOPED_CONTEXT_KIND,
+        contextEditionId: world.editionId,
+      };
+      await writeValues(tx, registry, produced, afterAll, scope);
+      const { rows } = await tx.query(
+        `SELECT count(*)::int AS n FROM feature.feature_value
+          WHERE subject_team_id = $1 AND context_kind_code = $2`,
+        [world.alphaTeamId, CALCULATION_CONTEXT_KIND]
+      );
+      assert.equal(rows[0].n, 0, 'no ALL_COMPETITIONS row was created by the scoped write');
+    });
   });
 });

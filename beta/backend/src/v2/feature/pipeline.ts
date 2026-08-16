@@ -89,6 +89,7 @@ import { fixtureLoad } from './calculators/fixtureLoad';
 import { travelLoad } from './calculators/travelLoad';
 import { teamReadiness } from './calculators/teamReadiness';
 import { travelItinerary } from './calculators/travelItinerary';
+import { venueWinRate } from './calculators/venueWinRate';
 import { logger } from '../../utils/logger';
 
 /** The only role S-5 authenticates as. */
@@ -109,6 +110,9 @@ export const CALCULATORS: readonly Calculator[] = [
   travelLoad,
   teamReadiness,
   travelItinerary,
+  // The first COMPETITION_SCOPED calculator — runs in the scoped pass (Gate
+  // C-ii), never the ALL_COMPETITIONS one, because it declares its context kind.
+  venueWinRate,
 ];
 
 export interface FeatureRunOptions extends EligibilityOptions {
