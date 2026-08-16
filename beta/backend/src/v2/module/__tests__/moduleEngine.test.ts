@@ -192,8 +192,8 @@ describe('home_away_split — pure status rule and assembly', () => {
     assert.equal(r.sampleObservationCount, 3);
     assert.equal(r.sampleMeetsThreshold, false, '3 < 5');
   });
-  it('MODULE_CALCULATORS holds exactly home_away_split', () => {
-    assert.deepEqual(MODULE_CALCULATORS.map((c) => c.moduleKey), ['home_away_split']);
+  it('MODULE_CALCULATORS holds the authorized modules (home_away_split, readiness_tracker)', () => {
+    assert.deepEqual([...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(), ['home_away_split', 'readiness_tracker']);
   });
 
   // ── Gate E-i: assembleReading honours the declared scope (pure) ──────────────

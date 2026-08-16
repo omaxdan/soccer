@@ -51,6 +51,7 @@ import {
 import { consumedKey, readConsumedFeatures } from './read/consumedFeatures';
 import { writeReading, type ReadingToWrite } from './write/readings';
 import { homeAwaySplit } from './calculators/homeAwaySplit';
+import { readinessTracker } from './calculators/readinessTracker';
 import { logger } from '../../utils/logger';
 
 /** The only role S-6 authenticates as. */
@@ -60,10 +61,13 @@ export const MODULE_ROLE = 'pt_pipeline_module' as const;
 export const INACTIVE_REASON_FEATURE_ABSENT = 'FEATURE_ABSENT';
 
 /**
- * The implemented modules. NOT an execution order — a set. `home_away_split` is
- * the only one implemented; the other twelve stay registered and unproduced.
+ * The implemented modules. NOT an execution order — a set. Two are implemented
+ * (`home_away_split` COMPETITION_SCOPED, `readiness_tracker` ALL_COMPETITIONS —
+ * proving E-i routes both scopes generically); the other eleven stay registered
+ * and unproduced. This array is the D-3 declaration site — a module is produced
+ * only when it is both registered active AND listed here.
  */
-export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [homeAwaySplit];
+export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [homeAwaySplit, readinessTracker];
 
 export interface ModuleRunOptions extends EligibilityOptions {
   readonly dryRun?: boolean;
