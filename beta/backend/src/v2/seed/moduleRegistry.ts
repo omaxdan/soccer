@@ -51,6 +51,15 @@ interface ModuleSeed {
   readonly isActive: boolean;
   /** The V1 module key this carries forward, or null when newly approved. */
   readonly v1Key: string | null;
+  /**
+   * The version 1.0.0 rationale, when it is NOT the default "ported in S-6"
+   * template. Set for an IMPLEMENTED module under D-2 (doc 56/58): the rationale
+   * STATES the version's status rule, threshold and count rule. Must be
+   * byte-identical to migration 024, so a fresh seed and a migrated database
+   * converge (doc 82). Absent for the unimplemented modules, which keep the
+   * template until their own implementation gate amends them.
+   */
+  readonly versionRationale?: string;
 }
 
 /**
@@ -80,6 +89,17 @@ const MODULES: readonly ModuleSeed[] = [
     outcomeDimension: 'MATCH_RESULT',
     isActive: true,
     v1Key: 'home_away',
+    // D-2 amendment (migration 024, doc 82 §5). Byte-identical to the migration.
+    versionRationale:
+      '1.0.0. Status rule (D-2, stated here): disparity = home_win_rate - away_win_rate; '
+      + 'SUPPORTS when |disparity| >= 40, otherwise NEUTRAL — orientation-free, transcribed '
+      + 'from the V1 evalHomeAway rule (docs/db-v2/78, 79). A rule transcription, NOT a literal '
+      + 'V1 port: the inputs team.home_win_rate and team.away_win_rate are edition-cumulative and '
+      + 'COMPETITION_SCOPED, deliberately superseding the V1 lifetime all-competition venue '
+      + 'population (docs/db-v2/76). Threshold minimum_sample_observation_count = 0 (no gate). '
+      + 'Observation-count rule: sample_observation_count = MIN(consumed); the non-composite '
+      + 'inputs pass their own counts through (D-5c-i). strength, confidence and '
+      + 'published_baseline_id are NULL at 1.0.0 (D-5a/D-5b; S-9 out of scope).',
   },
   {
     key: 'readiness_tracker',
@@ -92,6 +112,18 @@ const MODULES: readonly ModuleSeed[] = [
     outcomeDimension: 'MATCH_RESULT',
     isActive: true,
     v1Key: 'readiness',
+    // D-2 amendment (migration 024, doc 82 §5). Byte-identical to the migration.
+    versionRationale:
+      '1.0.0. Status rule (D-2, stated here): on team.momentum = last5Points - prior5Points, '
+      + 'classify >= +10 as SURGING, <= -10 as CRASHING, otherwise STABLE, and map '
+      + 'SURGING -> SUPPORTS, CRASHING -> CONTRADICTS, STABLE -> NEUTRAL — the numeric V1 '
+      + 'classifyTrend thresholds, transcribed (docs/db-v2/79, 81). The defective V1 '
+      + 'evalReadinessTracker, which compares a formatted string against a bare label and so '
+      + 'always yields neutral, is deliberately NOT reproduced. Threshold '
+      + 'minimum_sample_observation_count = 0. Observation-count rule: '
+      + 'sample_observation_count = MIN(consumed) — for this single non-composite input, the '
+      + 'team.momentum count (10 for a valid momentum) passes through (D-5c-i). strength, '
+      + 'confidence and published_baseline_id are NULL at 1.0.0 (D-5a/D-5b; S-9 out of scope).',
   },
   {
     key: 'consistency_index',
@@ -360,11 +392,14 @@ export async function seedModuleRegistry(tx: PoolClient): Promise<SeedOutcome[]>
         m.key,
         '1.0.0',
         openEffectivePeriod(),
-        m.v1Key
-          ? `Initial registration. Carries forward the V1 module '${m.v1Key}' unchanged; the ` +
-            'evaluation logic is ported in S-6.'
-          : 'Initial registration of a newly approved module. Identity and version only — no ' +
-            'evaluation logic exists, which is why the definition is registered inactive.',
+        // An IMPLEMENTED module states its rule under D-2 (versionRationale,
+        // migration 024). The rest keep the template until their own gate.
+        m.versionRationale ??
+          (m.v1Key
+            ? `Initial registration. Carries forward the V1 module '${m.v1Key}' unchanged; the ` +
+              'evaluation logic is ported in S-6.'
+            : 'Initial registration of a newly approved module. Identity and version only — no ' +
+              'evaluation logic exists, which is why the definition is registered inactive.'),
       ]),
       ['module_definition_id', 'designation']
     )
