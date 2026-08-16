@@ -94,6 +94,7 @@ const IMPLEMENTED_FEATURES = [
   'team.congestion_index',
   'team.home_form',
   'team.home_win_rate',
+  'team.momentum',
   'team.readiness_score',
   'team.rest_advantage',
   'team.travel_distance',

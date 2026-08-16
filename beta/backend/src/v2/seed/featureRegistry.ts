@@ -84,6 +84,14 @@ const CALCULATORS: readonly (readonly [string, string, string, string])[] = [
       '(processDbOnly.ts processTeamVenuePerformance) but SUPERSEDES its lifetime, ' +
       'all-competition population with an edition-cumulative one — see docs/db-v2/76.',
   ],
+  [
+    'team_momentum',
+    'Team momentum',
+    '1.0.0',
+    'V1 processTeamMomentum in jobs/processDbOnly.ts, writing team_momentum.momentum_score ' +
+      '(last-5 minus prior-5 points over team_form_history, all competitions). Carried across as ' +
+      'FORMULA and POPULATION unchanged; the only V2 difference is point-in-time as_of windowing.',
+  ],
 ];
 
 interface FeatureSeed {
@@ -303,6 +311,40 @@ const FEATURES: readonly FeatureSeed[] = [
     maxProvenance: 'DERIVED',
     sampleThreshold: 3,
     contextKinds: ['ALL_COMPETITIONS', 'COMPETITION_SCOPED'],
+  },
+  {
+    key: 'team.momentum',
+    calculator: 'team_momentum',
+    subjectKind: 'TEAM',
+    displayName: 'Momentum',
+    meaning:
+      'Short-term form trend: points taken in the five most recent completed fixtures minus ' +
+      'points in the five before them, across all competitions (win 3 / draw 1 / loss 0). ' +
+      'Signed — positive is rising, negative is declining. V1: team_momentum.momentum_score ' +
+      '(processDbOnly.ts processTeamMomentum). A trend, not a level — held separate from home/away ' +
+      'form (weighted per-side quality) and win rate (edition-cumulative rate).',
+    // A points differential, like `rest_advantage` is a day count — not an index.
+    unit: 'points',
+    // Whole points; the delta of two integer point-sums is an integer.
+    valueScale: 0,
+    // More positive = improving form. The delta is signed; feature_value has no
+    // non-negativity constraint, so a declining team's negative value is stored as-is.
+    direction: 'HIGHER_IS_STRONGER',
+    maxProvenance: 'DERIVED',
+    // No statistical sample gate: the quantity is UNDEFINED below ten completed,
+    // result-bearing fixtures (both five-match windows must be full), so the
+    // calculator emits NO VALUE there and every persisted value rests on exactly
+    // ten observations. Significance banding (±10 "Surging/Crashing") is the
+    // Readiness Tracker module's concern, not a feature threshold.
+    sampleThreshold: 0,
+    contextKinds: ['ALL_COMPETITIONS'],
+    versionRationale:
+      'Initial registration. Carries the V1 processTeamMomentum FORMULA and POPULATION unchanged ' +
+      '(last-5 minus prior-5 points, 3/1/0, over the ten most-recent completed result-bearing ' +
+      'fixtures across all competitions and seasons). The only V2 difference is the mandatory ' +
+      'point-in-time boundary: V1 computed one "now" snapshot; V2 evaluates the same quantity as ' +
+      'of each instant, reading only fixtures strictly before as_of. Not a population supersession — ' +
+      'the number is identical; V1-golden comparison is therefore valid for this quantity.',
   },
   {
     key: 'team.squad_stability',

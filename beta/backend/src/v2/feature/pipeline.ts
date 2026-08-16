@@ -89,6 +89,7 @@ import { fixtureLoad } from './calculators/fixtureLoad';
 import { travelLoad } from './calculators/travelLoad';
 import { teamReadiness } from './calculators/teamReadiness';
 import { travelItinerary } from './calculators/travelItinerary';
+import { teamMomentum } from './calculators/teamMomentum';
 import { venueWinRate } from './calculators/venueWinRate';
 import { logger } from '../../utils/logger';
 
@@ -110,6 +111,9 @@ export const CALCULATORS: readonly Calculator[] = [
   travelLoad,
   teamReadiness,
   travelItinerary,
+  // ALL_COMPETITIONS form-trend delta (Gate E-ii). Runs in the default pass; the
+  // Readiness Tracker module (E-iii) consumes it.
+  teamMomentum,
   // The first COMPETITION_SCOPED calculator — runs in the scoped pass (Gate
   // C-ii), never the ALL_COMPETITIONS one, because it declares its context kind.
   venueWinRate,
