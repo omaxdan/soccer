@@ -1,0 +1,69 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// THE MODULE CALCULATOR CONTRACT (S-6)
+//
+// The Layer-3 analogue of the S-5 feature Calculator. A module calculator is
+// PURE: it receives already-read consumed feature values and returns a finding
+// (status + verdict). It is handed no PoolClient and no clock, so it cannot read
+// a database or a wall clock (the same R-2 obligation the feature calculators
+// observe). The engine does everything else — eligibility, version selection,
+// evidence assembly, sample counting, threshold evaluation, persistence,
+// telemetry — so a module never re-implements any of it.
+//
+// WHAT A CALCULATOR DECIDES, AND WHAT IT DOES NOT
+//   decides:      module_status_code (SUPPORTS/NEUTRAL/CONTRADICTS) and verdict
+//   does NOT:     INACTIVE (the engine raises it when a declared input is absent
+//                 — the calculator is only called when every input is present, so
+//                 it never sees absence); the sample count (MIN(consumed), D-5c-i);
+//                 sample_meets_threshold (engine, vs the module version); strength
+//                 and confidence (NULL at 1.0.0, D-5a/D-5b); the baseline (NULL,
+//                 S-9 out of scope).
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { Exact } from '../feature/write/scale';
+
+/** The four module statuses (E3.07). INACTIVE is the engine's, never a calculator's. */
+export const MODULE_STATUS = {
+  SUPPORTS: 'SUPPORTS',
+  NEUTRAL: 'NEUTRAL',
+  CONTRADICTS: 'CONTRADICTS',
+  INACTIVE: 'INACTIVE',
+} as const;
+
+export type EngagedStatus = 'SUPPORTS' | 'NEUTRAL' | 'CONTRADICTS';
+
+/** A feature value a module consumed, with the identity evidence and lineage need. */
+export interface ConsumedFeature {
+  readonly featureKey: string;
+  /** `feature_value.id`, cited by module_evidence_item. */
+  readonly valueId: string;
+  /** The consumed value's own `as_of` — the other half of the composite citation. */
+  readonly asOf: Date;
+  readonly value: Exact;
+  readonly sampleObservationCount: number;
+}
+
+/** What a pure module calculator returns when it can speak. */
+export interface ModuleFinding {
+  readonly status: EngagedStatus;
+  /** The module's own plain conclusion (E3.09). No action, stake or selection (LC-71). */
+  readonly verdictText: string;
+}
+
+/**
+ * A module calculator — pure and deterministic.
+ *
+ * `inputFeatureKeys` is the D-3 declaration site: the module names the features
+ * it consumes IN CODE, and the engine derives `declared_input_count` from it. No
+ * `module_input` relation exists or is needed.
+ */
+export interface ModuleCalculator {
+  readonly moduleKey: string;
+  readonly subjectKind: 'TEAM';
+  readonly contextKind: 'COMPETITION_SCOPED';
+  readonly inputFeatureKeys: readonly string[];
+  /**
+   * Called ONLY when every declared input is present, so `inputs` always holds
+   * all of `inputFeatureKeys`. Must be deterministic: same inputs → same finding.
+   */
+  evaluate(inputs: ReadonlyMap<string, ConsumedFeature>): ModuleFinding;
+}
