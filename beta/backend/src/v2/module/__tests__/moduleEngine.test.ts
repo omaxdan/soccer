@@ -26,8 +26,14 @@ import { loadRegistry, type Registry } from '../../feature/registry/load';
 import { buildScopedContext } from '../../feature/pipeline';
 import { venueWinRate } from '../../feature/calculators/venueWinRate';
 import { writeValues } from '../../feature/write/values';
-import { COMPETITION_SCOPED_CONTEXT_KIND, type CalculationScope } from '../../feature/calculators/types';
-import { fromInt, fromString, type Exact } from '../../feature/write/scale';
+import {
+  CALCULATION_CONTEXT_KIND,
+  COMPETITION_SCOPED_CONTEXT_KIND,
+  ALL_COMPETITIONS_SCOPE,
+  type CalculationScope,
+  type CandidateValue,
+} from '../../feature/calculators/types';
+import { compare, fromInt, fromString, type Exact } from '../../feature/write/scale';
 import { seedWorld, type SeededWorld } from '../../feature/__tests__/fixtures';
 import { seedSecondEditionForModuleTests, type ModuleSecondEdition } from './secondEdition';
 
@@ -36,7 +42,7 @@ import { assembleReading, INACTIVE_REASON_FEATURE_ABSENT, MODULE_CALCULATORS, ru
 import { loadModuleRegistry, resolveModuleVersion } from '../registry/load';
 import { consumedKey, readConsumedFeatures } from '../read/consumedFeatures';
 import { writeReading } from '../write/readings';
-import type { ConsumedFeature } from '../types';
+import type { ConsumedFeature, ModuleCalculator } from '../types';
 
 const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
 const INGESTION_ROLE = 'pt_pipeline_ingestion' as const;
@@ -49,6 +55,15 @@ const MODULE_ROLE = 'pt_pipeline_module' as const;
 const MODULE_AS_OF = new Date('2027-03-15T00:00:00Z');
 const HOME = 'team.home_win_rate';
 const AWAY = 'team.away_win_rate';
+
+// The ALL_COMPETITIONS feature the E-i probe consumes — an existing registered
+// feature (registered at both context kinds); its meaning is irrelevant here.
+const PROBE_FEATURE = 'team.home_form';
+
+/** A COMPETITION_SCOPED scope for one edition. */
+function scoped(editionId: string): CalculationScope {
+  return { contextKind: COMPETITION_SCOPED_CONTEXT_KIND, contextEditionId: editionId };
+}
 
 // ─── the pure calculator + assembly ──────────────────────────────────────────
 
@@ -77,7 +92,7 @@ function assemble(homeRate: Exact | null, awayRate: Exact | null, hc = 4, ac = 4
     definition: DEF,
     version: VERSION,
     asOf: MODULE_AS_OF,
-    competitionEditionId: '999',
+    scope: scoped('999'),
     teamId: '100',
     inputs: inputs(
       homeRate ? consumed(HOME, homeRate, hc, 'H') : null,
@@ -171,7 +186,7 @@ describe('home_away_split — pure status rule and assembly', () => {
     const r = assembleReading({
       calculator: homeAwaySplit, definition: DEF,
       version: { ...VERSION, minimumSampleObservationCount: 5 },
-      asOf: MODULE_AS_OF, competitionEditionId: '999', teamId: '100',
+      asOf: MODULE_AS_OF, scope: scoped('999'), teamId: '100',
       inputs: inputs(consumed(HOME, fromInt(90), 3, 'H'), consumed(AWAY, fromInt(10), 4, 'A')),
     });
     assert.equal(r.sampleObservationCount, 3);
@@ -180,7 +195,54 @@ describe('home_away_split — pure status rule and assembly', () => {
   it('MODULE_CALCULATORS holds exactly home_away_split', () => {
     assert.deepEqual(MODULE_CALCULATORS.map((c) => c.moduleKey), ['home_away_split']);
   });
+
+  // ── Gate E-i: assembleReading honours the declared scope (pure) ──────────────
+
+  it('E-i: a COMPETITION_SCOPED scope persists the edition on the reading', () => {
+    const r = assemble(fromInt(100), fromInt(0)); // uses scoped('999')
+    assert.equal(r.contextKindCode, COMPETITION_SCOPED_CONTEXT_KIND);
+    assert.equal(r.contextEditionId, '999');
+  });
+  it('E-i: an ALL_COMPETITIONS scope persists context kind ALL_COMPETITIONS with NULL edition', () => {
+    const r = assembleReading({
+      calculator: homeAwaySplit, definition: DEF, version: VERSION,
+      asOf: MODULE_AS_OF, scope: ALL_COMPETITIONS_SCOPE, teamId: '100',
+      inputs: inputs(consumed(HOME, fromInt(100), 4, 'H'), consumed(AWAY, fromInt(0), 4, 'A')),
+    });
+    assert.equal(r.contextKindCode, CALCULATION_CONTEXT_KIND);
+    assert.equal(r.contextEditionId, null, 'ALL_COMPETITIONS carries no edition');
+  });
+  it('E-i: scope does not alter the finding — same inputs, same status/sample across scopes', () => {
+    const scopedR = assemble(fromInt(100), fromInt(0));
+    const allCompR = assembleReading({
+      calculator: homeAwaySplit, definition: DEF, version: VERSION,
+      asOf: MODULE_AS_OF, scope: ALL_COMPETITIONS_SCOPE, teamId: '100',
+      inputs: inputs(consumed(HOME, fromInt(100), 4, 'H'), consumed(AWAY, fromInt(0), 4, 'A')),
+    });
+    assert.equal(scopedR.statusCode, allCompR.statusCode);
+    assert.equal(scopedR.sampleObservationCount, allCompR.sampleObservationCount);
+    assert.equal(scopedR.verdictText, allCompR.verdictText);
+  });
 });
+
+// A throwaway ALL_COMPETITIONS × TEAM probe module. It consumes an existing
+// ALL_COMPETITIONS feature and exists ONLY to prove the engine routes by the
+// calculator's declared contextKind — never a hardcoded scope — and reads/writes
+// the ALL_COMPETITIONS path correctly. It is NOT readiness_tracker: no registry
+// row, no team-momentum feature, no production wiring; it borrows the registered
+// home_away_split definition purely so the reading's FK resolves.
+const allCompProbe: ModuleCalculator = {
+  moduleKey: 'home_away_split',
+  subjectKind: 'TEAM',
+  contextKind: CALCULATION_CONTEXT_KIND,
+  inputFeatureKeys: [PROBE_FEATURE],
+  evaluate(map) {
+    const v = map.get(PROBE_FEATURE)!;
+    return compare(v.value, fromInt(50)) >= 0
+      ? { status: 'SUPPORTS', verdictText: 'probe: ALL_COMPETITIONS input >= 50' }
+      : { status: 'NEUTRAL', verdictText: 'probe: ALL_COMPETITIONS input < 50' };
+  },
+};
 
 // ─── DB: the read → assemble → write chain ───────────────────────────────────
 
@@ -208,6 +270,18 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
         const scope: CalculationScope = { contextKind: COMPETITION_SCOPED_CONTEXT_KIND, contextEditionId: editionId };
         await writeValues(tx, registry, produced, MODULE_AS_OF, scope);
       }
+      // An ALL_COMPETITIONS value (edition NULL) for the E-i probe, committed on
+      // the DEDICATED gamma team (→ SUPPORTS). Kept off shared Alpha/Beta so it
+      // cannot perturb another suite's global ALL_COMP invariants.
+      const allCompValue: CandidateValue = {
+        featureKey: PROBE_FEATURE,
+        teamId: second.gammaTeamId,
+        asOf: MODULE_AS_OF,
+        value: fromInt(70),
+        sampleObservationCount: 6,
+        consumed: [],
+      };
+      await writeValues(tx, registry, [allCompValue], MODULE_AS_OF); // default scope = ALL_COMPETITIONS
     });
   });
 
@@ -231,11 +305,11 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
 
   it('reads edition-scoped consumed features, isolated per edition', async () => {
     await asModule(async (tx) => {
-      const e1 = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, world.editionId);
+      const e1 = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, scoped(world.editionId));
       // Edition 1 alpha: home 50.00 (4 matches), away 25.00 (4 matches).
       assert.equal(e1.get(consumedKey(HOME, world.alphaTeamId))!.sampleObservationCount, 4);
       assert.equal(e1.get(consumedKey(AWAY, world.alphaTeamId))!.sampleObservationCount, 4);
-      const e2 = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, second.editionId);
+      const e2 = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, scoped(second.editionId));
       // Edition 2 alpha: home present (>10 wins), away ABSENT.
       assert.ok(e2.get(consumedKey(HOME, world.alphaTeamId)));
       assert.equal(e2.get(consumedKey(AWAY, world.alphaTeamId)), undefined, 'no away rate in edition 2');
@@ -247,12 +321,12 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
       const registry = await loadModuleRegistry(tx);
       const def = registry.definitionsByKey.get('home_away_split')!;
       const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
-      const consumedMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, world.editionId);
+      const consumedMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, scoped(world.editionId));
       const teamInputs = new Map<string, ConsumedFeature>();
       for (const k of homeAwaySplit.inputFeatureKeys) teamInputs.set(k, consumedMap.get(consumedKey(k, world.alphaTeamId))!);
       const reading = assembleReading({
         calculator: homeAwaySplit, definition: def, version: version!,
-        asOf: MODULE_AS_OF, competitionEditionId: world.editionId, teamId: world.alphaTeamId, inputs: teamInputs,
+        asOf: MODULE_AS_OF, scope: scoped(world.editionId), teamId: world.alphaTeamId, inputs: teamInputs,
       });
       assert.equal(reading.statusCode, 'NEUTRAL', 'disparity 25 < 40');
       assert.equal(reading.sampleObservationCount, 4);
@@ -295,7 +369,7 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
       const registry = await loadModuleRegistry(tx);
       const def = registry.definitionsByKey.get('home_away_split')!;
       const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
-      const consumedMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, second.editionId);
+      const consumedMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, scoped(second.editionId));
       const teamInputs = new Map<string, ConsumedFeature>();
       for (const k of homeAwaySplit.inputFeatureKeys) {
         const c = consumedMap.get(consumedKey(k, world.alphaTeamId));
@@ -303,7 +377,7 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
       }
       const reading = assembleReading({
         calculator: homeAwaySplit, definition: def, version: version!,
-        asOf: MODULE_AS_OF, competitionEditionId: second.editionId, teamId: world.alphaTeamId, inputs: teamInputs,
+        asOf: MODULE_AS_OF, scope: scoped(second.editionId), teamId: world.alphaTeamId, inputs: teamInputs,
       });
       assert.equal(reading.statusCode, 'INACTIVE');
       assert.equal(reading.inactiveReason, INACTIVE_REASON_FEATURE_ABSENT);
@@ -331,12 +405,12 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
       const registry = await loadModuleRegistry(tx);
       const def = registry.definitionsByKey.get('home_away_split')!;
       const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
-      const consumedMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, world.editionId);
+      const consumedMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, scoped(world.editionId));
       const teamInputs = new Map<string, ConsumedFeature>();
       for (const k of homeAwaySplit.inputFeatureKeys) teamInputs.set(k, consumedMap.get(consumedKey(k, world.alphaTeamId))!);
       const reading = assembleReading({
         calculator: homeAwaySplit, definition: def, version: version!,
-        asOf: MODULE_AS_OF, competitionEditionId: world.editionId, teamId: world.alphaTeamId, inputs: teamInputs,
+        asOf: MODULE_AS_OF, scope: scoped(world.editionId), teamId: world.alphaTeamId, inputs: teamInputs,
       });
       const first = await writeReading(tx, { ...reading, calculatedAt: MODULE_AS_OF });
       const again = await writeReading(tx, { ...reading, calculatedAt: MODULE_AS_OF });
@@ -348,6 +422,8 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
 
   it('the module write creates no ALL_COMPETITIONS feature rows (feature path untouched)', async () => {
     await asModule(async (tx) => {
+      // Alpha carries no ALL_COMPETITIONS feature value (the E-i probe is on the
+      // dedicated gamma team), so the module layer having written none is exact.
       const { rows } = await tx.query(
         `SELECT count(*)::int AS n FROM feature.feature_value
           WHERE subject_team_id = $1 AND as_of = $2 AND context_kind_code = 'ALL_COMPETITIONS'`,
@@ -363,5 +439,178 @@ describe('S-6 module engine against the DB', { skip: !hasDatabase }, () => {
       runModulePipeline({ now: MODULE_AS_OF, calculators: [ghost], dryRun: true, replayFrom: MODULE_AS_OF, replayTo: MODULE_AS_OF }),
       /not a registered module/
     );
+  });
+
+  // ── Gate E-i: the ALL_COMPETITIONS × TEAM path, and coexistence ──────────────
+
+  it('E-i: reads ALL_COMPETITIONS features (edition NULL), not edition-scoped ones', async () => {
+    await asModule(async (tx) => {
+      // Gamma has an ALL_COMP probe value; reading at ALL_COMPETITIONS finds it.
+      const allComp = await readConsumedFeatures(
+        tx, [PROBE_FEATURE], [second.gammaTeamId], MODULE_AS_OF, ALL_COMPETITIONS_SCOPE
+      );
+      assert.ok(allComp.get(consumedKey(PROBE_FEATURE, second.gammaTeamId)), 'ALL_COMP probe value is read');
+      // The scoped venue rate (Alpha, edition 1) is NOT visible to an ALL_COMP read…
+      const allCompVenue = await readConsumedFeatures(
+        tx, [HOME], [world.alphaTeamId], MODULE_AS_OF, ALL_COMPETITIONS_SCOPE
+      );
+      assert.equal(allCompVenue.get(consumedKey(HOME, world.alphaTeamId)), undefined, 'edition-scoped value invisible to ALL_COMP read');
+      // …and the ALL_COMP probe value is NOT visible to an edition-scoped read.
+      const scopedProbe = await readConsumedFeatures(
+        tx, [PROBE_FEATURE], [second.gammaTeamId], MODULE_AS_OF, scoped(world.editionId)
+      );
+      assert.equal(scopedProbe.get(consumedKey(PROBE_FEATURE, second.gammaTeamId)), undefined, 'ALL_COMP value invisible to scoped read');
+    });
+  });
+
+  it('E-i: end-to-end ALL_COMPETITIONS reading persists with NULL edition + evidence citing the ALL_COMP value', async () => {
+    await inRolledBackModuleTx(async (tx) => {
+      const registry = await loadModuleRegistry(tx);
+      const def = registry.definitionsByKey.get('home_away_split')!; // any TEAM def; the probe is a throwaway
+      const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
+      const consumedMap = await readConsumedFeatures(
+        tx, allCompProbe.inputFeatureKeys, [second.gammaTeamId], MODULE_AS_OF, ALL_COMPETITIONS_SCOPE
+      );
+      const teamInputs = new Map<string, ConsumedFeature>();
+      for (const k of allCompProbe.inputFeatureKeys) teamInputs.set(k, consumedMap.get(consumedKey(k, second.gammaTeamId))!);
+      const reading = assembleReading({
+        calculator: allCompProbe, definition: def, version: version!,
+        asOf: MODULE_AS_OF, scope: ALL_COMPETITIONS_SCOPE, teamId: second.gammaTeamId, inputs: teamInputs,
+      });
+      assert.equal(reading.statusCode, 'SUPPORTS', 'probe: home_form 70 >= 50');
+      assert.equal(reading.contextKindCode, CALCULATION_CONTEXT_KIND);
+      assert.equal(reading.contextEditionId, null);
+      const res = await writeReading(tx, { ...reading, calculatedAt: MODULE_AS_OF });
+      assert.equal(res.written, 1);
+      const { rows } = await tx.query(
+        `SELECT r.context_kind_code, r.context_competition_edition_id AS ed, r.module_status_code,
+                r.strength, r.confidence, r.published_baseline_id,
+                (SELECT count(*)::int FROM module.module_evidence_item i
+                   JOIN module.module_evidence e ON e.id = i.module_evidence_id AND e.reading_as_of = i.reading_as_of
+                  WHERE e.module_reading_id = r.id
+                    AND i.cited_feature_value_id = (
+                      SELECT fv.id FROM feature.feature_value fv
+                        JOIN feature.feature_definition d ON d.id = fv.feature_definition_id
+                       WHERE d.feature_key = $4 AND fv.subject_team_id = $2 AND fv.as_of = $3
+                         AND fv.context_kind_code = 'ALL_COMPETITIONS')) AS items_citing_allcomp
+           FROM module.module_reading r
+          WHERE r.as_of = $1 AND r.subject_team_id = $2 AND r.context_kind_code = 'ALL_COMPETITIONS'`,
+        [MODULE_AS_OF, second.gammaTeamId, MODULE_AS_OF, PROBE_FEATURE]
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].context_kind_code, 'ALL_COMPETITIONS');
+      assert.equal(rows[0].ed, null, 'ALL_COMPETITIONS reading carries NULL edition — impossible under the Gate D hardcoding');
+      assert.equal(rows[0].module_status_code, 'SUPPORTS');
+      assert.equal(rows[0].strength, null);
+      assert.equal(rows[0].confidence, null);
+      assert.equal(rows[0].published_baseline_id, null);
+      assert.equal(rows[0].items_citing_allcomp, 1, 'evidence cites the ALL_COMPETITIONS feature value');
+    });
+  });
+
+  it('E-i: an absent ALL_COMPETITIONS input is INACTIVE (beta has no probe value)', async () => {
+    await inRolledBackModuleTx(async (tx) => {
+      const registry = await loadModuleRegistry(tx);
+      const def = registry.definitionsByKey.get('home_away_split')!;
+      const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
+      const consumedMap = await readConsumedFeatures(
+        tx, allCompProbe.inputFeatureKeys, [world.betaTeamId], MODULE_AS_OF, ALL_COMPETITIONS_SCOPE
+      );
+      const teamInputs = new Map<string, ConsumedFeature>();
+      for (const k of allCompProbe.inputFeatureKeys) {
+        const c = consumedMap.get(consumedKey(k, world.betaTeamId));
+        if (c) teamInputs.set(k, c);
+      }
+      const reading = assembleReading({
+        calculator: allCompProbe, definition: def, version: version!,
+        asOf: MODULE_AS_OF, scope: ALL_COMPETITIONS_SCOPE, teamId: world.betaTeamId, inputs: teamInputs,
+      });
+      assert.equal(reading.statusCode, 'INACTIVE');
+      assert.equal(reading.inactiveReason, INACTIVE_REASON_FEATURE_ABSENT);
+      assert.equal(reading.contextEditionId, null);
+      const res = await writeReading(tx, { ...reading, calculatedAt: MODULE_AS_OF });
+      assert.equal(res.written, 1, 'INACTIVE ALL_COMPETITIONS reading persists (NULL edition satisfies the conditional check)');
+    });
+  });
+
+  it('E-i: ALL_COMPETITIONS and COMPETITION_SCOPED readings coexist for the same team/as_of/definition', async () => {
+    await inRolledBackModuleTx(async (tx) => {
+      const registry = await loadModuleRegistry(tx);
+      const def = registry.definitionsByKey.get('home_away_split')!;
+      const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
+      // Scoped reading (real home_away_split, edition 1).
+      const scopedInputsMap = await readConsumedFeatures(tx, [HOME, AWAY], [world.alphaTeamId], MODULE_AS_OF, scoped(world.editionId));
+      const scopedInputs = new Map<string, ConsumedFeature>();
+      for (const k of homeAwaySplit.inputFeatureKeys) scopedInputs.set(k, scopedInputsMap.get(consumedKey(k, world.alphaTeamId))!);
+      const scopedReading = assembleReading({
+        calculator: homeAwaySplit, definition: def, version: version!,
+        asOf: MODULE_AS_OF, scope: scoped(world.editionId), teamId: world.alphaTeamId, inputs: scopedInputs,
+      });
+      // ALL_COMP reading for the SAME def/team/as_of/version. Alpha carries no
+      // ALL_COMP input (the probe value is on gamma), so this reading is INACTIVE
+      // — which is all coexistence needs: it differs only in context from the
+      // scoped reading and must not collide with it.
+      const allCompReading = assembleReading({
+        calculator: allCompProbe, definition: def, version: version!,
+        asOf: MODULE_AS_OF, scope: ALL_COMPETITIONS_SCOPE, teamId: world.alphaTeamId,
+        inputs: new Map<string, ConsumedFeature>(),
+      });
+      assert.equal(allCompReading.statusCode, 'INACTIVE');
+
+      const a = await writeReading(tx, { ...scopedReading, calculatedAt: MODULE_AS_OF });
+      const b = await writeReading(tx, { ...allCompReading, calculatedAt: MODULE_AS_OF });
+      assert.equal(a.written, 1, 'scoped reading written');
+      assert.equal(b.written, 1, 'ALL_COMP reading written — no collision with the scoped one');
+      const { rows } = await tx.query(
+        `SELECT context_kind_code, context_competition_edition_id::text AS ed
+           FROM module.module_reading
+          WHERE as_of = $1 AND subject_team_id = $2 AND module_definition_id = $3 AND module_version_id = $4
+          ORDER BY context_kind_code`,
+        [MODULE_AS_OF, world.alphaTeamId, def.moduleDefinitionId, version!.moduleVersionId]
+      );
+      assert.equal(rows.length, 2, 'both scopes coexist for the same subject/def/as_of/version');
+      assert.deepEqual(rows.map((r: { context_kind_code: string }) => r.context_kind_code), ['ALL_COMPETITIONS', 'COMPETITION_SCOPED']);
+      assert.equal(rows.find((r: { context_kind_code: string }) => r.context_kind_code === 'ALL_COMPETITIONS')!.ed, null);
+      assert.equal(rows.find((r: { context_kind_code: string }) => r.context_kind_code === 'COMPETITION_SCOPED')!.ed, world.editionId);
+    });
+  });
+
+  it('E-i: ALL_COMPETITIONS reading is idempotent on rerun', async () => {
+    await inRolledBackModuleTx(async (tx) => {
+      const registry = await loadModuleRegistry(tx);
+      const def = registry.definitionsByKey.get('home_away_split')!;
+      const version = await resolveModuleVersion(tx, def.moduleDefinitionId, MODULE_AS_OF);
+      const consumedMap = await readConsumedFeatures(tx, allCompProbe.inputFeatureKeys, [second.gammaTeamId], MODULE_AS_OF, ALL_COMPETITIONS_SCOPE);
+      const teamInputs = new Map<string, ConsumedFeature>();
+      for (const k of allCompProbe.inputFeatureKeys) teamInputs.set(k, consumedMap.get(consumedKey(k, second.gammaTeamId))!);
+      const reading = assembleReading({
+        calculator: allCompProbe, definition: def, version: version!,
+        asOf: MODULE_AS_OF, scope: ALL_COMPETITIONS_SCOPE, teamId: second.gammaTeamId, inputs: teamInputs,
+      });
+      const first = await writeReading(tx, { ...reading, calculatedAt: MODULE_AS_OF });
+      const again = await writeReading(tx, { ...reading, calculatedAt: MODULE_AS_OF });
+      assert.equal(first.written, 1);
+      assert.equal(again.written, 0);
+      assert.equal(again.skipped, 1);
+    });
+  });
+
+  it('E-i: runModulePipeline routes by declared contextKind (ALL_COMP probe → ALL_COMP enumerator)', async () => {
+    // dryRun: no writes. An ALL_COMPETITIONS probe must enumerate via selectBatches
+    // and complete without failures — impossible if the engine were hardwired to
+    // the scoped enumerator only (Gate D). Contrast with the scoped calculator.
+    const allCompReport = await runModulePipeline({
+      now: MODULE_AS_OF, calculators: [allCompProbe], dryRun: true,
+      replayFrom: new Date('2026-07-01T00:00:00Z'), replayTo: new Date('2027-03-01T00:00:00Z'),
+    });
+    assert.equal(allCompReport.failures, 0, 'ALL_COMP probe routed and ran without failure');
+    assert.ok(allCompReport.batches > 0, 'ALL_COMP enumerator produced batches');
+
+    const scopedReport = await runModulePipeline({
+      now: MODULE_AS_OF, calculators: [homeAwaySplit], dryRun: true,
+      replayFrom: new Date('2026-07-01T00:00:00Z'), replayTo: new Date('2027-03-01T00:00:00Z'),
+    });
+    assert.equal(scopedReport.failures, 0, 'scoped calculator routed and ran without failure');
+    assert.ok(scopedReport.batches > 0, 'scoped enumerator produced batches');
   });
 });

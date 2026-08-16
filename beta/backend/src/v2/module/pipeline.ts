@@ -29,10 +29,17 @@ import { buildDiagnostic } from '../operations/failure';
 import { assertDatabaseConfigured } from '../config/index';
 import { loadRegistry } from '../feature/registry/load';
 import {
+  selectBatches,
   selectScopedBatches,
   type EligibilityOptions,
   type ScopedSubjectBatch,
+  type SubjectBatch,
 } from '../feature/driver/eligibility';
+import {
+  CALCULATION_CONTEXT_KIND,
+  COMPETITION_SCOPED_CONTEXT_KIND,
+  type CalculationScope,
+} from '../feature/calculators/types';
 import { MODULE_STATUS, type ConsumedFeature, type ModuleCalculator } from './types';
 import {
   loadModuleRegistry,
@@ -63,6 +70,35 @@ export interface ModuleRunOptions extends EligibilityOptions {
   readonly now?: Date;
   /** Test seam: override the module set. Production omits it. */
   readonly calculators?: readonly ModuleCalculator[];
+}
+
+/**
+ * One (as_of, team-set) unit at one scope — the engine's scope-neutral batch.
+ *
+ * COMPETITION_SCOPED batches carry the edition (from `selectScopedBatches`);
+ * ALL_COMPETITIONS batches carry `null` (from `selectBatches`). Normalizing both
+ * to this one shape is what lets a single pipeline drive both scopes.
+ */
+interface ModuleBatch {
+  readonly asOf: Date;
+  readonly competitionEditionId: string | null;
+  readonly teamIds: readonly string[];
+  readonly snapshotPointCodes: readonly string[];
+}
+
+/** The read/write scope a calculator's declared `contextKind` resolves to for a batch. */
+function scopeFor(calculator: ModuleCalculator, batch: ModuleBatch): CalculationScope {
+  if (calculator.contextKind === COMPETITION_SCOPED_CONTEXT_KIND) {
+    if (batch.competitionEditionId === null) {
+      // A scoped calculator must only ever be routed a scoped batch.
+      throw new Error(
+        `module '${calculator.moduleKey}' is COMPETITION_SCOPED but was routed an ` +
+          'ALL_COMPETITIONS batch (no edition). This is an engine routing error.'
+      );
+    }
+    return { contextKind: COMPETITION_SCOPED_CONTEXT_KIND, contextEditionId: batch.competitionEditionId };
+  }
+  return { contextKind: CALCULATION_CONTEXT_KIND, contextEditionId: null };
 }
 
 export interface RelationCounts {
@@ -108,11 +144,11 @@ export function assembleReading(params: {
   readonly definition: ModuleDefinition;
   readonly version: ModuleVersion;
   readonly asOf: Date;
-  readonly competitionEditionId: string;
+  readonly scope: CalculationScope;
   readonly teamId: string;
   readonly inputs: ReadonlyMap<string, ConsumedFeature>;
 }): Omit<ReadingToWrite, 'calculatedAt'> {
-  const { calculator, definition, version, asOf, competitionEditionId, teamId, inputs } = params;
+  const { calculator, definition, version, asOf, scope, teamId, inputs } = params;
   const declaredInputCount = calculator.inputFeatureKeys.length;
   const presentInputCount = calculator.inputFeatureKeys.filter((k) => inputs.has(k)).length;
 
@@ -121,7 +157,8 @@ export function assembleReading(params: {
     moduleVersionId: version.moduleVersionId,
     subjectTeamId: teamId,
     asOf,
-    contextEditionId: competitionEditionId,
+    contextKindCode: scope.contextKind,
+    contextEditionId: scope.contextEditionId,
     declaredInputCount,
     presentInputCount,
     belowThresholdInputCount: 0,
@@ -183,7 +220,14 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
   const counts = new Map<string, RelationCounts>();
   let failures = 0;
 
-  const { moduleRegistry, batches } = await withConnection(MODULE_ROLE, async (tx) => {
+  // Which scopes does this run's calculator set require? Enumerate only those —
+  // the ALL_COMPETITIONS and COMPETITION_SCOPED batch sets are produced by the two
+  // sibling feature-layer selectors, and a calculator runs only against the set
+  // matching its declared contextKind (never the other's rows).
+  const needsScoped = calculators.some((c) => c.contextKind === COMPETITION_SCOPED_CONTEXT_KIND);
+  const needsAllComp = calculators.some((c) => c.contextKind === CALCULATION_CONTEXT_KIND);
+
+  const { moduleRegistry, scopedBatches, allCompBatches } = await withConnection(MODULE_ROLE, async (tx) => {
     const featureRegistry = await loadRegistry(tx); // snapshot points for enumeration
     const modules = await loadModuleRegistry(tx);
     // Reconcile: a calculator must name a registered module (LC-28-style).
@@ -196,12 +240,36 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
         );
       }
     }
-    const selected = await selectScopedBatches(tx, featureRegistry, now, options);
-    return { moduleRegistry: modules, batches: selected };
+    const scoped: readonly ScopedSubjectBatch[] = needsScoped
+      ? await selectScopedBatches(tx, featureRegistry, now, options)
+      : [];
+    const allComp: readonly SubjectBatch[] = needsAllComp
+      ? await selectBatches(tx, featureRegistry, now, options)
+      : [];
+    return { moduleRegistry: modules, scopedBatches: scoped, allCompBatches: allComp };
   });
 
+  // Normalize both sets to the scope-neutral ModuleBatch shape.
+  const scopedModuleBatches: ModuleBatch[] = scopedBatches.map((b) => ({
+    asOf: b.asOf,
+    competitionEditionId: b.competitionEditionId,
+    teamIds: b.teamIds,
+    snapshotPointCodes: b.snapshotPointCodes,
+  }));
+  const allCompModuleBatches: ModuleBatch[] = allCompBatches.map((b) => ({
+    asOf: b.asOf,
+    competitionEditionId: null,
+    teamIds: b.teamIds,
+    snapshotPointCodes: b.snapshotPointCodes,
+  }));
+
   logger.info(
-    { batches: batches.length, modules: calculators.map((c) => c.moduleKey), dryRun: options.dryRun === true },
+    {
+      scopedBatches: scopedModuleBatches.length,
+      allCompBatches: allCompModuleBatches.length,
+      modules: calculators.map((c) => c.moduleKey),
+      dryRun: options.dryRun === true,
+    },
     'v2 module: plan loaded'
   );
 
@@ -209,6 +277,12 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
     for (const calculator of calculators) {
       const definition = moduleRegistry.definitionsByKey.get(calculator.moduleKey)!;
       if (!definition.isActive) continue; // registered inactive → not produced
+
+      // Route by declared scope — the anti-hardcoding guarantee.
+      const batches =
+        calculator.contextKind === COMPETITION_SCOPED_CONTEXT_KIND
+          ? scopedModuleBatches
+          : allCompModuleBatches;
 
       for (const batch of batches) {
         try {
@@ -231,7 +305,7 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
   });
 
   return {
-    batches: batches.length,
+    batches: scopedModuleBatches.length + allCompModuleBatches.length,
     modules: calculators.map((c) => c.moduleKey),
     counts,
     failures,
@@ -239,19 +313,22 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
   };
 }
 
-/** One (module × scoped batch) transaction. */
+/** One (module × batch) transaction, at the calculator's declared scope. */
 async function runModuleBatch(
   calculator: ModuleCalculator,
   definition: ModuleDefinition,
-  batch: ScopedSubjectBatch,
+  batch: ModuleBatch,
   dryRun: boolean
 ): Promise<Map<string, RelationCounts>> {
   const relationCounts = new Map<string, RelationCounts>();
+  const scope = scopeFor(calculator, batch);
 
   await withRun(
     MODULE_ROLE,
     `module.${calculator.moduleKey}`,
     async (tx: PoolClient, job) => {
+      // Version resolution is scope-agnostic — a reading is attributed to the
+      // version whose effective_period contains its as_of, whatever the scope.
       const version = await resolveModuleVersion(tx, definition.moduleDefinitionId, batch.asOf);
       if (!version) {
         logger.warn(
@@ -266,7 +343,7 @@ async function runModuleBatch(
         calculator.inputFeatureKeys,
         batch.teamIds,
         batch.asOf,
-        batch.competitionEditionId
+        scope
       );
 
       const readings = batch.teamIds.map((teamId) => {
@@ -280,7 +357,7 @@ async function runModuleBatch(
           definition,
           version,
           asOf: batch.asOf,
-          competitionEditionId: batch.competitionEditionId,
+          scope,
           teamId,
           inputs,
         });

@@ -40,6 +40,14 @@ export interface ModuleSecondEdition {
   readonly competitionId: string;
   readonly editionId: string;
   readonly alphaHomeCount: number;
+  /**
+   * A DEDICATED team owned by this suite (no fixtures, in no edition), used solely
+   * as the subject of a committed ALL_COMPETITIONS feature value in the Gate E-i
+   * tests. Kept off the shared Alpha/Beta so an ALL_COMP commit here cannot touch
+   * another suite's global invariants (e.g. Gate C-ii's "Alpha has no ALL_COMP
+   * row"). It carries the `S6MOD` prefix like the rest of this seeder.
+   */
+  readonly gammaTeamId: string;
 }
 
 /**
@@ -103,9 +111,27 @@ export async function seedSecondEditionForModuleTests(
     });
   }
 
+  // A dedicated, fixture-less team for the ALL_COMPETITIONS probe. Its home venue
+  // reuses Alpha's — arbitrary; the team is never played, only referenced as a
+  // feature-value subject.
+  const gamma = await upsertMutable(tx, {
+    relation: 'football.team',
+    columns: ['provider_code', 'provider_external_id', 'name', 'slug', 'country_code', 'home_venue_id'],
+    values: [
+      PROVIDER_CODE,
+      `${SECOND_PREFIX}-T-GAMMA`,
+      'S6 Module Gamma',
+      `${SECOND_PREFIX}-t-gamma`.toLowerCase(),
+      'GB',
+      world.alphaVenueId,
+    ],
+    conflictTarget: ['provider_code', 'provider_external_id'],
+  });
+
   return {
     competitionId: String(competition.id),
     editionId: String(edition.id),
     alphaHomeCount: SECOND_EDITION_KICKOFFS.length,
+    gammaTeamId: String(gamma.id),
   };
 }

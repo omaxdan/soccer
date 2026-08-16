@@ -20,6 +20,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Exact } from '../feature/write/scale';
+import type {
+  CALCULATION_CONTEXT_KIND,
+  COMPETITION_SCOPED_CONTEXT_KIND,
+} from '../feature/calculators/types';
 
 /** The four module statuses (E3.07). INACTIVE is the engine's, never a calculator's. */
 export const MODULE_STATUS = {
@@ -59,7 +63,16 @@ export interface ModuleFinding {
 export interface ModuleCalculator {
   readonly moduleKey: string;
   readonly subjectKind: 'TEAM';
-  readonly contextKind: 'COMPETITION_SCOPED';
+  /**
+   * The scope at which the engine reads this module's declared inputs, over the
+   * shared `football.context_kind` vocabulary — the module-layer analogue of the
+   * feature `Calculator.contextKind`, reusing its constants rather than a parallel
+   * vocabulary (Gate E-i). `COMPETITION_SCOPED` reads edition-keyed feature values
+   * (`home_away_split`); `ALL_COMPETITIONS` reads values with a NULL edition. A
+   * calculator declares exactly ONE scope: every input in `inputFeatureKeys` is
+   * read at it. Mixed-context modules are unsupported (Gate E-i §Q9).
+   */
+  readonly contextKind: typeof CALCULATION_CONTEXT_KIND | typeof COMPETITION_SCOPED_CONTEXT_KIND;
   readonly inputFeatureKeys: readonly string[];
   /**
    * Called ONLY when every declared input is present, so `inputs` always holds

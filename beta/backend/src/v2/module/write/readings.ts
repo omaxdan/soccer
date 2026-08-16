@@ -30,7 +30,9 @@ export interface ReadingToWrite {
   readonly subjectTeamId: string;
   readonly asOf: Date;
   readonly calculatedAt: Date;
-  readonly contextEditionId: string;
+  /** The module's declared scope. ALL_COMPETITIONS carries a NULL edition. */
+  readonly contextKindCode: string;
+  readonly contextEditionId: string | null;
   readonly statusCode: string;
   readonly verdictText: string | null;
   readonly inactiveReason: string | null;
@@ -52,9 +54,13 @@ export interface ReadingWriteResult {
  * Writes one module reading with its evidence, skipping if it already exists.
  *
  * `strength`, `confidence` and `published_baseline_id` are hard NULL — the frozen
- * 1.0.0 contract, not a runtime choice. The reading is TEAM-subject and
- * COMPETITION_SCOPED, so the subject player/fixture/edition columns are NULL and
- * `context_competition_edition_id` carries the edition.
+ * 1.0.0 contract, not a runtime choice. The reading is TEAM-subject, so the
+ * subject player/fixture/edition columns are NULL. The context is the module's
+ * declared scope: `context_kind_code` is bound and `context_competition_edition_id`
+ * carries the edition for COMPETITION_SCOPED or NULL for ALL_COMPETITIONS —
+ * `ck_module_reading__context_edition_conditional` enforces both-or-neither, and
+ * the named unique constraint (NULLS NOT DISTINCT, context-inclusive) keeps the
+ * two scopes idempotent and non-colliding for the same team/as_of.
  */
 export async function writeReading(
   tx: PoolClient,
@@ -71,10 +77,10 @@ export async function writeReading(
      VALUES
        ($1::timestamptz, $2::timestamptz, $3::bigint, $4::bigint,
         'TEAM', $5::bigint,
-        'COMPETITION_SCOPED', $6::bigint,
-        $7::text, NULL, NULL,
-        $8::integer, $9::boolean,
-        NULL, NULL, $10::text, $11::text)
+        $6::text, $7::bigint,
+        $8::text, NULL, NULL,
+        $9::integer, $10::boolean,
+        NULL, NULL, $11::text, $12::text)
      ON CONFLICT ON CONSTRAINT uq_module_reading__subject_context_definition_asof_version
      DO NOTHING
      RETURNING id::text, as_of`,
@@ -84,6 +90,7 @@ export async function writeReading(
       reading.moduleDefinitionId,
       reading.moduleVersionId,
       reading.subjectTeamId,
+      reading.contextKindCode,
       reading.contextEditionId,
       reading.statusCode,
       reading.sampleObservationCount,
