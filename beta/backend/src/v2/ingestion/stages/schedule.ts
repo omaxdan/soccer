@@ -41,7 +41,7 @@ import {
   resolveVenue,
 } from '../entities/reference';
 import { recordTeamRegistration, resolveTeam } from '../entities/participants';
-import { recordResult, resolveFixture } from '../entities/fixtures';
+import { AmbiguousFixtureIdentityError, recordResult, resolveFixture } from '../entities/fixtures';
 import { asRecord, externalId, fromUnixSeconds, nonNegativeInt, text, utcDateString } from '../normalise';
 import { logger } from '../../../utils/logger';
 
@@ -218,7 +218,11 @@ export async function ingestEvents(
       // that DID fail rethrows below, because the transaction is then poisoned
       // and continuing would fail every subsequent statement with
       // "current transaction is aborted".
-      if (isPostgresError(error)) throw error;
+      // D2 §5/§7: ambiguous fixture identity (U-9) is a HARD STOP, not a
+      // malformed-event skip. It carries no SQLSTATE, so it must be named here
+      // explicitly or the per-event catch would swallow it and the run would
+      // continue past a corruption the writer is the sole enforcement point for.
+      if (isPostgresError(error) || error instanceof AmbiguousFixtureIdentityError) throw error;
       stage.for('football.fixture').reject('event payload could not be interpreted');
       logger.warn(
         { label: options.label, error: (error as Error).message },

@@ -44,10 +44,15 @@ import {
   sweepSeason,
   type EventDirection,
   type FixtureWindow,
+  type PagedEvent,
   type StopReason,
   type SweepResult,
 } from './provider/pager';
+import { sweepTeam } from './provider/teamPager';
+import { reconcileTeamSeason, type ReconcileCounts } from './stages/teamSpine';
 import { ingestTeamSquad, type SquadTeam } from './stages/squad';
+import type { StageCounts } from './stages/schedule';
+import { AmbiguousFixtureIdentityError } from './entities/fixtures';
 import { utcDateString } from './normalise';
 import { logger } from '../../utils/logger';
 
@@ -660,5 +665,298 @@ export async function ingestSeason(
     standingsAsOfOn,
     standingsCounts,
     failed,
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAM-DRIVEN INGESTION — the bounded first-run controller (D2 I1)
+//
+// ONE explicit (team, uniqueTournament, season). C1 enumeration and C2 season
+// selection are BYPASSED — the ids are supplied. The team-event spine is walked
+// and written through the SAME shared writer as schedule/season, WITH NO SCOPE,
+// so its complete cross-competition chronology is preserved (D2 §2). Then the
+// competition-season feeds reconcile it; anything missing from the spine is fed
+// back through the same writer and audited, never discarded. Writes football.*
+// and operations.* only — the role holds no other USAGE.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TeamIngestionOptions {
+  readonly teamId: string;
+  readonly uniqueTournamentId: string;
+  readonly seasonId: string;
+  /** Historical date floor, inclusive. */
+  readonly from: Date;
+  /** Window end, inclusive to end of day. Defaults to today. */
+  readonly to?: Date;
+  /** Maximum provider calls for the WHOLE run (spine walk + reconciliation). */
+  readonly maxCalls: number;
+  /** Reconcile against season / tournament-team-events feeds. On unless false. */
+  readonly reconcile?: boolean;
+  /** Tests supply a client; production gets a real one. */
+  readonly client?: ProviderClient;
+}
+
+export interface TeamIngestionReport {
+  readonly team: string;
+  readonly uniqueTournament: string;
+  readonly season: string;
+  readonly pagesLast: readonly number[];
+  readonly pagesNext: readonly number[];
+  readonly eventsObserved: number;
+  readonly distinctEventIds: number;
+  readonly fixturesCreated: number;
+  readonly fixturesReused: number;
+  readonly duplicatesSuppressed: number;
+  readonly teamRegistrationsCreated: number;
+  readonly resultsWritten: number;
+  readonly lifecycleTransitions: number;
+  readonly reconciliationMatches: number;
+  readonly missingFromSpine: number;
+  readonly spineOnly: number;
+  readonly identityMismatches: number;
+  readonly dateDiscrepancies: number;
+  readonly statusDiscrepancies: number;
+  readonly unknownStatusCount: number;
+  readonly quarantinedEvents: number;
+  readonly failures: number;
+  readonly providerCalls: number;
+  readonly providerBudget: number;
+  readonly budgetRemaining: number;
+  readonly moduleWrites: number;
+  readonly featureWrites: number;
+  readonly snapshotWrites: number;
+  readonly calibrationWrites: number;
+  readonly runStatus: 'SUCCEEDED' | 'HARD_STOP';
+  readonly hardStopReason: string | null;
+  readonly resumeFromPage: number | null;
+  readonly anomalies: readonly string[];
+}
+
+/** Folds several stages' per-relation counts into one map for the report. */
+function mergeRelationCounts(...stages: (StageCounts | null)[]): Map<string, IngestionCounts> {
+  const merged = new Map<string, IngestionCounts>();
+  for (const stage of stages) {
+    if (!stage) continue;
+    for (const [relation, counts] of stage.byRelation) {
+      let into = merged.get(relation);
+      if (!into) {
+        into = new IngestionCounts();
+        merged.set(relation, into);
+      }
+      into.add(counts);
+    }
+  }
+  return merged;
+}
+
+function classifyHardStop(error: unknown): string {
+  if (error instanceof AmbiguousFixtureIdentityError) return 'ambiguous fixture identity (U-9)';
+  if (error instanceof ProviderRequestError) {
+    return error.status === 403
+      ? 'HTTP 403 provider access failure'
+      : `provider request failed (status ${error.status ?? 'none'})`;
+  }
+  return 'unrecoverable error';
+}
+
+/**
+ * Ingests one team's cross-competition event spine, bounded and reconciled.
+ *
+ * FETCH OUTSIDE THE TRANSACTION, WRITE INSIDE IT, exactly as `ingestSeason` does.
+ * The spine is written in ONE transaction (all-or-nothing) through `ingestEvents`
+ * with NO scope, so no competition is filtered out. A hard stop (403, ambiguous
+ * identity, provider failure) is captured, recorded via the operations layer, and
+ * surfaced in the report rather than rethrown, so a verification report is always
+ * produced (D2 §17).
+ */
+export async function ingestTeam(options: TeamIngestionOptions): Promise<TeamIngestionReport> {
+  assertDatabaseConfigured();
+  installOperationalLayer();
+
+  if (!options.teamId || !options.uniqueTournamentId || !options.seasonId) {
+    throw new Error(
+      'ingestTeam requires explicit --team, --tournament and --season (C1/C2 are bypassed for I1).'
+    );
+  }
+  if (!Number.isInteger(options.maxCalls) || options.maxCalls < 2) {
+    throw new Error(
+      'ingestTeam requires --max-calls to be a whole number of at least 2 (spine walk + reconciliation).'
+    );
+  }
+
+  const client = options.client ?? new ProviderClient(loadProviderConfig());
+  const window: FixtureWindow = {
+    startsAt: new Date(`${utcDateString(options.from)}T00:00:00.000Z`),
+    endsAt: new Date(`${utcDateString(options.to ?? new Date())}T23:59:59.999Z`),
+  };
+  const doReconcile = options.reconcile !== false;
+
+  const scopeText =
+    `team ${options.teamId} competition ${options.uniqueTournamentId} ` +
+    `season ${options.seasonId} from ${utcDateString(options.from)}`;
+
+  // The callback RETURNS its state rather than mutating outer `let`s: TypeScript's
+  // control-flow analysis does not track assignments made inside a callback, so
+  // reading them back after the await is the only form it narrows correctly.
+  interface TeamRunState {
+    sweep: Readonly<Record<EventDirection, SweepResult>> | null;
+    spineEvents: PagedEvent[];
+    spineStage: StageCounts | null;
+    missingStage: StageCounts | null;
+    recon: { readonly counts: ReconcileCounts; readonly anomalies: readonly string[] } | null;
+    runStatus: 'SUCCEEDED' | 'HARD_STOP';
+    hardStopReason: string | null;
+  }
+
+  const state = await withPipelineRun(
+    INGESTION_ROLE,
+    'v2.ingest.team',
+    async (): Promise<TeamRunState> => {
+      let sweep: Readonly<Record<EventDirection, SweepResult>> | null = null;
+      let spineEvents: PagedEvent[] = [];
+      let spineStage: StageCounts | null = null;
+      let missingStage: StageCounts | null = null;
+      let recon: { readonly counts: ReconcileCounts; readonly anomalies: readonly string[] } | null = null;
+      let runStatus: 'SUCCEEDED' | 'HARD_STOP' = 'SUCCEEDED';
+      let hardStopReason: string | null = null;
+      try {
+        // ── READ: team spine, outside any transaction ───────────────────────
+        sweep = await sweepTeam(client, {
+          teamId: options.teamId,
+          window,
+          callBudget: options.maxCalls,
+        });
+        spineEvents = [...sweep.last.events, ...sweep.next.events];
+
+        // ── WRITE: the whole spine in one transaction, NO SCOPE (D2 §2) ──────
+        spineStage = await withRun(
+          INGESTION_ROLE,
+          'ingest.team.spine',
+          async (tx: PoolClient, job) => {
+            const written = await ingestEvents(
+              tx,
+              spineEvents.map((event) => event.raw),
+              { label: `team ${options.teamId} spine` }
+            );
+            await reportWrites(job, written);
+            return written;
+          },
+          {
+            detail: {
+              team: options.teamId,
+              competition: options.uniqueTournamentId,
+              season: options.seasonId,
+            },
+          }
+        );
+
+        // ── RECONCILE: season + tournament-team-events, ingest any gap ───────
+        if (doReconcile) {
+          const remaining = Math.max(
+            0,
+            options.maxCalls - (sweep.last.callsSpent + sweep.next.callsSpent)
+          );
+          const result = await reconcileTeamSeason(
+            client,
+            {
+              teamId: options.teamId,
+              uniqueTournamentId: options.uniqueTournamentId,
+              seasonId: options.seasonId,
+              window,
+              callBudget: remaining,
+            },
+            spineEvents
+          );
+          recon = { counts: result.counts, anomalies: result.anomalies };
+
+          if (result.missingRaws.length > 0) {
+            missingStage = await withRun(
+              INGESTION_ROLE,
+              'ingest.team.reconcile',
+              async (tx: PoolClient, job) => {
+                const written = await ingestEvents(tx, result.missingRaws, {
+                  label: `team ${options.teamId} reconcile`,
+                });
+                await reportWrites(job, written);
+                return written;
+              },
+              { detail: { team: options.teamId, missing: result.missingRaws.length } }
+            );
+          }
+        }
+      } catch (error) {
+        runStatus = 'HARD_STOP';
+        hardStopReason = classifyHardStop(error);
+        // `withRun` already wrote operations.failure with job attribution, and
+        // the run's outcome reflects the failed job via jobOutcomes. Not
+        // rethrown, so the verification report can still be produced.
+        logger.error(
+          { team: options.teamId, error: buildDiagnostic(error) },
+          'v2 ingestion: team run hard-stopped'
+        );
+      } finally {
+        await withConnection(INGESTION_ROLE, (control) => client.flushUsage(control));
+      }
+      return { sweep, spineEvents, spineStage, missingStage, recon, runStatus, hardStopReason };
+    },
+    { scopeText }
+  );
+
+  // ── Assemble the verification report ────────────────────────────────────────
+  const { sweep, spineEvents, recon, runStatus, hardStopReason } = state;
+  const merged = mergeRelationCounts(state.spineStage, state.missingStage);
+  const fixtures = merged.get('football.fixture') ?? new IngestionCounts();
+  const registrations = merged.get('football.team_registration') ?? new IngestionCounts();
+  const results = merged.get('football.result') ?? new IngestionCounts();
+  const transitions = merged.get('football.fixture_lifecycle_transition') ?? new IngestionCounts();
+  let quarantined = 0;
+  for (const counts of merged.values()) quarantined += counts.rejected;
+
+  const walkCalls = sweep ? sweep.last.callsSpent + sweep.next.callsSpent : 0;
+  const reconCalls = recon ? recon.counts.callsSpent : 0;
+  const providerCalls = walkCalls + reconCalls;
+  const duplicates =
+    (sweep?.last.pages.reduce((n, p) => n + p.duplicateCount, 0) ?? 0) +
+    (sweep?.next.pages.reduce((n, p) => n + p.duplicateCount, 0) ?? 0);
+  const eventsObserved =
+    (sweep?.last.pages.reduce((n, p) => n + p.eventCount, 0) ?? 0) +
+    (sweep?.next.pages.reduce((n, p) => n + p.eventCount, 0) ?? 0);
+  const lastQuota = sweep ? sweep.next.quotaRemaining ?? sweep.last.quotaRemaining : null;
+
+  return {
+    team: options.teamId,
+    uniqueTournament: options.uniqueTournamentId,
+    season: options.seasonId,
+    pagesLast: sweep ? sweep.last.pages.map((p) => p.page) : [],
+    pagesNext: sweep ? sweep.next.pages.map((p) => p.page) : [],
+    eventsObserved,
+    distinctEventIds: spineEvents.length,
+    fixturesCreated: fixtures.inserted,
+    fixturesReused: fixtures.updated,
+    duplicatesSuppressed: duplicates,
+    teamRegistrationsCreated: registrations.inserted,
+    resultsWritten: results.written,
+    lifecycleTransitions: transitions.written,
+    reconciliationMatches: recon ? recon.counts.presentBoth : 0,
+    missingFromSpine: recon ? recon.counts.missingFromSpine : 0,
+    spineOnly: recon ? recon.counts.spineOnly : 0,
+    identityMismatches: recon ? recon.counts.identityMismatches : 0,
+    dateDiscrepancies: recon ? recon.counts.dateDiscrepancies : 0,
+    statusDiscrepancies: recon ? recon.counts.statusDiscrepancies : 0,
+    unknownStatusCount: spineEvents.filter((event) => event.lifecycleState === 'UNKNOWN').length,
+    quarantinedEvents: quarantined,
+    failures: runStatus === 'HARD_STOP' ? 1 : 0,
+    providerCalls,
+    providerBudget: options.maxCalls,
+    budgetRemaining: lastQuota ?? Math.max(0, options.maxCalls - providerCalls),
+    moduleWrites: 0,
+    featureWrites: 0,
+    snapshotWrites: 0,
+    calibrationWrites: 0,
+    runStatus,
+    hardStopReason,
+    resumeFromPage: sweep ? sweep.last.resumeFromPage ?? sweep.next.resumeFromPage : null,
+    anomalies: recon ? recon.anomalies : [],
   };
 }

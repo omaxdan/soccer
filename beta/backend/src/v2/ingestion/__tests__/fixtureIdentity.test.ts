@@ -40,7 +40,7 @@ import {
 import { fixturePartitionOn, utcDateString } from '../normalise';
 import { IngestionCounts } from '../write/index';
 import { PROVIDER_CODE } from '../provider/config';
-import { ingestScheduleDate } from '../stages/schedule';
+import { ingestEvents, ingestScheduleDate } from '../stages/schedule';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 
@@ -562,5 +562,52 @@ describe('U-9 persistence (requires a V2 database)', { skip: !hasDatabase }, () 
         );
       }
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D2 §5/§7 — AMBIGUOUS FIXTURE IDENTITY IS A HARD STOP, NOT A SWALLOWED SKIP
+//
+// The shared writer's per-event catch previously rethrew only errors carrying a
+// SQLSTATE, so AmbiguousFixtureIdentityError (a plain Error, U-9) was counted as
+// a malformed event and the run continued past a corruption. These lock the fix.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ingestEvents ambiguous-identity hard stop', () => {
+  const teamEvent = (): Record<string, unknown> => ({
+    id: 1,
+    startTimestamp: 1780000000,
+    tournament: { id: 83, uniqueTournament: { id: 325, name: 'X' } },
+    season: { id: 87678 },
+    homeTeam: { id: 1963, name: 'H' },
+    awayTeam: { id: 999, name: 'A' },
+    status: { code: 100, type: 'finished' },
+    winnerCode: 1,
+  });
+  const txThatThrows = (error: unknown): PoolClient =>
+    ({ query: async (): Promise<never> => { throw error; } }) as unknown as PoolClient;
+
+  it('rethrows AmbiguousFixtureIdentityError rather than swallowing it', async () => {
+    const tx = txThatThrows(
+      new AmbiguousFixtureIdentityError('SPORTSAPI_API', '1', [
+        { id: '1', partitionOn: '2026-08-10' },
+        { id: '2', partitionOn: '2026-08-09' },
+      ])
+    );
+    await assert.rejects(
+      ingestEvents(tx, [teamEvent()], { label: 'test' }),
+      (error: unknown) => error instanceof AmbiguousFixtureIdentityError
+    );
+  });
+
+  it('rethrows a Postgres error carrying a SQLSTATE', async () => {
+    const pgError = Object.assign(new Error('duplicate key'), { code: '23505' });
+    await assert.rejects(ingestEvents(txThatThrows(pgError), [teamEvent()], { label: 'test' }), /duplicate key/);
+  });
+
+  it('still swallows a plain shape error as a rejected malformed event', async () => {
+    const result = await ingestEvents(txThatThrows(new Error('boom')), [teamEvent()], { label: 'test' });
+    assert.equal(result.total.rejected >= 1, true);
+    assert.equal(result.total.written, 0);
   });
 });

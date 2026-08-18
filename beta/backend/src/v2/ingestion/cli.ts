@@ -37,11 +37,11 @@
 // any module that reads `process.env` at load time is evaluated.
 import '../config/env';
 
-import { ingestSchedule, ingestSeason, ingestSquads } from './pipeline';
-import type { IngestionReport, SeasonIngestionReport } from './pipeline';
+import { ingestSchedule, ingestSeason, ingestSquads, ingestTeam } from './pipeline';
+import type { IngestionReport, SeasonIngestionReport, TeamIngestionReport } from './pipeline';
 import { closeAllPools } from '../db/pool';
 
-type Command = 'schedule' | 'squads' | 'season';
+type Command = 'schedule' | 'squads' | 'season' | 'team';
 
 interface ScheduleArguments {
   readonly command: 'schedule';
@@ -68,10 +68,23 @@ interface SeasonArguments {
   readonly withStandings: boolean;
 }
 
-export type Arguments = ScheduleArguments | SquadArguments | SeasonArguments;
+interface TeamArguments {
+  readonly command: 'team';
+  readonly teamId: string;
+  readonly uniqueTournamentId: string;
+  readonly seasonId: string;
+  readonly from: Date;
+  readonly to?: Date;
+  readonly maxCalls: number;
+}
+
+export type Arguments = ScheduleArguments | SquadArguments | SeasonArguments | TeamArguments;
 
 /** The whole sweep's budget. Four pages is the observed cost of one season. */
 export const DEFAULT_SEASON_MAX_CALLS = 10;
+
+/** Bounded first-run budget for the team spine walk plus reconciliation. */
+export const DEFAULT_TEAM_MAX_CALLS = 12;
 
 function parseUtcDate(value: string, flag: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -90,7 +103,13 @@ export function parseArguments(argv: readonly string[]): Arguments {
   // The first positional is a command ONLY when it names one. Anything else is
   // left alone so an unrecognised token cannot silently change what runs.
   const command: Command =
-    positional[0] === 'squads' ? 'squads' : positional[0] === 'season' ? 'season' : 'schedule';
+    positional[0] === 'squads'
+      ? 'squads'
+      : positional[0] === 'season'
+        ? 'season'
+        : positional[0] === 'team'
+          ? 'team'
+          : 'schedule';
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -108,6 +127,37 @@ export function parseArguments(argv: readonly string[]): Arguments {
       values.set(arg, next);
       i += 1;
     }
+  }
+
+  if (command === 'team') {
+    // EXPLICIT IDS ONLY. C1 enumeration and C2 season selection are bypassed for
+    // the bounded first run, so team, competition and season are all required.
+    for (const flag of ['--team', '--tournament', '--season', '--from']) {
+      if (!values.has(flag)) {
+        throw new Error(
+          `${flag} is required for a team run. ` +
+            'Usage: ingest:v2 -- team --team 1963 --tournament 325 --season 87678 --from 2026-05-31'
+        );
+      }
+    }
+    const from = parseUtcDate(values.get('--from')!, '--from');
+    const to = values.has('--to') ? parseUtcDate(values.get('--to')!, '--to') : undefined;
+    if (to && to.getTime() < from.getTime()) {
+      throw new Error(`--to (${values.get('--to')}) precedes --from (${values.get('--from')}).`);
+    }
+    const rawMaxCalls = values.get('--max-calls');
+    if (rawMaxCalls !== undefined && !/^[1-9]\d*$/.test(rawMaxCalls)) {
+      throw new Error(`--max-calls expects a whole number of at least 1, received '${rawMaxCalls}'.`);
+    }
+    return {
+      command,
+      teamId: values.get('--team')!,
+      uniqueTournamentId: values.get('--tournament')!,
+      seasonId: values.get('--season')!,
+      from,
+      to,
+      maxCalls: rawMaxCalls === undefined ? DEFAULT_TEAM_MAX_CALLS : Number(rawMaxCalls),
+    };
   }
 
   if (command === 'season') {
@@ -251,9 +301,62 @@ function reportSeason(result: SeasonIngestionReport): void {
   /* eslint-enable no-console */
 }
 
+function reportTeam(result: TeamIngestionReport): void {
+  /* eslint-disable no-console */
+  console.log(
+    `\nv2 team run — team ${result.team}, competition ${result.uniqueTournament}, ` +
+      `season ${result.season} — ${result.runStatus}` +
+      (result.hardStopReason ? ` (${result.hardStopReason})` : '')
+  );
+  console.log(
+    `  spine pages   last [${result.pagesLast.join(', ')}]  next [${result.pagesNext.join(', ')}]` +
+      (result.resumeFromPage === null ? '' : `  resume-from ${result.resumeFromPage}`)
+  );
+  console.log(`  events observed   ${String(result.eventsObserved).padStart(6)}   distinct ${result.distinctEventIds}`);
+  console.log(
+    `  fixtures          ${String(result.fixturesCreated).padStart(6)} created, ` +
+      `${result.fixturesReused} reused, ${result.duplicatesSuppressed} duplicates suppressed`
+  );
+  console.log(
+    `  registrations     ${String(result.teamRegistrationsCreated).padStart(6)}   ` +
+      `results ${result.resultsWritten}   lifecycle transitions ${result.lifecycleTransitions}`
+  );
+  console.log(
+    `  reconciliation    matches ${result.reconciliationMatches}  MISSING_FROM_SPINE ${result.missingFromSpine}  ` +
+      `spine_only ${result.spineOnly}  identity ${result.identityMismatches}  date ${result.dateDiscrepancies}  status ${result.statusDiscrepancies}`
+  );
+  console.log(
+    `  quarantined ${result.quarantinedEvents}   unknown-status ${result.unknownStatusCount}   failures ${result.failures}`
+  );
+  console.log(
+    `  provider calls    ${result.providerCalls} / budget ${result.providerBudget}   remaining ${result.budgetRemaining}`
+  );
+  console.log(
+    `  isolation         module ${result.moduleWrites} · feature ${result.featureWrites} · ` +
+      `snapshot ${result.snapshotWrites} · calibration ${result.calibrationWrites}  (all must be 0)`
+  );
+  for (const anomaly of result.anomalies.slice(0, 20)) console.log(`    AUDIT: ${anomaly}`);
+  console.log('');
+  /* eslint-enable no-console */
+}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   try {
     const args = parseArguments(argv);
+
+    if (args.command === 'team') {
+      const teamResult = await ingestTeam({
+        teamId: args.teamId,
+        uniqueTournamentId: args.uniqueTournamentId,
+        seasonId: args.seasonId,
+        from: args.from,
+        to: args.to,
+        maxCalls: args.maxCalls,
+      });
+      reportTeam(teamResult);
+      if (teamResult.runStatus === 'HARD_STOP') process.exitCode = 1;
+      return;
+    }
 
     if (args.command === 'season') {
       announceSeason(args);
