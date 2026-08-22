@@ -11,6 +11,7 @@
     "seed:v2": "tsx src/v2/seed/runAll.ts",
     "ingest:v2": "tsx src/v2/ingestion/cli.ts",
     "ingest:v2:governed": "tsx src/v2/ingestion/orchestration/governedSeason.ts",
+    "ingest:v2:governed-all": "tsx src/v2/ingestion/orchestration/governedEditions.ts",
     "feature:v2": "tsx src/v2/feature/cli.ts",
     "doctor:v2": "tsx src/v2/db/doctor.ts",
     "discover:v2": "tsx src/v2/ingestion/discover.ts",
