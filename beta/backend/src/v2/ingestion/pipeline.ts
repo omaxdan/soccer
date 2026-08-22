@@ -396,6 +396,17 @@ export interface SeasonIngestionOptions {
   readonly withStandings?: boolean;
   /** Supplied by tests. Production passes nothing and gets a real client. */
   readonly client?: ProviderClient;
+  /**
+   * OPTIONAL TRANSACTION-LOCAL PRE-COMMIT GUARD. Runs as the FINAL step inside the
+   * season write transaction, on that transaction's connection, immediately before
+   * the transaction commits. Throwing from it rolls the whole season back.
+   *
+   * Generic by design: this file stays governance-agnostic. The governed caller
+   * (governedSeason) supplies a closure that re-checks — and row-locks — governance
+   * authorization at commit time (Gate 4). A plain `ingestSeason` caller passes
+   * nothing and the behaviour is unchanged.
+   */
+  readonly verifyBeforeCommit?: (tx: PoolClient) => Promise<void>;
 }
 
 export interface SeasonDirectionReport {
@@ -591,6 +602,15 @@ export async function ingestSeason(
               { competition: options.competitionProviderId, season: options.seasonProviderId },
               'v2 ingestion: standings fetched but no competition edition was resolved, table not written'
             );
+          }
+
+          // AT-COMMIT GUARD, LAST (Gate 4). Runs on THIS transaction's connection,
+          // after every football write, immediately before the return that commits.
+          // Throwing here rolls the whole season back. The generic pipeline never
+          // learns what the guard checks — governedSeason supplies the governance
+          // authorization lock.
+          if (options.verifyBeforeCommit) {
+            await options.verifyBeforeCommit(tx);
           }
 
           return written;

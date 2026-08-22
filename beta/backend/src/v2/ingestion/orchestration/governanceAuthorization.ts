@@ -50,6 +50,31 @@ export const AUTHORIZATION_COUNT_SQL = `
 `;
 
 /**
+ * SINGLE-EDITION AUTHORIZATION LOCK. The at-commit re-check (Gate 4).
+ *
+ * Row-returning (not count) because the locking clause `FOR SHARE` is not allowed
+ * with an aggregate. It composes the SAME identity + status conjuncts as
+ * AUTHORIZATION_COUNT_SQL, so the predicate stays single-sourced — only the
+ * projection and the lock differ.
+ *
+ * `FOR SHARE OF tc, te` takes a shared row lock on the matched governance rows:
+ * a concurrent `UPDATE tracked_edition SET authorized_for_ingestion = false`
+ * (or any revoking mutation of those rows) must wait until this transaction
+ * commits or rolls back. Combined with running this as the FINAL statement before
+ * commit, that means football is committed only while authorization is held AND
+ * locked — Level 3. `FOR SHARE` needs only SELECT privilege, which
+ * pt_pipeline_ingestion holds (migration 025), and reads the rows its SELECT
+ * policy already exposes. The caller checks that exactly one row returns.
+ */
+export const AUTHORIZATION_LOCK_SQL = `
+  SELECT te.id
+  ${FROM_JOIN}
+  WHERE ${AUTHORIZATION_IDENTITY_CONJUNCTS}
+    AND ${AUTHORIZATION_STATUS_CONJUNCTS}
+  FOR SHARE OF tc, te
+`;
+
+/**
  * ALL authorized editions — no parameters, returns the whole authorized set.
  * Columns are AUTHORIZATION FACTS ONLY: provider identity, the reality linkage,
  * and the season_period bound. NO window, priority, freshness, or budget — those

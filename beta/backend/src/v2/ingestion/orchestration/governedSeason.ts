@@ -41,7 +41,7 @@ import { PROVIDER_CODE } from '../provider/config';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 import { logger } from '../../../utils/logger';
-import { AUTHORIZATION_COUNT_SQL } from './governanceAuthorization';
+import { AUTHORIZATION_COUNT_SQL, AUTHORIZATION_LOCK_SQL } from './governanceAuthorization';
 
 /** Mirrors the season sweep default (see cli.ts DEFAULT_SEASON_MAX_CALLS). */
 export const DEFAULT_GOVERNED_MAX_CALLS = 10;
@@ -82,6 +82,63 @@ export function classifyAuthorization(count: number): AuthorizationOutcome {
   if (count === 1) return 'AUTHORIZED';
   if (count === 0) return 'UNAUTHORIZED';
   return 'AMBIGUOUS';
+}
+
+/**
+ * Thrown by the at-commit guard when governance no longer authorizes the edition
+ * at commit time (Gate 4). Distinct type + code so operations.failure records a
+ * revocation as recognisably different from an ordinary ingestion failure —
+ * without a new DB outcome value (the job still closes FAILED and rolls back).
+ */
+export class GovernanceRevokedError extends Error {
+  readonly code = 'GOVERNANCE_REVOKED';
+  constructor(
+    readonly detail: {
+      readonly providerCode: string;
+      readonly competitionProviderId: string;
+      readonly seasonProviderId: string;
+      readonly observed: number;
+    }
+  ) {
+    super(
+      `GOVERNANCE_REVOKED: authorization is no longer valid at commit for ` +
+        `${detail.providerCode} / ${detail.competitionProviderId} / ${detail.seasonProviderId} ` +
+        `(authorized rows = ${detail.observed}); rolling back — no football committed`
+    );
+    this.name = 'GovernanceRevokedError';
+  }
+}
+
+/**
+ * Builds the AT-COMMIT authorization guard for one edition (Gate 4, Level 3).
+ *
+ * Runs AUTHORIZATION_LOCK_SQL on the ingestion transaction's own connection,
+ * taking `FOR SHARE` locks on the governance rows so a concurrent revocation
+ * blocks until this transaction commits or rolls back. Exactly one row must
+ * return; anything else throws GovernanceRevokedError → the write transaction
+ * rolls back. A query failure is NOT caught: it propagates and also rolls back
+ * (fail-closed — a check that cannot complete never authorizes).
+ */
+export function makeAtCommitAuthorizationGuard(args: {
+  readonly providerCode: string;
+  readonly competitionProviderId: string;
+  readonly seasonProviderId: string;
+}): (tx: PoolClient) => Promise<void> {
+  return async (tx: PoolClient) => {
+    const result = await tx.query(AUTHORIZATION_LOCK_SQL, [
+      args.providerCode,
+      args.competitionProviderId,
+      args.seasonProviderId,
+    ]);
+    if (result.rows.length !== 1) {
+      throw new GovernanceRevokedError({
+        providerCode: args.providerCode,
+        competitionProviderId: args.competitionProviderId,
+        seasonProviderId: args.seasonProviderId,
+        observed: result.rows.length,
+      });
+    }
+  };
 }
 
 /** Read-only governance authorization count for one explicit identity. */
@@ -225,6 +282,15 @@ export async function runGovernedSeason(
     maxCalls: args.maxCalls,
     // withStandings deliberately omitted — the governed first run is the proven
     // four-call sweep, nothing added.
+    //
+    // AT-COMMIT GUARD (Gate 4). The pre-dispatch check above closes the gap before
+    // the run; this closes the long provider-walk TOCTOU gap by re-checking AND
+    // FOR SHARE-locking governance as the final step inside the write transaction.
+    verifyBeforeCommit: makeAtCommitAuthorizationGuard({
+      providerCode: args.providerCode,
+      competitionProviderId: args.competitionProviderId,
+      seasonProviderId: args.seasonProviderId,
+    }),
   });
 
   return { outcome, authorizationCount, report };

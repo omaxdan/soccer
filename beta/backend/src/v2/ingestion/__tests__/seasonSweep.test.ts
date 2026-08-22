@@ -24,6 +24,7 @@ import type { PoolClient } from 'pg';
 import { parseArguments, DEFAULT_SEASON_MAX_CALLS, type Arguments } from '../cli';
 import { ingestEvents, ingestScheduleDate } from '../stages/schedule';
 import { ingestSeason } from '../pipeline';
+import { makeAtCommitAuthorizationGuard, GovernanceRevokedError } from '../orchestration/governedSeason';
 import { sweepSeason, type EventPageSource } from '../provider/pager';
 import { ProviderRequestError, type ProviderObservation } from '../provider/client';
 import type { EndpointKey } from '../provider/endpoints';
@@ -698,4 +699,114 @@ describe('B-1 · operational lifecycle (requires a V2 database)', { skip: !hasDa
 // refuses connections to the next one, which is exactly the guard's job.
 after(async () => {
   await closeAllPools();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GATE 4 — at-commit governance authorization (requires a V2 database)
+//
+// Calls ingestSeason for real (commits), so it uses a competition/season nobody
+// else touches, seeds its own governance rows, and cleans up. Proves: authorized
+// governance → commit; revoked governance → GovernanceRevokedError → ROLLBACK
+// with no football committed; and that a plain ingestSeason (no guard) is
+// unchanged. The FOR SHARE lock property itself is proven separately against an
+// ephemeral cluster (see the Gate 4 report).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Gate 4 · at-commit authorization (requires a V2 database)', { skip: !hasDatabase }, () => {
+  const COMP = '90425';
+  const SEASON = '90778';
+  const WINDOW = { from: new Date('2026-05-31T00:00:00Z'), to: new Date('2026-08-11T00:00:00Z') };
+
+  const seedGovernance = (authorized: boolean) =>
+    withConnection('pt_pipeline_ingestion', async (tx) => {
+      // Superuser in the scratch cluster; seeds this test's own governance rows.
+      await tx.query(`DELETE FROM governance.tracked_edition te USING governance.tracked_competition tc
+                       WHERE te.tracked_competition_id = tc.id AND tc.provider_external_id = $1`, [COMP]);
+      await tx.query(`DELETE FROM governance.tracked_competition WHERE provider_external_id = $1`, [COMP]);
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO governance.tracked_competition
+           (provider_code, provider_external_id, tracking_status_code, competition_type_code, competition_scope_code)
+         VALUES ('SPORTSAPI_API', $1, 'TRACKED', 'LEAGUE', 'DOMESTIC') RETURNING id::text`, [COMP]);
+      await tx.query(
+        `INSERT INTO governance.tracked_edition
+           (tracked_competition_id, provider_season_external_id, edition_status_code, authorized_for_ingestion, season_period)
+         VALUES ($1, $2, 'ACTIVE', $3, daterange('2026-01-01','2027-01-01'))`,
+        [rows[0].id, SEASON, authorized]
+      );
+    });
+
+  after(async () => {
+    await withConnection('pt_pipeline_ingestion', async (tx) => {
+      await tx.query(`DELETE FROM football.fixture WHERE provider_external_id LIKE 'G4-%'`).catch(() => undefined);
+      await tx.query(`DELETE FROM governance.tracked_edition te USING governance.tracked_competition tc
+                       WHERE te.tracked_competition_id = tc.id AND tc.provider_external_id = $1`, [COMP]).catch(() => undefined);
+      await tx.query(`DELETE FROM governance.tracked_competition WHERE provider_external_id = $1`, [COMP]).catch(() => undefined);
+    });
+  });
+
+  function onePage(fixtureId: string) {
+    return {
+      async get<T>() { return { standings: [] } as T; },
+      async getObserved<T>(key: EndpointKey, params: Record<string, string | number>) {
+        return {
+          endpointKey: key, path: '(stub)', url: '(stub)', parameters: params,
+          status: 200, attempts: 1, quotaRemaining: 91,
+          data: { data: { hasNextPage: false, events: key === 'tournament_season_events_last' ? [{
+            id: fixtureId,
+            startTimestamp: Math.floor(Date.UTC(2026, 6, 20, 18, 0) / 1000),
+            tournament: { id: 83, uniqueTournament: { id: Number(COMP), name: 'G4 League', category: { name: 'Brazil' } } },
+            season: { id: Number(SEASON), name: 'G4 2026', year: '2026' },
+            roundInfo: { round: 1 },
+            homeTeam: { id: 'G4-H', name: 'G4 Home', country: { name: 'Brazil' } },
+            awayTeam: { id: 'G4-A', name: 'G4 Away', country: { name: 'Brazil' } },
+            status: { code: 100, description: 'Ended' }, winnerCode: 1,
+            homeScore: { current: 2 }, awayScore: { current: 1 },
+          }] : [] } } as T,
+        } as ProviderObservation<T>;
+      },
+      async flushUsage() { return 0; },
+    } as unknown as ProviderClient;
+  }
+
+  const fixtureExists = async (id: string): Promise<boolean> => {
+    const { rows } = await withConnection('pt_pipeline_ingestion', (tx) =>
+      tx.query<{ n: string }>(`SELECT count(*)::text AS n FROM football.fixture WHERE provider_external_id = $1`, [id]));
+    return Number(rows[0].n) > 0;
+  };
+
+  it('G4-1. authorized governance → the guard passes and football commits', async () => {
+    await seedGovernance(true);
+    const fixtureId = `G4-OK-${Date.now()}`;
+    const report = await ingestSeason({
+      competitionProviderId: COMP, seasonProviderId: SEASON, ...WINDOW, maxCalls: 4,
+      client: onePage(fixtureId),
+      verifyBeforeCommit: makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: COMP, seasonProviderId: SEASON }),
+    });
+    assert.equal(report.failed, false);
+    assert.ok(await fixtureExists(fixtureId), 'authorized run commits the fixture');
+  });
+
+  it('G4-2. revoked governance → GovernanceRevokedError, ROLLBACK, no football committed', async () => {
+    await seedGovernance(false); // authorized_for_ingestion = false
+    const fixtureId = `G4-REVOKED-${Date.now()}`;
+    await assert.rejects(
+      ingestSeason({
+        competitionProviderId: COMP, seasonProviderId: SEASON, ...WINDOW, maxCalls: 4,
+        client: onePage(fixtureId),
+        verifyBeforeCommit: makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: COMP, seasonProviderId: SEASON }),
+      }),
+      (e: unknown) => e instanceof GovernanceRevokedError
+    );
+    assert.equal(await fixtureExists(fixtureId), false, 'the whole season write rolled back — no football committed');
+  });
+
+  it('G4-3. backward compatible — ingestSeason with no guard behaves as before', async () => {
+    const fixtureId = `G4-NOGUARD-${Date.now()}`;
+    const report = await ingestSeason({
+      competitionProviderId: COMP, seasonProviderId: SEASON, ...WINDOW, maxCalls: 4,
+      client: onePage(fixtureId),
+      // no verifyBeforeCommit
+    });
+    assert.equal(report.failed, false);
+    assert.ok(await fixtureExists(fixtureId), 'a plain ingestSeason still commits');
+  });
 });

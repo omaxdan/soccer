@@ -8,16 +8,25 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { PoolClient } from 'pg';
 import {
   parseGovernedArguments,
   classifyAuthorization,
   runGovernedSeason,
+  makeAtCommitAuthorizationGuard,
+  GovernanceRevokedError,
   AUTHORIZATION_SQL,
   DEFAULT_GOVERNED_MAX_CALLS,
   type GovernedArguments,
 } from '../orchestration/governedSeason';
+import { AUTHORIZATION_LOCK_SQL, AUTHORIZATION_STATUS_CONJUNCTS, AUTHORIZATION_IDENTITY_CONJUNCTS } from '../orchestration/governanceAuthorization';
 import type { SeasonIngestionReport } from '../pipeline';
 import { PROVIDER_CODE } from '../provider/config';
+
+/** A fake tx whose query() returns a fixed row set, or throws. */
+function fakeTx(onQuery: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>): PoolClient {
+  return { query: (sql: string, params?: unknown[]) => onQuery(sql, params) } as unknown as PoolClient;
+}
 
 const OK = { competitionProviderId: '325', seasonProviderId: '87678' };
 
@@ -140,5 +149,57 @@ describe('governed season · fail-closed dispatch', () => {
     assert.equal(result.outcome, 'AMBIGUOUS');
     assert.equal(called, 0);
     assert.equal(result.report, null);
+  });
+});
+
+describe('governed season · at-commit authorization lock SQL', () => {
+  test('shares the status + identity conjuncts and adds a FOR SHARE row lock', () => {
+    assert.ok(AUTHORIZATION_LOCK_SQL.includes(AUTHORIZATION_STATUS_CONJUNCTS), 'shares the status conjuncts');
+    assert.ok(AUTHORIZATION_LOCK_SQL.includes(AUTHORIZATION_IDENTITY_CONJUNCTS), 'carries the identity conjuncts ($1,$2,$3)');
+    assert.ok(/FOR SHARE OF tc, te/.test(AUTHORIZATION_LOCK_SQL), 'locks the governance rows through commit');
+  });
+  test('is row-returning, not an aggregate (FOR SHARE forbids aggregates)', () => {
+    assert.match(AUTHORIZATION_LOCK_SQL, /SELECT\s+te\.id/);
+    assert.ok(!/count\s*\(/i.test(AUTHORIZATION_LOCK_SQL));
+  });
+});
+
+describe('governed season · at-commit guard', () => {
+  test('exactly one authorized row → resolves (commit may proceed)', async () => {
+    let sql = ''; let params: unknown[] | undefined;
+    const guard = makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: '325', seasonProviderId: '87678' });
+    await guard(fakeTx(async (s, p) => { sql = s; params = p; return { rows: [{ id: '9' }] }; }));
+    assert.equal(sql, AUTHORIZATION_LOCK_SQL);           // runs the exact lock query on the tx
+    assert.deepEqual(params, ['SPORTSAPI_API', '325', '87678']); // with the edition identity
+  });
+
+  test('zero authorized rows → throws GovernanceRevokedError (→ rollback)', async () => {
+    const guard = makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: '325', seasonProviderId: '87678' });
+    await assert.rejects(
+      guard(fakeTx(async () => ({ rows: [] }))),
+      (e: unknown) => e instanceof GovernanceRevokedError && (e as GovernanceRevokedError).code === 'GOVERNANCE_REVOKED' && (e as GovernanceRevokedError).detail.observed === 0
+    );
+  });
+
+  test('more than one row → throws GovernanceRevokedError (fail-closed)', async () => {
+    const guard = makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: '325', seasonProviderId: '87678' });
+    await assert.rejects(guard(fakeTx(async () => ({ rows: [{ id: '9' }, { id: '10' }] }))), GovernanceRevokedError);
+  });
+
+  test('a governance query error PROPAGATES (never treated as unauthorized-and-continue)', async () => {
+    const guard = makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: '325', seasonProviderId: '87678' });
+    await assert.rejects(
+      guard(fakeTx(async () => { throw new Error('lock wait timeout'); })),
+      (e: unknown) => e instanceof Error && !(e instanceof GovernanceRevokedError) && /lock wait timeout/.test((e as Error).message)
+    );
+  });
+});
+
+describe('governed season · wires the at-commit guard into ingestSeason', () => {
+  test('authorized dispatch passes a verifyBeforeCommit guard to ingestSeason', async () => {
+    let passed: { verifyBeforeCommit?: unknown } | undefined;
+    const ingest = (async (opts: { verifyBeforeCommit?: unknown }) => { passed = opts; return fakeReport; }) as typeof import('../pipeline').ingestSeason;
+    await runGovernedSeason(args(OK), { authorize: async () => 1, ingest });
+    assert.equal(typeof passed?.verifyBeforeCommit, 'function');
   });
 });
