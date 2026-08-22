@@ -41,6 +41,7 @@ import { PROVIDER_CODE } from '../provider/config';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 import { logger } from '../../../utils/logger';
+import { AUTHORIZATION_COUNT_SQL } from './governanceAuthorization';
 
 /** Mirrors the season sweep default (see cli.ts DEFAULT_SEASON_MAX_CALLS). */
 export const DEFAULT_GOVERNED_MAX_CALLS = 10;
@@ -62,18 +63,11 @@ export interface GovernedArguments {
  * the governance contract (Doc 95 / V8): a TRACKED competition, an ACTIVE edition
  * of the requested season, explicitly authorized. `count` is exact so the caller
  * can distinguish none / one / many.
+ *
+ * DEFINED ONCE in ./governanceAuthorization and re-exported here so the single-
+ * edition check and the set enumerator (governedSelection) share one predicate.
  */
-export const AUTHORIZATION_SQL = `
-  SELECT count(*)::int AS n
-  FROM governance.tracked_competition tc
-  JOIN governance.tracked_edition te ON te.tracked_competition_id = tc.id
-  WHERE tc.provider_code = $1
-    AND tc.provider_external_id = $2
-    AND tc.tracking_status_code = 'TRACKED'
-    AND te.provider_season_external_id = $3
-    AND te.edition_status_code = 'ACTIVE'
-    AND te.authorized_for_ingestion = true
-`;
+export const AUTHORIZATION_SQL = AUTHORIZATION_COUNT_SQL;
 
 export type AuthorizationOutcome = 'AUTHORIZED' | 'UNAUTHORIZED' | 'AMBIGUOUS';
 
