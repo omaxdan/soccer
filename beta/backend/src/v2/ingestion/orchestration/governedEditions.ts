@@ -39,6 +39,9 @@ import '../../config/env';
 
 import { selectAuthorizedEditions, type AuthorizedEdition } from './governedSelection';
 import { runGovernedSeason, type GovernedRunResult } from './governedSeason';
+import { deriveUncoveredWindows, type DateInterval, type UncoveredDerivation } from '../coverageWindows';
+import { INGESTION_ROLE } from '../pipeline';
+import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 import { logger } from '../../../utils/logger';
 
@@ -49,15 +52,24 @@ export interface GovernedEditionsArguments {
   readonly maxCalls: number;
 }
 
-export type EditionStatus = 'SUCCEEDED' | 'FAILED' | 'REFUSED' | 'SKIPPED_BUDGET' | 'NOT_ATTEMPTED';
+export type EditionStatus =
+  | 'SUCCEEDED'
+  | 'NO_WORK'
+  | 'FAILED'
+  | 'REFUSED'
+  | 'SKIPPED_BUDGET'
+  | 'NOT_ATTEMPTED';
 
 export interface EditionOutcome {
   readonly competitionProviderExternalId: string;
   readonly seasonProviderExternalId: string;
   readonly providerCode: string;
   readonly status: EditionStatus;
+  /** Number of uncovered gaps derived for this edition over the operator window. */
+  readonly gaps: number;
+  /** Total provider calls spent across this edition's gaps. */
   readonly callsSpent: number;
-  /** Present for REFUSED (authorization outcome) or FAILED (error message). */
+  /** Present for NO_WORK (reason), REFUSED (authorization), FAILED (error), or budget notes. */
   readonly detail?: string;
 }
 
@@ -79,6 +91,20 @@ export interface GovernedEditionsDeps {
     to: Date;
     maxCalls: number;
   }) => Promise<GovernedRunResult>;
+  /** Gate 6C coverage-aware derivation of the uncovered gaps for one edition. */
+  readonly derive?: (
+    edition: AuthorizedEdition,
+    requestedFrom: string,
+    requestedTo: string
+  ) => Promise<UncoveredDerivation>;
+}
+
+/** Converts a half-open coverage gap [from, to) into an inclusive dispatch window. */
+function gapToInclusiveWindow(gap: DateInterval): { from: Date; to: Date } {
+  const from = new Date(`${gap.from}T00:00:00Z`);
+  // Inclusive last day = the half-open upper bound minus one day.
+  const to = new Date(new Date(`${gap.to}T00:00:00Z`).getTime() - 86_400_000);
+  return { from, to };
 }
 
 function parseUtcDate(value: string, flag: string): Date {
@@ -126,6 +152,16 @@ export async function runGovernedEditions(
 ): Promise<GovernedEditionsResult> {
   const select = deps.select ?? (() => selectAuthorizedEditions());
   const run = deps.run ?? runGovernedSeason;
+  const derive =
+    deps.derive ??
+    ((edition: AuthorizedEdition, requestedFrom: string, requestedTo: string) =>
+      withConnection(INGESTION_ROLE, (tx) =>
+        deriveUncoveredWindows(tx, {
+          competitionEditionId: edition.competitionEditionId!,
+          requestedFrom,
+          requestedTo,
+        })
+      ));
 
   const editions = await select(); // fail-closed: a read error propagates (never [])
   if (editions.length === 0) {
@@ -133,8 +169,11 @@ export async function runGovernedEditions(
     return { selected: 0, outcomes: [], totalCallsSpent: 0, aggregate: 'NOOP' };
   }
 
+  const requestedFrom = iso(args.from);
+  const requestedTo = iso(args.to);
+
   const outcomes: EditionOutcome[] = [];
-  let remaining = args.maxCalls;
+  let remaining = args.maxCalls; // GLOBAL budget: never reset per edition or per gap
   let totalCallsSpent = 0;
   let stop = false;
 
@@ -146,43 +185,87 @@ export async function runGovernedEditions(
     };
 
     if (stop) {
-      outcomes.push({ ...base, status: 'NOT_ATTEMPTED', callsSpent: 0 });
+      outcomes.push({ ...base, status: 'NOT_ATTEMPTED', gaps: 0, callsSpent: 0 });
       continue;
     }
     if (remaining < 1) {
-      outcomes.push({ ...base, status: 'SKIPPED_BUDGET', callsSpent: 0, detail: 'total --max-calls budget exhausted' });
+      outcomes.push({ ...base, status: 'SKIPPED_BUDGET', gaps: 0, callsSpent: 0, detail: 'total --max-calls budget exhausted' });
       continue;
     }
 
+    // ── Gate 6C: derive the uncovered gaps for this edition over the operator
+    //    window. An edition with no materialized reality row (competitionEditionId
+    //    null) has no coverage yet, so the whole window is uncovered — no read.
+    let gaps: DateInterval[];
     try {
-      const result = await run({
-        providerCode: e.providerCode,
-        competitionProviderId: e.competitionProviderExternalId,
-        seasonProviderId: e.seasonProviderExternalId,
-        from: args.from,
-        to: args.to,
-        maxCalls: remaining, // total budget: hand each edition what is left
-      });
-      const spent = result.report?.callsSpent ?? 0;
-      remaining -= spent;
-      totalCallsSpent += spent;
-
-      if (result.outcome !== 'AUTHORIZED') {
-        // Revoked between selection and dispatch — fail-closed, and fail-fast.
-        outcomes.push({ ...base, status: 'REFUSED', callsSpent: spent, detail: `authorization outcome ${result.outcome}` });
-        stop = true;
-      } else if (result.report?.failed) {
-        outcomes.push({ ...base, status: 'FAILED', callsSpent: spent, detail: 'ingestSeason reported failed' });
-        stop = true;
+      if (e.competitionEditionId) {
+        const derivation = await derive(e, requestedFrom, requestedTo);
+        if (derivation.noWork) {
+          // Fully covered (or clipped away): successful no-work, ZERO provider calls.
+          outcomes.push({ ...base, status: 'NO_WORK', gaps: 0, callsSpent: 0, detail: derivation.reason });
+          continue;
+        }
+        gaps = [...derivation.uncovered];
       } else {
-        outcomes.push({ ...base, status: 'SUCCEEDED', callsSpent: spent });
+        gaps = [{ from: requestedFrom, to: iso(new Date(args.to.getTime() + 86_400_000)) }];
       }
     } catch (error) {
-      // A thrown error (e.g. GovernanceRevokedError at commit, provider hard-stop)
-      // stops the run. The edition's own transaction has already rolled back.
-      outcomes.push({ ...base, status: 'FAILED', callsSpent: 0, detail: error instanceof Error ? error.message : String(error) });
+      // A derivation (DB) failure cannot be resolved into work; fail-closed, fail-fast.
+      outcomes.push({ ...base, status: 'FAILED', gaps: 0, callsSpent: 0, detail: `derivation failed: ${error instanceof Error ? error.message : String(error)}` });
       stop = true;
+      continue;
     }
+
+    // ── Dispatch each uncovered gap through the existing Gate 5 → Gate 4 path,
+    //    drawing down the ONE global budget. Fail-fast within and across editions.
+    let editionSpent = 0;
+    let editionStatus: EditionStatus = 'SUCCEEDED';
+    let editionDetail: string | undefined;
+    let dispatched = 0;
+
+    for (const gap of gaps) {
+      if (remaining < 1) {
+        editionStatus = 'SKIPPED_BUDGET';
+        editionDetail = `budget exhausted after ${dispatched}/${gaps.length} gap(s)`;
+        break;
+      }
+      const window = gapToInclusiveWindow(gap);
+      try {
+        const result = await run({
+          providerCode: e.providerCode,
+          competitionProviderId: e.competitionProviderExternalId,
+          seasonProviderId: e.seasonProviderExternalId,
+          from: window.from,
+          to: window.to,
+          maxCalls: remaining, // hand each gap the remaining GLOBAL budget
+        });
+        const spent = result.report?.callsSpent ?? 0;
+        remaining -= spent;
+        totalCallsSpent += spent;
+        editionSpent += spent;
+        dispatched += 1;
+
+        if (result.outcome !== 'AUTHORIZED') {
+          editionStatus = 'REFUSED';
+          editionDetail = `authorization outcome ${result.outcome}`;
+          stop = true;
+          break;
+        }
+        if (result.report?.failed) {
+          editionStatus = 'FAILED';
+          editionDetail = 'ingestSeason reported failed';
+          stop = true;
+          break;
+        }
+      } catch (error) {
+        editionStatus = 'FAILED';
+        editionDetail = error instanceof Error ? error.message : String(error);
+        stop = true;
+        break;
+      }
+    }
+
+    outcomes.push({ ...base, status: editionStatus, gaps: gaps.length, callsSpent: editionSpent, detail: editionDetail });
   }
 
   const anyBad = outcomes.some((o) => o.status === 'FAILED' || o.status === 'REFUSED');
@@ -204,7 +287,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     for (const o of result.outcomes) {
       console.log(
         `  ${o.providerCode} / ${o.competitionProviderExternalId} / ${o.seasonProviderExternalId}  ` +
-          `${o.status.padEnd(14)} calls ${o.callsSpent}${o.detail ? `  (${o.detail})` : ''}`
+          `${o.status.padEnd(14)} gaps ${o.gaps} calls ${o.callsSpent}${o.detail ? `  (${o.detail})` : ''}`
       );
     }
     console.log(`  total calls spent ${result.totalCallsSpent}   aggregate ${result.aggregate}\n`);
