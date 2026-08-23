@@ -20,6 +20,7 @@ import { resolveRoute, createServer, type ApiDeps } from '../server';
 import { isValidId, mapIntelligence, mapTeamFeatures } from '../handlers';
 import type { TeamFeatureValue } from '../../feature/read/currentValues';
 import type { TeamModuleReading } from '../../module/read/readings';
+import type { ReadingEvidence } from '../../module/read/evidence';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 
@@ -83,6 +84,44 @@ describe('v2 api · intelligence mapping (missing readings → null, never fabri
   test('no readings at all → all null', () => {
     const out = mapIntelligence([], '10', '11');
     assert.deepEqual(out, { home: { readiness: null, homeAwaySplit: null }, away: { readiness: null, homeAwaySplit: null } });
+  });
+
+  test('a reading with no evidence carries evidence: null (never fabricated)', () => {
+    const out = mapIntelligence([reading('10', 'readiness_tracker')], '10', '11');
+    assert.equal(out.home.readiness?.evidence, null);
+  });
+});
+
+describe('v2 api · evidence attachment (persisted evidence → the matching reading only)', () => {
+  const reading = (teamId: string, moduleKey: string): TeamModuleReading => ({
+    moduleKey, teamId, contextKindCode: moduleKey === 'home_away_split' ? 'COMPETITION_SCOPED' : 'ALL_COMPETITIONS',
+    contextCompetitionEditionId: moduleKey === 'home_away_split' ? '42' : null,
+    asOf: new Date('2027-06-01T00:00:00Z'), calculatedAt: new Date('2027-06-01T00:00:00Z'),
+    moduleStatusCode: 'SUPPORTS', strength: null, confidence: null, sampleObservationCount: 10,
+    sampleMeetsThreshold: true, verdictText: 'v', inactiveReason: null,
+  });
+  const evidence = (teamId: string, moduleKey: string): ReadingEvidence => ({
+    moduleKey, teamId, contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
+    declaredInputCount: 1, presentInputCount: 1, belowThresholdInputCount: 0, estimatedInputCount: 0,
+    items: [{ featureKey: 'team.momentum', displayName: 'Momentum', value: 15, asOf: new Date('2027-06-01T00:00:00Z'), contributionDirection: 'SUPPORTS' }],
+  });
+
+  test('evidence attaches to its own (team, module) reading and to no other', () => {
+    const out = mapIntelligence(
+      [reading('10', 'readiness_tracker'), reading('11', 'readiness_tracker')],
+      '10', '11',
+      [evidence('10', 'readiness_tracker')]
+    );
+    assert.equal(out.home.readiness?.evidence?.items[0].value, 15);
+    assert.equal(out.home.readiness?.evidence?.items[0].contributionDirection, 'SUPPORTS');
+    assert.equal(out.away.readiness?.evidence, null, 'team 11 has no evidence → null, not team 10’s');
+  });
+
+  test('a zero count survives projection (present 0 of 2 is not treated as absent)', () => {
+    const zero: ReadingEvidence = { ...evidence('10', 'readiness_tracker'), declaredInputCount: 2, presentInputCount: 0, items: [] };
+    const out = mapIntelligence([reading('10', 'readiness_tracker')], '10', '11', [zero]);
+    assert.equal(out.home.readiness?.evidence?.presentInputCount, 0);
+    assert.equal(out.home.readiness?.evidence?.declaredInputCount, 2);
   });
 });
 
@@ -320,6 +359,20 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     assert.equal(body.teamFeatures.home.congestion.value, 20);
     assert.equal(body.teamFeatures.away.momentum.value, -5, 'negative value preserved');
     assert.equal(body.teamFeatures.away.congestion, null, 'team B has no congestion value → null, not zero');
+    // EVIDENCE — the persisted explainability substrate behind each engaged reading.
+    const ha = body.intelligence.home.homeAwaySplit.evidence;
+    assert.ok(ha, 'home_away_split carries persisted evidence');
+    assert.equal(ha.declaredInputCount, 2);
+    assert.equal(ha.presentInputCount, 2);
+    assert.equal(ha.items.length, 2, 'two cited win-rate values');
+    assert.ok(ha.items.every((i: any) => i.contributionDirection === 'SUPPORTS'), 'A’s 80/20 disparity → SUPPORTS');
+    assert.deepEqual(ha.items.map((i: any) => i.value).sort((x: number, y: number) => x - y), [20, 80]);
+    assert.ok(ha.items.every((i: any) => typeof i.featureKey === 'string' && typeof i.displayName === 'string'));
+    const rt = body.intelligence.home.readiness.evidence;
+    assert.ok(rt, 'readiness_tracker carries persisted evidence');
+    assert.equal(rt.items.length, 1, 'one cited momentum value');
+    assert.equal(rt.items[0].value, 15);
+    assert.equal(rt.items[0].contributionDirection, 'SUPPORTS');
   });
 
   it('home_away_split respects the competition-edition scope; readiness is ALL_COMPETITIONS', async () => {

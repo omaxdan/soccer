@@ -15,7 +15,8 @@
 import type { PoolClient } from 'pg';
 import { readCompletedFixtures } from '../feature/read/fixtures';
 import { readCurrentTeamFeatures, TEAM_PANEL_FEATURE_KEYS, type TeamFeatureValue } from '../feature/read/currentValues';
-import { readActiveMatchReadings, type TeamModuleReading } from '../module/read/readings';
+import { readActiveMatchReadings, ACTIVE_MODULE_KEYS, type TeamModuleReading } from '../module/read/readings';
+import { readCurrentReadingEvidence, type ReadingEvidence } from '../module/read/evidence';
 import type {
   MatchDetailResponse,
   EditionFixtureListResponse,
@@ -23,6 +24,7 @@ import type {
   ApiTeamIntelligence,
   ApiTeamFeatures,
   ApiModuleReading,
+  ApiModuleEvidence,
   ApiFeatureValue,
   ApiFormFixture,
   ApiScore,
@@ -37,8 +39,25 @@ const iso = (d: Date): string => new Date(d).toISOString();
 const score = (h: number | null, a: number | null): ApiScore | null =>
   h === null || a === null ? null : { home: Number(h), away: Number(a) };
 
-/** Projects a persisted reading to the wire shape. */
-function toReadingDto(r: TeamModuleReading): ApiModuleReading {
+/** Projects a persisted evidence set to the wire shape. Counts/values pass through unchanged (zeros preserved). */
+function toEvidenceDto(e: ReadingEvidence): ApiModuleEvidence {
+  return {
+    declaredInputCount: e.declaredInputCount,
+    presentInputCount: e.presentInputCount,
+    belowThresholdInputCount: e.belowThresholdInputCount,
+    estimatedInputCount: e.estimatedInputCount,
+    items: e.items.map((i) => ({
+      featureKey: i.featureKey,
+      displayName: i.displayName,
+      value: i.value,
+      asOf: i.asOf === null ? null : iso(i.asOf),
+      contributionDirection: i.contributionDirection,
+    })),
+  };
+}
+
+/** Projects a persisted reading to the wire shape, attaching its evidence when present. */
+function toReadingDto(r: TeamModuleReading, evidence: ReadingEvidence | undefined): ApiModuleReading {
   return {
     moduleKey: r.moduleKey,
     status: r.moduleStatusCode,
@@ -49,6 +68,7 @@ function toReadingDto(r: TeamModuleReading): ApiModuleReading {
     asOf: iso(r.asOf),
     verdictText: r.verdictText,
     inactiveReason: r.inactiveReason,
+    evidence: evidence ? toEvidenceDto(evidence) : null,
   };
 }
 
@@ -88,11 +108,14 @@ export function mapTeamFeatures(
 export function mapIntelligence(
   readings: readonly TeamModuleReading[],
   homeTeamId: string,
-  awayTeamId: string
+  awayTeamId: string,
+  evidence: readonly ReadingEvidence[] = []
 ): { home: ApiTeamIntelligence; away: ApiTeamIntelligence } {
+  const evidenceKey = (teamId: string, moduleKey: string): string => `${teamId}|${moduleKey}`;
+  const evidenceByKey = new Map(evidence.map((e) => [evidenceKey(e.teamId, e.moduleKey), e]));
   const pick = (teamId: string, moduleKey: string): ApiModuleReading | null => {
     const found = readings.find((r) => r.teamId === teamId && r.moduleKey === moduleKey);
-    return found ? toReadingDto(found) : null;
+    return found ? toReadingDto(found, evidenceByKey.get(evidenceKey(teamId, moduleKey))) : null;
   };
   const forTeam = (teamId: string): ApiTeamIntelligence => ({
     readiness: pick(teamId, 'readiness_tracker'),
@@ -165,6 +188,15 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     competitionEditionId: h.edition_id,
     asOf,
   });
+  // Persisted evidence behind those readings — same teams, module set and context
+  // scope, at the same kickoff boundary, so evidence resolves for exactly the
+  // readings shown (and only engaged ones; INACTIVE readings carry none).
+  const evidence = await readCurrentReadingEvidence(tx, {
+    teamIds: [h.home_id, h.away_id],
+    asOf,
+    moduleKeys: [...ACTIVE_MODULE_KEYS],
+    contextCompetitionEditionId: h.edition_id,
+  });
   // Team Intelligence panel features — persisted, as of the same kickoff boundary.
   const features = await readCurrentTeamFeatures(tx, {
     teamIds: [h.home_id, h.away_id],
@@ -187,7 +219,7 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
       home: toFormFixtures(form.get(h.home_id)),
       away: toFormFixtures(form.get(h.away_id)),
     },
-    intelligence: mapIntelligence(readings, h.home_id, h.away_id),
+    intelligence: mapIntelligence(readings, h.home_id, h.away_id, evidence),
     teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),
   };
 }

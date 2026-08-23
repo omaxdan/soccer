@@ -32,6 +32,37 @@ export interface ApiFormFixture {
   readonly goalsAgainst: number | null;
 }
 
+/** The direction a cited value contributed to a reading (module_evidence_item). */
+export type ApiContributionDirection = 'SUPPORTS' | 'CONTRADICTS' | 'NEUTRAL';
+
+/**
+ * One cited feature value's contribution to a reading — the item-level evidence
+ * (module_evidence_item joined to its feature value). `value`/`asOf` are null only
+ * when the cited value cannot be resolved; a zero value is preserved as 0. The
+ * direction is the persisted one, never derived on the wire.
+ */
+export interface ApiEvidenceItem {
+  readonly featureKey: string | null;
+  readonly displayName: string | null;
+  readonly value: number | null;
+  readonly asOf: string | null;             // ISO-8601 or null
+  readonly contributionDirection: ApiContributionDirection;
+}
+
+/**
+ * A reading's persisted evidence — the set-level input counts (module_evidence)
+ * and each cited value (module_evidence_item). Present only for an engaged reading
+ * that recorded evidence; a reading with none carries `evidence: null`. Counts are
+ * the persisted values, never recomputed — a zero count stays zero.
+ */
+export interface ApiModuleEvidence {
+  readonly declaredInputCount: number;
+  readonly presentInputCount: number;
+  readonly belowThresholdInputCount: number;
+  readonly estimatedInputCount: number;
+  readonly items: readonly ApiEvidenceItem[];
+}
+
 /** A persisted module reading, projected for the wire. Null means "no reading yet". */
 export interface ApiModuleReading {
   readonly moduleKey: string;
@@ -43,6 +74,8 @@ export interface ApiModuleReading {
   readonly asOf: string;                    // ISO-8601
   readonly verdictText: string | null;
   readonly inactiveReason: string | null;
+  /** The persisted evidence behind this reading; null when the reading recorded none. */
+  readonly evidence: ApiModuleEvidence | null;
 }
 
 /** The two ACTIVE modules for one team. Either may be null if not yet computed. */

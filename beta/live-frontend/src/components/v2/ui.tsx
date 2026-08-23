@@ -1,7 +1,7 @@
 // V2 UI PRIMITIVES — small presentational components for the V2 analysis views.
 // Read-only rendering of V2 API data. No data fetching, no calculation, no V1.
 
-import type { ApiScore, ApiModuleReading, ApiFormFixture, ApiFeatureValue, ApiTeamFeatures } from '@/lib/v2/types';
+import type { ApiScore, ApiModuleReading, ApiModuleEvidence, ApiEvidenceItem, ApiContributionDirection, ApiFormFixture, ApiFeatureValue, ApiTeamFeatures } from '@/lib/v2/types';
 import { formResult } from '@/lib/v2/types';
 
 /** UTC kickoff, rendered compactly and unambiguously. */
@@ -71,6 +71,67 @@ export function FormStrip({ fixtures }: { fixtures: ApiFormFixture[] }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE EVIDENCE — the persisted explainability substrate behind a reading.
+// Renders the set-level input counts and each cited feature value with its
+// persisted contribution direction. It computes nothing: directions, values and
+// counts are displayed exactly as persisted (a zero count / zero value stays),
+// and a cited value with no resolvable number is shown honestly, never invented.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DIRECTION_COLOR: Record<ApiContributionDirection, string> = {
+  SUPPORTS: 'var(--edge)', CONTRADICTS: 'var(--risk)', NEUTRAL: 'var(--muted)',
+};
+
+/** Displays a cited value without inventing precision, or an em dash when absent. */
+function citedValue(v: number | null): string {
+  if (v === null) return '—';
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+function EvidenceItemRow({ item }: { item: ApiEvidenceItem }) {
+  const color = DIRECTION_COLOR[item.contributionDirection];
+  const label = item.displayName ?? item.featureKey ?? 'input';
+  return (
+    <div role="listitem" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+      <span className="label-cap" style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'baseline' }}>
+        <span className="mono tnum" style={{ color: 'var(--faint)', fontSize: 11 }}>{citedValue(item.value)}</span>
+        <span
+          className="label-cap"
+          style={{ color, fontWeight: 700, fontSize: 10 }}
+          aria-label={`contribution ${item.contributionDirection.toLowerCase()}`}
+        >{item.contributionDirection.toLowerCase()}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The evidence behind one reading. Set-level line ("N of M inputs present", plus
+ * below-threshold / estimated counts only when non-zero), then one row per cited
+ * value. Renders nothing when the reading recorded no evidence.
+ */
+export function EvidencePanel({ evidence }: { evidence: ApiModuleEvidence | null }) {
+  if (!evidence) return null;
+  const { declaredInputCount, presentInputCount, belowThresholdInputCount, estimatedInputCount, items } = evidence;
+  return (
+    <div style={{ marginTop: 8, borderTop: '1px solid var(--hairline, rgba(128,128,128,0.2))', paddingTop: 6 }}>
+      <p className="eyebrow" style={{ fontSize: 10 }}>Evidence</p>
+      <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 2 }}>
+        {presentInputCount} of {declaredInputCount} inputs present
+        {belowThresholdInputCount > 0 ? ` · ${belowThresholdInputCount} below threshold` : ''}
+        {estimatedInputCount > 0 ? ` · ${estimatedInputCount} estimated` : ''}
+      </p>
+      {items.length > 0 && (
+        <div role="list" aria-label="cited evidence" style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
+          {items.map((it, i) => <EvidenceItemRow key={`${it.featureKey ?? 'input'}-${i}`} item={it} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * One module reading card. When `reading` is null the card is explicitly empty
  * ("Not enough data") — a missing reading is never rendered as a value.
@@ -101,6 +162,7 @@ export function ReadingCard({ title, reading }: { title: string; reading: ApiMod
         sample {reading.sampleObservationCount}
         {reading.sampleMeetsThreshold ? '' : ' · below threshold'}
       </p>
+      {!inactive && <EvidencePanel evidence={reading.evidence} />}
     </div>
   );
 }

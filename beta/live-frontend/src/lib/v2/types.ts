@@ -13,6 +13,24 @@ export interface ApiFormFixture {
   goalsAgainst: number | null;
 }
 
+export type ApiContributionDirection = 'SUPPORTS' | 'CONTRADICTS' | 'NEUTRAL';
+
+export interface ApiEvidenceItem {
+  featureKey: string | null;
+  displayName: string | null;
+  value: number | null;
+  asOf: string | null;
+  contributionDirection: ApiContributionDirection;
+}
+
+export interface ApiModuleEvidence {
+  declaredInputCount: number;
+  presentInputCount: number;
+  belowThresholdInputCount: number;
+  estimatedInputCount: number;
+  items: ApiEvidenceItem[];
+}
+
 export interface ApiModuleReading {
   moduleKey: string;
   status: string;
@@ -23,6 +41,7 @@ export interface ApiModuleReading {
   asOf: string;
   verdictText: string | null;
   inactiveReason: string | null;
+  evidence: ApiModuleEvidence | null;
 }
 
 export interface ApiTeamIntelligence {
