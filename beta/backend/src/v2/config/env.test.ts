@@ -43,6 +43,11 @@ const ENTRY_POINTS = [
   join(SRC, 'v2', 'db', 'doctor.ts'),
   join(SRC, 'v2', 'ingestion', 'discover.ts'),
   join(SRC, 'v2', 'quality', 'cli.ts'),
+  join(SRC, 'v2', 'ingestion', 'orchestration', 'governedSeason.ts'),
+  join(SRC, 'v2', 'ingestion', 'orchestration', 'governedEditions.ts'),
+  join(SRC, 'v2', 'ingestion', 'orchestration', 'governanceAdmin.ts'),
+  join(SRC, 'v2', 'module', 'cli.ts'),
+  join(SRC, 'v2', 'api', 'server.ts'),
 ];
 
 /** TypeScript import specifiers use forward slashes on every platform. */
@@ -165,9 +170,11 @@ describe('the entry points load it first', () => {
     test(`${entry.slice(SRC.length + 1)} imports the loader before anything else`, () => {
       const lines = readFileSync(entry, 'utf8').split(/\r?\n/);
       const firstImport = lines.find((line) => line.startsWith('import '));
-      assert.equal(
-        firstImport,
-        "import '../config/env';",
+      // The loader must be first; its relative depth varies with the entry point's
+      // directory (e.g. orchestration/* uses '../../config/env').
+      assert.match(
+        firstImport ?? '',
+        /^import '(?:\.\.\/)+config\/env';$/,
         'the env loader must be the first import in a V2 entry point'
       );
     });

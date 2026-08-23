@@ -16,6 +16,7 @@
     "governance:link": "tsx src/v2/ingestion/orchestration/governanceAdmin.ts link",
     "feature:v2": "tsx src/v2/feature/cli.ts",
     "module:v2": "tsx src/v2/module/cli.ts",
+    "api:v2": "tsx src/v2/api/server.ts",
     "doctor:v2": "tsx src/v2/db/doctor.ts",
     "discover:v2": "tsx src/v2/ingestion/discover.ts",
     "quality:v2": "tsx src/v2/quality/cli.ts"
