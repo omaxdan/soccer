@@ -30,7 +30,8 @@
 
 import type { PoolClient } from 'pg';
 import { withConnection, withRun } from '../db/tx';
-import { withPipelineRun } from '../operations/run';
+import { currentRun, withPipelineRun } from '../operations/run';
+import { recordEditionCoverage } from './coverage';
 import { installOperationalLayer } from '../operations/jobLifecycle';
 import { recordWrite } from '../operations/writeRecord';
 import { buildDiagnostic } from '../operations/failure';
@@ -542,6 +543,15 @@ export async function ingestSeason(
 
       const selected = [...sweep.last.events, ...sweep.next.events];
 
+      // A window is definitively covered only when NEITHER direction stopped on
+      // budget exhaustion; every other terminal reason (BEYOND_WINDOW,
+      // HAS_NEXT_PAGE_FALSE, EMPTY_PAGE, NOT_FOUND) means the window was walked to
+      // its end. A budget-truncated run may still commit, but its coverage is
+      // partial — complete=false (Gate 6B).
+      const windowExhausted =
+        sweep.last.stoppedBecause !== 'BUDGET_EXHAUSTED' &&
+        sweep.next.stoppedBecause !== 'BUDGET_EXHAUSTED';
+
       // FETCHED OUTSIDE THE TRANSACTION, like the walk, for the same reason: a
       // database transaction must not be held open across a network request.
       let standingsResponse: Awaited<ReturnType<typeof fetchSeasonStandings>> | null = null;
@@ -611,6 +621,27 @@ export async function ingestSeason(
           // authorization lock.
           if (options.verifyBeforeCommit) {
             await options.verifyBeforeCommit(tx);
+          }
+
+          // COVERAGE ATTESTATION, LAST — AFTER the Gate 4 guard, BEFORE the return
+          // that commits (Gate 6B). Appended on THIS transaction, so it commits iff
+          // the football writes commit and the guard passed, and rolls back with
+          // them otherwise. Written only when an edition resolved (nothing to attest
+          // otherwise); coverage is evidence, never authorization.
+          const run = currentRun();
+          if (competitionEditionId && run) {
+            await recordEditionCoverage(tx, {
+              competitionEditionId,
+              providerCode: PROVIDER_CODE,
+              competitionProviderId: options.competitionProviderId,
+              seasonProviderId: options.seasonProviderId,
+              fromDate: utcDateString(options.from),
+              toDate: utcDateString(options.to),
+              complete: windowExhausted,
+              eventsCommitted: selected.length,
+              pipelineRunId: run.id,
+              runOccurredAt: run.occurredAt,
+            });
           }
 
           return written;

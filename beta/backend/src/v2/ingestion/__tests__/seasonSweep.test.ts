@@ -810,3 +810,122 @@ describe('Gate 4 · at-commit authorization (requires a V2 database)', { skip: !
     assert.ok(await fixtureExists(fixtureId), 'a plain ingestSeason still commits');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GATE 6B — coverage attestation is atomic with the season write (requires a DB)
+//
+// Proves: a committed governed run appends exactly one coverage row for the
+// edition (correct covered_period, complete, events, run reference); a revoked run
+// rolls back and appends NO coverage row. Coverage is append-only (DELETE is
+// guarded), so assertions are scoped by before/after counts rather than cleanup.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Gate 6B · coverage attestation (requires a V2 database)', { skip: !hasDatabase }, () => {
+  const COMP = '90426';
+  const SEASON = '90779';
+  const WINDOW = { from: new Date('2026-05-31T00:00:00Z'), to: new Date('2026-08-11T00:00:00Z') };
+
+  const seedGovernance = (authorized: boolean) =>
+    withConnection('pt_pipeline_ingestion', async (tx) => {
+      await tx.query(`DELETE FROM governance.tracked_edition te USING governance.tracked_competition tc
+                       WHERE te.tracked_competition_id = tc.id AND tc.provider_external_id = $1`, [COMP]);
+      await tx.query(`DELETE FROM governance.tracked_competition WHERE provider_external_id = $1`, [COMP]);
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO governance.tracked_competition
+           (provider_code, provider_external_id, tracking_status_code, competition_type_code, competition_scope_code)
+         VALUES ('SPORTSAPI_API', $1, 'TRACKED', 'LEAGUE', 'DOMESTIC') RETURNING id::text`, [COMP]);
+      await tx.query(
+        `INSERT INTO governance.tracked_edition
+           (tracked_competition_id, provider_season_external_id, edition_status_code, authorized_for_ingestion, season_period)
+         VALUES ($1, $2, 'ACTIVE', $3, daterange('2026-01-01','2027-01-01'))`,
+        [rows[0].id, SEASON, authorized]
+      );
+    });
+
+  after(async () => {
+    await withConnection('pt_pipeline_ingestion', async (tx) => {
+      await tx.query(`DELETE FROM football.fixture WHERE provider_external_id LIKE 'G6B-%'`).catch(() => undefined);
+      await tx.query(`DELETE FROM governance.tracked_edition te USING governance.tracked_competition tc
+                       WHERE te.tracked_competition_id = tc.id AND tc.provider_external_id = $1`, [COMP]).catch(() => undefined);
+      await tx.query(`DELETE FROM governance.tracked_competition WHERE provider_external_id = $1`, [COMP]).catch(() => undefined);
+      // NB: coverage rows are append-only (guarded) and intentionally not deleted.
+    });
+  });
+
+  function onePage(fixtureId: string) {
+    return {
+      async get<T>() { return { standings: [] } as T; },
+      async getObserved<T>(key: EndpointKey, params: Record<string, string | number>) {
+        return {
+          endpointKey: key, path: '(stub)', url: '(stub)', parameters: params,
+          status: 200, attempts: 1, quotaRemaining: 91,
+          data: { data: { hasNextPage: false, events: key === 'tournament_season_events_last' ? [{
+            id: fixtureId,
+            startTimestamp: Math.floor(Date.UTC(2026, 6, 20, 18, 0) / 1000),
+            tournament: { id: 83, uniqueTournament: { id: Number(COMP), name: 'G6B League', category: { name: 'Brazil' } } },
+            season: { id: Number(SEASON), name: 'G6B 2026', year: '2026' },
+            roundInfo: { round: 1 },
+            homeTeam: { id: 'G6B-H', name: 'G6B Home', country: { name: 'Brazil' } },
+            awayTeam: { id: 'G6B-A', name: 'G6B Away', country: { name: 'Brazil' } },
+            status: { code: 100, description: 'Ended' }, winnerCode: 1,
+            homeScore: { current: 2 }, awayScore: { current: 1 },
+          }] : [] } } as T,
+        } as ProviderObservation<T>;
+      },
+      async flushUsage() { return 0; },
+    } as unknown as ProviderClient;
+  }
+
+  const coverageRowsForSeason = async (): Promise<number> => {
+    const { rows } = await withConnection('pt_pipeline_ingestion', (tx) =>
+      tx.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM operations.edition_ingestion_coverage WHERE provider_season_external_id = $1`,
+        [SEASON]));
+    return Number(rows[0].n);
+  };
+
+  it('G6B-1. a committed governed run appends exactly one coverage attestation', async () => {
+    await seedGovernance(true);
+    const before = await coverageRowsForSeason();
+    const report = await ingestSeason({
+      competitionProviderId: COMP, seasonProviderId: SEASON, ...WINDOW, maxCalls: 4,
+      client: onePage(`G6B-OK-${Date.now()}`),
+      verifyBeforeCommit: makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: COMP, seasonProviderId: SEASON }),
+    });
+    assert.equal(report.failed, false);
+    assert.equal(await coverageRowsForSeason(), before + 1, 'exactly one coverage row appended');
+
+    const { rows } = await withConnection('pt_pipeline_ingestion', (tx) =>
+      tx.query<{ edition: string; run: string; lo: string; hi: string; complete: boolean; events: number }>(
+        `SELECT cov.competition_edition_id::text AS edition,
+                cov.pipeline_run_id::text        AS run,
+                lower(cov.covered_period)::text  AS lo,
+                upper(cov.covered_period)::text  AS hi,
+                cov.complete                     AS complete,
+                cov.events_committed             AS events
+           FROM operations.edition_ingestion_coverage cov
+          WHERE cov.provider_season_external_id = $1
+          ORDER BY cov.occurred_at DESC, cov.id DESC
+          LIMIT 1`, [SEASON]));
+    const cov = rows[0];
+    assert.equal(cov.edition, report.competitionEditionId, 'references the resolved edition');
+    assert.ok(Number(cov.run) > 0, 'references a real pipeline run');
+    assert.equal(cov.lo, '2026-05-31', 'covered_period lower = --from');
+    assert.equal(cov.hi, '2026-08-12', 'covered_period upper = --to + 1 (half-open)');
+    assert.equal(cov.complete, true, 'window definitively exhausted (no budget truncation)');
+    assert.equal(cov.events, 1, 'events_committed = events selected into the committed writes');
+  });
+
+  it('G6B-2. a revoked run rolls back and appends NO coverage row', async () => {
+    await seedGovernance(false);
+    const before = await coverageRowsForSeason();
+    await assert.rejects(
+      ingestSeason({
+        competitionProviderId: COMP, seasonProviderId: SEASON, ...WINDOW, maxCalls: 4,
+        client: onePage(`G6B-REVOKED-${Date.now()}`),
+        verifyBeforeCommit: makeAtCommitAuthorizationGuard({ providerCode: 'SPORTSAPI_API', competitionProviderId: COMP, seasonProviderId: SEASON }),
+      }),
+      (e: unknown) => e instanceof GovernanceRevokedError
+    );
+    assert.equal(await coverageRowsForSeason(), before, 'coverage did not advance for a rolled-back run');
+  });
+});
