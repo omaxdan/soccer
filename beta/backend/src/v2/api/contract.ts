@@ -88,6 +88,18 @@ export interface EditionFixtureListResponse {
   readonly fixtures: readonly ApiEditionFixture[];
 }
 
+/** One tracked/materialized edition, for the league-entry list. */
+export interface ApiEditionSummary {
+  readonly id: string;
+  readonly seasonLabel: string;
+  readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+  readonly fixtureCount: number;
+}
+
+export interface EditionListResponse {
+  readonly editions: readonly ApiEditionSummary[];
+}
+
 /** Uniform error body. */
 export interface ApiError {
   readonly error: string;

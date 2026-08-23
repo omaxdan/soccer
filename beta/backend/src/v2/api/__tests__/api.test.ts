@@ -53,6 +53,7 @@ describe('v2 api · id validation and routing', () => {
   test('resolveRoute maps method + path to intent', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/18'), { kind: 'match', id: '18' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/fixtures'), { kind: 'editionFixtures', id: '42' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/editions'), { kind: 'editionList' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18'), { kind: 'notFound' });
@@ -94,6 +95,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     const deps: ApiDeps = {
       getMatch: async (id) => { matchCalls.push(id); return id === '18' ? { match: { fixtureId: '18' } } : null; },
       getEdition: async (id) => { editionCalls.push(id); return id === '42' ? { edition: { id: '42' }, fixtures: [] } : null; },
+      getEditions: async () => ({ editions: [{ id: '42', seasonLabel: 'S', competition: { id: '1', name: 'L', slug: 'l' }, fixtureCount: 3 }] }),
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -123,6 +125,12 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     const res = await fetch(`${base}/api/v2/editions/43/fixtures`);
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: 'edition_not_found' });
+  });
+
+  it('GET the edition list → 200 with editions', async () => {
+    const res = await fetch(`${base}/api/v2/editions`);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json() as any).editions[0].id, '42');
   });
 
   it('unknown path → 404 not_found; POST → 405; invalid id → 400', async () => {
@@ -298,6 +306,14 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     const completed = body.fixtures.find((f: any) => f.score !== null);
     assert.ok(completed, 'a completed fixture carries a score');
     assert.ok(body.fixtures.every((f: any) => f.homeTeam.id && f.awayTeam.id && f.status));
+  });
+
+  it('GET the edition list → 200 including the seeded edition with its fixture count', async () => {
+    const body = await (await fetch(`${base}/api/v2/editions`)).json() as any;
+    const mine = body.editions.find((e: any) => e.id === editionId);
+    assert.ok(mine, 'the seeded edition appears in the list');
+    assert.equal(mine.competition.name, 'B2 League');
+    assert.ok(mine.fixtureCount >= 4, 'reports its materialized fixture count');
   });
 
   it('unknown match id → 404; unknown edition id → 404', async () => {

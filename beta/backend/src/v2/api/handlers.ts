@@ -18,6 +18,7 @@ import { readActiveMatchReadings, type TeamModuleReading } from '../module/read/
 import type {
   MatchDetailResponse,
   EditionFixtureListResponse,
+  EditionListResponse,
   ApiTeamIntelligence,
   ApiModuleReading,
   ApiFormFixture,
@@ -191,6 +192,43 @@ const EDITION_FIXTURES_SQL = `
    WHERE f.competition_edition_id = $1::bigint
    ORDER BY f.scheduled_kickoff_at, f.id
 `;
+
+interface EditionSummaryRow {
+  edition_id: string;
+  season_label: string;
+  competition_id: string;
+  competition_name: string;
+  competition_slug: string;
+  fixture_count: string;
+}
+
+const EDITION_LIST_SQL = `
+  SELECT e.id::text AS edition_id, e.season_label AS season_label,
+         c.id::text AS competition_id, c.name AS competition_name, c.slug AS competition_slug,
+         count(f.id)::text AS fixture_count
+    FROM football.competition_edition e
+    JOIN football.competition c ON c.id = e.competition_id
+    JOIN football.fixture f     ON f.competition_edition_id = e.id
+   GROUP BY e.id, e.season_label, c.id, c.name, c.slug
+   ORDER BY c.name, e.season_label
+`;
+
+/**
+ * Lists the editions that have materialized fixtures — the real, openable leagues
+ * for the entry surface. Read-only; the smallest honest discovery mechanism (no
+ * governance exposure, no writes).
+ */
+export async function getEditions(tx: PoolClient): Promise<EditionListResponse> {
+  const rows = await tx.query<EditionSummaryRow>(EDITION_LIST_SQL);
+  return {
+    editions: rows.rows.map((e) => ({
+      id: e.edition_id,
+      seasonLabel: e.season_label,
+      competition: { id: e.competition_id, name: e.competition_name, slug: e.competition_slug },
+      fixtureCount: Number(e.fixture_count),
+    })),
+  };
+}
 
 /** Lists an edition's fixtures for a league page, or null when the edition does not exist. */
 export async function getEditionFixtures(tx: PoolClient, editionId: string): Promise<EditionFixtureListResponse | null> {

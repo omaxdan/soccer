@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getEditionFixtures, isValidId } from './handlers';
+import { getMatchDetail, getEditionFixtures, getEditions, isValidId } from './handlers';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -29,14 +29,17 @@ export const DEFAULT_API_PORT = 8787;
 export interface ApiDeps {
   readonly getMatch: (id: string) => Promise<unknown | null>;
   readonly getEdition: (id: string) => Promise<unknown | null>;
+  readonly getEditions: () => Promise<unknown>;
 }
 
 const productionDeps: ApiDeps = {
   getMatch: (id) => withConnection(API_ROLE, (tx: PoolClient) => getMatchDetail(tx, id)),
   getEdition: (id) => withConnection(API_ROLE, (tx: PoolClient) => getEditionFixtures(tx, id)),
+  getEditions: () => withConnection(API_ROLE, (tx: PoolClient) => getEditions(tx)),
 };
 
 export type Route =
+  | { kind: 'editionList' }
   | { kind: 'match'; id: string }
   | { kind: 'editionFixtures'; id: string }
   | { kind: 'badRequest' }
@@ -45,10 +48,12 @@ export type Route =
 
 /** Pure router — matches method + pathname to an intent. No I/O. */
 export function resolveRoute(method: string | undefined, pathname: string): Route {
+  const isEditionList = pathname === '/api/v2/editions';
   const match = pathname.match(/^\/api\/v2\/matches\/([^/]+)$/);
   const editionFixtures = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/fixtures$/);
-  if (!match && !editionFixtures) return { kind: 'notFound' };
+  if (!isEditionList && !match && !editionFixtures) return { kind: 'notFound' };
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
+  if (isEditionList) return { kind: 'editionList' };
   if (match) {
     const id = decodeURIComponent(match[1]);
     return isValidId(id) ? { kind: 'match', id } : { kind: 'badRequest' };
@@ -75,6 +80,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         return sendJson(res, 405, { error: 'method_not_allowed' });
       case 'badRequest':
         return sendJson(res, 400, { error: 'invalid_id' });
+      case 'editionList':
+        return sendJson(res, 200, await deps.getEditions());
       case 'match': {
         const body = await deps.getMatch(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'match_not_found' });
