@@ -63,10 +63,39 @@ export interface ApiMatchHeader {
   readonly score: ApiScore | null;
 }
 
+/**
+ * One persisted feature value, projected for the wire. Null means "no value yet".
+ * `value` is the raw persisted number (never fabricated); `sampleMeetsThreshold`
+ * distinguishes a low-sample value from a trusted one. Direction/units are the
+ * feature's established semantics — see ApiTeamFeatures.
+ */
+export interface ApiFeatureValue {
+  readonly value: number;
+  readonly sampleObservationCount: number;
+  readonly sampleMeetsThreshold: boolean;
+  readonly asOf: string;                    // ISO-8601
+}
+
+/**
+ * The five ALL_COMPETITIONS features the Team Intelligence panel compares, per team.
+ * Any may be null when not yet computed (e.g. momentum needs 10 completed fixtures).
+ * Established semantics: homeForm/awayForm 0-100 higher-better; momentum Δ points
+ * higher-better; rest days-since-last-fixture higher-better; congestion 0-100
+ * higher-worse.
+ */
+export interface ApiTeamFeatures {
+  readonly homeForm: ApiFeatureValue | null;
+  readonly awayForm: ApiFeatureValue | null;
+  readonly momentum: ApiFeatureValue | null;
+  readonly rest: ApiFeatureValue | null;
+  readonly congestion: ApiFeatureValue | null;
+}
+
 export interface MatchDetailResponse {
   readonly match: ApiMatchHeader;
   readonly form: { readonly home: readonly ApiFormFixture[]; readonly away: readonly ApiFormFixture[] };
   readonly intelligence: { readonly home: ApiTeamIntelligence; readonly away: ApiTeamIntelligence };
+  readonly teamFeatures: { readonly home: ApiTeamFeatures; readonly away: ApiTeamFeatures };
 }
 
 /** One fixture in a league/edition list. */

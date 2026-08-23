@@ -17,7 +17,8 @@ import type { Server } from 'node:http';
 import type { PoolClient } from 'pg';
 
 import { resolveRoute, createServer, type ApiDeps } from '../server';
-import { isValidId, mapIntelligence } from '../handlers';
+import { isValidId, mapIntelligence, mapTeamFeatures } from '../handlers';
+import type { TeamFeatureValue } from '../../feature/read/currentValues';
 import type { TeamModuleReading } from '../../module/read/readings';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
@@ -82,6 +83,39 @@ describe('v2 api · intelligence mapping (missing readings → null, never fabri
   test('no readings at all → all null', () => {
     const out = mapIntelligence([], '10', '11');
     assert.deepEqual(out, { home: { readiness: null, homeAwaySplit: null }, away: { readiness: null, homeAwaySplit: null } });
+  });
+});
+
+describe('v2 api · team-feature mapping (missing values → null, never fabricated)', () => {
+  const fv = (teamId: string, featureKey: string, value: number): TeamFeatureValue => ({
+    featureKey, teamId, contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
+    value, sampleObservationCount: 8, sampleMeetsThreshold: true, asOf: new Date('2027-06-01T00:00:00Z'),
+  });
+
+  test('present features map to the named slots; absent ones are null', () => {
+    const values = [fv('10', 'team.home_form', 73), fv('10', 'team.momentum', 15), fv('11', 'team.rest_advantage', 4)];
+    const out = mapTeamFeatures(values, '10', '11');
+    assert.equal(out.home.homeForm?.value, 73);
+    assert.equal(out.home.momentum?.value, 15);
+    assert.equal(out.home.awayForm, null, 'no away_form for home team → null');
+    assert.equal(out.home.rest, null);
+    assert.equal(out.home.congestion, null);
+    assert.equal(out.away.rest?.value, 4);
+    assert.equal(out.away.homeForm, null);
+  });
+
+  test('a zero value is preserved, not treated as missing', () => {
+    const out = mapTeamFeatures([fv('10', 'team.momentum', 0)], '10', '11');
+    assert.equal(out.home.momentum?.value, 0);
+    assert.notEqual(out.home.momentum, null);
+  });
+
+  test('no values at all → every slot null', () => {
+    const out = mapTeamFeatures([], '10', '11');
+    assert.deepEqual(out, {
+      home: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null },
+      away: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null },
+    });
   });
 });
 
@@ -226,6 +260,14 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
       await writeValues(tx, registry, [
         { featureKey: 'team.momentum', teamId: teamA, asOf: AS_OF, value: fromInt(15), sampleObservationCount: 8, consumed: [] },
         { featureKey: 'team.momentum', teamId: teamB, asOf: AS_OF, value: fromInt(-5), sampleObservationCount: 8, consumed: [] },
+        // Team Intelligence panel features (ALL_COMPETITIONS). teamB omits congestion → null in the panel.
+        { featureKey: 'team.home_form', teamId: teamA, asOf: AS_OF, value: fromInt(73), sampleObservationCount: 8, consumed: [] },
+        { featureKey: 'team.away_form', teamId: teamA, asOf: AS_OF, value: fromInt(41), sampleObservationCount: 8, consumed: [] },
+        { featureKey: 'team.rest_advantage', teamId: teamA, asOf: AS_OF, value: fromInt(6), sampleObservationCount: 1, consumed: [] },
+        { featureKey: 'team.congestion_index', teamId: teamA, asOf: AS_OF, value: fromInt(20), sampleObservationCount: 3, consumed: [] },
+        { featureKey: 'team.home_form', teamId: teamB, asOf: AS_OF, value: fromInt(55), sampleObservationCount: 8, consumed: [] },
+        { featureKey: 'team.away_form', teamId: teamB, asOf: AS_OF, value: fromInt(50), sampleObservationCount: 8, consumed: [] },
+        { featureKey: 'team.rest_advantage', teamId: teamB, asOf: AS_OF, value: fromInt(3), sampleObservationCount: 1, consumed: [] },
       ], AS_OF);
     });
     await withConnection(MODULE_ROLE, async (tx) => {
@@ -270,6 +312,14 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     assert.equal(body.intelligence.away.homeAwaySplit.moduleKey, 'home_away_split');
     // scope: readiness ALL_COMPETITIONS (verified by presence for the team); home_away split reflects A's 80/20
     assert.equal(body.intelligence.home.homeAwaySplit.status, 'SUPPORTS');
+    // TEAM FEATURES panel — persisted values surfaced per team, missing ones null.
+    assert.equal(body.teamFeatures.home.homeForm.value, 73);
+    assert.equal(body.teamFeatures.home.awayForm.value, 41);
+    assert.equal(body.teamFeatures.home.momentum.value, 15);
+    assert.equal(body.teamFeatures.home.rest.value, 6);
+    assert.equal(body.teamFeatures.home.congestion.value, 20);
+    assert.equal(body.teamFeatures.away.momentum.value, -5, 'negative value preserved');
+    assert.equal(body.teamFeatures.away.congestion, null, 'team B has no congestion value → null, not zero');
   });
 
   it('home_away_split respects the competition-edition scope; readiness is ALL_COMPETITIONS', async () => {
@@ -295,6 +345,9 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     assert.deepEqual(body.intelligence.away, { readiness: null, homeAwaySplit: null });
     assert.equal(body.form.home.length, 0);
     assert.equal(body.form.away.length, 0);
+    // No feature values for these teams → every panel slot null (never fabricated).
+    assert.deepEqual(body.teamFeatures.home, { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null });
+    assert.deepEqual(body.teamFeatures.away, { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null });
   });
 
   it('GET the edition fixtures → 200 with every fixture, teams, status and score', async () => {

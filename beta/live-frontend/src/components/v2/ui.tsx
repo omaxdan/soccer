@@ -1,7 +1,7 @@
 // V2 UI PRIMITIVES — small presentational components for the V2 analysis views.
 // Read-only rendering of V2 API data. No data fetching, no calculation, no V1.
 
-import type { ApiScore, ApiModuleReading, ApiFormFixture } from '@/lib/v2/types';
+import type { ApiScore, ApiModuleReading, ApiFormFixture, ApiFeatureValue, ApiTeamFeatures } from '@/lib/v2/types';
 import { formResult } from '@/lib/v2/types';
 
 /** UTC kickoff, rendered compactly and unambiguously. */
@@ -111,5 +111,91 @@ export function EmptyState({ message }: { message: string }) {
     <div className="panel" style={{ padding: 24, textAlign: 'center' }}>
       <p style={{ color: 'var(--muted)' }}>{message}</p>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAM INTELLIGENCE COMPARISON PANEL
+// Surfaces persisted feature values (already computed by the V2 feature pipeline)
+// as a home-vs-away comparison. It performs NO calculation — it displays values,
+// applies the feature's ESTABLISHED direction only to highlight the leading side,
+// and shows an honest state for missing / low-sample data. Never fabricates a
+// value and never invents a composite score.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** direction 'up' = higher is better; 'down' = higher is worse (established semantics). */
+type Direction = 'up' | 'down';
+interface MetricSpec {
+  label: string;
+  unit: string;
+  pick: (f: ApiTeamFeatures) => ApiFeatureValue | null;
+  direction: Direction;
+}
+const METRICS: MetricSpec[] = [
+  { label: 'Home form', unit: '/100', pick: (f) => f.homeForm, direction: 'up' },
+  { label: 'Away form', unit: '/100', pick: (f) => f.awayForm, direction: 'up' },
+  { label: 'Momentum', unit: 'pts', pick: (f) => f.momentum, direction: 'up' },
+  { label: 'Rest', unit: 'days', pick: (f) => f.rest, direction: 'up' },
+  { label: 'Congestion', unit: '/100', pick: (f) => f.congestion, direction: 'down' },
+];
+
+/** Rounds for display without inventing precision the value doesn't carry. */
+function show(v: ApiFeatureValue): string {
+  const n = v.value;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/** Which side leads on a metric per its established direction; null when not comparable. */
+function leader(home: ApiFeatureValue | null, away: ApiFeatureValue | null, dir: Direction): 'home' | 'away' | null {
+  if (!home || !away) return null;
+  if (home.value === away.value) return null;
+  const homeBetter = dir === 'up' ? home.value > away.value : home.value < away.value;
+  return homeBetter ? 'home' : 'away';
+}
+
+function Cell({ v, lead }: { v: ApiFeatureValue | null; lead: boolean }) {
+  if (!v) {
+    return <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 11 }}>Not enough data</span>;
+  }
+  const low = !v.sampleMeetsThreshold;
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'inherit' }}>
+      <span className="mono tnum" style={{ fontSize: 16, fontWeight: lead ? 700 : 500, color: lead ? 'var(--edge)' : 'var(--text)' }}>
+        {show(v)}
+      </span>
+      {low && <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>low sample ({v.sampleObservationCount})</span>}
+    </span>
+  );
+}
+
+export function TeamIntelligencePanel({ home, away, homeName, awayName }: { home: ApiTeamFeatures; away: ApiTeamFeatures; homeName: string; awayName: string }) {
+  return (
+    <section aria-label="team intelligence comparison" className="panel" style={{ padding: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'baseline', marginBottom: 8 }}>
+        <span className="label-cap" style={{ textAlign: 'right', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeName}</span>
+        <span className="eyebrow" style={{ fontSize: 10 }} />
+        <span className="label-cap" style={{ textAlign: 'left', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayName}</span>
+      </div>
+      <div role="table" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {METRICS.map((m) => {
+          const h = m.pick(home);
+          const a = m.pick(away);
+          const lead = leader(h, a, m.direction);
+          return (
+            <div role="row" key={m.label} className="hairline" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center', padding: '6px 0' }}>
+              <div style={{ textAlign: 'right' }}><Cell v={h} lead={lead === 'home'} /></div>
+              <div style={{ textAlign: 'center', minWidth: 96 }}>
+                <span className="label-cap" style={{ color: 'var(--muted)' }}>{m.label}</span>
+                <span className="label-cap" style={{ display: 'block', color: 'var(--faint)', fontSize: 9 }}>{m.unit}{m.direction === 'down' ? ' · lower better' : ''}</span>
+              </div>
+              <div style={{ textAlign: 'left' }}><Cell v={a} lead={lead === 'away'} /></div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 8 }}>
+        Supporting evidence — persisted V2 feature values. Highlight marks the stronger side per metric.
+      </p>
+    </section>
   );
 }

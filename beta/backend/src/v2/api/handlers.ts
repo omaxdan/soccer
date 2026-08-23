@@ -14,13 +14,16 @@
 
 import type { PoolClient } from 'pg';
 import { readCompletedFixtures } from '../feature/read/fixtures';
+import { readCurrentTeamFeatures, TEAM_PANEL_FEATURE_KEYS, type TeamFeatureValue } from '../feature/read/currentValues';
 import { readActiveMatchReadings, type TeamModuleReading } from '../module/read/readings';
 import type {
   MatchDetailResponse,
   EditionFixtureListResponse,
   EditionListResponse,
   ApiTeamIntelligence,
+  ApiTeamFeatures,
   ApiModuleReading,
+  ApiFeatureValue,
   ApiFormFixture,
   ApiScore,
 } from './contract';
@@ -47,6 +50,34 @@ function toReadingDto(r: TeamModuleReading): ApiModuleReading {
     verdictText: r.verdictText,
     inactiveReason: r.inactiveReason,
   };
+}
+
+function toFeatureDto(v: TeamFeatureValue): ApiFeatureValue {
+  return { value: v.value, sampleObservationCount: v.sampleObservationCount, sampleMeetsThreshold: v.sampleMeetsThreshold, asOf: iso(v.asOf) };
+}
+
+/**
+ * Pure mapping of the flat feature list into per-team panel features. A feature
+ * with no persisted value for a team is `null` — never fabricated, never zeroed.
+ * Exported so the "missing value" semantics are unit-testable without a database.
+ */
+export function mapTeamFeatures(
+  values: readonly TeamFeatureValue[],
+  homeTeamId: string,
+  awayTeamId: string
+): { home: ApiTeamFeatures; away: ApiTeamFeatures } {
+  const pick = (teamId: string, featureKey: string): ApiFeatureValue | null => {
+    const found = values.find((v) => v.teamId === teamId && v.featureKey === featureKey);
+    return found ? toFeatureDto(found) : null;
+  };
+  const forTeam = (teamId: string): ApiTeamFeatures => ({
+    homeForm: pick(teamId, 'team.home_form'),
+    awayForm: pick(teamId, 'team.away_form'),
+    momentum: pick(teamId, 'team.momentum'),
+    rest: pick(teamId, 'team.rest_advantage'),
+    congestion: pick(teamId, 'team.congestion_index'),
+  });
+  return { home: forTeam(homeTeamId), away: forTeam(awayTeamId) };
 }
 
 /**
@@ -134,6 +165,12 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     competitionEditionId: h.edition_id,
     asOf,
   });
+  // Team Intelligence panel features — persisted, as of the same kickoff boundary.
+  const features = await readCurrentTeamFeatures(tx, {
+    teamIds: [h.home_id, h.away_id],
+    asOf,
+    featureKeys: [...TEAM_PANEL_FEATURE_KEYS],
+  });
 
   return {
     match: {
@@ -151,6 +188,7 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
       away: toFormFixtures(form.get(h.away_id)),
     },
     intelligence: mapIntelligence(readings, h.home_id, h.away_id),
+    teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),
   };
 }
 

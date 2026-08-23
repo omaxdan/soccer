@@ -41,10 +41,26 @@ export interface ApiMatchHeader {
   score: ApiScore | null;
 }
 
+export interface ApiFeatureValue {
+  value: number;
+  sampleObservationCount: number;
+  sampleMeetsThreshold: boolean;
+  asOf: string;
+}
+
+export interface ApiTeamFeatures {
+  homeForm: ApiFeatureValue | null;
+  awayForm: ApiFeatureValue | null;
+  momentum: ApiFeatureValue | null;
+  rest: ApiFeatureValue | null;
+  congestion: ApiFeatureValue | null;
+}
+
 export interface MatchDetailResponse {
   match: ApiMatchHeader;
   form: { home: ApiFormFixture[]; away: ApiFormFixture[] };
   intelligence: { home: ApiTeamIntelligence; away: ApiTeamIntelligence };
+  teamFeatures: { home: ApiTeamFeatures; away: ApiTeamFeatures };
 }
 
 export interface ApiEditionFixture {

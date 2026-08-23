@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchMatch } from '@/lib/v2/api';
-import { Kickoff, StatusChip, Score, FormStrip, ReadingCard } from '@/components/v2/ui';
+import { Kickoff, StatusChip, Score, FormStrip, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import type { ApiTeamIntelligence } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ export default async function V2MatchPage({ params }: { params: Promise<{ matchI
   const { matchId } = await params;
   const data = await fetchMatch(matchId);
   if (!data) notFound();
-  const { match, form, intelligence } = data;
+  const { match, form, intelligence, teamFeatures } = data;
 
   return (
     <main className="space-y-5" style={{ maxWidth: 820, margin: '0 auto', padding: 16 }}>
@@ -62,6 +62,12 @@ export default async function V2MatchPage({ params }: { params: Promise<{ matchI
           <TeamIntel name={match.homeTeam.name} intel={intelligence.home} />
           <TeamIntel name={match.awayTeam.name} intel={intelligence.away} />
         </div>
+      </section>
+
+      {/* TEAM INTELLIGENCE — supporting evidence: persisted feature comparison */}
+      <section className="space-y-3">
+        <p className="eyebrow">Team intelligence</p>
+        <TeamIntelligencePanel home={teamFeatures.home} away={teamFeatures.away} homeName={match.homeTeam.name} awayName={match.awayTeam.name} />
       </section>
     </main>
   );
