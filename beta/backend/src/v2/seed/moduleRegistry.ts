@@ -211,6 +211,28 @@ const MODULES: readonly ModuleSeed[] = [
     outcomeDimension: 'MATCH_RESULT',
     isActive: true,
     v1Key: 'form_gap',
+    // D-2 amendment for the second FIXTURE-subject comparison module (S-6.x form
+    // governance gate). BYTE-IDENTICAL to migration 029, so a fresh seed and a
+    // migrated database converge.
+    versionRationale:
+      '1.0.0. Status rule (D-2, stated here): gap = home_team.home_form - away_team.away_form '
+      + '(venue-specific form index); SUPPORTS when gap > 0 (home’s venue form stronger), CONTRADICTS '
+      + 'when gap < 0 (away’s venue form stronger), NEUTRAL when gap = 0 - the module’s own '
+      + 'characterisation (doc 56 C-2); the favoured side is carried in verdict_text, with no '
+      + 'orientation column (doc 56 C-3). A SIGNED COMPARISON, deliberately NOT the V1 form_gap rule: '
+      + 'V1’s Banker/Strong/Lean/Coin-flip bands and pickSide selection are not reproduced - LC-71 bars '
+      + 'a selection, magnitude significance is an S-9 calibration concern rather than a fabricated '
+      + 'threshold, and no probability or betting interpretation is made. FIXTURE-subject (D-4), '
+      + 'consuming the home team’s team.home_form and the away team’s team.away_form - each club’s '
+      + 'venue-appropriate form for THIS fixture, a different question from the Home/Away Split module '
+      + '(one team’s own home-vs-away disparity), so the two are not duplicate calculations. The two '
+      + 'per-side inputs are two declared inputs (D-4a), so declared_input_count = 2. Threshold: each '
+      + 'feature’s own minimum_sample_observation_count = 5 governs sufficiency; no module threshold is '
+      + 'fabricated. Observation-count rule: sample_observation_count = MIN(consumed) across both sides '
+      + '(D-5c-i). Either side’s form absent makes the reading INACTIVE; no zero substitution and no '
+      + 'fabricated value, and a below-threshold value stays below threshold, never silently upgraded. '
+      + 'Values are compared at the feature’s declared scale, with no rounding beyond the definition’s. '
+      + 'strength, confidence and published_baseline_id are NULL at 1.0.0 (D-5a/D-5b; S-9 out of scope).',
   },
   {
     key: 'squad_stability',
