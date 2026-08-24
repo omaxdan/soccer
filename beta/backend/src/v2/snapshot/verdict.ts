@@ -39,14 +39,18 @@ export interface CitedFeatureValue {
   readonly contributionDirection: ContributionDirection;
 }
 
-/** A current engaged (spoke) reading selected for sealing. */
+/** A current engaged (spoke) reading selected for sealing. TEAM or FIXTURE subject. */
 export interface SpokeReading {
   readonly readingId: string;
   readonly readingAsOf: Date;
   readonly moduleKey: string;
   readonly moduleDefinitionId: string;
   readonly moduleVersionId: string;
-  readonly teamId: string;
+  readonly subjectKindCode: 'TEAM' | 'FIXTURE';
+  /** The team, for a TEAM reading; null for a FIXTURE reading. */
+  readonly teamId: string | null;
+  /** The fixture, for a FIXTURE reading; null for a TEAM reading. */
+  readonly fixtureId: string | null;
   readonly status: EngagedStatus;
   readonly sampleObservationCount: number;
   readonly sampleMeetsThreshold: boolean;

@@ -23,6 +23,7 @@ const reading = (moduleKey: string, teamId: string, status: EngagedStatus, over:
   readingId: String(++rid), readingAsOf: new Date('2027-07-01T00:00:00Z'), moduleKey,
   moduleDefinitionId: moduleKey === 'home_away_split' ? '1' : '2',
   moduleVersionId: moduleKey === 'home_away_split' ? '11' : '12',
+  subjectKindCode: 'TEAM', fixtureId: null,
   teamId, status, sampleObservationCount: 10, sampleMeetsThreshold: true,
   contextKindCode: moduleKey === 'home_away_split' ? 'COMPETITION_SCOPED' : 'ALL_COMPETITIONS',
   contextCompetitionEditionId: moduleKey === 'home_away_split' ? '42' : null,

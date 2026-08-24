@@ -178,7 +178,7 @@ describe('S-7 sealing over a real migrated database', { skip: !hasDatabase }, ()
     const { storedHex, recomputedHex } = await withConnection(MODULE, async (tx) => {
       const ms = (await tx.query<{ id: string; as_of: Date; checksum: Buffer }>(
         `SELECT id::text, snapshot_as_of as_of, content_checksum checksum FROM snapshot.match_snapshot WHERE fixture_id=$1 AND snapshot_point_code='KICKOFF'`, [fixtureId])).rows[0];
-      const spoke = await readSpokeReadings(tx, { teamIds: [teamA, teamB], asOf: ms.as_of, competitionEditionId: editionId });
+      const spoke = await readSpokeReadings(tx, { teamIds: [teamA, teamB], asOf: ms.as_of, competitionEditionId: editionId, fixtureId });
       const eligible = await readEligibleModules(tx);
       const [vv, cv2, kv] = await Promise.all([
         resolveVersionInForce(tx, 'module.verdict_composition_version', ms.as_of),

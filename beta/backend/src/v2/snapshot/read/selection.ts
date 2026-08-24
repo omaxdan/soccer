@@ -125,17 +125,25 @@ export async function readEligibleModules(tx: PoolClient): Promise<EligibleModul
   }));
 }
 
-// The current SPOKE reading per (team, module def, context) at or before the
-// ceiling — the same current-reading selection used everywhere in V2.
+// The current SPOKE reading per (subject, module def, context) at or before the
+// ceiling — the same current-reading selection used everywhere in V2, made
+// subject-aware (S-7.x): a TEAM reading belongs to a fixture team; a FIXTURE
+// reading belongs directly to the fixture. The DISTINCT ON key leads with the
+// subject columns so a TEAM reading can never suppress a FIXTURE one, and one
+// team's reading can never suppress the other's.
+//   $1 team ids, $2 as_of ceiling, $3 context edition | null, $4 fixture id
 const CURRENT_SPOKE_CTE = `
   WITH current_reading AS (
-    SELECT DISTINCT ON (mr.subject_team_id, mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id)
+    SELECT DISTINCT ON (mr.subject_kind_code, mr.subject_team_id, mr.subject_fixture_id,
+                        mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id)
            mr.id                                    AS reading_id,
            mr.as_of                                 AS reading_as_of,
            md.module_key                            AS module_key,
            mr.module_definition_id::text            AS module_definition_id,
            mr.module_version_id::text               AS module_version_id,
+           mr.subject_kind_code                     AS subject_kind_code,
            mr.subject_team_id::text                 AS team_id,
+           mr.subject_fixture_id::text              AS fixture_id,
            mr.module_status_code                    AS status,
            mr.sample_observation_count              AS sample_observation_count,
            mr.sample_meets_threshold                AS sample_meets_threshold,
@@ -143,21 +151,22 @@ const CURRENT_SPOKE_CTE = `
            mr.context_competition_edition_id::text  AS context_competition_edition_id
       FROM module.module_reading mr
       JOIN module.module_definition md ON md.id = mr.module_definition_id
-     WHERE mr.subject_kind_code = 'TEAM'
-       AND mr.subject_team_id = ANY($1::bigint[])
+     WHERE ((mr.subject_kind_code = 'TEAM' AND mr.subject_team_id = ANY($1::bigint[]))
+            OR (mr.subject_kind_code = 'FIXTURE' AND mr.subject_fixture_id = $4::bigint))
        AND mr.as_of <= $2::timestamptz
        AND mr.module_status_code <> 'INACTIVE'
        AND (mr.context_competition_edition_id IS NULL
             OR $3::bigint IS NULL
             OR mr.context_competition_edition_id = $3::bigint)
-     ORDER BY mr.subject_team_id, mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id,
+     ORDER BY mr.subject_kind_code, mr.subject_team_id, mr.subject_fixture_id,
+              mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id,
               mr.as_of DESC, mr.calculated_at DESC, mr.id DESC
   )
 `;
 
 interface ReadingRow {
   reading_id: string; reading_as_of: Date; module_key: string; module_definition_id: string;
-  module_version_id: string; team_id: string; status: string;
+  module_version_id: string; subject_kind_code: string; team_id: string | null; fixture_id: string | null; status: string;
   sample_observation_count: number; sample_meets_threshold: boolean;
   context_kind_code: string; context_competition_edition_id: string | null;
   declared_input_count: number; present_input_count: number;
@@ -179,22 +188,28 @@ interface CitedRow {
  */
 export async function readSpokeReadings(
   tx: PoolClient,
-  params: { readonly teamIds: readonly string[]; readonly asOf: Date; readonly competitionEditionId: string | null }
+  params: {
+    readonly teamIds: readonly string[];
+    readonly asOf: Date;
+    readonly competitionEditionId: string | null;
+    /** The fixture whose FIXTURE-subject readings are also selected (S-7.x). */
+    readonly fixtureId: string;
+  }
 ): Promise<SpokeReading[]> {
   if (params.teamIds.length === 0) return [];
-  const args = [params.teamIds, params.asOf, params.competitionEditionId];
+  const args = [params.teamIds, params.asOf, params.competitionEditionId, params.fixtureId];
 
   const readings = await tx.query<ReadingRow>(
     `${CURRENT_SPOKE_CTE}
      SELECT cr.reading_id, cr.reading_as_of, cr.module_key, cr.module_definition_id,
-            cr.module_version_id, cr.team_id, cr.status,
+            cr.module_version_id, cr.subject_kind_code, cr.team_id, cr.fixture_id, cr.status,
             cr.sample_observation_count, cr.sample_meets_threshold,
             cr.context_kind_code, cr.context_competition_edition_id,
             me.declared_input_count, me.present_input_count
        FROM current_reading cr
        JOIN module.module_evidence me
          ON me.module_reading_id = cr.reading_id AND me.reading_as_of = cr.reading_as_of
-      ORDER BY cr.team_id, cr.module_key`,
+      ORDER BY cr.subject_kind_code, cr.team_id, cr.fixture_id, cr.module_key`,
     args
   );
 
@@ -247,7 +262,9 @@ export async function readSpokeReadings(
     moduleKey: r.module_key,
     moduleDefinitionId: r.module_definition_id,
     moduleVersionId: r.module_version_id,
+    subjectKindCode: r.subject_kind_code as 'TEAM' | 'FIXTURE',
     teamId: r.team_id,
+    fixtureId: r.fixture_id,
     status: r.status as EngagedStatus,
     sampleObservationCount: Number(r.sample_observation_count),
     sampleMeetsThreshold: r.sample_meets_threshold,

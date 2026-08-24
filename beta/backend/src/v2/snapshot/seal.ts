@@ -164,6 +164,7 @@ export async function sealSnapshot(
       teamIds: [fixture.homeTeamId, fixture.awayTeamId],
       asOf: snapshotAsOf,
       competitionEditionId: fixture.competitionEditionId,
+      fixtureId: fixture.fixtureId,
     }),
     readEligibleModules(tx),
     tryResolveVersionInForce(tx, 'module.verdict_composition_version', snapshotAsOf),
