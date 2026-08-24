@@ -160,7 +160,8 @@ describe('rest_advantage — pure signed comparison and assembly', () => {
   });
 
   it('registration: rest is a FIXTURE calculator; the TEAM set is unchanged', () => {
-    assert.deepEqual([...FIXTURE_MODULE_CALCULATORS.map((c) => c.moduleKey)], ['rest_advantage']);
+    // form_gap_accuracy joined the FIXTURE set (S-6.x); rest_advantage is still present and first.
+    assert.ok(FIXTURE_MODULE_CALCULATORS.map((c) => c.moduleKey).includes('rest_advantage'));
     assert.deepEqual([...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(), ['home_away_split', 'readiness_tracker']);
   });
 });

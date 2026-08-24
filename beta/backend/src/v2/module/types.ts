@@ -104,14 +104,37 @@ export interface FixtureInputs {
 /**
  * A FIXTURE-subject module calculator — pure and deterministic.
  *
- * `inputFeatureKeys` names the features read for EACH side; the engine reads them
- * for both teams, so `declared_input_count = inputFeatureKeys.length * 2` (D-4a).
- * `evaluate` is called ONLY when every declared input is present for BOTH sides.
+ * By default the comparison is SYMMETRIC: `inputFeatureKeys` names the features
+ * read for EACH side, the engine reads them for both teams, and
+ * `declared_input_count = inputFeatureKeys.length * 2` (D-4a) — this is
+ * `rest_advantage` (both sides consume `team.rest_advantage`).
+ *
+ * A module whose sides consume DIFFERENT features declares them per side with the
+ * optional `homeInputFeatureKeys` / `awayInputFeatureKeys` (S-6.x form_gap_accuracy:
+ * the home side reads `team.home_form`, the away side `team.away_form`). When a
+ * per-side list is omitted it falls back to `inputFeatureKeys`, so the symmetric
+ * modules are byte-for-byte unchanged. `declared_input_count` is then
+ * `homeInputKeys.length + awayInputKeys.length`. `evaluate` is called ONLY when
+ * every declared input is present for its own side.
  */
 export interface FixtureModuleCalculator {
   readonly moduleKey: string;
   readonly subjectKind: 'FIXTURE';
   readonly contextKind: typeof CALCULATION_CONTEXT_KIND | typeof COMPETITION_SCOPED_CONTEXT_KIND;
   readonly inputFeatureKeys: readonly string[];
+  /** The features read for the HOME side; defaults to `inputFeatureKeys` (symmetric). */
+  readonly homeInputFeatureKeys?: readonly string[];
+  /** The features read for the AWAY side; defaults to `inputFeatureKeys` (symmetric). */
+  readonly awayInputFeatureKeys?: readonly string[];
   evaluate(inputs: FixtureInputs): ModuleFinding;
+}
+
+/** The features a FIXTURE calculator reads for the HOME side (per-side or symmetric default). */
+export function homeInputKeys(c: FixtureModuleCalculator): readonly string[] {
+  return c.homeInputFeatureKeys ?? c.inputFeatureKeys;
+}
+
+/** The features a FIXTURE calculator reads for the AWAY side (per-side or symmetric default). */
+export function awayInputKeys(c: FixtureModuleCalculator): readonly string[] {
+  return c.awayInputFeatureKeys ?? c.inputFeatureKeys;
 }

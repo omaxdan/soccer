@@ -233,8 +233,8 @@ describe('module readings · read surface over real readings (requires a V2 data
 
   it('runModulePipeline (the production entry the CLI wraps) runs and reports the implemented modules', async () => {
     const report = await runModulePipeline({ dryRun: true, replayFrom: AS_OF, replayTo: CEILING });
-    // The two TEAM modules plus the first FIXTURE comparison module (S-6.x).
-    assert.deepEqual([...report.modules].sort(), ['home_away_split', 'readiness_tracker', 'rest_advantage']);
+    // The two TEAM modules plus the two FIXTURE comparison modules (S-6.x).
+    assert.deepEqual([...report.modules].sort(), ['form_gap_accuracy', 'home_away_split', 'readiness_tracker', 'rest_advantage']);
     assert.equal(report.failures, 0);
   });
 

@@ -44,6 +44,8 @@ import {
 import { selectFixtureBatches, type FixtureBatch } from './driver/fixtureEligibility';
 import {
   MODULE_STATUS,
+  homeInputKeys,
+  awayInputKeys,
   type ConsumedFeature,
   type ModuleCalculator,
   type FixtureModuleCalculator,
@@ -60,6 +62,7 @@ import { writeReading, type ReadingToWrite } from './write/readings';
 import { homeAwaySplit } from './calculators/homeAwaySplit';
 import { readinessTracker } from './calculators/readinessTracker';
 import { restAdvantage } from './calculators/restAdvantage';
+import { formGapAccuracy } from './calculators/formGapAccuracy';
 import { logger } from '../../utils/logger';
 
 /** The only role S-6 authenticates as. */
@@ -79,10 +82,11 @@ export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [homeAwaySplit, r
 
 /**
  * The implemented FIXTURE-subject comparison modules (S-6.x). A SET, produced only
- * when both registered active AND listed here. `rest_advantage` is the first — it
- * compares the two teams' `team.rest_advantage` into one signed reading per fixture.
+ * when both registered active AND listed here. `rest_advantage` is the first
+ * (symmetric — both sides consume `team.rest_advantage`); `form_gap_accuracy` is the
+ * second (asymmetric — home reads `team.home_form`, away reads `team.away_form`).
  */
-export const FIXTURE_MODULE_CALCULATORS: readonly FixtureModuleCalculator[] = [restAdvantage];
+export const FIXTURE_MODULE_CALCULATORS: readonly FixtureModuleCalculator[] = [restAdvantage, formGapAccuracy];
 
 export interface ModuleRunOptions extends EligibilityOptions {
   readonly dryRun?: boolean;
@@ -247,10 +251,13 @@ export function assembleFixtureReading(params: {
   readonly awayInputs: ReadonlyMap<string, ConsumedFeature>;
 }): Omit<ReadingToWrite, 'calculatedAt'> {
   const { calculator, definition, version, asOf, scope, fixtureId, fixturePartitionOn, homeInputs, awayInputs } = params;
-  const perSide = calculator.inputFeatureKeys.length;
-  const declaredInputCount = perSide * 2;
-  const homePresent = calculator.inputFeatureKeys.filter((k) => homeInputs.has(k)).length;
-  const awayPresent = calculator.inputFeatureKeys.filter((k) => awayInputs.has(k)).length;
+  // Per-side keys: symmetric modules read the same keys on both sides (the default);
+  // an asymmetric module (form_gap_accuracy) reads home_form for home, away_form for away.
+  const homeKeys = homeInputKeys(calculator);
+  const awayKeys = awayInputKeys(calculator);
+  const declaredInputCount = homeKeys.length + awayKeys.length;
+  const homePresent = homeKeys.filter((k) => homeInputs.has(k)).length;
+  const awayPresent = awayKeys.filter((k) => awayInputs.has(k)).length;
   const presentInputCount = homePresent + awayPresent;
 
   const base = {
@@ -283,25 +290,25 @@ export function assembleFixtureReading(params: {
   }
 
   const finding = calculator.evaluate({ home: homeInputs, away: awayInputs });
+  // Sample = MIN(consumed) across both sides' own inputs (D-5c-i).
   let sampleObservationCount = Number.POSITIVE_INFINITY;
-  for (const key of calculator.inputFeatureKeys) {
-    sampleObservationCount = Math.min(
-      sampleObservationCount,
-      homeInputs.get(key)!.sampleObservationCount,
-      awayInputs.get(key)!.sampleObservationCount
-    );
+  for (const key of homeKeys) {
+    sampleObservationCount = Math.min(sampleObservationCount, homeInputs.get(key)!.sampleObservationCount);
+  }
+  for (const key of awayKeys) {
+    sampleObservationCount = Math.min(sampleObservationCount, awayInputs.get(key)!.sampleObservationCount);
   }
 
+  // Every cited value (home's inputs then away's) carries the finding's status; the
+  // favoured side lives in verdict_text, not a column (doc 56 C-3).
   const evidenceItems = [];
-  for (const side of [homeInputs, awayInputs]) {
-    for (const key of calculator.inputFeatureKeys) {
-      const consumed = side.get(key)!;
-      evidenceItems.push({
-        citedFeatureValueId: consumed.valueId,
-        citedFeatureValueAsOf: consumed.asOf,
-        contributionDirection: finding.status,
-      });
-    }
+  for (const key of homeKeys) {
+    const consumed = homeInputs.get(key)!;
+    evidenceItems.push({ citedFeatureValueId: consumed.valueId, citedFeatureValueAsOf: consumed.asOf, contributionDirection: finding.status });
+  }
+  for (const key of awayKeys) {
+    const consumed = awayInputs.get(key)!;
+    evidenceItems.push({ citedFeatureValueId: consumed.valueId, citedFeatureValueAsOf: consumed.asOf, contributionDirection: finding.status });
   }
 
   return {
@@ -479,20 +486,28 @@ async function runFixtureModuleBatch(
         return;
       }
 
-      // Both teams' declared inputs, at one instant and one scope.
+      // Each side's declared inputs, at one instant and one scope. Symmetric modules
+      // read the same keys on both sides; an asymmetric module (form_gap_accuracy)
+      // reads home_form for home and away_form for away — the union is read once and
+      // assigned to each side by its own declared keys.
+      const homeKeys = homeInputKeys(calculator);
+      const awayKeys = awayInputKeys(calculator);
+      const allKeys = [...new Set([...homeKeys, ...awayKeys])];
       const consumed = await readConsumedFeatures(
         tx,
-        calculator.inputFeatureKeys,
+        allKeys,
         [batch.homeTeamId, batch.awayTeamId],
         batch.asOf,
         scope
       );
       const homeInputs = new Map<string, ConsumedFeature>();
       const awayInputs = new Map<string, ConsumedFeature>();
-      for (const key of calculator.inputFeatureKeys) {
+      for (const key of homeKeys) {
         const home = consumed.get(consumedKey(key, batch.homeTeamId));
-        const away = consumed.get(consumedKey(key, batch.awayTeamId));
         if (home) homeInputs.set(key, home);
+      }
+      for (const key of awayKeys) {
+        const away = consumed.get(consumedKey(key, batch.awayTeamId));
         if (away) awayInputs.set(key, away);
       }
 
