@@ -13,8 +13,11 @@
 // under the same rule versions conflicts and is skipped. A new rule version yields
 // a DISTINCT snapshot rather than mutating the old one.
 //
-// NO new intelligence: no edges, no risk, no confidence, no reliability. Those
-// columns are written NULL, structurally, via VerdictRow.
+// Under composition 1.0.0 this seals NO intelligence: every edge, risk,
+// confidence and reliability column is NULL. Under 1.1.0 (S-8) exactly ONE
+// governed comparative field is added — rest_edge = home − away rest_advantage,
+// from the sealed FIXTURE rest reading — and nothing else changes: still no
+// aggregation, no winner, no risk, no confidence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg';
@@ -32,6 +35,8 @@ import {
   computeCompleteness,
   buildVerdict,
   buildManifest,
+  computeRestEdge,
+  restEdgeGovernedIn,
   type SpokeReading,
 } from './verdict';
 import {
@@ -67,6 +72,8 @@ export function buildContent(args: {
     consensusSupportsCount: number; consensusContradictsCount: number;
     consensusNeutralCount: number; consensusInactiveCount: number;
     evidenceCount: number; completenessRatioText: string;
+    /** Governed rest edge (numeric text) under composition 1.1.0+, else null. */
+    restEdge: string | null;
   };
 }): SnapshotContent {
   const header: Canonical = {
@@ -131,8 +138,11 @@ export function buildContent(args: {
     consensusInactiveCount: args.verdict.consensusInactiveCount,
     evidenceCount: args.verdict.evidenceCount,
     completenessRatio: decimal(args.verdict.completenessRatioText),
-    // NON-DIRECTIONAL: every graded field is null, part of the hashed content.
-    readinessEdge: null, formEdge: null, travelEdge: null, restEdge: null,
+    // Every graded field is null in the hashed content EXCEPT rest_edge, the one
+    // governed comparative field (S-8, composition 1.1.0+). Its presence changes
+    // the checksum — a 1.1.0 verdict hashes differently from the 1.0.0 verdict.
+    readinessEdge: null, formEdge: null, travelEdge: null,
+    restEdge: args.verdict.restEdge === null ? null : decimal(args.verdict.restEdge),
     congestionEdge: null, availabilityEdge: null, riskScore: null,
     confidence: null, historicalReliabilityBaselineId: null,
   };
@@ -175,10 +185,15 @@ export async function sealSnapshot(
   // no rule to seal it under. Skip honestly rather than fabricate a rule identity.
   if (!verdictV || !consensusV || !checksumV) return { status: 'SKIPPED', reason: 'NO_RULE_IN_FORCE' };
 
-  // 2. Tally (pure, non-directional).
+  // 2. Tally (pure, non-directional), then the one governed comparative edge.
+  //    rest_edge is populated ONLY under composition 1.1.0+ (S-8 decision C); a
+  //    snapshot resolving to 1.0.0 keeps it NULL, exactly as S-7 sealed it.
   const consensus = tallyConsensus(spoke, eligible);
   const completeness = computeCompleteness(spoke, eligible);
-  const verdict = buildVerdict(consensus, completeness);
+  const restEdge = restEdgeGovernedIn(verdictV.designation)
+    ? computeRestEdge(spoke, { homeTeamId: fixture.homeTeamId, awayTeamId: fixture.awayTeamId })
+    : null;
+  const verdict = buildVerdict(consensus, completeness, restEdge);
   const manifest = buildManifest(spoke, {
     verdictCompositionVersionId: verdictV.id,
     consensusRuleVersionId: consensusV.id,
@@ -204,6 +219,7 @@ export async function sealSnapshot(
       consensusInactiveCount: verdict.consensusInactiveCount,
       evidenceCount: verdict.evidenceCount,
       completenessRatioText: completenessRatioTxt,
+      restEdge: verdict.restEdge,
     },
   });
   const checksum = contentChecksum(content);
@@ -265,7 +281,8 @@ export async function sealSnapshot(
     }
   }
 
-  // 8. Verdict — non-directional; graded columns NULL.
+  // 8. Verdict — rest_edge is the sole graded column that may be non-NULL (S-8,
+  //    composition 1.1.0+); every other edge and risk/confidence/reliability is NULL.
   await tx.query(
     `INSERT INTO snapshot.snapshot_verdict
        (fixture_partition_on, match_snapshot_id, verdict_composition_version_id,
@@ -274,12 +291,13 @@ export async function sealSnapshot(
         consensus_supports_count, consensus_contradicts_count, consensus_neutral_count, consensus_inactive_count,
         completeness_ratio, historical_reliability_baseline_id)
      VALUES ($1::date, $2::bigint, $3::bigint,
-             NULL, NULL, NULL, NULL, NULL, NULL,
-             NULL, NULL, $4::integer,
-             $5::integer, $6::integer, $7::integer, $8::integer,
-             $9::numeric, NULL)`,
+             NULL, NULL, NULL, $4::numeric, NULL, NULL,
+             NULL, NULL, $5::integer,
+             $6::integer, $7::integer, $8::integer, $9::integer,
+             $10::numeric, NULL)`,
     [
       partitionOn, snapshotId, verdictV.id,
+      verdict.restEdge,
       verdict.evidenceCount,
       verdict.consensusSupportsCount, verdict.consensusContradictsCount,
       verdict.consensusNeutralCount, verdict.consensusInactiveCount,

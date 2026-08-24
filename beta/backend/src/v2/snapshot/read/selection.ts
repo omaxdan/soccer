@@ -175,7 +175,7 @@ interface ReadingRow {
 interface CitedRow {
   reading_id: string; contribution_direction: string;
   feature_value_id: string; feature_value_as_of: Date; feature_version_id: string;
-  feature_definition_id: string; feature_key: string; value: string;
+  feature_definition_id: string; feature_key: string; subject_team_id: string | null; value: string;
   provenance_class_code: string; sample_observation_count: number; sample_meets_threshold: boolean;
 }
 
@@ -222,6 +222,7 @@ export async function readSpokeReadings(
             fv.feature_version_id::text AS feature_version_id,
             d.id::text                  AS feature_definition_id,
             d.feature_key               AS feature_key,
+            fv.subject_team_id::text    AS subject_team_id,
             fv.value::text              AS value,
             fv.provenance_class_code    AS provenance_class_code,
             fv.sample_observation_count AS sample_observation_count,
@@ -247,6 +248,7 @@ export async function readSpokeReadings(
       featureVersionId: c.feature_version_id,
       featureDefinitionId: c.feature_definition_id,
       featureKey: c.feature_key,
+      subjectTeamId: c.subject_team_id,
       value: c.value,
       provenanceClassCode: c.provenance_class_code,
       sampleObservationCount: Number(c.sample_observation_count),

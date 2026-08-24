@@ -15,10 +15,16 @@
 //   • consensus unit = one (module, team) SPOKE reading → one status. NOT a vote.
 //   • home & away readings enter the SAME distribution independently; no winner.
 //   • evidence_count = supports + contradicts + neutral   (INACTIVE excluded).
-//   • edges / risk / confidence / historical reliability = NULL. No exceptions.
 //   • completeness denominator = ELIGIBLE-ACTIVE modules for THIS fixture.
 //   • absence is recorded as absence, never as NEUTRAL, never as zero-as-signal.
+//
+// S-8 (v1.1.0) adds ONE governed comparative field — `rest_edge` — computed by
+// `computeRestEdge` and populated only under composition version 1.1.0+. Every
+// other edge and risk / confidence / historical reliability remain NULL. No
+// exceptions, no aggregation, no winner, no prediction. See the S-8 block below.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { fromString, subtract, toNumericString } from '../feature/write/scale';
 
 /** The three engaged statuses. INACTIVE is never a spoke reading. */
 export type EngagedStatus = 'SUPPORTS' | 'CONTRADICTS' | 'NEUTRAL';
@@ -31,6 +37,9 @@ export interface CitedFeatureValue {
   readonly featureVersionId: string;
   readonly featureDefinitionId: string;
   readonly featureKey: string;
+  /** The value's subject team (TEAM-subject values only); null otherwise. Lets a
+   *  FIXTURE comparison attribute each cited value to home or away (S-8). */
+  readonly subjectTeamId: string | null;
   /** PostgreSQL numeric text — scale preserved (never a JS float). */
   readonly value: string;
   readonly provenanceClassCode: string;
@@ -191,7 +200,9 @@ export function computeCompleteness(
   };
 }
 
-/** The snapshot_verdict row content. Every directional/graded field is NULL in v1.0.0. */
+/** The snapshot_verdict row content. Every graded field is NULL except `restEdge`,
+ *  which composition version 1.1.0 (S-8) populates from the sealed FIXTURE
+ *  rest_advantage reading; under 1.0.0 it stays NULL like the rest. */
 export interface VerdictRow {
   readonly consensusSupportsCount: number;
   readonly consensusContradictsCount: number;
@@ -199,12 +210,15 @@ export interface VerdictRow {
   readonly consensusInactiveCount: number;
   readonly evidenceCount: number;
   readonly completenessRatio: number;
-  // Deliberately, permanently NULL at v1.0.0 — no substrate exists to fill them.
+  // Still permanently NULL — no governed substrate exists to fill them.
   // (These are the actual nullable columns on snapshot.snapshot_verdict.)
   readonly readinessEdge: null;
   readonly formEdge: null;
   readonly travelEdge: null;
-  readonly restEdge: null;
+  /** The first governed comparative edge (S-8): home.rest_advantage − away.rest_advantage,
+   *  as PostgreSQL numeric text (scale preserved). NULL when not governed (1.0.0) or a
+   *  required side is absent. */
+  readonly restEdge: string | null;
   readonly congestionEdge: null;
   readonly availabilityEdge: null;
   readonly riskScore: null;
@@ -212,8 +226,16 @@ export interface VerdictRow {
   readonly historicalReliabilityBaselineId: null;
 }
 
-/** Assembles the non-directional verdict. NULL guarantees are encoded in the type. */
-export function buildVerdict(consensus: Consensus, completeness: Completeness): VerdictRow {
+/**
+ * Assembles the verdict. Every graded field is NULL except `restEdge`, which the
+ * caller supplies already computed and already gated on the composition version
+ * (null under 1.0.0). The NULL guarantees for the other fields are encoded in the type.
+ */
+export function buildVerdict(
+  consensus: Consensus,
+  completeness: Completeness,
+  restEdge: string | null = null
+): VerdictRow {
   return {
     consensusSupportsCount: consensus.supports,
     consensusContradictsCount: consensus.contradicts,
@@ -224,13 +246,80 @@ export function buildVerdict(consensus: Consensus, completeness: Completeness): 
     readinessEdge: null,
     formEdge: null,
     travelEdge: null,
-    restEdge: null,
+    restEdge,
     congestionEdge: null,
     availabilityEdge: null,
     riskScore: null,
     confidence: null,
     historicalReliabilityBaselineId: null,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-8 REST EDGE COMPOSITION — v1.1.0
+//
+// The first governed comparative edge. From the sealed FIXTURE rest_advantage
+// reading and its two sealed underlying team.rest_advantage values:
+//
+//   rest_edge = home.rest_advantage − away.rest_advantage
+//     > 0 → home has more rest; < 0 → away has more rest; 0 → equal rest.
+//
+// GOVERNED (S-8 decisions A/B/C), enforced here:
+//   • Home-relative sign; the sign is NOT re-derived from feature direction,
+//     module status or prose — only the two underlying numeric VALUES (decision A).
+//   • Both required values present → compute, even when one/both are below
+//     threshold; the below-threshold caveat stays in completeness, never nulls a
+//     real value; zero is a real value, never "missing" (decision B).
+//   • Either required value absent → NULL; nothing is substituted (decision B).
+//   • NO aggregation, no winner, no prediction, no risk, no confidence.
+//   • Populated ONLY under composition version 1.1.0+ (decision C); 1.0.0 → NULL.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The FIXTURE comparison module that produces the rest edge. */
+export const REST_EDGE_MODULE_KEY = 'rest_advantage';
+/** The per-side TEAM feature the rest edge subtracts. */
+export const REST_ADVANTAGE_FEATURE_KEY = 'team.rest_advantage';
+
+/**
+ * True when the governed composition version populates the rest edge — 1.1.0 and
+ * any later version. Compared as a numeric (major,minor,patch) tuple so ordering
+ * is real, not lexical ('1.10.0' > '1.2.0'). Unparseable designations → false
+ * (the rest edge is only ever ADDED by a governed version, never by accident).
+ */
+export function restEdgeGovernedIn(designation: string): boolean {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(designation.trim());
+  if (!m) return false;
+  const [maj, min] = [Number(m[1]), Number(m[2])];
+  return maj > 1 || (maj === 1 && min >= 1);
+}
+
+/**
+ * The governed rest edge for a fixture, or null. Reads ONLY the already-selected
+ * sealed spoke readings: it finds the one engaged FIXTURE rest_advantage reading,
+ * attributes each of its cited team.rest_advantage values to home or away by the
+ * value's own subject team, and returns home − away with the database scale
+ * preserved. Returns null when the reading is absent (INACTIVE ⇒ not a spoke
+ * reading) or when either required side's value is missing.
+ */
+export function computeRestEdge(
+  spoke: readonly SpokeReading[],
+  fixture: { readonly homeTeamId: string; readonly awayTeamId: string }
+): string | null {
+  const reading = spoke.find(
+    (r) => r.subjectKindCode === 'FIXTURE' && r.moduleKey === REST_EDGE_MODULE_KEY
+  );
+  if (!reading) return null; // no engaged rest reading → nothing to compare.
+
+  let home: string | undefined;
+  let away: string | undefined;
+  for (const cv of reading.citedValues) {
+    if (cv.featureKey !== REST_ADVANTAGE_FEATURE_KEY) continue;
+    if (cv.subjectTeamId === fixture.homeTeamId) home = cv.value;
+    else if (cv.subjectTeamId === fixture.awayTeamId) away = cv.value;
+  }
+  if (home === undefined || away === undefined) return null; // a required side absent.
+
+  return toNumericString(subtract(fromString(home), fromString(away)));
 }
 
 export type ComponentKind =

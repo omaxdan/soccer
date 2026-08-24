@@ -187,7 +187,10 @@ describe('seeding (requires a V2 database)', { skip: skipReason() || false }, ()
     assert.equal(firstCounts['feature.feature_version'], FEATURE_KEYS.length);
     assert.equal(firstCounts['module.module_definition'], MODULE_KEYS.length);
     assert.equal(firstCounts['module.module_version'], MODULE_KEYS.length);
-    assert.equal(firstCounts['module.verdict_composition_version'], 1);
+    // The seed declares 1.0.0; migration 028 (S-8) adds the 1.1.0 successor
+    // post-seed (the same seed-declares-identity / migration-states-the-rule split
+    // as 024/027), so the registry's governed end state holds two rows.
+    assert.equal(firstCounts['module.verdict_composition_version'], 2);
     assert.equal(firstCounts['module.consensus_rule_version'], 1);
   });
 

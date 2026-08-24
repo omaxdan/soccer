@@ -309,6 +309,12 @@ const ENTITLEMENT_FEATURES: readonly (readonly [string, string, string])[] = MOD
  * same principle the brief states for modules: register identity and version,
  * not evaluation.
  */
+// Identity-only registration of the FIRST composition version. The successor
+// 1.1.0 (S-8: adds rest_edge = home - away rest_advantage) is registered by
+// migration 028, post-seed, which also closes this 1.0.0 period — the same
+// seed-provides-identity / migration-states-the-rule split used for module
+// versions (024/027). A fresh seed yields 1.0.0 open; 028 then performs the
+// succession, so seed + migration converge with an upgraded database.
 const COMPOSITION_VERSIONS: readonly (readonly [string, string, string])[] = [
   [
     'module.verdict_composition_version',

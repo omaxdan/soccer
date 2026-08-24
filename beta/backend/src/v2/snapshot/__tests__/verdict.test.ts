@@ -9,12 +9,13 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tallyConsensus, computeCompleteness, buildVerdict, buildManifest,
+  computeRestEdge, restEdgeGovernedIn, REST_ADVANTAGE_FEATURE_KEY,
   type SpokeReading, type EligibleModule, type EngagedStatus, type CitedFeatureValue,
 } from '../verdict';
 
 const cv = (over: Partial<CitedFeatureValue> = {}): CitedFeatureValue => ({
   featureValueId: '10', featureValueAsOf: new Date('2027-07-01T00:00:00Z'), featureVersionId: '5',
-  featureDefinitionId: '3', featureKey: 'team.momentum', value: '15', provenanceClassCode: 'DERIVED',
+  featureDefinitionId: '3', featureKey: 'team.momentum', subjectTeamId: null, value: '15', provenanceClassCode: 'DERIVED',
   sampleObservationCount: 10, sampleMeetsThreshold: true, contributionDirection: 'SUPPORTS', ...over,
 });
 
@@ -175,6 +176,101 @@ describe('verdict NULL guarantees (non-directional, structural)', () => {
     assert.equal(v.consensusSupportsCount, 1);
     assert.equal(v.consensusContradictsCount, 1);
     assert.equal(v.evidenceCount, 2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-8 — rest edge composition (v1.1.0). home.rest_advantage − away.rest_advantage.
+// ─────────────────────────────────────────────────────────────────────────────
+const HOME = '100';
+const AWAY = '200';
+const fx = { homeTeamId: HOME, awayTeamId: AWAY };
+
+// A FIXTURE rest_advantage reading citing the two teams' rest values. `homeVal`/
+// `awayVal` are PostgreSQL numeric text; undefined omits that side's value.
+const restReading = (
+  homeVal: string | undefined,
+  awayVal: string | undefined,
+  over: Partial<CitedFeatureValue> = {}
+): SpokeReading => {
+  const cited: CitedFeatureValue[] = [];
+  if (homeVal !== undefined) cited.push(cv({ featureKey: REST_ADVANTAGE_FEATURE_KEY, subjectTeamId: HOME, value: homeVal, featureValueId: '1001', ...over }));
+  if (awayVal !== undefined) cited.push(cv({ featureKey: REST_ADVANTAGE_FEATURE_KEY, subjectTeamId: AWAY, value: awayVal, featureValueId: '1002', ...over }));
+  return reading('rest_advantage', HOME, 'SUPPORTS', {
+    subjectKindCode: 'FIXTURE', teamId: null, fixtureId: '500',
+    contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
+    declaredInputCount: 2, presentInputCount: cited.length, citedValues: cited,
+  });
+};
+
+describe('S-8 rest edge (home − away, home-relative sign)', () => {
+  test('home has more rest → positive edge', () => {
+    assert.equal(computeRestEdge([restReading('5', '2')], fx), '3');
+  });
+  test('away has more rest → negative edge', () => {
+    assert.equal(computeRestEdge([restReading('2', '5')], fx), '-3');
+  });
+  test('equal rest → zero edge', () => {
+    assert.equal(computeRestEdge([restReading('3', '3')], fx), '0');
+  });
+  test('zero is a real value, never treated as missing (home 0, away 3 → -3)', () => {
+    assert.equal(computeRestEdge([restReading('0', '3')], fx), '-3');
+  });
+  test('missing home value → NULL', () => {
+    assert.equal(computeRestEdge([restReading(undefined, '3')], fx), null);
+  });
+  test('missing away value → NULL', () => {
+    assert.equal(computeRestEdge([restReading('3', undefined)], fx), null);
+  });
+  test('no FIXTURE rest reading at all → NULL', () => {
+    assert.equal(computeRestEdge([reading('readiness_tracker', HOME, 'SUPPORTS')], fx), null);
+  });
+  test('below-threshold values still yield an edge (caveat lives in completeness, not here)', () => {
+    assert.equal(computeRestEdge([restReading('5', '2', { sampleMeetsThreshold: false })], fx), '3');
+  });
+  test('HOME/AWAY are resolved by each value’s own subject team, not citation order', () => {
+    // Build with cited values deliberately in away-then-home order.
+    const away = cv({ featureKey: REST_ADVANTAGE_FEATURE_KEY, subjectTeamId: AWAY, value: '1', featureValueId: '1002' });
+    const home = cv({ featureKey: REST_ADVANTAGE_FEATURE_KEY, subjectTeamId: HOME, value: '9', featureValueId: '1001' });
+    const r = reading('rest_advantage', HOME, 'SUPPORTS', {
+      subjectKindCode: 'FIXTURE', teamId: null, fixtureId: '500',
+      contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
+      declaredInputCount: 2, presentInputCount: 2, citedValues: [away, home],
+    });
+    assert.equal(computeRestEdge([r], fx), '8'); // 9 (home) − 1 (away), regardless of order
+  });
+  test('decimal scale is preserved (2.50 − 0.25 = 2.25)', () => {
+    assert.equal(computeRestEdge([restReading('2.50', '0.25')], fx), '2.25');
+  });
+
+  test('buildVerdict carries a supplied rest edge; every other graded field stays NULL', () => {
+    const spoke = [restReading('5', '2')];
+    const v = buildVerdict(tallyConsensus(spoke, eligible), computeCompleteness(spoke, eligible), '3');
+    assert.equal(v.restEdge, '3');
+    assert.equal(v.readinessEdge, null);
+    assert.equal(v.formEdge, null);
+    assert.equal(v.travelEdge, null);
+    assert.equal(v.congestionEdge, null);
+    assert.equal(v.availabilityEdge, null);
+    assert.equal(v.riskScore, null);
+    assert.equal(v.confidence, null);
+    assert.equal(v.historicalReliabilityBaselineId, null);
+  });
+});
+
+describe('S-8 rest edge is governed only from composition 1.1.0+', () => {
+  test('1.0.0 does not govern the rest edge; 1.1.0 and later do', () => {
+    assert.equal(restEdgeGovernedIn('1.0.0'), false);
+    assert.equal(restEdgeGovernedIn('1.1.0'), true);
+    assert.equal(restEdgeGovernedIn('1.2.0'), true);
+    assert.equal(restEdgeGovernedIn('2.0.0'), true);
+  });
+  test('minor is compared numerically, not lexically (1.10.0 > 1.2.0)', () => {
+    assert.equal(restEdgeGovernedIn('1.10.0'), true);
+  });
+  test('an unparseable designation never governs the edge', () => {
+    assert.equal(restEdgeGovernedIn('nonsense'), false);
+    assert.equal(restEdgeGovernedIn('1.0'), false);
   });
 });
 

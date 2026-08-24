@@ -37,7 +37,7 @@ import { runSnapshotSealing } from '../driver';
 import {
   readSpokeReadings, readEligibleModules, resolveVersionInForce,
 } from '../read/selection';
-import { tallyConsensus, computeCompleteness, buildManifest } from '../verdict';
+import { tallyConsensus, computeCompleteness, buildManifest, computeRestEdge, restEdgeGovernedIn } from '../verdict';
 import { buildContent, sealSnapshot } from '../seal';
 import { contentChecksum } from '../canonical';
 
@@ -198,6 +198,9 @@ describe('S-7 sealing over a real migrated database', { skip: !hasDatabase }, ()
           consensusSupportsCount: consensus.supports, consensusContradictsCount: consensus.contradicts,
           consensusNeutralCount: consensus.neutral, consensusInactiveCount: consensus.inactive,
           evidenceCount: consensus.evidenceCount, completenessRatioText: ratioText,
+          // Mirror seal.ts exactly so the checksum reproduces (this fixture has no
+          // rest reading, so this is null, but compute it the governed way anyway).
+          restEdge: restEdgeGovernedIn(vv.designation) ? computeRestEdge(spoke, { homeTeamId: teamA, awayTeamId: teamB }) : null,
         },
       });
       return { storedHex: ms.checksum.toString('hex'), recomputedHex: contentChecksum(content).toString('hex') };

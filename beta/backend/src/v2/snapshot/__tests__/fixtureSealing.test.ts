@@ -203,17 +203,27 @@ describe('S-7.x sealing FIXTURE readings over a real database', { skip: !hasData
     assert.ok(ok, 'all cited readings and feature values are ≤ snapshot as_of');
   });
 
-  it('(8) verdict remains non-directional: rest_edge and every edge/risk/confidence/reliability are NULL', async () => {
+  it('(8) under 1.1.0 the FIXTURE reading populates ONLY rest_edge; every other edge/risk/confidence/reliability stays NULL', async () => {
     const ms = await kickoffSnapshot();
-    const bad = await withConnection(MODULE, (tx) => tx.query<{ n: string }>(
-      `SELECT count(*)::text n FROM snapshot.snapshot_verdict
-        WHERE match_snapshot_id=$1 AND fixture_partition_on=$2::date
-          AND (rest_edge IS NOT NULL OR readiness_edge IS NOT NULL OR form_edge IS NOT NULL
-               OR travel_edge IS NOT NULL OR congestion_edge IS NOT NULL OR availability_edge IS NOT NULL
-               OR risk_score IS NOT NULL OR confidence IS NOT NULL OR historical_reliability_baseline_id IS NOT NULL)`,
+    // Home (teamA) rest 6, away (teamB) rest 3 → rest_edge = 6 − 3 = 3.
+    const row = await withConnection(MODULE, (tx) => tx.query<{ rest: string | null; others: string }>(
+      `SELECT rest_edge::text rest,
+              (CASE WHEN readiness_edge IS NULL AND form_edge IS NULL AND travel_edge IS NULL
+                     AND congestion_edge IS NULL AND availability_edge IS NULL
+                     AND risk_score IS NULL AND confidence IS NULL AND historical_reliability_baseline_id IS NULL
+                    THEN 'all-null' ELSE 'leaked' END) others
+         FROM snapshot.snapshot_verdict
+        WHERE match_snapshot_id=$1 AND fixture_partition_on=$2::date`,
       [ms.id, partitionOn]));
-    assert.equal(Number(bad.rows[0].n), 0, 'no edge/risk/confidence/reliability populated by the FIXTURE reading');
-    // rest is now an engaged module: evidence_count includes the 5 spoke readings.
+    assert.equal(Number(row.rows[0].rest), 3, 'rest_edge = home − away rest_advantage (6 − 3)');
+    assert.equal(row.rows[0].others, 'all-null', 'no OTHER edge/risk/confidence/reliability populated');
+    // Snapshot resolved to the 1.1.0 composition version (the one that governs rest_edge).
+    const ver = await withConnection(MODULE, (tx) => tx.query<{ d: string }>(
+      `SELECT vv.designation d FROM snapshot.match_snapshot ms
+         JOIN module.verdict_composition_version vv ON vv.id=ms.verdict_composition_version_id
+        WHERE ms.id=$1`, [ms.id]));
+    assert.equal(ver.rows[0].d, '1.1.0', 'sealed under composition version 1.1.0');
+    // rest is an engaged module: evidence_count includes the 5 spoke readings.
     const v = await withConnection(MODULE, (tx) => tx.query<{ ev: string }>(
       `SELECT evidence_count::text ev FROM snapshot.snapshot_verdict WHERE match_snapshot_id=$1 AND fixture_partition_on=$2::date`, [ms.id, partitionOn]));
     assert.equal(Number(v.rows[0].ev), 5, 'four TEAM readings + one FIXTURE reading are counted as engaged evidence');
