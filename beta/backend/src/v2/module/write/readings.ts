@@ -27,7 +27,17 @@ export interface EvidenceItemToWrite {
 export interface ReadingToWrite {
   readonly moduleDefinitionId: string;
   readonly moduleVersionId: string;
-  readonly subjectTeamId: string;
+  /**
+   * Subject kind — defaults to 'TEAM' when omitted, so the existing TEAM path is
+   * byte-for-byte unchanged. 'FIXTURE' carries `subjectFixtureId` +
+   * `subjectFixturePartitionOn` instead of `subjectTeamId` (D-4).
+   */
+  readonly subjectKindCode?: 'TEAM' | 'FIXTURE';
+  /** Set for TEAM readings; NULL for FIXTURE. */
+  readonly subjectTeamId: string | null;
+  /** Set for FIXTURE readings (composite with the partition); NULL for TEAM. */
+  readonly subjectFixtureId?: string | null;
+  readonly subjectFixturePartitionOn?: string | null;
   readonly asOf: Date;
   readonly calculatedAt: Date;
   /** The module's declared scope. ALL_COMPETITIONS carries a NULL edition. */
@@ -66,21 +76,22 @@ export async function writeReading(
   tx: PoolClient,
   reading: ReadingToWrite
 ): Promise<ReadingWriteResult> {
+  const subjectKind = reading.subjectKindCode ?? 'TEAM';
   const inserted = await tx.query<{ id: string; as_of: Date }>(
     `INSERT INTO module.module_reading
        (as_of, calculated_at, module_definition_id, module_version_id,
-        subject_kind_code, subject_team_id,
+        subject_kind_code, subject_team_id, subject_fixture_id, subject_fixture_partition_on,
         context_kind_code, context_competition_edition_id,
         module_status_code, strength, confidence,
         sample_observation_count, sample_meets_threshold,
         published_baseline_id, headline_text, verdict_text, inactive_reason)
      VALUES
        ($1::timestamptz, $2::timestamptz, $3::bigint, $4::bigint,
-        'TEAM', $5::bigint,
-        $6::text, $7::bigint,
-        $8::text, NULL, NULL,
-        $9::integer, $10::boolean,
-        NULL, NULL, $11::text, $12::text)
+        $5::text, $6::bigint, $7::bigint, $8::date,
+        $9::text, $10::bigint,
+        $11::text, NULL, NULL,
+        $12::integer, $13::boolean,
+        NULL, NULL, $14::text, $15::text)
      ON CONFLICT ON CONSTRAINT uq_module_reading__subject_context_definition_asof_version
      DO NOTHING
      RETURNING id::text, as_of`,
@@ -89,7 +100,10 @@ export async function writeReading(
       reading.calculatedAt,
       reading.moduleDefinitionId,
       reading.moduleVersionId,
+      subjectKind,
       reading.subjectTeamId,
+      reading.subjectFixtureId ?? null,
+      reading.subjectFixturePartitionOn ?? null,
       reading.contextKindCode,
       reading.contextEditionId,
       reading.statusCode,

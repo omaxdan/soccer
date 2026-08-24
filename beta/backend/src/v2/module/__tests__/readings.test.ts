@@ -231,9 +231,10 @@ describe('module readings · read surface over real readings (requires a V2 data
     await closeAllPools();
   });
 
-  it('runModulePipeline (the production entry the CLI wraps) runs and reports the two active modules', async () => {
+  it('runModulePipeline (the production entry the CLI wraps) runs and reports the implemented modules', async () => {
     const report = await runModulePipeline({ dryRun: true, replayFrom: AS_OF, replayTo: CEILING });
-    assert.deepEqual([...report.modules].sort(), ['home_away_split', 'readiness_tracker']);
+    // The two TEAM modules plus the first FIXTURE comparison module (S-6.x).
+    assert.deepEqual([...report.modules].sort(), ['home_away_split', 'readiness_tracker', 'rest_advantage']);
     assert.equal(report.failures, 0);
   });
 

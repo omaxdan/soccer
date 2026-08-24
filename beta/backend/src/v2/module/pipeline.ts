@@ -38,9 +38,16 @@ import {
 import {
   CALCULATION_CONTEXT_KIND,
   COMPETITION_SCOPED_CONTEXT_KIND,
+  ALL_COMPETITIONS_SCOPE,
   type CalculationScope,
 } from '../feature/calculators/types';
-import { MODULE_STATUS, type ConsumedFeature, type ModuleCalculator } from './types';
+import { selectFixtureBatches, type FixtureBatch } from './driver/fixtureEligibility';
+import {
+  MODULE_STATUS,
+  type ConsumedFeature,
+  type ModuleCalculator,
+  type FixtureModuleCalculator,
+} from './types';
 import {
   loadModuleRegistry,
   resolveModuleVersion,
@@ -52,6 +59,7 @@ import { consumedKey, readConsumedFeatures } from './read/consumedFeatures';
 import { writeReading, type ReadingToWrite } from './write/readings';
 import { homeAwaySplit } from './calculators/homeAwaySplit';
 import { readinessTracker } from './calculators/readinessTracker';
+import { restAdvantage } from './calculators/restAdvantage';
 import { logger } from '../../utils/logger';
 
 /** The only role S-6 authenticates as. */
@@ -69,11 +77,20 @@ export const INACTIVE_REASON_FEATURE_ABSENT = 'FEATURE_ABSENT';
  */
 export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [homeAwaySplit, readinessTracker];
 
+/**
+ * The implemented FIXTURE-subject comparison modules (S-6.x). A SET, produced only
+ * when both registered active AND listed here. `rest_advantage` is the first — it
+ * compares the two teams' `team.rest_advantage` into one signed reading per fixture.
+ */
+export const FIXTURE_MODULE_CALCULATORS: readonly FixtureModuleCalculator[] = [restAdvantage];
+
 export interface ModuleRunOptions extends EligibilityOptions {
   readonly dryRun?: boolean;
   readonly now?: Date;
-  /** Test seam: override the module set. Production omits it. */
+  /** Test seam: override the TEAM module set. Production omits it. */
   readonly calculators?: readonly ModuleCalculator[];
+  /** Test seam: override the FIXTURE module set. Production omits it. */
+  readonly fixtureCalculators?: readonly FixtureModuleCalculator[];
 }
 
 /**
@@ -209,6 +226,96 @@ export function assembleReading(params: {
 }
 
 /**
+ * Assembles the FIXTURE comparison reading from BOTH sides' resolved inputs — PURE.
+ *
+ * D-4a: a per-side input is TWO declared inputs, so declared = keys × 2 and the
+ * reading is INACTIVE unless every declared input is present for BOTH sides (never
+ * a fabricated zero). Otherwise the calculator speaks, the sample count is
+ * MIN(consumed) across both sides (D-5c-i), and every cited value (home's and
+ * away's) carries the finding's status — the favoured side lives in verdict_text,
+ * not in a column (doc 56 C-3). Subject is the FIXTURE.
+ */
+export function assembleFixtureReading(params: {
+  readonly calculator: FixtureModuleCalculator;
+  readonly definition: ModuleDefinition;
+  readonly version: ModuleVersion;
+  readonly asOf: Date;
+  readonly scope: CalculationScope;
+  readonly fixtureId: string;
+  readonly fixturePartitionOn: string;
+  readonly homeInputs: ReadonlyMap<string, ConsumedFeature>;
+  readonly awayInputs: ReadonlyMap<string, ConsumedFeature>;
+}): Omit<ReadingToWrite, 'calculatedAt'> {
+  const { calculator, definition, version, asOf, scope, fixtureId, fixturePartitionOn, homeInputs, awayInputs } = params;
+  const perSide = calculator.inputFeatureKeys.length;
+  const declaredInputCount = perSide * 2;
+  const homePresent = calculator.inputFeatureKeys.filter((k) => homeInputs.has(k)).length;
+  const awayPresent = calculator.inputFeatureKeys.filter((k) => awayInputs.has(k)).length;
+  const presentInputCount = homePresent + awayPresent;
+
+  const base = {
+    moduleDefinitionId: definition.moduleDefinitionId,
+    moduleVersionId: version.moduleVersionId,
+    subjectKindCode: 'FIXTURE' as const,
+    subjectTeamId: null,
+    subjectFixtureId: fixtureId,
+    subjectFixturePartitionOn: fixturePartitionOn,
+    asOf,
+    contextKindCode: scope.contextKind,
+    contextEditionId: scope.contextEditionId,
+    declaredInputCount,
+    presentInputCount,
+    belowThresholdInputCount: 0,
+    estimatedInputCount: 0,
+  };
+
+  if (presentInputCount < declaredInputCount) {
+    // INACTIVE — one or both sides missing an input. Silent, no items, no zero.
+    return {
+      ...base,
+      statusCode: MODULE_STATUS.INACTIVE,
+      verdictText: null,
+      inactiveReason: INACTIVE_REASON_FEATURE_ABSENT,
+      sampleObservationCount: 0,
+      sampleMeetsThreshold: false,
+      evidenceItems: [],
+    };
+  }
+
+  const finding = calculator.evaluate({ home: homeInputs, away: awayInputs });
+  let sampleObservationCount = Number.POSITIVE_INFINITY;
+  for (const key of calculator.inputFeatureKeys) {
+    sampleObservationCount = Math.min(
+      sampleObservationCount,
+      homeInputs.get(key)!.sampleObservationCount,
+      awayInputs.get(key)!.sampleObservationCount
+    );
+  }
+
+  const evidenceItems = [];
+  for (const side of [homeInputs, awayInputs]) {
+    for (const key of calculator.inputFeatureKeys) {
+      const consumed = side.get(key)!;
+      evidenceItems.push({
+        citedFeatureValueId: consumed.valueId,
+        citedFeatureValueAsOf: consumed.asOf,
+        contributionDirection: finding.status,
+      });
+    }
+  }
+
+  return {
+    ...base,
+    statusCode: finding.status,
+    verdictText: finding.verdictText,
+    inactiveReason: null,
+    sampleObservationCount,
+    sampleMeetsThreshold: sampleObservationCount >= version.minimumSampleObservationCount,
+    evidenceItems,
+  };
+}
+
+/**
  * Runs the module engine.
  *
  * The clock is captured once and passed down, so one instant governs the whole
@@ -221,6 +328,7 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
 
   const now = options.now ?? new Date();
   const calculators = options.calculators ?? MODULE_CALCULATORS;
+  const fixtureCalculators = options.fixtureCalculators ?? FIXTURE_MODULE_CALCULATORS;
   const counts = new Map<string, RelationCounts>();
   let failures = 0;
 
@@ -231,11 +339,11 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
   const needsScoped = calculators.some((c) => c.contextKind === COMPETITION_SCOPED_CONTEXT_KIND);
   const needsAllComp = calculators.some((c) => c.contextKind === CALCULATION_CONTEXT_KIND);
 
-  const { moduleRegistry, scopedBatches, allCompBatches } = await withConnection(MODULE_ROLE, async (tx) => {
+  const { moduleRegistry, scopedBatches, allCompBatches, fixtureBatches } = await withConnection(MODULE_ROLE, async (tx) => {
     const featureRegistry = await loadRegistry(tx); // snapshot points for enumeration
     const modules = await loadModuleRegistry(tx);
-    // Reconcile: a calculator must name a registered module (LC-28-style).
-    for (const calculator of calculators) {
+    // Reconcile: every calculator (TEAM and FIXTURE) must name a registered module.
+    for (const calculator of [...calculators, ...fixtureCalculators]) {
       const definition = modules.definitionsByKey.get(calculator.moduleKey);
       if (!definition) {
         throw new Error(
@@ -250,7 +358,10 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
     const allComp: readonly SubjectBatch[] = needsAllComp
       ? await selectBatches(tx, featureRegistry, now, options)
       : [];
-    return { moduleRegistry: modules, scopedBatches: scoped, allCompBatches: allComp };
+    const fixtures: readonly FixtureBatch[] = fixtureCalculators.length > 0
+      ? await selectFixtureBatches(tx, featureRegistry.snapshotPoints, now, options)
+      : [];
+    return { moduleRegistry: modules, scopedBatches: scoped, allCompBatches: allComp, fixtureBatches: fixtures };
   });
 
   // Normalize both sets to the scope-neutral ModuleBatch shape.
@@ -306,15 +417,123 @@ export async function runModulePipeline(options: ModuleRunOptions = {}): Promise
         }
       }
     }
+
+    // FIXTURE-subject comparison modules — one reading per (fixture, as_of).
+    for (const calculator of fixtureCalculators) {
+      const definition = moduleRegistry.definitionsByKey.get(calculator.moduleKey)!;
+      if (!definition.isActive) continue;
+      for (const batch of fixtureBatches) {
+        try {
+          const result = await runFixtureModuleBatch(calculator, definition, batch, options.dryRun === true);
+          for (const [relation, delta] of result) accumulate(counts, relation, delta);
+        } catch (error) {
+          failures += 1;
+          logger.error(
+            {
+              moduleKey: calculator.moduleKey,
+              fixtureId: batch.fixtureId,
+              asOf: batch.asOf.toISOString(),
+              error: buildDiagnostic(error),
+            },
+            'v2 module: fixture batch failed, continuing'
+          );
+        }
+      }
+    }
   });
 
   return {
-    batches: scopedModuleBatches.length + allCompModuleBatches.length,
-    modules: calculators.map((c) => c.moduleKey),
+    batches: scopedModuleBatches.length + allCompModuleBatches.length + fixtureBatches.length,
+    modules: [...calculators, ...fixtureCalculators].map((c) => c.moduleKey),
     counts,
     failures,
     dryRun: options.dryRun === true,
   };
+}
+
+/** One (FIXTURE module × fixture) transaction. Reads both teams' inputs, writes one reading. */
+async function runFixtureModuleBatch(
+  calculator: FixtureModuleCalculator,
+  definition: ModuleDefinition,
+  batch: FixtureBatch,
+  dryRun: boolean
+): Promise<Map<string, RelationCounts>> {
+  const relationCounts = new Map<string, RelationCounts>();
+  // Scope for the inputs. A FIXTURE module declares ONE scope; rest_advantage is
+  // ALL_COMPETITIONS. (COMPETITION_SCOPED fixture modules would bind the edition.)
+  const scope: CalculationScope =
+    calculator.contextKind === COMPETITION_SCOPED_CONTEXT_KIND
+      ? { contextKind: COMPETITION_SCOPED_CONTEXT_KIND, contextEditionId: batch.competitionEditionId }
+      : ALL_COMPETITIONS_SCOPE;
+
+  await withRun(
+    MODULE_ROLE,
+    `module.${calculator.moduleKey}`,
+    async (tx: PoolClient, job) => {
+      const version = await resolveModuleVersion(tx, definition.moduleDefinitionId, batch.asOf);
+      if (!version) {
+        logger.warn(
+          { moduleKey: calculator.moduleKey, asOf: batch.asOf.toISOString() },
+          'v2 module: no version covers as_of, skipping'
+        );
+        return;
+      }
+
+      // Both teams' declared inputs, at one instant and one scope.
+      const consumed = await readConsumedFeatures(
+        tx,
+        calculator.inputFeatureKeys,
+        [batch.homeTeamId, batch.awayTeamId],
+        batch.asOf,
+        scope
+      );
+      const homeInputs = new Map<string, ConsumedFeature>();
+      const awayInputs = new Map<string, ConsumedFeature>();
+      for (const key of calculator.inputFeatureKeys) {
+        const home = consumed.get(consumedKey(key, batch.homeTeamId));
+        const away = consumed.get(consumedKey(key, batch.awayTeamId));
+        if (home) homeInputs.set(key, home);
+        if (away) awayInputs.set(key, away);
+      }
+
+      const reading = assembleFixtureReading({
+        calculator,
+        definition,
+        version,
+        asOf: batch.asOf,
+        scope,
+        fixtureId: batch.fixtureId,
+        fixturePartitionOn: batch.fixturePartitionOn,
+        homeInputs,
+        awayInputs,
+      });
+
+      if (dryRun) {
+        accumulate(relationCounts, 'module.module_reading', { examined: 1, skipped: 1 });
+        return;
+      }
+
+      const calculatedAt = operationalNow();
+      const result = await writeReading(tx, { ...reading, calculatedAt });
+      accumulate(relationCounts, 'module.module_reading', {
+        examined: 1,
+        written: result.written,
+        skipped: result.skipped,
+      });
+      if (result.written === 1) {
+        accumulate(relationCounts, 'module.module_evidence', { examined: 1, written: 1 });
+        accumulate(relationCounts, 'module.module_evidence_item', {
+          examined: reading.evidenceItems.length,
+          written: reading.evidenceItems.length,
+        });
+      }
+
+      await reportWrites(job, relationCounts);
+    },
+    { detail: { module: calculator.moduleKey, fixtureId: batch.fixtureId, asOf: batch.asOf.toISOString() } }
+  );
+
+  return relationCounts;
 }
 
 /** One (module × batch) transaction, at the calculator's declared scope. */

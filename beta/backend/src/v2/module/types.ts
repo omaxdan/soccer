@@ -80,3 +80,38 @@ export interface ModuleCalculator {
    */
   evaluate(inputs: ReadonlyMap<string, ConsumedFeature>): ModuleFinding;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIXTURE-SUBJECT COMPARISON MODULES (S-6.x)
+//
+// The first module family whose subject is the FIXTURE, comparing the two teams.
+// Governed by D-4 (a FIXTURE module may consume TEAM-subject features) and D-4a
+// (a per-side input is TWO declared inputs — the same feature read for home AND
+// away). It is a SIBLING of `ModuleCalculator`, not a modification: the TEAM path
+// is untouched, so a change here cannot alter `home_away_split`/`readiness_tracker`.
+//
+// The status is still the four governed codes; its meaning is the module's OWN
+// characterisation (doc 56 C-2), anchored by the version rationale. No orientation
+// column is needed (doc 56 C-3): the favoured side lives in `verdict_text`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The two teams' consumed inputs for a fixture comparison. */
+export interface FixtureInputs {
+  readonly home: ReadonlyMap<string, ConsumedFeature>;
+  readonly away: ReadonlyMap<string, ConsumedFeature>;
+}
+
+/**
+ * A FIXTURE-subject module calculator — pure and deterministic.
+ *
+ * `inputFeatureKeys` names the features read for EACH side; the engine reads them
+ * for both teams, so `declared_input_count = inputFeatureKeys.length * 2` (D-4a).
+ * `evaluate` is called ONLY when every declared input is present for BOTH sides.
+ */
+export interface FixtureModuleCalculator {
+  readonly moduleKey: string;
+  readonly subjectKind: 'FIXTURE';
+  readonly contextKind: typeof CALCULATION_CONTEXT_KIND | typeof COMPETITION_SCOPED_CONTEXT_KIND;
+  readonly inputFeatureKeys: readonly string[];
+  evaluate(inputs: FixtureInputs): ModuleFinding;
+}

@@ -173,6 +173,20 @@ const MODULES: readonly ModuleSeed[] = [
     outcomeDimension: 'MATCH_RESULT',
     isActive: true,
     v1Key: 'rest',
+    // D-2 amendment for the first FIXTURE-subject comparison module (S-6.x).
+    // BYTE-IDENTICAL to migration 027, so a fresh seed and a migrated database converge.
+    versionRationale:
+      '1.0.0. Status rule (D-2, stated here): gap = home.rest_advantage - away.rest_advantage (days); '
+      + 'SUPPORTS when gap > 0 (home fresher), CONTRADICTS when gap < 0 (away fresher), NEUTRAL when '
+      + 'gap = 0 - the module’s own characterisation (doc 56 C-2); the favoured side is carried in '
+      + 'verdict_text, with no orientation column (doc 56 C-3). A SIGNED COMPARISON, deliberately NOT the '
+      + 'V1 evalRest rule: V1’s 4-day band and pickSide selection are not reproduced - LC-71 bars a '
+      + 'selection, and magnitude significance is an S-9 calibration concern, not a fabricated threshold. '
+      + 'FIXTURE-subject, consuming team.rest_advantage for BOTH teams (D-4); a per-side input is two '
+      + 'declared inputs (D-4a), so declared_input_count = 2. Threshold minimum_sample_observation_count '
+      + '= 0. Observation-count rule: sample_observation_count = MIN(consumed) across both sides (D-5c-i); '
+      + 'team.rest_advantage carries a fixed count of 1, so a valid reading rests on 1. strength, '
+      + 'confidence and published_baseline_id are NULL at 1.0.0 (D-5a/D-5b; S-9 out of scope).',
   },
   {
     key: 'league_goal_profiles',
