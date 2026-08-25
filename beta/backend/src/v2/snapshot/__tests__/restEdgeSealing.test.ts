@@ -27,7 +27,7 @@ import type { ConsumedFeature } from '../../module/types';
 import { readSpokeReadings, readEligibleModules, resolveVersionInForce } from '../read/selection';
 import { runSnapshotSealing } from '../driver';
 import { buildContent } from '../seal';
-import { tallyConsensus, computeCompleteness, buildManifest, computeRestEdge } from '../verdict';
+import { tallyConsensus, computeCompleteness, buildManifest, computeRestEdge, computeFormEdge } from '../verdict';
 import { contentChecksum } from '../canonical';
 
 const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
@@ -127,7 +127,7 @@ describe('S-8 rest edge sealing over a real database', { skip: !hasDatabase }, (
 
   it('(1) home has more rest → positive edge, sealed under 1.1.0', async () => {
     const s = await sealRest(6, 2);
-    assert.equal(s.designation, '1.1.0', 'sealed under the composition version that governs rest_edge');
+    assert.equal(s.designation, '1.2.0', 'sealed under the current composition version, which governs rest_edge');
     assert.equal(Number(s.restEdge), 4, 'rest_edge = 6 − 2');
   });
 
@@ -187,15 +187,15 @@ describe('S-8 rest edge sealing over a real database', { skip: !hasDatabase }, (
     assert.equal(Number(s.restEdge), 3);
   });
 
-  it('(11) the sealed snapshot carries the 1.1.0 composition version in its manifest', async () => {
+  it('(11) the sealed snapshot carries its composition version in its manifest', async () => {
     const s = await sealRest(5, 5);
     const inManifest = await withConnection(MODULE, (tx) => tx.query<{ n: string }>(
       `SELECT count(*)::text n
          FROM snapshot.snapshot_version_component svc
          JOIN module.verdict_composition_version vv ON vv.id=svc.component_version_id
-        WHERE svc.match_snapshot_id=$1 AND svc.component_kind='VERDICT_COMPOSITION_VERSION' AND vv.designation='1.1.0'`,
-      [s.snapshotId]));
-    assert.equal(Number(inManifest.rows[0].n), 1, 'the version manifest records verdict_composition_version 1.1.0');
+        WHERE svc.match_snapshot_id=$1 AND svc.component_kind='VERDICT_COMPOSITION_VERSION' AND vv.designation=$2`,
+      [s.snapshotId, s.designation]));
+    assert.equal(Number(inManifest.rows[0].n), 1, 'the version manifest records the snapshot’s verdict_composition_version');
   });
 
   it('(12) the content checksum depends on rest_edge (it is part of the hashed content)', async () => {
@@ -224,6 +224,8 @@ describe('S-8 rest edge sealing over a real database', { skip: !hasDatabase }, (
         consensusSupportsCount: consensus.supports, consensusContradictsCount: consensus.contradicts,
         consensusNeutralCount: consensus.neutral, consensusInactiveCount: consensus.inactive,
         evidenceCount: consensus.evidenceCount, completenessRatioText: ratioText,
+        // This fixture has no form reading → form_edge is null under any version.
+        formEdge: computeFormEdge(spoke, { homeTeamId: s.homeTeamId, awayTeamId: s.awayTeamId }),
       };
       // The governed edge at the sealed feature scale (never hardcode a scale here).
       const edge = computeRestEdge(spoke, { homeTeamId: s.homeTeamId, awayTeamId: s.awayTeamId });
@@ -236,11 +238,11 @@ describe('S-8 rest edge sealing over a real database', { skip: !hasDatabase }, (
     assert.notEqual(withoutEdge, stored, 'omitting rest_edge produces a DIFFERENT checksum — rest_edge is hashed content');
   });
 
-  it('(13) a pre-existing 1.0.0 snapshot is not mutated and coexists with the 1.1.0 one', async () => {
-    // Seal a real 1.1.0 snapshot for a fixture, then (in a rolled-back tx) forge a
-    // 1.0.0-era snapshot of the SAME fixture with rest_edge NULL and prove they
-    // coexist and the 1.0.0 row keeps rest_edge NULL — S-8 never rewrites it.
-    const s = await sealRest(5, 1); // 1.1.0, rest_edge = 4
+  it('(13) a pre-existing 1.0.0 snapshot is not mutated and coexists with the current one', async () => {
+    // Seal a real current-version snapshot for a fixture, then (in a rolled-back tx)
+    // forge a 1.0.0-era snapshot of the SAME fixture with rest_edge NULL and prove
+    // they coexist and the 1.0.0 row keeps rest_edge NULL — S-8 never rewrites it.
+    const s = await sealRest(5, 1); // current version, rest_edge = 4
     await withConnection(MODULE, async (tx) => {
       await tx.query('BEGIN');
       try {
@@ -266,10 +268,10 @@ describe('S-8 rest edge sealing over a real database', { skip: !hasDatabase }, (
              JOIN snapshot.snapshot_verdict v ON v.match_snapshot_id=ms.id
              JOIN module.verdict_composition_version vv ON vv.id=ms.verdict_composition_version_id
             WHERE ms.fixture_id=$1 AND ms.snapshot_point_code='KICKOFF' ORDER BY vv.designation`, [s.fixtureId]);
-        assert.deepEqual(both.rows.map((r) => r.designation), ['1.0.0', '1.1.0'], 'both versions coexist for the fixture');
+        assert.deepEqual(both.rows.map((r) => r.designation).sort(), ['1.0.0', s.designation].sort(), 'both versions coexist for the fixture');
         const byVer = new Map(both.rows.map((r) => [r.designation, r.rest]));
         assert.equal(byVer.get('1.0.0'), null, 'the 1.0.0 verdict keeps rest_edge NULL — untouched');
-        assert.equal(Number(byVer.get('1.1.0')), 4, 'the 1.1.0 verdict carries the computed rest_edge');
+        assert.equal(Number(byVer.get(s.designation)), 4, 'the current-version verdict carries the computed rest_edge');
       } finally {
         await tx.query('ROLLBACK');
       }

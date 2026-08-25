@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import {
   tallyConsensus, computeCompleteness, buildVerdict, buildManifest,
   computeRestEdge, restEdgeGovernedIn, REST_ADVANTAGE_FEATURE_KEY,
+  computeFormEdge, formEdgeGovernedIn, HOME_FORM_FEATURE_KEY, AWAY_FORM_FEATURE_KEY,
   type SpokeReading, type EligibleModule, type EngagedStatus, type CitedFeatureValue,
 } from '../verdict';
 
@@ -271,6 +272,108 @@ describe('S-8 rest edge is governed only from composition 1.1.0+', () => {
   test('an unparseable designation never governs the edge', () => {
     assert.equal(restEdgeGovernedIn('nonsense'), false);
     assert.equal(restEdgeGovernedIn('1.0'), false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-8 — form edge composition (v1.2.0). home.home_form − away.away_form.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A FIXTURE form_gap_accuracy reading citing the home team's home_form and the
+// away team's away_form. `homeVal`/`awayVal` are numeric text; undefined omits.
+const formReading = (
+  homeVal: string | undefined,
+  awayVal: string | undefined,
+  over: Partial<CitedFeatureValue> = {}
+): SpokeReading => {
+  const cited: CitedFeatureValue[] = [];
+  if (homeVal !== undefined) cited.push(cv({ featureKey: HOME_FORM_FEATURE_KEY, subjectTeamId: HOME, value: homeVal, featureValueId: '2001', ...over }));
+  if (awayVal !== undefined) cited.push(cv({ featureKey: AWAY_FORM_FEATURE_KEY, subjectTeamId: AWAY, value: awayVal, featureValueId: '2002', ...over }));
+  return reading('form_gap_accuracy', HOME, 'SUPPORTS', {
+    subjectKindCode: 'FIXTURE', teamId: null, fixtureId: '500',
+    contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
+    declaredInputCount: 2, presentInputCount: cited.length, citedValues: cited,
+  });
+};
+
+describe('S-8 form edge (home.home_form − away.away_form, home-relative sign)', () => {
+  test('1. home venue form stronger → positive edge', () => {
+    assert.equal(computeFormEdge([formReading('6', '2')], fx), '4');
+  });
+  test('2. away venue form stronger → negative edge', () => {
+    assert.equal(computeFormEdge([formReading('2', '6')], fx), '-4');
+  });
+  test('3. equal venue form → zero edge', () => {
+    assert.equal(computeFormEdge([formReading('3', '3')], fx), '0');
+  });
+  test('zero is a real value, never treated as missing (home 0, away 3 → -3)', () => {
+    assert.equal(computeFormEdge([formReading('0', '3')], fx), '-3');
+  });
+  test('4. no FIXTURE form reading at all → NULL', () => {
+    assert.equal(computeFormEdge([reading('readiness_tracker', HOME, 'SUPPORTS')], fx), null);
+  });
+  test('5. missing home citation → NULL', () => {
+    assert.equal(computeFormEdge([formReading(undefined, '3')], fx), null);
+  });
+  test('6. missing away citation → NULL', () => {
+    assert.equal(computeFormEdge([formReading('3', undefined)], fx), null);
+  });
+  test('7. below-threshold values still yield an edge (caveat lives in completeness)', () => {
+    assert.equal(computeFormEdge([formReading('6', '2', { sampleMeetsThreshold: false })], fx), '4');
+  });
+  test('8. decimal scale is preserved (6.50 − 2.25 = 4.25)', () => {
+    assert.equal(computeFormEdge([formReading('6.50', '2.25')], fx), '4.25');
+  });
+  test('9. home/away resolved by featureKey + subjectTeamId, not citation order', () => {
+    // Cited values deliberately away-first, and with a distractor value on the
+    // wrong side/feature that must be ignored.
+    const away = cv({ featureKey: AWAY_FORM_FEATURE_KEY, subjectTeamId: AWAY, value: '1', featureValueId: '2002' });
+    const home = cv({ featureKey: HOME_FORM_FEATURE_KEY, subjectTeamId: HOME, value: '9', featureValueId: '2001' });
+    const distractor = cv({ featureKey: HOME_FORM_FEATURE_KEY, subjectTeamId: AWAY, value: '99', featureValueId: '2099' });
+    const r = reading('form_gap_accuracy', HOME, 'SUPPORTS', {
+      subjectKindCode: 'FIXTURE', teamId: null, fixtureId: '500',
+      contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
+      declaredInputCount: 2, presentInputCount: 2, citedValues: [away, distractor, home],
+    });
+    assert.equal(computeFormEdge([r], fx), '8'); // 9 (home.home_form) − 1 (away.away_form)
+  });
+
+  test('buildVerdict carries a supplied form edge; every other graded field stays NULL', () => {
+    const spoke = [formReading('6', '2')];
+    const v = buildVerdict(tallyConsensus(spoke, eligible), computeCompleteness(spoke, eligible), null, '4');
+    assert.equal(v.formEdge, '4');
+    assert.equal(v.restEdge, null);
+    assert.equal(v.readinessEdge, null);
+    assert.equal(v.travelEdge, null);
+    assert.equal(v.congestionEdge, null);
+    assert.equal(v.availabilityEdge, null);
+    assert.equal(v.riskScore, null);
+    assert.equal(v.confidence, null);
+    assert.equal(v.historicalReliabilityBaselineId, null);
+  });
+
+  test('rest and form edges are carried independently — never combined', () => {
+    const spoke = [formReading('6', '2')];
+    const v = buildVerdict(tallyConsensus(spoke, eligible), computeCompleteness(spoke, eligible), '3', '4');
+    assert.equal(v.restEdge, '3');
+    assert.equal(v.formEdge, '4'); // two distinct fields; no sum/avg/score anywhere
+  });
+});
+
+describe('S-8 form edge is governed only from composition 1.2.0+', () => {
+  test('10. < 1.2.0 false; 1.2.0 and later true', () => {
+    assert.equal(formEdgeGovernedIn('1.0.0'), false);
+    assert.equal(formEdgeGovernedIn('1.1.0'), false);
+    assert.equal(formEdgeGovernedIn('1.2.0'), true);
+    assert.equal(formEdgeGovernedIn('1.3.0'), true);
+    assert.equal(formEdgeGovernedIn('2.0.0'), true);
+  });
+  test('minor is compared numerically, not lexically (1.10.0 ≥ 1.2.0)', () => {
+    assert.equal(formEdgeGovernedIn('1.10.0'), true);
+  });
+  test('an unparseable designation never governs the edge', () => {
+    assert.equal(formEdgeGovernedIn('nonsense'), false);
+    assert.equal(formEdgeGovernedIn('1.2'), false);
   });
 });
 

@@ -222,7 +222,7 @@ describe('S-7.x sealing FIXTURE readings over a real database', { skip: !hasData
       `SELECT vv.designation d FROM snapshot.match_snapshot ms
          JOIN module.verdict_composition_version vv ON vv.id=ms.verdict_composition_version_id
         WHERE ms.id=$1`, [ms.id]));
-    assert.equal(ver.rows[0].d, '1.1.0', 'sealed under composition version 1.1.0');
+    assert.equal(ver.rows[0].d, '1.2.0', 'sealed under the current composition version (1.2.0), which governs rest_edge');
     // rest is an engaged module: evidence_count includes the 5 spoke readings.
     const v = await withConnection(MODULE, (tx) => tx.query<{ ev: string }>(
       `SELECT evidence_count::text ev FROM snapshot.snapshot_verdict WHERE match_snapshot_id=$1 AND fixture_partition_on=$2::date`, [ms.id, partitionOn]));

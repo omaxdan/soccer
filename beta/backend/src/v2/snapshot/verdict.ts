@@ -200,9 +200,12 @@ export function computeCompleteness(
   };
 }
 
-/** The snapshot_verdict row content. Every graded field is NULL except `restEdge`,
- *  which composition version 1.1.0 (S-8) populates from the sealed FIXTURE
- *  rest_advantage reading; under 1.0.0 it stays NULL like the rest. */
+/** The snapshot_verdict row content. Every graded field is NULL except the two
+ *  governed comparative edges: `restEdge` (composition 1.1.0+, from the sealed
+ *  rest_advantage reading) and `formEdge` (composition 1.2.0+, from the sealed
+ *  form_gap_accuracy reading). Each is populated only under the version that
+ *  governs it; otherwise it stays NULL like the rest. The two are independent —
+ *  never aggregated. */
 export interface VerdictRow {
   readonly consensusSupportsCount: number;
   readonly consensusContradictsCount: number;
@@ -213,11 +216,14 @@ export interface VerdictRow {
   // Still permanently NULL — no governed substrate exists to fill them.
   // (These are the actual nullable columns on snapshot.snapshot_verdict.)
   readonly readinessEdge: null;
-  readonly formEdge: null;
+  /** The second governed comparative edge (S-8, composition 1.2.0+):
+   *  home.home_form − away.away_form, as PostgreSQL numeric text (scale preserved).
+   *  NULL when not governed (< 1.2.0) or a required side is absent. */
+  readonly formEdge: string | null;
   readonly travelEdge: null;
-  /** The first governed comparative edge (S-8): home.rest_advantage − away.rest_advantage,
-   *  as PostgreSQL numeric text (scale preserved). NULL when not governed (1.0.0) or a
-   *  required side is absent. */
+  /** The first governed comparative edge (S-8, composition 1.1.0+):
+   *  home.rest_advantage − away.rest_advantage, as PostgreSQL numeric text (scale
+   *  preserved). NULL when not governed (< 1.1.0) or a required side is absent. */
   readonly restEdge: string | null;
   readonly congestionEdge: null;
   readonly availabilityEdge: null;
@@ -227,14 +233,17 @@ export interface VerdictRow {
 }
 
 /**
- * Assembles the verdict. Every graded field is NULL except `restEdge`, which the
- * caller supplies already computed and already gated on the composition version
- * (null under 1.0.0). The NULL guarantees for the other fields are encoded in the type.
+ * Assembles the verdict. Every graded field is NULL except `restEdge` and
+ * `formEdge`, which the caller supplies already computed and already gated on the
+ * composition version (null under a version that does not govern them). The NULL
+ * guarantees for the other fields are encoded in the type. The two edges are
+ * carried independently — this function never combines them.
  */
 export function buildVerdict(
   consensus: Consensus,
   completeness: Completeness,
-  restEdge: string | null = null
+  restEdge: string | null = null,
+  formEdge: string | null = null
 ): VerdictRow {
   return {
     consensusSupportsCount: consensus.supports,
@@ -244,7 +253,7 @@ export function buildVerdict(
     evidenceCount: consensus.evidenceCount,
     completenessRatio: completeness.completenessRatio,
     readinessEdge: null,
-    formEdge: null,
+    formEdge,
     travelEdge: null,
     restEdge,
     congestionEdge: null,
@@ -316,6 +325,79 @@ export function computeRestEdge(
     if (cv.featureKey !== REST_ADVANTAGE_FEATURE_KEY) continue;
     if (cv.subjectTeamId === fixture.homeTeamId) home = cv.value;
     else if (cv.subjectTeamId === fixture.awayTeamId) away = cv.value;
+  }
+  if (home === undefined || away === undefined) return null; // a required side absent.
+
+  return toNumericString(subtract(fromString(home), fromString(away)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-8 FORM EDGE COMPOSITION — v1.2.0
+//
+// The second governed comparative edge, and the first ASYMMETRIC one. From the
+// sealed FIXTURE form_gap_accuracy reading and its two sealed underlying values —
+// the home team's team.home_form and the away team's team.away_form:
+//
+//   form_edge = home.home_form − away.away_form
+//     > 0 → home venue form stronger; < 0 → away stronger; 0 → equal.
+//
+// GOVERNED (S-8 form gate), enforced here:
+//   • Home-relative sign; re-derived from the two sealed VALUES (the module reading
+//     stores only a status, no numeric gap — this is the SAME differential the
+//     module characterised, not a second rule).
+//   • Each side is attributed by BOTH featureKey AND subjectTeamId, never by
+//     citation order.
+//   • Both required values present → compute, even below threshold; the caveat stays
+//     in completeness; zero is a real value, never "missing".
+//   • Reading absent/INACTIVE, or either required value missing → NULL; nothing
+//     substituted.
+//   • NO aggregation with rest_edge or any other edge; no winner, no prediction.
+//   • Populated ONLY under composition version 1.2.0+; earlier versions → NULL.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The FIXTURE comparison module that produces the form edge. */
+export const FORM_EDGE_MODULE_KEY = 'form_gap_accuracy';
+/** The home side's venue-form feature (read for the HOME team). */
+export const HOME_FORM_FEATURE_KEY = 'team.home_form';
+/** The away side's venue-form feature (read for the AWAY team). */
+export const AWAY_FORM_FEATURE_KEY = 'team.away_form';
+
+/**
+ * True when the governed composition version populates the form edge — 1.2.0 and
+ * any later version. Numeric (major,minor) compare, so '1.10.0' > '1.2.0'.
+ * Unparseable designations → false (the edge is only ever ADDED by a governed
+ * version, never by accident).
+ */
+export function formEdgeGovernedIn(designation: string): boolean {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(designation.trim());
+  if (!m) return false;
+  const [maj, min] = [Number(m[1]), Number(m[2])];
+  return maj > 1 || (maj === 1 && min >= 2);
+}
+
+/**
+ * The governed form edge for a fixture, or null. Reads ONLY the already-selected
+ * sealed spoke readings: it finds the one engaged FIXTURE form_gap_accuracy
+ * reading, takes the home side's team.home_form and the away side's team.away_form
+ * — each identified by BOTH featureKey AND subjectTeamId (never citation order) —
+ * and returns home − away with the database scale preserved. Returns null when the
+ * reading is absent (INACTIVE ⇒ not a spoke reading) or when either required value
+ * is missing.
+ */
+export function computeFormEdge(
+  spoke: readonly SpokeReading[],
+  fixture: { readonly homeTeamId: string; readonly awayTeamId: string }
+): string | null {
+  const reading = spoke.find(
+    (r) => r.subjectKindCode === 'FIXTURE' && r.moduleKey === FORM_EDGE_MODULE_KEY
+  );
+  if (!reading) return null; // no engaged form reading → nothing to compare.
+
+  let home: string | undefined;
+  let away: string | undefined;
+  for (const cv of reading.citedValues) {
+    if (cv.featureKey === HOME_FORM_FEATURE_KEY && cv.subjectTeamId === fixture.homeTeamId) home = cv.value;
+    else if (cv.featureKey === AWAY_FORM_FEATURE_KEY && cv.subjectTeamId === fixture.awayTeamId) away = cv.value;
   }
   if (home === undefined || away === undefined) return null; // a required side absent.
 

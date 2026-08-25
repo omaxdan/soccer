@@ -14,10 +14,12 @@
 // a DISTINCT snapshot rather than mutating the old one.
 //
 // Under composition 1.0.0 this seals NO intelligence: every edge, risk,
-// confidence and reliability column is NULL. Under 1.1.0 (S-8) exactly ONE
-// governed comparative field is added — rest_edge = home − away rest_advantage,
-// from the sealed FIXTURE rest reading — and nothing else changes: still no
-// aggregation, no winner, no risk, no confidence.
+// confidence and reliability column is NULL. Each later version adds ONE governed
+// comparative edge, computed from a sealed FIXTURE reading and nothing else:
+//   • 1.1.0 (S-8) → rest_edge = home − away rest_advantage
+//   • 1.2.0 (S-8) → form_edge = home.home_form − away.away_form
+// The edges are independent and never combined: still no aggregation, no winner,
+// no risk, no confidence.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg';
@@ -34,6 +36,8 @@ import {
   tallyConsensus,
   computeCompleteness,
   buildVerdict,
+  computeFormEdge,
+  formEdgeGovernedIn,
   buildManifest,
   computeRestEdge,
   restEdgeGovernedIn,
@@ -74,6 +78,8 @@ export function buildContent(args: {
     evidenceCount: number; completenessRatioText: string;
     /** Governed rest edge (numeric text) under composition 1.1.0+, else null. */
     restEdge: string | null;
+    /** Governed form edge (numeric text) under composition 1.2.0+, else null. */
+    formEdge: string | null;
   };
 }): SnapshotContent {
   const header: Canonical = {
@@ -138,10 +144,12 @@ export function buildContent(args: {
     consensusInactiveCount: args.verdict.consensusInactiveCount,
     evidenceCount: args.verdict.evidenceCount,
     completenessRatio: decimal(args.verdict.completenessRatioText),
-    // Every graded field is null in the hashed content EXCEPT rest_edge, the one
-    // governed comparative field (S-8, composition 1.1.0+). Its presence changes
-    // the checksum — a 1.1.0 verdict hashes differently from the 1.0.0 verdict.
-    readinessEdge: null, formEdge: null, travelEdge: null,
+    // Every graded field is null in the hashed content EXCEPT the two governed
+    // comparative edges: rest_edge (composition 1.1.0+) and form_edge (1.2.0+).
+    // Their presence changes the checksum — a 1.2.0 verdict hashes differently
+    // from a 1.1.0 one, which differs from 1.0.0.
+    readinessEdge: null, travelEdge: null,
+    formEdge: args.verdict.formEdge === null ? null : decimal(args.verdict.formEdge),
     restEdge: args.verdict.restEdge === null ? null : decimal(args.verdict.restEdge),
     congestionEdge: null, availabilityEdge: null, riskScore: null,
     confidence: null, historicalReliabilityBaselineId: null,
@@ -185,15 +193,16 @@ export async function sealSnapshot(
   // no rule to seal it under. Skip honestly rather than fabricate a rule identity.
   if (!verdictV || !consensusV || !checksumV) return { status: 'SKIPPED', reason: 'NO_RULE_IN_FORCE' };
 
-  // 2. Tally (pure, non-directional), then the one governed comparative edge.
-  //    rest_edge is populated ONLY under composition 1.1.0+ (S-8 decision C); a
-  //    snapshot resolving to 1.0.0 keeps it NULL, exactly as S-7 sealed it.
+  // 2. Tally (pure, non-directional), then the governed comparative edges. Each is
+  //    populated ONLY under the composition version that governs it, and each is
+  //    independent — never combined. rest_edge: 1.1.0+; form_edge: 1.2.0+. A
+  //    snapshot resolving to an earlier version keeps the ungoverned edge NULL.
   const consensus = tallyConsensus(spoke, eligible);
   const completeness = computeCompleteness(spoke, eligible);
-  const restEdge = restEdgeGovernedIn(verdictV.designation)
-    ? computeRestEdge(spoke, { homeTeamId: fixture.homeTeamId, awayTeamId: fixture.awayTeamId })
-    : null;
-  const verdict = buildVerdict(consensus, completeness, restEdge);
+  const fixtureSides = { homeTeamId: fixture.homeTeamId, awayTeamId: fixture.awayTeamId };
+  const restEdge = restEdgeGovernedIn(verdictV.designation) ? computeRestEdge(spoke, fixtureSides) : null;
+  const formEdge = formEdgeGovernedIn(verdictV.designation) ? computeFormEdge(spoke, fixtureSides) : null;
+  const verdict = buildVerdict(consensus, completeness, restEdge, formEdge);
   const manifest = buildManifest(spoke, {
     verdictCompositionVersionId: verdictV.id,
     consensusRuleVersionId: consensusV.id,
@@ -220,6 +229,7 @@ export async function sealSnapshot(
       evidenceCount: verdict.evidenceCount,
       completenessRatioText: completenessRatioTxt,
       restEdge: verdict.restEdge,
+      formEdge: verdict.formEdge,
     },
   });
   const checksum = contentChecksum(content);
@@ -281,8 +291,9 @@ export async function sealSnapshot(
     }
   }
 
-  // 8. Verdict — rest_edge is the sole graded column that may be non-NULL (S-8,
-  //    composition 1.1.0+); every other edge and risk/confidence/reliability is NULL.
+  // 8. Verdict — rest_edge (composition 1.1.0+) and form_edge (1.2.0+) are the only
+  //    graded columns that may be non-NULL, each independently; every other edge and
+  //    risk/confidence/reliability stays NULL. The two edges are never combined.
   await tx.query(
     `INSERT INTO snapshot.snapshot_verdict
        (fixture_partition_on, match_snapshot_id, verdict_composition_version_id,
@@ -291,12 +302,13 @@ export async function sealSnapshot(
         consensus_supports_count, consensus_contradicts_count, consensus_neutral_count, consensus_inactive_count,
         completeness_ratio, historical_reliability_baseline_id)
      VALUES ($1::date, $2::bigint, $3::bigint,
-             NULL, NULL, NULL, $4::numeric, NULL, NULL,
-             NULL, NULL, $5::integer,
-             $6::integer, $7::integer, $8::integer, $9::integer,
-             $10::numeric, NULL)`,
+             NULL, $4::numeric, NULL, $5::numeric, NULL, NULL,
+             NULL, NULL, $6::integer,
+             $7::integer, $8::integer, $9::integer, $10::integer,
+             $11::numeric, NULL)`,
     [
       partitionOn, snapshotId, verdictV.id,
+      verdict.formEdge,
       verdict.restEdge,
       verdict.evidenceCount,
       verdict.consensusSupportsCount, verdict.consensusContradictsCount,
