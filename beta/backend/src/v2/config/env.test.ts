@@ -48,6 +48,7 @@ const ENTRY_POINTS = [
   join(SRC, 'v2', 'ingestion', 'orchestration', 'governanceAdmin.ts'),
   join(SRC, 'v2', 'module', 'cli.ts'),
   join(SRC, 'v2', 'snapshot', 'cli.ts'),
+  join(SRC, 'v2', 'calibration', 'cli.ts'),
   join(SRC, 'v2', 'api', 'server.ts'),
 ];
 
