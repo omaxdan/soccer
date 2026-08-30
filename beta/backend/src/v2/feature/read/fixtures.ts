@@ -166,6 +166,106 @@ export async function readCompletedFixtures(
   return histories;
 }
 
+/** The consistency long-history window, in days (S-6 Phase 2, owner Option A). */
+export const LONG_WINDOW_DAYS = 730;
+
+/**
+ * ALL completed fixtures for a set of teams within a bounded long window before
+ * one instant — the ADDITIVE long-history read (S-6 Phase 2, owner Option A).
+ *
+ * DISTINCT from `readCompletedFixtures`, which returns only the last
+ * `FIXTURES_PER_SIDE` per side plus the 28-day congestion branch. That windowed
+ * population is correct for form/congestion but is NOT the full population a
+ * 730-day volatility needs, so this read returns EVERY completed fixture in
+ * `[asOf − windowDays, asOf)` — no per-side rank cap. It exists ONLY for
+ * calculators that declare `needsLongWindowHistory`; `fixturesByTeam` and its
+ * consumers are untouched.
+ *
+ * Temporal contract (leak-free): strictly `scheduled_kickoff_at < asOf` (never
+ * `<=`, so a fixture exactly at `asOf` is excluded) and `>= asOf − windowDays`
+ * (a fixture older than the window is excluded). Only COMPLETED fixtures WITH a
+ * `football.result` row are returned (an INNER JOIN), so an incomplete/missing
+ * result contributes nothing. Goals are oriented to the SUBJECT team exactly as
+ * `readCompletedFixtures` orients them (`goals_for` = what this team scored).
+ */
+export async function readCompletedFixturesInWindow(
+  tx: PoolClient,
+  teamIds: readonly string[],
+  asOf: Date,
+  windowDays: number = LONG_WINDOW_DAYS
+): Promise<Map<string, TeamFixtureHistory>> {
+  const histories = new Map<string, TeamFixtureHistory>();
+  if (teamIds.length === 0) return histories;
+
+  const { rows } = await tx.query<FixtureRow>(
+    `WITH subject AS (
+       SELECT team_id FROM unnest($1::bigint[]) AS t(team_id)
+     ),
+     played AS (
+       SELECT s.team_id,
+              f.id                   AS fixture_id,
+              f.fixture_partition_on,
+              f.scheduled_kickoff_at,
+              true                   AS is_home,
+              r.home_goals           AS goals_for,
+              r.away_goals           AS goals_against,
+              f.venue_id
+         FROM subject s
+         JOIN football.fixture f ON f.home_team_id = s.team_id
+         JOIN football.result r
+               ON r.fixture_id = f.id AND r.fixture_partition_on = f.fixture_partition_on
+        WHERE f.lifecycle_state_code = 'COMPLETED'
+          AND f.scheduled_kickoff_at <  $2
+          AND f.scheduled_kickoff_at >= $2::timestamptz - make_interval(days => $3::int)
+       UNION ALL
+       SELECT s.team_id,
+              f.id,
+              f.fixture_partition_on,
+              f.scheduled_kickoff_at,
+              false,
+              r.away_goals,
+              r.home_goals,
+              f.venue_id
+         FROM subject s
+         JOIN football.fixture f ON f.away_team_id = s.team_id
+         JOIN football.result r
+               ON r.fixture_id = f.id AND r.fixture_partition_on = f.fixture_partition_on
+        WHERE f.lifecycle_state_code = 'COMPLETED'
+          AND f.scheduled_kickoff_at <  $2
+          AND f.scheduled_kickoff_at >= $2::timestamptz - make_interval(days => $3::int)
+     )
+     SELECT team_id::text,
+            fixture_id::text,
+            fixture_partition_on::text,
+            scheduled_kickoff_at,
+            is_home,
+            goals_for,
+            goals_against,
+            venue_id::text
+       FROM played
+      ORDER BY team_id, scheduled_kickoff_at DESC, fixture_id DESC`,
+    [teamIds, asOf, windowDays]
+  );
+
+  for (const row of rows) {
+    let history = histories.get(row.team_id);
+    if (!history) {
+      history = { teamId: row.team_id, fixtures: [] };
+      histories.set(row.team_id, history);
+    }
+    (history.fixtures as CompletedFixture[]).push({
+      fixtureId: row.fixture_id,
+      fixturePartitionOn: row.fixture_partition_on,
+      kickoffAt: row.scheduled_kickoff_at,
+      isHome: row.is_home,
+      goalsFor: row.goals_for,
+      goalsAgainst: row.goals_against,
+      venueId: row.venue_id,
+    });
+  }
+  return histories;
+}
+
 /**
  * Fixtures eligible to generate `as_of` instants, for the driver.
  *

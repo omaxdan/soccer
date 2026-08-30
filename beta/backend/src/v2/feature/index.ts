@@ -107,7 +107,7 @@ export { resolve as resolveProvenance, type ResolvedProvenance } from './write/p
 export { writeValues, type WrittenValue, type ValueWriteResult } from './write/values';
 export { writeLineage, type LineageWriteResult } from './write/lineage';
 
-export { readCompletedFixtures, readFixturesForEligibility } from './read/fixtures';
+export { readCompletedFixtures, readCompletedFixturesInWindow, readFixturesForEligibility } from './read/fixtures';
 export { readHomeVenues, readVenueLocations } from './read/venues';
 export { readPriorValues, countExistingValues } from './read/featureValues';
 export { readSquadAvailability, type SquadAvailability } from './read/availability';

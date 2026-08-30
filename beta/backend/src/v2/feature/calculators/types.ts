@@ -167,6 +167,18 @@ export interface CalculationContext {
   readonly subjects: readonly SubjectMoment[];
   /** Completed fixtures strictly before each subject's `as_of`, by team id. */
   readonly fixturesByTeam: ReadonlyMap<string, TeamFixtureHistory>;
+  /**
+   * FULL completed-fixture history within the long (≤730-day) window before each
+   * subject's `as_of`, by team id — the ADDITIVE surface (S-6 Phase 2, Option A).
+   *
+   * Semantically DISTINCT from `fixturesByTeam` (which is the last-N-per-side +
+   * 28-day window): this is every completed fixture in the long window. It is
+   * populated ONLY for calculators that declare `needsLongWindowHistory` (the
+   * production pipeline always provides it — an empty map otherwise). OPTIONAL so
+   * existing context constructors that predate it stay valid; a consumer treats
+   * absence as empty. It never alters what existing calculators read.
+   */
+  readonly longWindowFixturesByTeam?: ReadonlyMap<string, TeamFixtureHistory>;
   /** Home venue per team, for travel origin. */
   readonly homeVenueByTeam: ReadonlyMap<string, string | null>;
   readonly venuesById: ReadonlyMap<string, VenueLocation>;
@@ -196,6 +208,13 @@ export interface Calculator {
    * with the edition; the two passes never mix.
    */
   readonly contextKind?: typeof CALCULATION_CONTEXT_KIND | typeof COMPETITION_SCOPED_CONTEXT_KIND;
+  /**
+   * When true, the pipeline populates `context.longWindowFixturesByTeam` (the
+   * full ≤730-day completed history) for this calculator. Omitted/false means the
+   * field is an empty map — the default for every existing calculator, whose
+   * behaviour is therefore unchanged. Additive (S-6 Phase 2, Option A).
+   */
+  readonly needsLongWindowHistory?: boolean;
   calculate(context: CalculationContext): readonly CandidateValue[];
 }
 

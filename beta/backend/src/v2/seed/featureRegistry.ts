@@ -299,6 +299,40 @@ const FEATURES: readonly FeatureSeed[] = [
       'implementation is retained as historical evidence only.',
   },
   {
+    key: 'team.goal_margin_volatility',
+    calculator: 'goal_margin_volatility',
+    subjectKind: 'TEAM',
+    displayName: 'Goal margin volatility',
+    meaning:
+      'Unweighted sample standard deviation of a team’s signed goal margin ' +
+      '(team_goals − opponent_goals) over ALL completed fixtures in the previous ' +
+      '730 days, across all competitions, home and away. Higher = less consistent / ' +
+      'more unpredictable. V1: the volatility computed in ' +
+      'processExtendedIntelligence.ts (processTeamFormQuality) — an UNWEIGHTED sample ' +
+      'stddev; the V1 45-day half-life weights PPG/OAF, never this figure. Requires ' +
+      'n ≥ 3 completed observations; absent below that. Descriptive substrate for the ' +
+      'CONTEXTUAL consistency_index module (S-6 Phase 2).',
+    // A spread of goal margins, measured in goals — a MEASUREMENT, so UNSIGNED:
+    // whether lower volatility is "better" is the consumer’s judgement, exactly as
+    // team.travel_distance leaves "is more travel worse" to its consumer.
+    unit: 'goals',
+    valueScale: 2,
+    direction: 'UNSIGNED',
+    maxProvenance: 'DERIVED',
+    // n ≥ 3 completed observations — the V1 minimum. The calculator emits nothing
+    // below 3 (feature absent), so any written value already meets this.
+    sampleThreshold: 3,
+    contextKinds: ['ALL_COMPETITIONS'],
+    versionRationale:
+      'Initial registration (S-6 Phase 2, owner Option A). V1-exact: unweighted sample ' +
+      'standard deviation sqrt(Σ(margin − mean)² / (n − 1)) of signed goal margin over ' +
+      'ALL completed fixtures with kickoff strictly before as_of within a 730-day window, ' +
+      'all competitions, home and away, opponent strength irrelevant. No 45-day recency ' +
+      'weighting is applied to the volatility (audit-established). n ≥ 3 or absent; n ≥ 3 ' +
+      'with equal margins yields 0. Reads the additive long-window history, never the ' +
+      'shared last-N-per-side/28-day window.',
+  },
+  {
     key: 'team.congestion_index',
     calculator: 'fixture_load',
     subjectKind: 'TEAM',

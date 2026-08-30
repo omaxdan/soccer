@@ -92,6 +92,7 @@ const IMPLEMENTED_FEATURES = [
   'team.away_form',
   'team.away_win_rate',
   'team.congestion_index',
+  'team.goal_margin_volatility',
   'team.home_form',
   'team.home_win_rate',
   'team.momentum',

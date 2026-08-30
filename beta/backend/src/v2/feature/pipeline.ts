@@ -69,7 +69,7 @@ import {
   type ScopedSubjectBatch,
   type SubjectBatch,
 } from './driver/eligibility';
-import { readCompletedFixtures } from './read/fixtures';
+import { readCompletedFixtures, readCompletedFixturesInWindow } from './read/fixtures';
 import { readEditionVenueResults } from './read/editionVenueResults';
 import { readHomeVenues, readVenueLocations } from './read/venues';
 import { readPriorValues } from './read/featureValues';
@@ -91,6 +91,7 @@ import { teamReadiness } from './calculators/teamReadiness';
 import { travelItinerary } from './calculators/travelItinerary';
 import { teamMomentum } from './calculators/teamMomentum';
 import { venueWinRate } from './calculators/venueWinRate';
+import { goalMarginVolatility } from './calculators/goalMarginVolatility';
 import { logger } from '../../utils/logger';
 
 /** The only role S-5 authenticates as. */
@@ -114,6 +115,10 @@ export const CALCULATORS: readonly Calculator[] = [
   // ALL_COMPETITIONS form-trend delta (Gate E-ii). Runs in the default pass; the
   // Readiness Tracker module (E-iii) consumes it.
   teamMomentum,
+  // ALL_COMPETITIONS goal-margin volatility over the ≤730-day long window
+  // (S-6 Phase 2, Option A). Declares `needsLongWindowHistory`; the future
+  // Consistency Index module will consume it. Runs in the default pass.
+  goalMarginVolatility,
   // The first COMPETITION_SCOPED calculator — runs in the scoped pass (Gate
   // C-ii), never the ALL_COMPETITIONS one, because it declares its context kind.
   venueWinRate,
@@ -477,6 +482,8 @@ export async function buildScopedContext(
     definitions: registry.definitionsByKey,
     subjects,
     fixturesByTeam,
+    // No scoped calculator declares needsLongWindowHistory today; empty by default.
+    longWindowFixturesByTeam: new Map(),
     homeVenueByTeam: new Map(),
     venuesById: new Map(),
     priorValues: new Map(),
@@ -499,6 +506,12 @@ async function buildContext(
   const subjects: SubjectMoment[] = batch.teamIds.map((teamId) => ({ teamId, asOf: batch.asOf }));
 
   const fixturesByTeam = await readCompletedFixtures(tx, batch.teamIds, batch.asOf);
+  // Additive long history (S-6 Phase 2, Option A): fetched ONCE per batch, and
+  // ONLY for a calculator that declares it needs it, so existing calculators
+  // (which leave it empty) are entirely unaffected. Isolated from fixturesByTeam.
+  const longWindowFixturesByTeam = calculator.needsLongWindowHistory
+    ? await readCompletedFixturesInWindow(tx, batch.teamIds, batch.asOf)
+    : new Map();
   const homeVenueByTeam = await readHomeVenues(tx, batch.teamIds);
 
   const venueIds = new Set<string>();
@@ -518,6 +531,7 @@ async function buildContext(
     definitions: registry.definitionsByKey,
     subjects,
     fixturesByTeam,
+    longWindowFixturesByTeam,
     homeVenueByTeam,
     venuesById,
     priorValues,

@@ -77,6 +77,10 @@ export const FEATURE_SOURCES: Readonly<Record<string, readonly string[]>> = {
   // as form, a different quantity computed from them.
   'team.home_win_rate': ['fixture', 'result'],
   'team.away_win_rate': ['fixture', 'result'],
+  // Goal-margin volatility over completed fixtures — the fixture for participation
+  // and the result for the score. Same two football sources as form, over the
+  // additive 730-day long window.
+  'team.goal_margin_volatility': ['fixture', 'result'],
 };
 
 /** Feature → feature edges. The consumer, and what it consumes. */
