@@ -161,6 +161,22 @@ const MODULES: readonly ModuleSeed[] = [
     outcomeDimension: 'MATCH_RESULT',
     isActive: true,
     v1Key: 'travel',
+    // D-2 amendment for the third FIXTURE-subject comparison module (S-6, owner
+    // Decisions 1-3). BYTE-IDENTICAL to migration 032, so a fresh seed and a
+    // migrated database converge.
+    versionRationale:
+      '1.0.0. Status rule (D-2, stated here): gap = away.travel_distance - home.travel_distance (km); '
+      + 'SUPPORTS when gap > 0 (away travelled farther, favouring home), CONTRADICTS when gap < 0 (home '
+      + 'travelled farther), NEUTRAL when gap = 0 - the module’s own characterisation (doc 56 C-2); the '
+      + 'favoured side is carried in verdict_text, with no orientation column (doc 56 C-3). The sign is '
+      + 'INVERTED relative to rest_advantage because more travel is a disadvantage. A SIGNED COMPARISON, '
+      + 'deliberately NOT a V1 band/selection rule: LC-71 bars a selection, and magnitude significance is '
+      + 'an S-9 calibration concern rather than a fabricated threshold. FIXTURE-subject (D-4), consuming '
+      + 'team.travel_distance for BOTH teams - NOT the separate team.travel_impact feature (Decision 1; '
+      + 'docs 70/71); a per-side input is two declared inputs (D-4a), so declared_input_count = 2. Threshold '
+      + 'minimum_sample_observation_count = 0. Observation-count rule: sample_observation_count = MIN(consumed) '
+      + 'across both sides (D-5c-i). strength, confidence and published_baseline_id are NULL at 1.0.0 '
+      + '(D-5a/D-5b); the OUTCOME_SCORED outcome baseline (doc 71) is an S-9 concern and remains FUTURE.',
   },
   {
     key: 'rest_advantage',

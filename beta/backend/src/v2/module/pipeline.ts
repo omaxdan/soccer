@@ -63,6 +63,7 @@ import { homeAwaySplit } from './calculators/homeAwaySplit';
 import { readinessTracker } from './calculators/readinessTracker';
 import { restAdvantage } from './calculators/restAdvantage';
 import { formGapAccuracy } from './calculators/formGapAccuracy';
+import { travelImpact } from './calculators/travelImpact';
 import { logger } from '../../utils/logger';
 
 /** The only role S-6 authenticates as. */
@@ -84,9 +85,12 @@ export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [homeAwaySplit, r
  * The implemented FIXTURE-subject comparison modules (S-6.x). A SET, produced only
  * when both registered active AND listed here. `rest_advantage` is the first
  * (symmetric — both sides consume `team.rest_advantage`); `form_gap_accuracy` is the
- * second (asymmetric — home reads `team.home_form`, away reads `team.away_form`).
+ * second (asymmetric — home reads `team.home_form`, away reads `team.away_form`);
+ * `travel_impact` is the third (symmetric — both sides consume `team.travel_distance`,
+ * home-relative differential per S-6 Decision 2). All emit a categorical 1.0.0
+ * finding with strength/confidence/baseline NULL (S-9 out of scope).
  */
-export const FIXTURE_MODULE_CALCULATORS: readonly FixtureModuleCalculator[] = [restAdvantage, formGapAccuracy];
+export const FIXTURE_MODULE_CALCULATORS: readonly FixtureModuleCalculator[] = [restAdvantage, formGapAccuracy, travelImpact];
 
 export interface ModuleRunOptions extends EligibilityOptions {
   readonly dryRun?: boolean;
