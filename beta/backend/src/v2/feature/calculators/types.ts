@@ -146,6 +146,48 @@ export interface CompletedFixture {
   readonly venueId: string | null;
 }
 
+/**
+ * An opponent's rank band at the pre-match snapshot — the V1 tertile.
+ *
+ * V1 `processHistoricalContext.ts` reconstructs each opponent's league position
+ * BEFORE a fixture and buckets it into thirds; `null` is not a fourth band but
+ * the ABSENCE of one — the opponent had played no games yet, so no position and
+ * therefore no band could be assigned (V1 `MIN_OPP_GAMES_FOR_BASIC_QUALITY`).
+ */
+export type OpponentBand = 'top' | 'middle' | 'bottom';
+
+/**
+ * One completed fixture from a subject team's perspective, annotated with the
+ * opponent's pre-match rank band — the Giant Killer historical input (S-6 Phase
+ * 3B). Produced by the edition-wide chronological replay in
+ * `calculators/giantKillerRanking.ts`, NOT read directly from a table.
+ */
+export interface RankedFixture {
+  readonly fixtureId: string;
+  /** The edition whose standings the band was reconstructed within. */
+  readonly competitionEditionId: string;
+  readonly kickoffAt: Date;
+  readonly isHome: boolean;
+  /** Points the SUBJECT team earned in this fixture: 3 win / 1 draw / 0 loss. */
+  readonly pointsEarned: number;
+  /** The opponent's tertile at kickoff, or `null` when the opponent had 0 games. */
+  readonly opponentBand: OpponentBand | null;
+}
+
+/**
+ * A subject team's band-annotated completed fixtures — MAY SPAN EDITIONS.
+ *
+ * The band on each fixture is edition-scoped (reconstructed within that
+ * fixture's own edition), but a team's history pools every edition it played in
+ * the window, because the Giant Killer feature is ALL_COMPETITIONS (mirroring V1
+ * Stage B, which pools across competitions). Fixtures are in a deterministic
+ * order — ascending `(kickoffAt, fixtureId)`.
+ */
+export interface RankedTeamHistory {
+  readonly teamId: string;
+  readonly fixtures: readonly RankedFixture[];
+}
+
 /** Coordinates for distance, or null where the provider gave none. */
 export interface VenueLocation {
   readonly venueId: string;
@@ -179,6 +221,19 @@ export interface CalculationContext {
    * absence as empty. It never alters what existing calculators read.
    */
   readonly longWindowFixturesByTeam?: ReadonlyMap<string, TeamFixtureHistory>;
+  /**
+   * Band-annotated completed-fixture history for the Giant Killer feature (S-6
+   * Phase 3B), by team id. Each fixture carries the opponent's edition-scoped
+   * pre-match rank band, reconstructed by the edition-wide chronological replay.
+   *
+   * Semantically DISTINCT from both `fixturesByTeam` and `longWindowFixturesByTeam`:
+   * those are subject-oriented result reads; this is the OUTPUT of a per-edition
+   * standings replay over ALL teams. Populated ONLY for calculators that declare
+   * `needsEditionRankedHistory` (the production pipeline provides it — an empty map
+   * otherwise). OPTIONAL so existing context constructors stay valid; a consumer
+   * treats absence as empty. It never alters what existing calculators read.
+   */
+  readonly editionRankedHistoryByTeam?: ReadonlyMap<string, RankedTeamHistory>;
   /** Home venue per team, for travel origin. */
   readonly homeVenueByTeam: ReadonlyMap<string, string | null>;
   readonly venuesById: ReadonlyMap<string, VenueLocation>;
@@ -215,6 +270,14 @@ export interface Calculator {
    * behaviour is therefore unchanged. Additive (S-6 Phase 2, Option A).
    */
   readonly needsLongWindowHistory?: boolean;
+  /**
+   * When true, the pipeline populates `context.editionRankedHistoryByTeam` — the
+   * band-annotated history produced by the edition-wide chronological standings
+   * replay (S-6 Phase 3B, Giant Killer). Omitted/false means the field is an empty
+   * map — the default for every existing calculator, whose behaviour is therefore
+   * unchanged. Additive.
+   */
+  readonly needsEditionRankedHistory?: boolean;
   calculate(context: CalculationContext): readonly CandidateValue[];
 }
 

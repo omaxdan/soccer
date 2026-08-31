@@ -72,6 +72,9 @@ export {
   type CandidateValue,
   type CompletedFixture,
   type ConsumedValueRef,
+  type OpponentBand,
+  type RankedFixture,
+  type RankedTeamHistory,
   type SubjectMoment,
   type TeamFixtureHistory,
   type VenueLocation,
@@ -81,6 +84,13 @@ export { formBackfill } from './calculators/formBackfill';
 export { fixtureLoad } from './calculators/fixtureLoad';
 export { travelLoad } from './calculators/travelLoad';
 export { teamReadiness } from './calculators/teamReadiness';
+export { goalMarginVolatility } from './calculators/goalMarginVolatility';
+export { giantKillerPpg } from './calculators/giantKillerPpg';
+export {
+  rankEditionFixtures,
+  RANK_TABLE_SIZE_FLOOR,
+  type EditionFixture,
+} from './calculators/giantKillerRanking';
 
 export {
   add,
@@ -108,6 +118,7 @@ export { writeValues, type WrittenValue, type ValueWriteResult } from './write/v
 export { writeLineage, type LineageWriteResult } from './write/lineage';
 
 export { readCompletedFixtures, readCompletedFixturesInWindow, readFixturesForEligibility } from './read/fixtures';
+export { readEditionRankingFixtures, RANKING_WINDOW_DAYS } from './read/editionRanking';
 export { readHomeVenues, readVenueLocations } from './read/venues';
 export { readPriorValues, countExistingValues } from './read/featureValues';
 export { readSquadAvailability, type SquadAvailability } from './read/availability';

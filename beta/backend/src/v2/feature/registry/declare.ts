@@ -81,6 +81,11 @@ export const FEATURE_SOURCES: Readonly<Record<string, readonly string[]>> = {
   // and the result for the score. Same two football sources as form, over the
   // additive 730-day long window.
   'team.goal_margin_volatility': ['fixture', 'result'],
+  // Giant Killer PPG reads edition-wide fixtures and results to reconstruct every
+  // opponent's pre-match rank band — the fixture for participation, edition and
+  // kickoff, the result for the scores that build the standings. Same two football
+  // sources, read across ALL teams in the edition rather than one.
+  'team.giant_killer_ppg': ['fixture', 'result'],
 };
 
 /** Feature → feature edges. The consumer, and what it consumes. */

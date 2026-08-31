@@ -92,6 +92,16 @@ const CALCULATORS: readonly (readonly [string, string, string, string])[] = [
       '(last-5 minus prior-5 points over team_form_history, all competitions). Carried across as ' +
       'FORMULA and POPULATION unchanged; the only V2 difference is point-in-time as_of windowing.',
   ],
+  [
+    'giant_killer_ppg',
+    'Giant killer PPG',
+    '1.0.0',
+    'V1 Giant Killer "Stage B" in jobs/processExtendedIntelligence.ts (processTeamFormQuality): ' +
+      'recency-weighted points-per-game against top-tertile opponents. The opponent rank bands are ' +
+      'reconstructed by an edition-wide chronological standings replay (V1 Stage A, ' +
+      'jobs/processHistoricalContext.ts), NOT from football.standing (Phase 3A: too sparse). ' +
+      'Recency is anchored to as_of, not V1 wall-clock. Substrate only; the module is deferred.',
+  ],
 ];
 
 interface FeatureSeed {
@@ -331,6 +341,45 @@ const FEATURES: readonly FeatureSeed[] = [
       'weighting is applied to the volatility (audit-established). n ≥ 3 or absent; n ≥ 3 ' +
       'with equal margins yields 0. Reads the additive long-window history, never the ' +
       'shared last-N-per-side/28-day window.',
+  },
+  {
+    key: 'team.giant_killer_ppg',
+    calculator: 'giant_killer_ppg',
+    subjectKind: 'TEAM',
+    displayName: 'Giant killer PPG',
+    meaning:
+      'Recency-weighted points-per-game a team earns against TOP-tertile opponents over the ' +
+      'previous 730 days, across all competitions (win 3 / draw 1 / loss 0). The opponent’s ' +
+      'tertile is its league rank AS IT STOOD BEFORE each fixture, reconstructed by an ' +
+      'edition-wide chronological standings replay (all teams, points → goal-difference → ' +
+      'goals-for). V1: the ppgTop behind giant_killer_score in processExtendedIntelligence.ts ' +
+      '(processTeamFormQuality); the V1 presentation score is 100 × this ÷ 3. Requires ≥ 3 ' +
+      'top-tier matches; absent below that. Substrate for the deferred giant_killer_index module.',
+    // Points per game (0–3). A rate, like a win% is; stored as the PPG itself so a
+    // future module can derive the V1 100×ppg÷3 score once a numeric output path exists.
+    unit: 'ppg',
+    // Two decimals — V1 kept ppgTop at round2, so 100 × value ÷ 3 reproduces the
+    // V1 score exactly. Working precision is higher; the write boundary rounds once.
+    valueScale: 2,
+    // More points against strong teams is unambiguously stronger — unlike a spread
+    // (goal_margin_volatility, UNSIGNED), the monotonic sense is clear.
+    direction: 'HIGHER_IS_STRONGER',
+    maxProvenance: 'DERIVED',
+    // V1 MIN_TIER_SAMPLE = 3 top-tier matches. The calculator emits nothing below 3
+    // (feature absent), so any written value already meets this.
+    sampleThreshold: 3,
+    contextKinds: ['ALL_COMPETITIONS'],
+    versionRationale:
+      'Initial registration (S-6 Phase 3B, owner-authorized substrate). Carries the V1 Giant ' +
+      'Killer Stage-B FORMULA — recency-weighted ppgTop = Σ(points·0.5^(daysAgo/45)) / ' +
+      'Σ(0.5^(daysAgo/45)) over completed fixtures whose opponent’s pre-match band is top, within ' +
+      'a 730-day window, ≥ 3 or absent. Opponent bands come from an edition-wide chronological ' +
+      'replay (V1 Stage A: points → GD → GF, tableSize = max(size,16), tertiles, opponent games ≥ 1), ' +
+      'SUPERSEDING the football.standing substrate rejected in Phase 3A as too sparse. ONE ' +
+      'intentional, owner-authorized deviation from V1: recency is anchored to as_of ' +
+      '(daysAgo = (as_of − kickoff)/86_400_000), not V1’s wall-clock Date.now(), as R-2 requires. ' +
+      'The value is the PPG substrate (0–3); the V1 100×ppg÷3 score and any verdict belong to the ' +
+      'deferred giant_killer_index module.',
   },
   {
     key: 'team.congestion_index',

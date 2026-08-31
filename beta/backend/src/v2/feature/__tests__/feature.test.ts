@@ -92,6 +92,7 @@ const IMPLEMENTED_FEATURES = [
   'team.away_form',
   'team.away_win_rate',
   'team.congestion_index',
+  'team.giant_killer_ppg',
   'team.goal_margin_volatility',
   'team.home_form',
   'team.home_win_rate',
@@ -1244,6 +1245,11 @@ describe('mutation: wall clock inside a calculator', () => {
     'calculators/fixtureLoad.ts',
     'calculators/travelLoad.ts',
     'calculators/teamReadiness.ts',
+    // S-6 Phase 3B: the Giant Killer calculator and its pure ranking replay must
+    // be as clock-free and connection-free as every other calculation path — the
+    // as_of-anchored recency deviation exists precisely to avoid the wall clock.
+    'calculators/giantKillerPpg.ts',
+    'calculators/giantKillerRanking.ts',
   ];
 
   it('63. no calculator reads the wall clock', () => {

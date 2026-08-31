@@ -71,6 +71,7 @@ import {
 } from './driver/eligibility';
 import { readCompletedFixtures, readCompletedFixturesInWindow } from './read/fixtures';
 import { readEditionVenueResults } from './read/editionVenueResults';
+import { readEditionRankingFixtures } from './read/editionRanking';
 import { readHomeVenues, readVenueLocations } from './read/venues';
 import { readPriorValues } from './read/featureValues';
 import { writeValues } from './write/values';
@@ -92,6 +93,8 @@ import { travelItinerary } from './calculators/travelItinerary';
 import { teamMomentum } from './calculators/teamMomentum';
 import { venueWinRate } from './calculators/venueWinRate';
 import { goalMarginVolatility } from './calculators/goalMarginVolatility';
+import { giantKillerPpg } from './calculators/giantKillerPpg';
+import { rankEditionFixtures } from './calculators/giantKillerRanking';
 import { logger } from '../../utils/logger';
 
 /** The only role S-5 authenticates as. */
@@ -119,6 +122,11 @@ export const CALCULATORS: readonly Calculator[] = [
   // (S-6 Phase 2, Option A). Declares `needsLongWindowHistory`; the future
   // Consistency Index module will consume it. Runs in the default pass.
   goalMarginVolatility,
+  // ALL_COMPETITIONS Giant Killer PPG over the ≤730-day window (S-6 Phase 3B).
+  // Declares `needsEditionRankedHistory`; consumes the edition-wide rank-band
+  // replay. Runs in the default pass. The giant_killer_index MODULE remains
+  // deferred — this is substrate only.
+  giantKillerPpg,
   // The first COMPETITION_SCOPED calculator — runs in the scoped pass (Gate
   // C-ii), never the ALL_COMPETITIONS one, because it declares its context kind.
   venueWinRate,
@@ -484,6 +492,8 @@ export async function buildScopedContext(
     fixturesByTeam,
     // No scoped calculator declares needsLongWindowHistory today; empty by default.
     longWindowFixturesByTeam: new Map(),
+    // No scoped calculator declares needsEditionRankedHistory today; empty by default.
+    editionRankedHistoryByTeam: new Map(),
     homeVenueByTeam: new Map(),
     venuesById: new Map(),
     priorValues: new Map(),
@@ -512,6 +522,14 @@ async function buildContext(
   const longWindowFixturesByTeam = calculator.needsLongWindowHistory
     ? await readCompletedFixturesInWindow(tx, batch.teamIds, batch.asOf)
     : new Map();
+  // Additive edition-wide rank-band history (S-6 Phase 3B): read the relevant
+  // editions' fixtures ONCE per batch and replay them into bands, ONLY for a
+  // calculator that declares it needs them, so existing calculators (which leave
+  // it empty) are entirely unaffected. The replay is pure; the read is edition-
+  // wide (all teams), distinct from every subject-oriented read above.
+  const editionRankedHistoryByTeam = calculator.needsEditionRankedHistory
+    ? rankEditionFixtures(await readEditionRankingFixtures(tx, batch.teamIds, batch.asOf))
+    : new Map();
   const homeVenueByTeam = await readHomeVenues(tx, batch.teamIds);
 
   const venueIds = new Set<string>();
@@ -532,6 +550,7 @@ async function buildContext(
     subjects,
     fixturesByTeam,
     longWindowFixturesByTeam,
+    editionRankedHistoryByTeam,
     homeVenueByTeam,
     venuesById,
     priorValues,
