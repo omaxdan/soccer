@@ -157,7 +157,8 @@ describe('readiness_tracker — pure status rule and assembly', () => {
   it('26. MODULE_CALCULATORS holds exactly the authorized modules', () => {
     assert.deepEqual(
       [...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(),
-      ['home_away_split', 'readiness_tracker']
+      // S-9C added the two magnitude modules (TEAM × ALL_COMPETITIONS).
+      ['consistency_index', 'giant_killer_index', 'home_away_split', 'readiness_tracker']
     );
   });
 });

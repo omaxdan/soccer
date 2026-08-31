@@ -44,12 +44,14 @@ import {
 import { selectFixtureBatches, type FixtureBatch } from './driver/fixtureEligibility';
 import {
   MODULE_STATUS,
+  contributionDirectionOf,
   homeInputKeys,
   awayInputKeys,
   type ConsumedFeature,
   type ModuleCalculator,
   type FixtureModuleCalculator,
 } from './types';
+import { toNumericString } from '../feature/write/scale';
 import {
   loadModuleRegistry,
   resolveModuleVersion,
@@ -64,6 +66,8 @@ import { readinessTracker } from './calculators/readinessTracker';
 import { restAdvantage } from './calculators/restAdvantage';
 import { formGapAccuracy } from './calculators/formGapAccuracy';
 import { travelImpact } from './calculators/travelImpact';
+import { giantKillerIndex } from './calculators/giantKillerIndex';
+import { consistencyIndex } from './calculators/consistencyIndex';
 import { logger } from '../../utils/logger';
 
 /** The only role S-6 authenticates as. */
@@ -73,13 +77,31 @@ export const MODULE_ROLE = 'pt_pipeline_module' as const;
 export const INACTIVE_REASON_FEATURE_ABSENT = 'FEATURE_ABSENT';
 
 /**
+ * The version designation permitted to emit MEASURED + strength (S-9C, OD-5).
+ * A magnitude module (`emitsMagnitude`) produces a reading ONLY when the version
+ * in force at the reading's as_of is this designation; before it (the frozen
+ * 1.0.0 era) the module is not produced. This keeps 1.0.0 NULL-frozen and makes
+ * 2.0.0 the sole magnitude-bearing version.
+ */
+export const MAGNITUDE_VERSION_DESIGNATION = '2.0.0';
+
+/**
  * The implemented modules. NOT an execution order — a set. Two are implemented
  * (`home_away_split` COMPETITION_SCOPED, `readiness_tracker` ALL_COMPETITIONS —
  * proving E-i routes both scopes generically); the other eleven stay registered
  * and unproduced. This array is the D-3 declaration site — a module is produced
  * only when it is both registered active AND listed here.
  */
-export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [homeAwaySplit, readinessTracker];
+export const MODULE_CALCULATORS: readonly ModuleCalculator[] = [
+  homeAwaySplit,
+  readinessTracker,
+  // S-9C magnitude modules (ALL_COMPETITIONS, TEAM). They emit MEASURED + strength
+  // ONLY at the 2.0.0 version; giant_killer_index consumes team.giant_killer_ppg,
+  // consistency_index consumes team.goal_margin_volatility. Substrates unchanged;
+  // confidence/published_baseline_id NULL (calibration deferred, OD-6).
+  giantKillerIndex,
+  consistencyIndex,
+];
 
 /**
  * The implemented FIXTURE-subject comparison modules (S-6.x). A SET, produced only
@@ -188,6 +210,7 @@ export function assembleReading(params: {
     asOf,
     contextKindCode: scope.contextKind,
     contextEditionId: scope.contextEditionId,
+    strength: null as string | null,
     declaredInputCount,
     presentInputCount,
     belowThresholdInputCount: 0,
@@ -213,9 +236,15 @@ export function assembleReading(params: {
     sampleObservationCount = Math.min(sampleObservationCount, inputs.get(key)!.sampleObservationCount);
   }
 
+  // Magnitude (S-9C): written ONLY at the 2.0.0 version and only when the finding
+  // carries one. At 1.0.0 this is NULL (D-5a), keeping the frozen contract intact.
+  const emitsMagnitude = version.designation === MAGNITUDE_VERSION_DESIGNATION;
+  const strength = emitsMagnitude && finding.strength !== undefined ? toNumericString(finding.strength) : null;
+
   return {
     ...base,
     statusCode: finding.status,
+    strength,
     verdictText: finding.verdictText,
     inactiveReason: null,
     sampleObservationCount,
@@ -225,9 +254,10 @@ export function assembleReading(params: {
       return {
         citedFeatureValueId: consumed.valueId,
         citedFeatureValueAsOf: consumed.asOf,
-        // Each cited input carries the finding's direction. home_away_split emits
-        // only SUPPORTS/NEUTRAL; CONTRADICTS is available for future modules.
-        contributionDirection: finding.status,
+        // Each cited input carries the finding's direction. A non-directional
+        // MEASURED finding (S-9C) contributes NEUTRAL — the only value the
+        // evidence-item CHECK admits for "no direction".
+        contributionDirection: contributionDirectionOf(finding.status),
       };
     }),
   };
@@ -274,6 +304,8 @@ export function assembleFixtureReading(params: {
     asOf,
     contextKindCode: scope.contextKind,
     contextEditionId: scope.contextEditionId,
+    // No FIXTURE-subject magnitude module exists (S-9C is TEAM-only); NULL here.
+    strength: null as string | null,
     declaredInputCount,
     presentInputCount,
     belowThresholdInputCount: 0,
@@ -305,14 +337,15 @@ export function assembleFixtureReading(params: {
 
   // Every cited value (home's inputs then away's) carries the finding's status; the
   // favoured side lives in verdict_text, not a column (doc 56 C-3).
+  const direction = contributionDirectionOf(finding.status);
   const evidenceItems = [];
   for (const key of homeKeys) {
     const consumed = homeInputs.get(key)!;
-    evidenceItems.push({ citedFeatureValueId: consumed.valueId, citedFeatureValueAsOf: consumed.asOf, contributionDirection: finding.status });
+    evidenceItems.push({ citedFeatureValueId: consumed.valueId, citedFeatureValueAsOf: consumed.asOf, contributionDirection: direction });
   }
   for (const key of awayKeys) {
     const consumed = awayInputs.get(key)!;
-    evidenceItems.push({ citedFeatureValueId: consumed.valueId, citedFeatureValueAsOf: consumed.asOf, contributionDirection: finding.status });
+    evidenceItems.push({ citedFeatureValueId: consumed.valueId, citedFeatureValueAsOf: consumed.asOf, contributionDirection: direction });
   }
 
   return {
@@ -576,6 +609,17 @@ async function runModuleBatch(
         logger.warn(
           { moduleKey: calculator.moduleKey, asOf: batch.asOf.toISOString() },
           'v2 module: no version covers as_of, skipping'
+        );
+        return;
+      }
+
+      // S-9C: a magnitude module (MEASURED + strength) is produced ONLY at its
+      // 2.0.0 version. Before that (the frozen 1.0.0 era, where it had no
+      // calculator) it writes nothing — never a MEASURED reading at 1.0.0.
+      if (calculator.emitsMagnitude && version.designation !== MAGNITUDE_VERSION_DESIGNATION) {
+        logger.debug(
+          { moduleKey: calculator.moduleKey, asOf: batch.asOf.toISOString(), designation: version.designation },
+          'v2 module: magnitude module has no reading before its 2.0.0 version, skipping'
         );
         return;
       }

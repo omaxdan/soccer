@@ -465,7 +465,95 @@ export async function seedModuleRegistry(tx: PoolClient): Promise<SeedOutcome[]>
     )
   );
 
+  // S-9C: the two magnitude-bearing modules gain a 2.0.0 successor (OD-5). Versions
+  // are seed-managed exactly as 1.0.0 is (migrations cannot create module_version
+  // rows before the definitions exist). The successor's arrival closes 1.0.0's open
+  // period — the sanctioned mechanism (owner-authorized) — then 2.0.0 opens. Only
+  // the 1.0.0 lifecycle upper bound is touched: its rationale, semantics, and any
+  // readings are unchanged (these two modules produced no 1.0.0 readings).
+  outcomes.push(await seedMagnitudeVersions(tx));
+
   return outcomes;
+}
+
+/** The modules that gain a 2.0.0 magnitude version (S-9C). */
+export const MAGNITUDE_MODULE_KEYS = ['giant_killer_index', 'consistency_index'] as const;
+
+const MAGNITUDE_VERSION_RATIONALE: Readonly<Record<string, string>> = {
+  giant_killer_index:
+    '2.0.0 (S-9C magnitude output; OD-1/OD-2/OD-5). Status rule: MEASURED — a non-directional '
+    + 'measured result, never SUPPORTS/NEUTRAL/CONTRADICTS (no threshold, band, or categorical '
+    + 'conversion; owner-barred). strength = 100 * ppgTop / 3, rounded to two decimals — the '
+    + 'V1-authoritative Giant Killer score — from the committed team.giant_killer_ppg substrate '
+    + '(recency-weighted PPG vs top-tertile opponents, ALL_COMPETITIONS, as_of-anchored recency, '
+    + '>= 3 top-tier or absent; substrate unchanged). TEAM-subject, one declared input. '
+    + 'sample_observation_count = MIN(consumed) (D-5c-i); minimum_sample_observation_count = 0. '
+    + 'confidence and published_baseline_id are NULL — the S-9 calibration channel is deferred '
+    + '(OD-6). Coexists with an immutable 1.0.0 predecessor, which produced no readings.',
+  consistency_index:
+    '2.0.0 (S-9C magnitude output; OD-1/OD-3/OD-5). Status rule: MEASURED — a non-directional '
+    + 'measured result, never SUPPORTS/NEUTRAL/CONTRADICTS (no threshold, direction, band, or '
+    + 'categorical mapping; owner-barred). strength = team.goal_margin_volatility, emitted UNCHANGED '
+    + '(no scale/normalize/invert) — the raw unweighted sample standard deviation of signed goal '
+    + 'margin over the 730-day window from the committed substrate (higher = less consistent; '
+    + 'substrate unchanged). TEAM-subject, one declared input. sample_observation_count = '
+    + 'MIN(consumed) (D-5c-i); minimum_sample_observation_count = 0. confidence and '
+    + 'published_baseline_id are NULL — S-9 calibration deferred (OD-6). Coexists with an immutable '
+    + '1.0.0 predecessor, which produced no readings.',
+};
+
+/**
+ * Adds the 2.0.0 magnitude version for each magnitude module, closing its 1.0.0
+ * open period first (the exclusion constraint forbids two open periods). Idempotent:
+ * a module that already has a 2.0.0 is left exactly as it is. The 1.0.0 row's
+ * rationale and readings are never touched — only its effective_period upper bound
+ * closes, which is the successor mechanism `openEffectivePeriod` documents.
+ */
+async function seedMagnitudeVersions(tx: PoolClient): Promise<SeedOutcome> {
+  let inserted = 0;
+  for (const moduleKey of MAGNITUDE_MODULE_KEYS) {
+    const already = await tx.query(
+      `SELECT 1
+         FROM module.module_version v
+         JOIN module.module_definition d ON d.id = v.module_definition_id
+        WHERE d.module_key = $1 AND v.designation = '2.0.0'`,
+      [moduleKey]
+    );
+    if ((already.rowCount ?? 0) > 0) continue;
+
+    const cutover = new Date().toISOString();
+    // Close the still-open 1.0.0 period at the cutover instant (idempotent guard:
+    // only when it is still open). 1.0.0's rationale and readings are untouched.
+    await tx.query(
+      `UPDATE module.module_version v
+          SET effective_period = tstzrange(lower(v.effective_period), $2::timestamptz, '[)')
+         FROM module.module_definition d
+        WHERE d.id = v.module_definition_id
+          AND d.module_key = $1
+          AND v.designation = '1.0.0'
+          AND upper_inf(v.effective_period)`,
+      [moduleKey, cutover]
+    );
+    // Insert the 2.0.0 successor with predecessor = 1.0.0 and an open period.
+    await tx.query(
+      `INSERT INTO module.module_version
+         (module_definition_id, designation, effective_period, predecessor_id, rationale)
+       SELECT d.id, '2.0.0', tstzrange($2::timestamptz, NULL, '[)'),
+              (SELECT v.id FROM module.module_version v
+                WHERE v.module_definition_id = d.id AND v.designation = '1.0.0'),
+              $3
+         FROM module.module_definition d
+        WHERE d.module_key = $1`,
+      [moduleKey, cutover, MAGNITUDE_VERSION_RATIONALE[moduleKey]]
+    );
+    inserted += 1;
+  }
+  return {
+    relation: 'module.module_version',
+    offered: MAGNITUDE_MODULE_KEYS.length,
+    inserted,
+    skipped: MAGNITUDE_MODULE_KEYS.length - inserted,
+  };
 }
 
 /** Exposed for the test suite, so expectations are not restated by hand. */

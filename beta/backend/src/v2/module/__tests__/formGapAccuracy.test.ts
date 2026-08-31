@@ -181,7 +181,7 @@ describe('form_gap_accuracy — pure signed comparison and assembly', () => {
 
   it('registration: form_gap_accuracy joins the FIXTURE set; the TEAM set is unchanged', () => {
     assert.deepEqual([...FIXTURE_MODULE_CALCULATORS.map((c) => c.moduleKey)], ['rest_advantage', 'form_gap_accuracy', 'travel_impact']);
-    assert.deepEqual([...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(), ['home_away_split', 'readiness_tracker']);
+    assert.deepEqual([...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(), ['consistency_index', 'giant_killer_index', 'home_away_split', 'readiness_tracker']);
   });
 });
 

@@ -44,6 +44,13 @@ export interface ReadingToWrite {
   readonly contextKindCode: string;
   readonly contextEditionId: string | null;
   readonly statusCode: string;
+  /**
+   * The measured magnitude as a numeric string, or NULL. Non-NULL ONLY at the
+   * 2.0.0 magnitude version (S-9C); NULL at 1.0.0 (D-5a) and for every INACTIVE or
+   * categorical reading. `confidence` and `published_baseline_id` remain NULL
+   * (S-9 calibration deferred, OD-6).
+   */
+  readonly strength: string | null;
   readonly verdictText: string | null;
   readonly inactiveReason: string | null;
   readonly sampleObservationCount: number;
@@ -63,8 +70,10 @@ export interface ReadingWriteResult {
 /**
  * Writes one module reading with its evidence, skipping if it already exists.
  *
- * `strength`, `confidence` and `published_baseline_id` are hard NULL — the frozen
- * 1.0.0 contract, not a runtime choice. The reading is TEAM-subject, so the
+ * `strength` is supplied by the caller: a numeric string ONLY at the 2.0.0
+ * magnitude version (S-9C), NULL at 1.0.0 (D-5a) and for INACTIVE/categorical
+ * readings. `confidence` and `published_baseline_id` are hard NULL — the S-9
+ * calibration channel is deferred (OD-6). The reading is TEAM-subject, so the
  * subject player/fixture/edition columns are NULL. The context is the module's
  * declared scope: `context_kind_code` is bound and `context_competition_edition_id`
  * carries the edition for COMPETITION_SCOPED or NULL for ALL_COMPETITIONS —
@@ -89,9 +98,9 @@ export async function writeReading(
        ($1::timestamptz, $2::timestamptz, $3::bigint, $4::bigint,
         $5::text, $6::bigint, $7::bigint, $8::date,
         $9::text, $10::bigint,
-        $11::text, NULL, NULL,
-        $12::integer, $13::boolean,
-        NULL, NULL, $14::text, $15::text)
+        $11::text, $12::numeric, NULL,
+        $13::integer, $14::boolean,
+        NULL, NULL, $15::text, $16::text)
      ON CONFLICT ON CONSTRAINT uq_module_reading__subject_context_definition_asof_version
      DO NOTHING
      RETURNING id::text, as_of`,
@@ -107,6 +116,7 @@ export async function writeReading(
       reading.contextKindCode,
       reading.contextEditionId,
       reading.statusCode,
+      reading.strength,
       reading.sampleObservationCount,
       reading.sampleMeetsThreshold,
       reading.verdictText,

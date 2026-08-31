@@ -34,6 +34,7 @@ export {
   INACTIVE_MODULE_KEYS,
   ENTITLEMENT_KEYS,
   RETIRED_V1_MODULE_KEYS,
+  MAGNITUDE_MODULE_KEYS,
 } from './moduleRegistry';
 
 export {

@@ -32,6 +32,7 @@ import {
   INACTIVE_MODULE_KEYS,
   ENTITLEMENT_KEYS,
   RETIRED_V1_MODULE_KEYS,
+  MAGNITUDE_MODULE_KEYS,
   seedRows,
 } from '../index';
 
@@ -186,7 +187,13 @@ describe('seeding (requires a V2 database)', { skip: skipReason() || false }, ()
     assert.equal(firstCounts['feature.feature_definition_context_kind'], FEATURE_CONTEXT_PAIRS);
     assert.equal(firstCounts['feature.feature_version'], FEATURE_KEYS.length);
     assert.equal(firstCounts['module.module_definition'], MODULE_KEYS.length);
-    assert.equal(firstCounts['module.module_version'], MODULE_KEYS.length);
+    // One 1.0.0 per module, plus the S-9C 2.0.0 successor for each magnitude module
+    // (giant_killer_index, consistency_index): the seed closes their 1.0.0 period
+    // and adds 2.0.0. Governed end state: MODULE_KEYS + MAGNITUDE_MODULE_KEYS.
+    assert.equal(
+      firstCounts['module.module_version'],
+      MODULE_KEYS.length + MAGNITUDE_MODULE_KEYS.length
+    );
     // The seed declares 1.0.0; post-seed S-8 migrations add successors (028 → 1.1.0
     // for rest_edge, 030 → 1.2.0 for form_edge), the same seed-declares-identity /
     // migration-states-the-rule split as 024/027. Governed end state: three rows.

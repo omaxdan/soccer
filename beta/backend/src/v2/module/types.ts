@@ -25,15 +25,38 @@ import type {
   COMPETITION_SCOPED_CONTEXT_KIND,
 } from '../feature/calculators/types';
 
-/** The four module statuses (E3.07). INACTIVE is the engine's, never a calculator's. */
+/**
+ * The module statuses (E3.07). INACTIVE is the engine's, never a calculator's.
+ *
+ * MEASURED (S-9C, OD-1) is an engaged, NON-DIRECTIONAL status: a valid
+ * measured/characterised result that does not assert SUPPORTS/NEUTRAL/CONTRADICTS.
+ * It is emitted ONLY by the 2.0.0 magnitude path; the 1.0.0 categorical contract
+ * is unchanged. A MEASURED reading carries `strength`; its evidence items, whose
+ * `contribution_direction` is schema-constrained to SUPPORTS/CONTRADICTS/NEUTRAL,
+ * record NEUTRAL (a magnitude input has no directional contribution).
+ */
 export const MODULE_STATUS = {
   SUPPORTS: 'SUPPORTS',
   NEUTRAL: 'NEUTRAL',
   CONTRADICTS: 'CONTRADICTS',
+  MEASURED: 'MEASURED',
   INACTIVE: 'INACTIVE',
 } as const;
 
-export type EngagedStatus = 'SUPPORTS' | 'NEUTRAL' | 'CONTRADICTS';
+/** The engaged statuses a calculator may return. MEASURED is non-directional (S-9C). */
+export type EngagedStatus = 'SUPPORTS' | 'NEUTRAL' | 'CONTRADICTS' | 'MEASURED';
+
+/** The directional statuses valid as an evidence item's contribution_direction (schema CHECK). */
+export type ContributionDirection = 'SUPPORTS' | 'CONTRADICTS' | 'NEUTRAL';
+
+/**
+ * The contribution_direction an evidence item records for a finding. Directional
+ * statuses pass through; a non-directional MEASURED finding contributes NEUTRAL,
+ * the only faithful non-directional value the schema CHECK admits.
+ */
+export function contributionDirectionOf(status: EngagedStatus): ContributionDirection {
+  return status === 'MEASURED' ? 'NEUTRAL' : status;
+}
 
 /** A feature value a module consumed, with the identity evidence and lineage need. */
 export interface ConsumedFeature {
@@ -51,6 +74,13 @@ export interface ModuleFinding {
   readonly status: EngagedStatus;
   /** The module's own plain conclusion (E3.09). No action, stake or selection (LC-71). */
   readonly verdictText: string;
+  /**
+   * The measured magnitude, when the module is magnitude-bearing (S-9C, MEASURED).
+   * Carried at the module's own scale, converted to numeric at the write boundary.
+   * The engine writes it ONLY at the 2.0.0 magnitude version; at 1.0.0 it stays
+   * NULL (D-5a). A directional (SUPPORTS/NEUTRAL/CONTRADICTS) finding omits it.
+   */
+  readonly strength?: Exact;
 }
 
 /**
@@ -74,6 +104,12 @@ export interface ModuleCalculator {
    */
   readonly contextKind: typeof CALCULATION_CONTEXT_KIND | typeof COMPETITION_SCOPED_CONTEXT_KIND;
   readonly inputFeatureKeys: readonly string[];
+  /**
+   * True for a magnitude-bearing module (S-9C): it returns a MEASURED finding with
+   * `strength`, and the engine produces it ONLY at the 2.0.0 version. Omitted/false
+   * is the default — the existing categorical modules, unchanged. Additive.
+   */
+  readonly emitsMagnitude?: boolean;
   /**
    * Called ONLY when every declared input is present, so `inputs` always holds
    * all of `inputFeatureKeys`. Must be deterministic: same inputs → same finding.

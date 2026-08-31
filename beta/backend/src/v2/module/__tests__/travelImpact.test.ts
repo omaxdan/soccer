@@ -167,7 +167,7 @@ describe('travel_impact — pure home-relative signed comparison and assembly', 
 
   it('registration: travel_impact is the third FIXTURE calculator; the TEAM set is unchanged', () => {
     assert.deepEqual([...FIXTURE_MODULE_CALCULATORS.map((c) => c.moduleKey)], ['rest_advantage', 'form_gap_accuracy', 'travel_impact']);
-    assert.deepEqual([...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(), ['home_away_split', 'readiness_tracker']);
+    assert.deepEqual([...MODULE_CALCULATORS.map((c) => c.moduleKey)].sort(), ['consistency_index', 'giant_killer_index', 'home_away_split', 'readiness_tracker']);
   });
 });
 
