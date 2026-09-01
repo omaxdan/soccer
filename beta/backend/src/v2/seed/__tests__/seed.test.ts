@@ -26,6 +26,7 @@ import {
   VOCABULARY_COUNTS,
   FEATURE_KEYS,
   CALCULATOR_KEYS,
+  FEATURE_CALCULATOR_REFS,
   FEATURE_CONTEXT_PAIRS,
   MODULE_KEYS,
   ACTIVE_MODULE_KEYS,
@@ -48,6 +49,17 @@ describe('seed declarations (no database required)', () => {
   test('exactly the approved thirteen modules are declared', () => {
     assert.equal(MODULE_KEYS.length, 13);
     assert.equal(new Set(MODULE_KEYS).size, 13, 'module keys must be unique');
+  });
+
+  test('every feature references a declared calculator key', () => {
+    // A feature whose calculator key is not among CALCULATOR_KEYS makes the
+    // feature_definition seed resolve feature_calculator_id to NULL and the whole
+    // stage roll back (the goal_margin_volatility omission). This pure guard fails
+    // at build time instead of only against a live database.
+    const calculatorKeys = new Set(CALCULATOR_KEYS);
+    for (const ref of FEATURE_CALCULATOR_REFS) {
+      assert.ok(calculatorKeys.has(ref), `feature calculator '${ref}' is not a declared CALCULATOR_KEY`);
+    }
   });
 
   test('the four newly approved modules are registered INACTIVE', () => {

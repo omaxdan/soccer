@@ -23,6 +23,7 @@ export {
   seedFeatureRegistry,
   FEATURE_KEYS,
   CALCULATOR_KEYS,
+  FEATURE_CALCULATOR_REFS,
   FEATURE_CONTEXT_PAIRS,
 } from './featureRegistry';
 

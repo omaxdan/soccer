@@ -93,6 +93,14 @@ const CALCULATORS: readonly (readonly [string, string, string, string])[] = [
       'FORMULA and POPULATION unchanged; the only V2 difference is point-in-time as_of windowing.',
   ],
   [
+    'goal_margin_volatility',
+    'Goal margin volatility',
+    '1.0.0',
+    'V1 processTeamFormQuality in jobs/processExtendedIntelligence.ts — the volatility figure: '
+      + 'the unweighted sample standard deviation of signed goal margin. Carried across unchanged '
+      + '(S-6 Phase 2 substrate for consistency_index).',
+  ],
+  [
     'giant_killer_ppg',
     'Giant killer PPG',
     '1.0.0',
@@ -548,3 +556,10 @@ export async function seedFeatureRegistry(tx: PoolClient): Promise<SeedOutcome[]
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);
 export const CALCULATOR_KEYS = CALCULATORS.map((c) => c[0]);
 export const FEATURE_CONTEXT_PAIRS = FEATURES.reduce((n, f) => n + f.contextKinds.length, 0);
+/**
+ * The calculator key each feature references. Every entry MUST be a CALCULATOR_KEY,
+ * or the feature_definition seed resolves feature_calculator_id to NULL and the
+ * whole feature registry stage rolls back — the exact failure a missing calculator
+ * tuple caused. Exported so a pure test can guard the invariant without a DB.
+ */
+export const FEATURE_CALCULATOR_REFS = FEATURES.map((f) => f.calculator);
