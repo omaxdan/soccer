@@ -131,8 +131,10 @@ describe('S-7 sealing over a real migrated database', { skip: !hasDatabase }, ()
       }
     });
     // Seal at now = KICKOFF. The KICKOFF point (as_of = KICKOFF, after seed time)
-    // seals; earlier points (as_of before the rules' genesis on this fresh DB) are
-    // skipped as NO_RULE_IN_FORCE. The bare fixture's KICKOFF seals an empty verdict.
+    // seals; earlier points seal too iff their as_of is already governed (true on a
+    // long-lived DB whose rules predate them). The dedicated NO_RULE_IN_FORCE case is
+    // proven separately below with a fixture anchored before the rules' genesis. The
+    // bare fixture's KICKOFF seals an empty verdict.
     await runSnapshotSealing({ fixtureId, now: KICKOFF });
     await runSnapshotSealing({ fixtureId: bareFixtureId, now: KICKOFF });
   });
@@ -311,11 +313,52 @@ describe('S-7 sealing over a real migrated database', { skip: !hasDatabase }, ()
   });
 
   it('earlier snapshot points are skipped honestly when no governing rule is in force yet', async () => {
-    // On this fresh DB the rules were seeded recently, so a point 7 days before
-    // kickoff predates them and CANNOT be sealed — it is skipped, not sealed empty
-    // under a fabricated rule. (In production the rules predate every fixture.)
+    // DETERMINISTIC AGAINST DB AGE. Sealing requires all three governing version
+    // dimensions to be in force at the snapshot as-of (seal.ts: verdict_composition,
+    // consensus_rule, checksum_algorithm — each resolved by effective_period @> asOf).
+    // Each has a real, historical effective start on the migrated DB. Rather than
+    // assume the rules were "seeded seconds ago" (false on a long-lived DB, where a
+    // point 7 days back is already governed), anchor a dedicated fixture 1 second
+    // BEFORE the earliest of those starts, so EVERY one of its snapshot points has an
+    // as-of that precedes every dimension's genesis. No dimension is in force there,
+    // so sealing must take the NO_RULE_IN_FORCE path and create no row — whatever the
+    // age of the database.
+    const earliest = await withConnection(MODULE, async (tx) => {
+      const r = await tx.query<{ e: Date }>(
+        `SELECT LEAST(
+           (SELECT min(lower(effective_period)) FROM module.verdict_composition_version),
+           (SELECT min(lower(effective_period)) FROM module.consensus_rule_version),
+           (SELECT min(lower(effective_period)) FROM module.checksum_algorithm_version)
+         ) AS e`);
+      return r.rows[0].e;
+    });
+    const preRuleKickoff = new Date(earliest.getTime() - 1000);
+    const preRuleFixtureId = await withConnection(INGESTION, async (tx) => {
+      const f = await tx.query<{ id: string }>(
+        `INSERT INTO football.fixture (provider_code, provider_external_id, fixture_partition_on, competition_edition_id,
+           is_neutral_venue, home_team_id, away_team_id, scheduled_kickoff_at, lifecycle_state_code)
+         VALUES ('SPORTSAPI_API',$1,$2::date,$3,false,$4,$5,$6,'SCHEDULED')
+         ON CONFLICT (provider_code, provider_external_id, fixture_partition_on) DO UPDATE SET lifecycle_state_code=EXCLUDED.lifecycle_state_code
+         RETURNING id::text`,
+        [`S7-PRERULE-${TAG}`, day(preRuleKickoff), editionId, teamA, teamB, iso(preRuleKickoff)]);
+      return f.rows[0].id;
+    });
+    // Seal as of the fixture's own (past) kickoff: every point has ARRIVED (eligible
+    // by time) yet is ungoverned, so each is skipped honestly and nothing is sealed.
+    const report = await runSnapshotSealing({ fixtureId: preRuleFixtureId, now: preRuleKickoff });
+    assert.equal(report.sealed, 0, 'nothing sealed: every point precedes the governing rules');
+    assert.equal(report.notYetDue, 0, 'every point is eligible by time (arrived), not future-skipped');
+    assert.ok(report.skippedNoRule >= 1, 'the engine took the NO_RULE_IN_FORCE path');
+
     const early = await withConnection(MODULE, (tx) =>
-      tx.query<{ n: string }>(`SELECT count(*)::text n FROM snapshot.match_snapshot WHERE fixture_id=$1 AND snapshot_point_code='T_MINUS_7D'`, [fixtureId]));
+      tx.query<{ n: string }>(`SELECT count(*)::text n FROM snapshot.match_snapshot WHERE fixture_id=$1 AND snapshot_point_code='T_MINUS_7D'`, [preRuleFixtureId]));
     assert.equal(Number(early.rows[0].n), 0, 'no snapshot sealed at a point preceding the governing rules');
+
+    // Positive control (deterministic): a point governed by a rule in force DOES
+    // seal — the primary fixture's KICKOFF (as-of after the rules' genesis) was
+    // sealed in setup — proving the skip above is honest, not a blanket refusal.
+    const governed = await withConnection(MODULE, (tx) =>
+      tx.query<{ n: string }>(`SELECT count(*)::text n FROM snapshot.match_snapshot WHERE fixture_id=$1 AND snapshot_point_code='KICKOFF'`, [fixtureId]));
+    assert.equal(Number(governed.rows[0].n), 1, 'a point governed by a rule in force still seals normally');
   });
 });
