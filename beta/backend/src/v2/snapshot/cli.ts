@@ -76,7 +76,8 @@ function reportRun(report: SnapshotRunReport): void {
   /* eslint-disable no-console */
   console.log(
     `\nv2 snapshot sealing complete: ${report.sealed} sealed, ${report.skipped} already sealed, ` +
-      `${report.skippedNoRule} skipped (no rule in force), ${report.notYetDue} not yet due ` +
+      `${report.skippedNoRule} skipped (no rule in force), ${report.notYetDue} not yet due, ` +
+      `${report.failed} failed (isolated) ` +
       `(${report.fixturesConsidered} fixture(s), ${report.pointsConsidered} arrived point(s))\n`
   );
   /* eslint-enable no-console */

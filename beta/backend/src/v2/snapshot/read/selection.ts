@@ -51,12 +51,22 @@ const FIXTURES_TO_SEAL_SQL = `
          f.away_team_id::text           AS away_team_id,
          f.competition_edition_id::text AS competition_edition_id
     FROM football.fixture f
+    JOIN football.fixture_lifecycle_state s ON s.code = f.lifecycle_state_code
    WHERE f.scheduled_kickoff_at >= $1::timestamptz
      AND f.scheduled_kickoff_at <  $2::timestamptz
+     AND s.is_open = true
    ORDER BY f.scheduled_kickoff_at, f.id
 `;
 
-/** Fixtures whose kickoff falls in [from, to). */
+/**
+ * Fixtures whose kickoff falls in [from, to) AND are in an EXPLICITLY OPEN
+ * lifecycle state (`is_open = true`). A snapshot may only be created for an open
+ * fixture — the migration-015 BEFORE-INSERT guard enforces this at the row, and
+ * selecting a COMPLETED/CANCELLED/unknown fixture would only hand the guard a row
+ * to reject. Filtering here means the guard is never reached for a closed fixture,
+ * so a normal catch-up window over a period containing finished matches no longer
+ * selects them. The kickoff-window bounds and ordering are unchanged.
+ */
 export async function readFixturesToSeal(tx: PoolClient, from: Date, to: Date): Promise<FixtureToSeal[]> {
   const { rows } = await tx.query<{
     fixture_id: string; fixture_partition_on: string; kickoff_at: Date;
