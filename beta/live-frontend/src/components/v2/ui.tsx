@@ -297,34 +297,68 @@ function ResultLetter({ row }: { row: ApiRecentFormRow }) {
   );
 }
 
-/** The rows for one venue side of one team. Honest empty / partial states. */
+// Fixed, deterministic column track so every row aligns vertically:
+// DATE · COMPETITION mark · OPPONENT · VENUE · SCORE · RESULT. The two flexible
+// columns use minmax(0, …) so long names truncate (ellipsis) instead of pushing
+// the fixed score/result columns out of alignment.
+const VENUE_FORM_ROW_GRID = '3.25rem 18px minmax(0, 1.4fr) minmax(0, 1.15fr) 2.4rem 0.85rem';
+
+/**
+ * Compact competition mark for a venue-form row. The V2 surface carries no
+ * persisted competition logo and no country, so per the fallback chain this is a
+ * NEUTRAL compact mark — the competition's initials — never an invented field or a
+ * runtime external image fetch. The full competition name stays accessible via
+ * title + aria-label: the mark is a visual abbreviation, not a removal of the
+ * underlying semantic information.
+ */
+function CompetitionMark({ competition }: { competition: { name: string } }) {
+  const initials =
+    competition.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '•';
+  return (
+    <span
+      title={competition.name}
+      aria-label={competition.name}
+      className="mono"
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 18, height: 18, borderRadius: 3, fontSize: 8, fontWeight: 700, lineHeight: 1,
+        color: 'var(--muted)', background: 'var(--raised, rgba(128,128,128,0.10))',
+        border: '1px solid var(--hairline, rgba(128,128,128,0.25))',
+      }}
+    >{initials}</span>
+  );
+}
+
+/** The rows for one venue side of one team, as an aligned column grid. Honest
+ *  empty / partial states. Purely presentational — no data or W/D/L semantics
+ *  change; the section heading (Last 5 Home / Away) already establishes venue
+ *  context, so no per-row home/away icon is added. */
 function VenueSide({ label, rows }: { label: string; rows: ApiRecentFormRow[] }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <p className="label-cap" style={{ color: 'var(--text-secondary)' }}>{label}</p>
-        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
-          {rows.length === 0 ? 'no matches' : `${rows.length} of up to 5`}
-        </span>
+        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>{rows.length} / 5</span>
       </div>
       {rows.length === 0 ? (
         <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 11, marginTop: 4 }}>No completed matches yet</p>
       ) : (
-        <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+        <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
           {rows.map((row) => (
             <div role="listitem" key={row.fixtureId}
-              style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: 6, alignItems: 'baseline', fontSize: 11 }}>
-              <span className="tnum" style={{ color: 'var(--faint)' }}>{shortDate(row.kickoffAt)}</span>
-              <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              style={{ display: 'grid', gridTemplateColumns: VENUE_FORM_ROW_GRID, gap: 6, alignItems: 'center', fontSize: 11 }}>
+              <span className="tnum" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>{shortDate(row.kickoffAt)}</span>
+              <CompetitionMark competition={row.competition} />
+              <span title={row.opponent.name} style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                 {row.opponent.name}
-                <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginLeft: 4 }}>
-                  {row.venueName ?? '—'} · {row.competition.name}
-                </span>
               </span>
-              <span className="mono tnum" style={{ color: 'var(--text-secondary)' }}>
+              <span title={row.venueName ?? undefined} style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {row.venueName ?? '—'}
+              </span>
+              <span className="mono tnum" style={{ color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                 {row.goalsFor ?? '-'}–{row.goalsAgainst ?? '-'}
               </span>
-              <ResultLetter row={row} />
+              <span style={{ display: 'flex', justifyContent: 'center' }}><ResultLetter row={row} /></span>
             </div>
           ))}
         </div>
