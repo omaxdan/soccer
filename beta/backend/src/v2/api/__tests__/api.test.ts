@@ -56,9 +56,14 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/18'), { kind: 'match', id: '18' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/fixtures'), { kind: 'editionFixtures', id: '42' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions'), { kind: 'editionList' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams'), { kind: 'teamList' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18'), { kind: 'team', id: '18' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/players'), { kind: 'playerList' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/players/9'), { kind: 'player', id: '9' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18'), { kind: 'methodNotAllowed' });
-    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18'), { kind: 'notFound' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/coaches/18'), { kind: 'notFound' });
     assert.deepEqual(resolveRoute('GET', '/'), { kind: 'notFound' });
   });
 });
@@ -169,6 +174,10 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getMatch: async (id) => { matchCalls.push(id); return id === '18' ? { match: { fixtureId: '18' } } : null; },
       getEdition: async (id) => { editionCalls.push(id); return id === '42' ? { edition: { id: '42' }, fixtures: [] } : null; },
       getEditions: async () => ({ editions: [{ id: '42', seasonLabel: 'S', competition: { id: '1', name: 'L', slug: 'l' }, fixtureCount: 3 }] }),
+      getTeams: async () => ({ teams: [{ id: '7', name: 'T', slug: 't', shortName: null, countryCode: null }] }),
+      getTeam: async (id) => (id === '7' ? { team: { id: '7' } } : null),
+      getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
+      getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -206,10 +215,30 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     assert.equal((await res.json() as any).editions[0].id, '42');
   });
 
+  it('GET the team list → 200; known team → 200; unknown team → 404', async () => {
+    assert.equal((await fetch(`${base}/api/v2/teams`)).status, 200);
+    assert.equal((await (await fetch(`${base}/api/v2/teams`)).json() as any).teams[0].id, '7');
+    assert.equal((await fetch(`${base}/api/v2/teams/7`)).status, 200);
+    const miss = await fetch(`${base}/api/v2/teams/8`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'team_not_found' });
+  });
+
+  it('GET the player list → 200; known player → 200; unknown player → 404', async () => {
+    assert.equal((await fetch(`${base}/api/v2/players`)).status, 200);
+    assert.equal((await (await fetch(`${base}/api/v2/players`)).json() as any).players[0].id, '9');
+    assert.equal((await fetch(`${base}/api/v2/players/9`)).status, 200);
+    const miss = await fetch(`${base}/api/v2/players/8`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'player_not_found' });
+  });
+
   it('unknown path → 404 not_found; POST → 405; invalid id → 400', async () => {
-    assert.equal((await fetch(`${base}/api/v2/teams/1`)).status, 404);
+    assert.equal((await fetch(`${base}/api/v2/coaches/1`)).status, 404);
     assert.equal((await fetch(`${base}/api/v2/matches/18`, { method: 'POST' })).status, 405);
     assert.equal((await fetch(`${base}/api/v2/matches/abc`)).status, 400);
+    assert.equal((await fetch(`${base}/api/v2/teams/abc`)).status, 400);
+    assert.equal((await fetch(`${base}/api/v2/players/abc`)).status, 400);
   });
 });
 
@@ -228,7 +257,7 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
   const HIST2 = new Date(AS_OF.getTime() - 10 * 86_400_000);
 
   let editionId = '', teamA = '', teamB = '', teamC = '', teamD = '';
-  let subjectAB = '', bareCD = '', postponedAB = '';
+  let subjectAB = '', bareCD = '', postponedAB = '', playerX = '';
   // A second, materialized edition that is deliberately NOT governed-authorized —
   // it must never appear in Day-1 edition navigation (PD-D1.1).
   let unauthEditionId = '';
@@ -292,6 +321,27 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
       // A POSTPONED fixture in the SAME edition — PD-D1.2 keeps non-playable
       // lifecycle states visible in edition navigation (exposure ≠ eligibility).
       postponedAB = await fixture(tx, 'PAB', teamA, teamB, new Date(KICKOFF.getTime() + 86_400_000), 'POSTPONED');
+
+      // Team & player registrations for the governed edition — the substrate the
+      // /teams and /players surfaces read (registration_period @> current_date).
+      for (const t of [teamA, teamB]) {
+        await tx.query(
+          `INSERT INTO football.team_registration (team_id, competition_edition_id, registered_on)
+           VALUES ($1,$2,'2026-01-01') ON CONFLICT (team_id, competition_edition_id) DO NOTHING`,
+          [t, editionId]);
+      }
+      const pl = await tx.query<{ id: string }>(
+        `INSERT INTO football.player (provider_code, provider_external_id, full_name, slug, nationality_code, height_cm, preferred_foot, date_of_birth)
+         VALUES ('SPORTSAPI_API',$1,'B2 Player X',$2,'GB',182,'RIGHT','1998-01-01')
+         ON CONFLICT (provider_code, provider_external_id) DO UPDATE SET full_name=EXCLUDED.full_name
+         RETURNING id::text`, [`B2-PX-${TAG}`, `b2-player-x-${TAG}`]);
+      playerX = pl.rows[0].id;
+      await tx.query(
+        `INSERT INTO football.player_registration
+           (player_id, team_id, registration_kind_code, competition_edition_id, registration_period, provenance_class_code)
+         VALUES ($1,$2,'PERMANENT',$3, daterange('2020-01-01', NULL), 'OBSERVED')
+         ON CONFLICT DO NOTHING`,
+        [playerX, teamA, editionId]);
 
       // A second edition under the same competition, with one fixture, left
       // GOVERNED-UNAUTHORIZED — the negative case for Day-1 exposure (PD-D1.1).
@@ -509,6 +559,46 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     const res = await fetch(`${base}/api/v2/editions/${unauthEditionId}/fixtures`);
     assert.equal(res.status, 404, 'a governed-unauthorized edition is not reachable by direct URL');
     assert.deepEqual(await res.json(), { error: 'edition_not_found' });
+  });
+
+  it('Teams: list is governed-scoped; detail carries identity, competitions, squad, results', async () => {
+    const list = await (await fetch(`${base}/api/v2/teams`)).json() as any;
+    const ids = list.teams.map((t: any) => t.id);
+    assert.ok(ids.includes(teamA) && ids.includes(teamB), 'registered teams appear');
+    assert.ok(!ids.includes(teamC) && !ids.includes(teamD), 'teams with no governed registration are excluded');
+    assert.ok(list.teams.every((t: any) => t.id && t.name && t.slug), 'identity fields present');
+
+    const detail = await (await fetch(`${base}/api/v2/teams/${teamA}`)).json() as any;
+    assert.equal(detail.team.id, teamA);
+    assert.ok(detail.competitions.some((c: any) => c.editionId === editionId && c.competition.name === 'B2 League'));
+    assert.ok(detail.squad.some((p: any) => p.id === playerX), 'current squad includes the registered player');
+    assert.equal(detail.recentResults.length, 2, 'team A has two completed results (H1, H2)');
+    assert.ok(detail.recentResults.every((r: any) => r.opponent.id && typeof r.isHome === 'boolean'));
+  });
+
+  it('GET a team with no governed registration → 404 (governed exposure gate)', async () => {
+    const res = await fetch(`${base}/api/v2/teams/${teamC}`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'team_not_found' });
+  });
+
+  it('Players: directory is governed-scoped; detail carries biography + current team', async () => {
+    const list = await (await fetch(`${base}/api/v2/players`)).json() as any;
+    const mine = list.players.find((p: any) => p.id === playerX);
+    assert.ok(mine, 'the registered player appears in the directory');
+    assert.equal(mine.team.id, teamA, 'directory row carries the current team');
+
+    const detail = await (await fetch(`${base}/api/v2/players/${playerX}`)).json() as any;
+    assert.equal(detail.player.id, playerX);
+    assert.equal(detail.player.fullName, 'B2 Player X');
+    assert.equal(detail.currentTeam.id, teamA);
+    assert.equal(detail.competition.name, 'B2 League');
+  });
+
+  it('GET a non-existent player → 404', async () => {
+    const res = await fetch(`${base}/api/v2/players/999999999`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'player_not_found' });
   });
 
   it('unknown match id → 404; unknown edition id → 404', async () => {

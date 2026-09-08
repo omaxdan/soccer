@@ -31,6 +31,12 @@ import type {
   ApiRecentFormRow,
   ApiTeamRecentVenueForm,
   ApiScore,
+  ApiTeamSummary,
+  ApiPlayerSummary,
+  TeamListResponse,
+  TeamDetailResponse,
+  PlayerListResponse,
+  PlayerDetailResponse,
 } from './contract';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
@@ -386,5 +392,231 @@ export async function getEditionFixtures(tx: PoolClient, editionId: string): Pro
       awayTeam: { id: f.away_id, name: f.away_name, slug: f.away_slug },
       score: score(f.home_goals, f.away_goals),
     })),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAMS & PLAYERS — factual directory + identity surfaces (read-only).
+//
+// Every team/player exposed is scoped to the governed authorized-active edition
+// (the same Day-1 gate as the edition list), so no ungoverned or V1 data leaks.
+// These are context surfaces: identity + biography + current registration + a
+// short results tail — NO intelligence reading, NO fabricated statistic. "Current
+// squad / registration" filters on registration_period @> current_date, which is
+// a factual "who is registered now" question — deliberately distinct from, and not
+// a change to, the as_of=kickoff temporal contract that governs match intelligence.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Governed-edition join for queries that alias football.competition_edition as `ce`
+// (mirrors DAY1_AUTHORIZED_EDITION_JOIN, which aliases it `e`).
+const GOVERNED_EDITION_JOIN_CE = `
+    JOIN governance.tracked_edition te
+      ON te.competition_edition_id = ce.id
+     AND te.edition_status_code = 'ACTIVE'
+     AND te.authorized_for_ingestion = true
+    JOIN governance.tracked_competition tc
+      ON tc.id = te.tracked_competition_id
+     AND tc.tracking_status_code = 'TRACKED'`;
+
+interface TeamSummaryRow { id: string; name: string; slug: string; short_name: string | null; country_code: string | null }
+const toTeamSummary = (r: TeamSummaryRow): ApiTeamSummary =>
+  ({ id: r.id, name: r.name, slug: r.slug, shortName: r.short_name, countryCode: r.country_code });
+
+const TEAMS_LIST_SQL = `
+  SELECT DISTINCT t.id::text AS id, t.name AS name, t.slug AS slug,
+         t.short_name AS short_name, t.country_code AS country_code
+    FROM football.team t
+    JOIN football.team_registration tr ON tr.team_id = t.id AND tr.withdrawn_on IS NULL
+    JOIN football.competition_edition ce ON ce.id = tr.competition_edition_id
+${GOVERNED_EDITION_JOIN_CE}
+   ORDER BY t.name
+`;
+
+/** Teams registered in a governed authorized-active edition. Directory, identity only. */
+export async function getTeams(tx: PoolClient): Promise<TeamListResponse> {
+  const rows = await tx.query<TeamSummaryRow>(TEAMS_LIST_SQL);
+  return { teams: rows.rows.map(toTeamSummary) };
+}
+
+interface TeamCompetitionRow { edition_id: string; season_label: string; competition_id: string; competition_name: string; competition_slug: string }
+const TEAM_COMPETITIONS_SQL = `
+  SELECT ce.id::text AS edition_id, ce.season_label AS season_label,
+         c.id::text AS competition_id, c.name AS competition_name, c.slug AS competition_slug
+    FROM football.team_registration tr
+    JOIN football.competition_edition ce ON ce.id = tr.competition_edition_id
+    JOIN football.competition c ON c.id = ce.competition_id
+${GOVERNED_EDITION_JOIN_CE}
+   WHERE tr.team_id = $1::bigint AND tr.withdrawn_on IS NULL
+   ORDER BY c.name, ce.season_label
+`;
+
+interface TeamIdentityRow extends TeamSummaryRow { home_venue_name: string | null }
+const TEAM_IDENTITY_SQL = `
+  SELECT t.id::text AS id, t.name AS name, t.slug AS slug, t.short_name AS short_name,
+         t.country_code AS country_code, v.name AS home_venue_name
+    FROM football.team t
+    LEFT JOIN football.venue v ON v.id = t.home_venue_id
+   WHERE t.id = $1::bigint
+`;
+
+interface PlayerSummaryRow { id: string; full_name: string; short_name: string | null; slug: string }
+const TEAM_SQUAD_SQL = `
+  SELECT p.id::text AS id, p.full_name AS full_name, p.short_name AS short_name, p.slug AS slug
+    FROM football.player_registration pr
+    JOIN football.player p ON p.id = pr.player_id
+   WHERE pr.team_id = $1::bigint
+     AND pr.registration_kind_code <> 'LOAN_OUT'
+     AND pr.registration_period @> current_date
+   ORDER BY p.full_name
+`;
+
+interface TeamResultRow {
+  fixture_id: string; scheduled_kickoff_at: Date; is_home: boolean;
+  goals_for: number | null; goals_against: number | null;
+  opp_id: string; opp_name: string; opp_slug: string;
+}
+const TEAM_RESULTS_SQL = `
+  WITH played AS (
+    SELECT f.id AS fixture_id, f.scheduled_kickoff_at, true AS is_home,
+           r.home_goals AS goals_for, r.away_goals AS goals_against, f.away_team_id AS opp_id
+      FROM football.fixture f
+      JOIN football.result r ON r.fixture_id = f.id AND r.fixture_partition_on = f.fixture_partition_on
+     WHERE f.home_team_id = $1::bigint AND f.lifecycle_state_code = 'COMPLETED'
+    UNION ALL
+    SELECT f.id, f.scheduled_kickoff_at, false,
+           r.away_goals, r.home_goals, f.home_team_id
+      FROM football.fixture f
+      JOIN football.result r ON r.fixture_id = f.id AND r.fixture_partition_on = f.fixture_partition_on
+     WHERE f.away_team_id = $1::bigint AND f.lifecycle_state_code = 'COMPLETED'
+  )
+  SELECT played.fixture_id::text AS fixture_id, played.scheduled_kickoff_at, played.is_home,
+         played.goals_for, played.goals_against,
+         o.id::text AS opp_id, o.name AS opp_name, o.slug AS opp_slug
+    FROM played
+    JOIN football.team o ON o.id = played.opp_id
+   ORDER BY played.scheduled_kickoff_at DESC, played.fixture_id DESC
+   LIMIT 8
+`;
+
+/**
+ * A team's identity + governed competition context + current squad + a short
+ * results tail, or null when the team is not exposed under a governed edition.
+ */
+export async function getTeamDetail(tx: PoolClient, teamId: string): Promise<TeamDetailResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  const idRes = await tx.query<TeamIdentityRow>(TEAM_IDENTITY_SQL, [teamId]);
+  if (idRes.rows.length === 0) return null;
+  const t = idRes.rows[0];
+
+  const squadRes = await tx.query<PlayerSummaryRow>(TEAM_SQUAD_SQL, [teamId]);
+  const resultsRes = await tx.query<TeamResultRow>(TEAM_RESULTS_SQL, [teamId]);
+  const teamSummary = toTeamSummary(t);
+
+  return {
+    team: { ...teamSummary, homeVenueName: t.home_venue_name },
+    competitions: comps.rows.map((c) => ({
+      editionId: c.edition_id,
+      seasonLabel: c.season_label,
+      competition: { id: c.competition_id, name: c.competition_name, slug: c.competition_slug },
+    })),
+    squad: squadRes.rows.map((p) => ({ id: p.id, fullName: p.full_name, shortName: p.short_name, slug: p.slug, team: teamSummary })),
+    recentResults: resultsRes.rows.map((r) => ({
+      fixtureId: r.fixture_id,
+      kickoffAt: iso(r.scheduled_kickoff_at),
+      isHome: r.is_home,
+      opponent: { id: r.opp_id, name: r.opp_name, slug: r.opp_slug },
+      goalsFor: r.goals_for === null ? null : Number(r.goals_for),
+      goalsAgainst: r.goals_against === null ? null : Number(r.goals_against),
+    })),
+  };
+}
+
+interface PlayerDirectoryRow extends PlayerSummaryRow {
+  team_id: string; team_name: string; team_slug: string; team_short: string | null; team_country: string | null;
+}
+const PLAYERS_LIST_SQL = `
+  SELECT DISTINCT ON (p.id)
+         p.id::text AS id, p.full_name AS full_name, p.short_name AS short_name, p.slug AS slug,
+         t.id::text AS team_id, t.name AS team_name, t.slug AS team_slug,
+         t.short_name AS team_short, t.country_code AS team_country
+    FROM football.player p
+    JOIN football.player_registration pr
+      ON pr.player_id = p.id AND pr.registration_kind_code <> 'LOAN_OUT' AND pr.registration_period @> current_date
+    JOIN football.team t ON t.id = pr.team_id
+    JOIN football.team_registration tr ON tr.team_id = t.id AND tr.withdrawn_on IS NULL
+    JOIN football.competition_edition ce ON ce.id = tr.competition_edition_id
+${GOVERNED_EDITION_JOIN_CE}
+   ORDER BY p.id
+`;
+
+/** Players currently registered to a team in a governed authorized-active edition. */
+export async function getPlayers(tx: PoolClient): Promise<PlayerListResponse> {
+  const rows = await tx.query<PlayerDirectoryRow>(PLAYERS_LIST_SQL);
+  const players: ApiPlayerSummary[] = rows.rows.map((r) => ({
+    id: r.id, fullName: r.full_name, shortName: r.short_name, slug: r.slug,
+    team: { id: r.team_id, name: r.team_name, slug: r.team_slug, shortName: r.team_short, countryCode: r.team_country },
+  }));
+  players.sort((a, b) => a.fullName.localeCompare(b.fullName));
+  return { players };
+}
+
+interface PlayerIdentityRow {
+  id: string; full_name: string; short_name: string | null; slug: string;
+  date_of_birth: string | null; nationality_code: string | null; height_cm: number | null; preferred_foot: string | null;
+}
+const PLAYER_IDENTITY_SQL = `
+  SELECT p.id::text AS id, p.full_name AS full_name, p.short_name AS short_name, p.slug AS slug,
+         to_char(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth, p.nationality_code AS nationality_code,
+         p.height_cm AS height_cm, p.preferred_foot AS preferred_foot
+    FROM football.player p
+   WHERE p.id = $1::bigint
+`;
+
+interface PlayerTeamRow {
+  team_id: string; team_name: string; team_slug: string; team_short: string | null; team_country: string | null;
+  competition_id: string; competition_name: string; competition_slug: string; season_label: string;
+}
+const PLAYER_CURRENT_TEAM_SQL = `
+  SELECT t.id::text AS team_id, t.name AS team_name, t.slug AS team_slug,
+         t.short_name AS team_short, t.country_code AS team_country,
+         c.id::text AS competition_id, c.name AS competition_name, c.slug AS competition_slug, ce.season_label AS season_label
+    FROM football.player_registration pr
+    JOIN football.team t ON t.id = pr.team_id
+    JOIN football.team_registration tr ON tr.team_id = t.id AND tr.withdrawn_on IS NULL
+    JOIN football.competition_edition ce ON ce.id = tr.competition_edition_id
+    JOIN football.competition c ON c.id = ce.competition_id
+${GOVERNED_EDITION_JOIN_CE}
+   WHERE pr.player_id = $1::bigint
+     AND pr.registration_kind_code <> 'LOAN_OUT'
+     AND pr.registration_period @> current_date
+   ORDER BY ce.season_label DESC
+   LIMIT 1
+`;
+
+/**
+ * A player's biography + current governed team/competition, or null when the
+ * player has no current registration within a governed authorized edition.
+ */
+export async function getPlayerDetail(tx: PoolClient, playerId: string): Promise<PlayerDetailResponse | null> {
+  // Exposure gate: only players in a governed edition's current squad are surfaced.
+  const teamRes = await tx.query<PlayerTeamRow>(PLAYER_CURRENT_TEAM_SQL, [playerId]);
+  if (teamRes.rows.length === 0) return null;
+
+  const idRes = await tx.query<PlayerIdentityRow>(PLAYER_IDENTITY_SQL, [playerId]);
+  if (idRes.rows.length === 0) return null;
+  const p = idRes.rows[0];
+  const ct = teamRes.rows[0];
+
+  return {
+    player: {
+      id: p.id, fullName: p.full_name, shortName: p.short_name, slug: p.slug,
+      dateOfBirth: p.date_of_birth, nationalityCode: p.nationality_code,
+      heightCm: p.height_cm === null ? null : Number(p.height_cm), preferredFoot: p.preferred_foot,
+    },
+    currentTeam: { id: ct.team_id, name: ct.team_name, slug: ct.team_slug, shortName: ct.team_short, countryCode: ct.team_country },
+    competition: { id: ct.competition_id, name: ct.competition_name, slug: ct.competition_slug, seasonLabel: ct.season_label },
   };
 }

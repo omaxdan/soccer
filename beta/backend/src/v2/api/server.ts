@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getEditionFixtures, getEditions, isValidId } from './handlers';
+import { getMatchDetail, getEditionFixtures, getEditions, getTeams, getTeamDetail, getPlayers, getPlayerDetail, isValidId } from './handlers';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -30,18 +30,30 @@ export interface ApiDeps {
   readonly getMatch: (id: string) => Promise<unknown | null>;
   readonly getEdition: (id: string) => Promise<unknown | null>;
   readonly getEditions: () => Promise<unknown>;
+  readonly getTeams: () => Promise<unknown>;
+  readonly getTeam: (id: string) => Promise<unknown | null>;
+  readonly getPlayers: () => Promise<unknown>;
+  readonly getPlayer: (id: string) => Promise<unknown | null>;
 }
 
 const productionDeps: ApiDeps = {
   getMatch: (id) => withConnection(API_ROLE, (tx: PoolClient) => getMatchDetail(tx, id)),
   getEdition: (id) => withConnection(API_ROLE, (tx: PoolClient) => getEditionFixtures(tx, id)),
   getEditions: () => withConnection(API_ROLE, (tx: PoolClient) => getEditions(tx)),
+  getTeams: () => withConnection(API_ROLE, (tx: PoolClient) => getTeams(tx)),
+  getTeam: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamDetail(tx, id)),
+  getPlayers: () => withConnection(API_ROLE, (tx: PoolClient) => getPlayers(tx)),
+  getPlayer: (id) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerDetail(tx, id)),
 };
 
 export type Route =
   | { kind: 'editionList' }
   | { kind: 'match'; id: string }
   | { kind: 'editionFixtures'; id: string }
+  | { kind: 'teamList' }
+  | { kind: 'team'; id: string }
+  | { kind: 'playerList' }
+  | { kind: 'player'; id: string }
   | { kind: 'badRequest' }
   | { kind: 'methodNotAllowed' }
   | { kind: 'notFound' };
@@ -49,17 +61,33 @@ export type Route =
 /** Pure router — matches method + pathname to an intent. No I/O. */
 export function resolveRoute(method: string | undefined, pathname: string): Route {
   const isEditionList = pathname === '/api/v2/editions';
+  const isTeamList = pathname === '/api/v2/teams';
+  const isPlayerList = pathname === '/api/v2/players';
   const match = pathname.match(/^\/api\/v2\/matches\/([^/]+)$/);
   const editionFixtures = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/fixtures$/);
-  if (!isEditionList && !match && !editionFixtures) return { kind: 'notFound' };
+  const team = pathname.match(/^\/api\/v2\/teams\/([^/]+)$/);
+  const player = pathname.match(/^\/api\/v2\/players\/([^/]+)$/);
+  if (!isEditionList && !isTeamList && !isPlayerList && !match && !editionFixtures && !team && !player) {
+    return { kind: 'notFound' };
+  }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
   if (isEditionList) return { kind: 'editionList' };
+  if (isTeamList) return { kind: 'teamList' };
+  if (isPlayerList) return { kind: 'playerList' };
   if (match) {
     const id = decodeURIComponent(match[1]);
     return isValidId(id) ? { kind: 'match', id } : { kind: 'badRequest' };
   }
-  const id = decodeURIComponent(editionFixtures![1]);
-  return isValidId(id) ? { kind: 'editionFixtures', id } : { kind: 'badRequest' };
+  if (editionFixtures) {
+    const id = decodeURIComponent(editionFixtures[1]);
+    return isValidId(id) ? { kind: 'editionFixtures', id } : { kind: 'badRequest' };
+  }
+  if (team) {
+    const id = decodeURIComponent(team[1]);
+    return isValidId(id) ? { kind: 'team', id } : { kind: 'badRequest' };
+  }
+  const id = decodeURIComponent(player![1]);
+  return isValidId(id) ? { kind: 'player', id } : { kind: 'badRequest' };
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -90,6 +118,18 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getEdition(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'edition_not_found' });
       }
+      case 'teamList':
+        return sendJson(res, 200, await deps.getTeams());
+      case 'team': {
+        const body = await deps.getTeam(route.id);
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
+      }
+      case 'playerList':
+        return sendJson(res, 200, await deps.getPlayers());
+      case 'player': {
+        const body = await deps.getPlayer(route.id);
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'player_not_found' });
+      }
     }
   } catch (error) {
     logger.error({ path: pathname, err: error instanceof Error ? error.message : String(error) }, 'v2 api: request failed');
@@ -111,7 +151,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/matches/:matchId\n  GET /api/v2/editions/:editionId/fixtures\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/matches/:matchId\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n`);
   });
 }
 

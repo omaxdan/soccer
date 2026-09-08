@@ -13,6 +13,10 @@ export default async function V2LeaguesPage() {
         <p className="eyebrow">PitchTerminal V2</p>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Leagues</h1>
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>Tracked competition editions with ingested fixtures.</p>
+        <nav style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+          <Link href="/v2/teams" className="label-cap" style={{ color: 'var(--cool)' }}>Teams →</Link>
+          <Link href="/v2/players" className="label-cap" style={{ color: 'var(--cool)' }}>Players →</Link>
+        </nav>
       </header>
       {editions.length === 0 ? (
         <EmptyState message="No leagues with fixtures are available yet." />

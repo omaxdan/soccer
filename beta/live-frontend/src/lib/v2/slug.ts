@@ -25,3 +25,13 @@ export interface V2SlugFixture {
 export function v2MatchSlug(f: V2SlugFixture): string {
   return `${slugify(f.homeTeam.name)}-vs-${slugify(f.awayTeam.name)}-${f.fixtureId}`;
 }
+
+/** Canonical V2 public team URL slug: `{name}-{id}` (id is the source of truth). */
+export function v2TeamSlug(t: { id: string; name: string }): string {
+  return `${slugify(t.name)}-${t.id}`;
+}
+
+/** Canonical V2 public player URL slug: `{name}-{id}` (id is the source of truth). */
+export function v2PlayerSlug(p: { id: string; fullName: string }): string {
+  return `${slugify(p.fullName)}-${p.id}`;
+}

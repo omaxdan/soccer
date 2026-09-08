@@ -3,7 +3,10 @@
 // Called from server components, so requests are server-to-server (no CORS) and
 // never expose a credential to the browser. Base URL is configurable.
 
-import type { MatchDetailResponse, EditionFixtureListResponse, EditionListResponse } from './types';
+import type {
+  MatchDetailResponse, EditionFixtureListResponse, EditionListResponse,
+  TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
+} from './types';
 
 export const V2_API_BASE =
   process.env.PITCHTERMINAL_V2_API ??
@@ -43,4 +46,26 @@ export function fetchEditionFixtures(editionId: string): Promise<EditionFixtureL
 /** One match's detail, or null when the fixture does not exist. */
 export function fetchMatch(matchId: string): Promise<MatchDetailResponse | null> {
   return getJson<MatchDetailResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}`);
+}
+
+/** Teams in the governed authorized-active edition(s). Never 404s. */
+export async function fetchTeams(): Promise<TeamListResponse> {
+  const body = await getJson<TeamListResponse>('/api/v2/teams');
+  return body ?? { teams: [] };
+}
+
+/** One team's identity/context, or null when not exposed under a governed edition. */
+export function fetchTeam(teamId: string): Promise<TeamDetailResponse | null> {
+  return getJson<TeamDetailResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}`);
+}
+
+/** Players in the governed authorized-active edition(s). Never 404s. */
+export async function fetchPlayers(): Promise<PlayerListResponse> {
+  const body = await getJson<PlayerListResponse>('/api/v2/players');
+  return body ?? { players: [] };
+}
+
+/** One player's biography/context, or null when not in a governed edition squad. */
+export function fetchPlayer(playerId: string): Promise<PlayerDetailResponse | null> {
+  return getJson<PlayerDetailResponse>(`/api/v2/players/${encodeURIComponent(playerId)}`);
 }

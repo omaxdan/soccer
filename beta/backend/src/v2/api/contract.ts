@@ -195,6 +195,83 @@ export interface EditionListResponse {
   readonly editions: readonly ApiEditionSummary[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAMS & PLAYERS — factual/context directory surfaces (V2 Teams/Players pages).
+//
+// Assembled only from persisted V2 football reality (football.team / player /
+// registration), scoped to the governed authorized-active edition(s) — the same
+// Day-1 exposure gate as the edition list. These are CONTEXT surfaces: identity
+// and biography only, no intelligence reading, no prediction, no fabricated stat.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One team, identity only, for the directory and cross-links. */
+export interface ApiTeamSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+  readonly shortName: string | null;
+  readonly countryCode: string | null;
+}
+
+export interface TeamListResponse {
+  readonly teams: readonly ApiTeamSummary[];
+}
+
+/** One player, identity only, for the directory and squad lists. */
+export interface ApiPlayerSummary {
+  readonly id: string;
+  readonly fullName: string;
+  readonly shortName: string | null;
+  readonly slug: string;
+  /** The team the player is currently registered to within a governed edition, when known. */
+  readonly team: ApiTeamSummary | null;
+}
+
+export interface PlayerListResponse {
+  readonly players: readonly ApiPlayerSummary[];
+}
+
+/** A completed result in a team's recent history, oriented to that team (context). */
+export interface ApiTeamResult {
+  readonly fixtureId: string;
+  readonly kickoffAt: string;               // ISO-8601
+  readonly isHome: boolean;
+  readonly opponent: ApiTeam;
+  readonly goalsFor: number | null;
+  readonly goalsAgainst: number | null;
+}
+
+export interface TeamDetailResponse {
+  readonly team: ApiTeamSummary & { readonly homeVenueName: string | null };
+  /** Governed edition(s) this team is registered in — competition/season context. */
+  readonly competitions: readonly {
+    readonly editionId: string;
+    readonly seasonLabel: string;
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+  }[];
+  /** Current squad — players registered to this team today (context, not intelligence). */
+  readonly squad: readonly ApiPlayerSummary[];
+  /** A short tail of recent completed results, oriented to the team (context). */
+  readonly recentResults: readonly ApiTeamResult[];
+}
+
+export interface PlayerDetailResponse {
+  readonly player: {
+    readonly id: string;
+    readonly fullName: string;
+    readonly shortName: string | null;
+    readonly slug: string;
+    readonly dateOfBirth: string | null;     // ISO date
+    readonly nationalityCode: string | null;
+    readonly heightCm: number | null;
+    readonly preferredFoot: string | null;
+  };
+  /** The team the player is currently registered to (within a governed edition), when known. */
+  readonly currentTeam: ApiTeamSummary | null;
+  /** Governed competition/season context for the current registration, when known. */
+  readonly competition: { readonly id: string; readonly name: string; readonly slug: string; readonly seasonLabel: string } | null;
+}
+
 /** Uniform error body. */
 export interface ApiError {
   readonly error: string;

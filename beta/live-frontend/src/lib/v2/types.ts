@@ -126,6 +126,64 @@ export interface EditionListResponse {
   editions: ApiEditionSummary[];
 }
 
+// Teams & Players — factual directory / identity surfaces (mirror of the backend
+// contract). Context only: identity + biography + current registration; no
+// intelligence reading, no prediction.
+export interface ApiTeamSummary {
+  id: string;
+  name: string;
+  slug: string;
+  shortName: string | null;
+  countryCode: string | null;
+}
+
+export interface TeamListResponse {
+  teams: ApiTeamSummary[];
+}
+
+export interface ApiPlayerSummary {
+  id: string;
+  fullName: string;
+  shortName: string | null;
+  slug: string;
+  team: ApiTeamSummary | null;
+}
+
+export interface PlayerListResponse {
+  players: ApiPlayerSummary[];
+}
+
+export interface ApiTeamResult {
+  fixtureId: string;
+  kickoffAt: string;
+  isHome: boolean;
+  opponent: ApiTeam;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+}
+
+export interface TeamDetailResponse {
+  team: ApiTeamSummary & { homeVenueName: string | null };
+  competitions: { editionId: string; seasonLabel: string; competition: { id: string; name: string; slug: string } }[];
+  squad: ApiPlayerSummary[];
+  recentResults: ApiTeamResult[];
+}
+
+export interface PlayerDetailResponse {
+  player: {
+    id: string;
+    fullName: string;
+    shortName: string | null;
+    slug: string;
+    dateOfBirth: string | null;
+    nationalityCode: string | null;
+    heightCm: number | null;
+    preferredFoot: string | null;
+  };
+  currentTeam: ApiTeamSummary | null;
+  competition: { id: string; name: string; slug: string; seasonLabel: string } | null;
+}
+
 /** Presentation-only W/D/L derivation (not intelligence). Works for any row that
  *  carries subject-oriented goals — plain recent form and enriched venue-form rows
  *  alike. Never a prediction or a match-result inference. */
