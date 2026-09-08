@@ -32,6 +32,37 @@ export interface ApiFormFixture {
   readonly goalsAgainst: number | null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RECENT VENUE FORM — CONTEXT ONLY (PD-11).
+//
+// A descriptive context surface: each team's five most recent completed HOME and
+// AWAY fixtures, enriched with opponent / venue / competition. It is NOT a module
+// input, NOT a feature, and NOT the substrate of `home_away_split` (which consumes
+// the edition-cumulative venue population, unchanged). W/D/L is derived by the
+// consumer from goalsFor/goalsAgainst — presentation only, never an intelligence
+// claim. Every row is strictly before the fixture's kickoff (PD-7).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One enriched completed fixture in a team's recent venue form, oriented to that team. */
+export interface ApiRecentFormRow {
+  readonly fixtureId: string;
+  readonly kickoffAt: string;      // ISO-8601
+  readonly isHome: boolean;
+  /** null when the completed fixture has no persisted result. */
+  readonly goalsFor: number | null;
+  readonly goalsAgainst: number | null;
+  readonly opponent: ApiTeam;
+  /** null when the fixture has no venue recorded. */
+  readonly venueName: string | null;
+  readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+}
+
+/** One team's recent venue form, split by venue side — at most five rows each. */
+export interface ApiTeamRecentVenueForm {
+  readonly lastHome: readonly ApiRecentFormRow[];
+  readonly lastAway: readonly ApiRecentFormRow[];
+}
+
 /** The direction a cited value contributed to a reading (module_evidence_item). */
 export type ApiContributionDirection = 'SUPPORTS' | 'CONTRADICTS' | 'NEUTRAL';
 
@@ -127,6 +158,8 @@ export interface ApiTeamFeatures {
 export interface MatchDetailResponse {
   readonly match: ApiMatchHeader;
   readonly form: { readonly home: readonly ApiFormFixture[]; readonly away: readonly ApiFormFixture[] };
+  /** PD-11 context surface — each team's last five home and last five away completed fixtures. */
+  readonly recentVenueForm: { readonly home: ApiTeamRecentVenueForm; readonly away: ApiTeamRecentVenueForm };
   readonly intelligence: { readonly home: ApiTeamIntelligence; readonly away: ApiTeamIntelligence };
   readonly teamFeatures: { readonly home: ApiTeamFeatures; readonly away: ApiTeamFeatures };
 }

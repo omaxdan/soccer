@@ -1,7 +1,7 @@
 // V2 UI PRIMITIVES — small presentational components for the V2 analysis views.
 // Read-only rendering of V2 API data. No data fetching, no calculation, no V1.
 
-import type { ApiScore, ApiModuleReading, ApiModuleEvidence, ApiEvidenceItem, ApiContributionDirection, ApiFormFixture, ApiFeatureValue, ApiTeamFeatures } from '@/lib/v2/types';
+import type { ApiScore, ApiModuleReading, ApiModuleEvidence, ApiEvidenceItem, ApiContributionDirection, ApiFormFixture, ApiRecentFormRow, ApiTeamRecentVenueForm, ApiFeatureValue, ApiTeamFeatures } from '@/lib/v2/types';
 import { formResult } from '@/lib/v2/types';
 
 /** UTC kickoff, rendered compactly and unambiguously. */
@@ -14,8 +14,12 @@ export function Kickoff({ iso }: { iso: string }) {
   return <time dateTime={iso} className="tnum">{s} UTC</time>;
 }
 
+// Every module status has an explicit, descriptive presentation state — SUPPORTS,
+// NEUTRAL and CONTRADICTS included, so CONTRADICTS never falls through to a generic
+// fallback. These are descriptive categorical states, never predictions: CONTRADICTS
+// is not AWAY_WIN and must never be presented as one.
 const STATUS_COLOR: Record<string, string> = {
-  SUPPORTS: 'var(--edge)', NEUTRAL: 'var(--muted)', INACTIVE: 'var(--faint)',
+  SUPPORTS: 'var(--edge)', CONTRADICTS: 'var(--risk)', NEUTRAL: 'var(--muted)', INACTIVE: 'var(--faint)',
 };
 function statusColor(status: string): string { return STATUS_COLOR[status] ?? 'var(--warn)'; }
 
@@ -72,11 +76,12 @@ export function FormStrip({ fixtures }: { fixtures: ApiFormFixture[] }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MODULE EVIDENCE — the persisted explainability substrate behind a reading.
-// Renders the set-level input counts and each cited feature value with its
-// persisted contribution direction. It computes nothing: directions, values and
-// counts are displayed exactly as persisted (a zero count / zero value stays),
-// and a cited value with no resolvable number is shown honestly, never invented.
+// MODULE SUBSTRATE — the persisted inputs the reading actually consumed (PD-10).
+// This is the module's OWN substrate: the feature values the module cited, with
+// the contribution direction it persisted — NOT unrelated context placed nearby.
+// It computes nothing: directions, values and counts are displayed exactly as
+// persisted (a zero count / zero value stays), and a cited value with no
+// resolvable number is shown honestly, never invented.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DIRECTION_COLOR: Record<ApiContributionDirection, string> = {
@@ -117,7 +122,8 @@ export function EvidencePanel({ evidence }: { evidence: ApiModuleEvidence | null
   const { declaredInputCount, presentInputCount, belowThresholdInputCount, estimatedInputCount, items } = evidence;
   return (
     <div style={{ marginTop: 8, borderTop: '1px solid var(--hairline, rgba(128,128,128,0.2))', paddingTop: 6 }}>
-      <p className="eyebrow" style={{ fontSize: 10 }}>Evidence</p>
+      <p className="eyebrow" style={{ fontSize: 10 }}>Why? · Module substrate</p>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 1 }}>the inputs this reading consumed</p>
       <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 2 }}>
         {presentInputCount} of {declaredInputCount} inputs present
         {belowThresholdInputCount > 0 ? ` · ${belowThresholdInputCount} below threshold` : ''}
@@ -256,8 +262,96 @@ export function TeamIntelligencePanel({ home, away, homeName, awayName }: { home
         })}
       </div>
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 8 }}>
-        Supporting evidence — persisted V2 feature values. Highlight marks the stronger side per metric.
+        Related context — persisted V2 feature values (all competitions). Descriptive facts for interpretation,
+        not the substrate of any single module. Highlight marks the stronger side per metric.
       </p>
     </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECENT VENUE FORM — CONTEXT ONLY (PD-11).
+// Each team's five most recent completed HOME fixtures and five most recent
+// completed AWAY fixtures, each row a plain fact: date · opponent · venue ·
+// competition · score · W/D/L. This is descriptive CONTEXT — it is NOT a module
+// input, NOT a feature, and NOT the calculation substrate of home_away_split
+// (which reads the edition-cumulative venue population, unchanged). W/D/L is the
+// presentation-only derivation; nothing here is a prediction. Every row is strictly
+// before kickoff (enforced server-side, PD-7).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Compact UTC date (e.g. "12 Aug"). */
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+}
+
+/** A small inline W/D/L letter for a venue-form row (presentation only). */
+function ResultLetter({ row }: { row: ApiRecentFormRow }) {
+  const r = formResult(row);
+  const map = { W: 'var(--edge)', D: 'var(--muted)', L: 'var(--risk)' } as const;
+  const color = r ? map[r] : 'var(--faint)';
+  const full = r === 'W' ? 'Win' : r === 'D' ? 'Draw' : r === 'L' ? 'Loss' : 'No result';
+  return (
+    <span className="mono" aria-label={full} title={full}
+      style={{ fontWeight: 700, color, minWidth: 12, textAlign: 'center' }}>{r ?? '·'}</span>
+  );
+}
+
+/** The rows for one venue side of one team. Honest empty / partial states. */
+function VenueSide({ label, rows }: { label: string; rows: ApiRecentFormRow[] }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <p className="label-cap" style={{ color: 'var(--text-secondary)' }}>{label}</p>
+        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
+          {rows.length === 0 ? 'no matches' : `${rows.length} of up to 5`}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 11, marginTop: 4 }}>No completed matches yet</p>
+      ) : (
+        <div role="list" style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+          {rows.map((row) => (
+            <div role="listitem" key={row.fixtureId}
+              style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: 6, alignItems: 'baseline', fontSize: 11 }}>
+              <span className="tnum" style={{ color: 'var(--faint)' }}>{shortDate(row.kickoffAt)}</span>
+              <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {row.opponent.name}
+                <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginLeft: 4 }}>
+                  {row.venueName ?? '—'} · {row.competition.name}
+                </span>
+              </span>
+              <span className="mono tnum" style={{ color: 'var(--text-secondary)' }}>
+                {row.goalsFor ?? '-'}–{row.goalsAgainst ?? '-'}
+              </span>
+              <ResultLetter row={row} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One team's recent venue form: Last 5 Home over Last 5 Away. */
+export function TeamVenueForm({ name, form }: { name: string; form: ApiTeamRecentVenueForm }) {
+  return (
+    <div className="panel" style={{ padding: 12 }} aria-label={`${name} recent venue form`}>
+      <p className="label-cap" style={{ color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 600 }}>{name}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <VenueSide label="Last 5 Home" rows={form.lastHome} />
+        <VenueSide label="Last 5 Away" rows={form.lastAway} />
+      </div>
+    </div>
+  );
+}
+
+/** The full PD-11 Recent Venue Form surface for both teams. */
+export function RecentVenueForm({ homeName, awayName, home, away }: { homeName: string; awayName: string; home: ApiTeamRecentVenueForm; away: ApiTeamRecentVenueForm }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <TeamVenueForm name={homeName} form={home} />
+      <TeamVenueForm name={awayName} form={away} />
+    </div>
   );
 }

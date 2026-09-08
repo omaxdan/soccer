@@ -13,6 +13,24 @@ export interface ApiFormFixture {
   goalsAgainst: number | null;
 }
 
+// PD-11 Recent Venue Form — CONTEXT ONLY. Not a module input, not a feature, not
+// the substrate of home_away_split. W/D/L is a presentation-only derivation.
+export interface ApiRecentFormRow {
+  fixtureId: string;
+  kickoffAt: string;
+  isHome: boolean;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+  opponent: ApiTeam;
+  venueName: string | null;
+  competition: { id: string; name: string; slug: string };
+}
+
+export interface ApiTeamRecentVenueForm {
+  lastHome: ApiRecentFormRow[];
+  lastAway: ApiRecentFormRow[];
+}
+
 export type ApiContributionDirection = 'SUPPORTS' | 'CONTRADICTS' | 'NEUTRAL';
 
 export interface ApiEvidenceItem {
@@ -78,6 +96,7 @@ export interface ApiTeamFeatures {
 export interface MatchDetailResponse {
   match: ApiMatchHeader;
   form: { home: ApiFormFixture[]; away: ApiFormFixture[] };
+  recentVenueForm: { home: ApiTeamRecentVenueForm; away: ApiTeamRecentVenueForm };
   intelligence: { home: ApiTeamIntelligence; away: ApiTeamIntelligence };
   teamFeatures: { home: ApiTeamFeatures; away: ApiTeamFeatures };
 }
@@ -107,9 +126,11 @@ export interface EditionListResponse {
   editions: ApiEditionSummary[];
 }
 
-/** Presentation-only W/D/L derivation (not intelligence). */
+/** Presentation-only W/D/L derivation (not intelligence). Works for any row that
+ *  carries subject-oriented goals — plain recent form and enriched venue-form rows
+ *  alike. Never a prediction or a match-result inference. */
 export type FormResult = 'W' | 'D' | 'L' | null;
-export function formResult(f: ApiFormFixture): FormResult {
+export function formResult(f: { goalsFor: number | null; goalsAgainst: number | null }): FormResult {
   if (f.goalsFor === null || f.goalsAgainst === null) return null;
   if (f.goalsFor > f.goalsAgainst) return 'W';
   if (f.goalsFor < f.goalsAgainst) return 'L';

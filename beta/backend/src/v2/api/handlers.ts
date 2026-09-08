@@ -14,6 +14,7 @@
 
 import type { PoolClient } from 'pg';
 import { readCompletedFixtures } from '../feature/read/fixtures';
+import { readRecentVenueFormRows, selectRecentVenueForm, type RecentVenueFormRow, type TeamRecentVenueForm } from '../feature/read/recentVenueForm';
 import { readCurrentTeamFeatures, TEAM_PANEL_FEATURE_KEYS, type TeamFeatureValue } from '../feature/read/currentValues';
 import { readActiveMatchReadings, ACTIVE_MODULE_KEYS, type TeamModuleReading } from '../module/read/readings';
 import { readCurrentReadingEvidence, type ReadingEvidence } from '../module/read/evidence';
@@ -27,6 +28,8 @@ import type {
   ApiModuleEvidence,
   ApiFeatureValue,
   ApiFormFixture,
+  ApiRecentFormRow,
+  ApiTeamRecentVenueForm,
   ApiScore,
 } from './contract';
 
@@ -170,6 +173,34 @@ const toFormFixtures = (history: { fixtures: readonly { fixtureId: string; kicko
     goalsAgainst: f.goalsAgainst === null ? null : Number(f.goalsAgainst),
   }));
 
+/** Projects one enriched recent-form row to the wire shape (dates → ISO). Pure. */
+function toRecentFormRow(r: RecentVenueFormRow): ApiRecentFormRow {
+  return {
+    fixtureId: r.fixtureId,
+    kickoffAt: iso(r.kickoffAt),
+    isHome: r.isHome,
+    goalsFor: r.goalsFor === null ? null : Number(r.goalsFor),
+    goalsAgainst: r.goalsAgainst === null ? null : Number(r.goalsAgainst),
+    opponent: r.opponent,
+    venueName: r.venueName,
+    competition: r.competition,
+  };
+}
+
+/**
+ * Projects a team's raw recent-form rows into the PD-11 venue-split wire shape.
+ * Pure — selection (five per side, most-recent-first) is delegated to
+ * `selectRecentVenueForm`, so the semantics are unit-testable without a database.
+ * A team with no rows yields two empty sides — never fabricated, never mixed.
+ */
+export function toTeamRecentVenueForm(rows: readonly RecentVenueFormRow[] | undefined): ApiTeamRecentVenueForm {
+  const selected: TeamRecentVenueForm = selectRecentVenueForm(rows ?? []);
+  return {
+    lastHome: selected.lastHome.map(toRecentFormRow),
+    lastAway: selected.lastAway.map(toRecentFormRow),
+  };
+}
+
 /**
  * Assembles the match-detail contract for one fixture, or null when it does not
  * exist. Form and intelligence are read AS OF the kickoff (pre-match), so a value
@@ -182,6 +213,10 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
   const asOf = new Date(h.scheduled_kickoff_at);
 
   const form = await readCompletedFixtures(tx, [h.home_id, h.away_id], asOf);
+  // PD-11 Recent Venue Form — CONTEXT ONLY. Same `asOf = kickoff` boundary as every
+  // other read here (strict `< asOf` in SQL), so the subject fixture can never enter
+  // its own context. Sourced by a dedicated read that feeds no calculator.
+  const venueForm = await readRecentVenueFormRows(tx, [h.home_id, h.away_id], asOf);
   const readings = await readActiveMatchReadings(tx, {
     homeTeamId: h.home_id,
     awayTeamId: h.away_id,
@@ -218,6 +253,10 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     form: {
       home: toFormFixtures(form.get(h.home_id)),
       away: toFormFixtures(form.get(h.away_id)),
+    },
+    recentVenueForm: {
+      home: toTeamRecentVenueForm(venueForm.get(h.home_id)),
+      away: toTeamRecentVenueForm(venueForm.get(h.away_id)),
     },
     intelligence: mapIntelligence(readings, h.home_id, h.away_id, evidence),
     teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),

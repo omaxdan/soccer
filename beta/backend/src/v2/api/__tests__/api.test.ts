@@ -375,6 +375,37 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     assert.equal(rt.items[0].contributionDirection, 'SUPPORTS');
   });
 
+  it('Recent Venue Form (PD-11): venue-split, enriched, strictly before kickoff', async () => {
+    const body = await (await fetch(`${base}/api/v2/matches/${subjectAB}`)).json() as any;
+    const rvf = body.recentVenueForm;
+    assert.ok(rvf, 'recentVenueForm present');
+
+    // History: H1 = A(home) vs B(away), H2 = B(home) vs A(away). Split by venue side.
+    // Team A: one home fixture (H1), one away fixture (H2).
+    assert.equal(rvf.home.lastHome.length, 1, 'A last-5-home has the one home fixture');
+    assert.equal(rvf.home.lastAway.length, 1, 'A last-5-away has the one away fixture');
+    assert.ok(rvf.home.lastHome.every((r: any) => r.isHome === true));
+    assert.ok(rvf.home.lastAway.every((r: any) => r.isHome === false));
+    // Team B: mirror — one home fixture (H2), one away fixture (H1).
+    assert.equal(rvf.away.lastHome.length, 1, 'B last-5-home has the one home fixture');
+    assert.equal(rvf.away.lastAway.length, 1, 'B last-5-away has the one away fixture');
+
+    // Enrichment: opponent, competition, venue (null here — fixtures seeded without a venue).
+    const aHome = rvf.home.lastHome[0];
+    assert.equal(aHome.opponent.id, teamB, 'A’s home-fixture opponent is B');
+    assert.equal(aHome.competition.name, 'B2 League');
+    assert.equal(aHome.venueName, null, 'no venue seeded → honest null, never fabricated');
+    assert.ok('goalsFor' in aHome && 'goalsAgainst' in aHome, 'subject-oriented goals present for W/D/L derivation');
+    assert.equal(aHome.result, undefined, 'no server-side W/D/L — derivation is presentation-only');
+
+    // Temporal safety (PD-7): the subject fixture is strictly excluded from its own context.
+    const allIds = [
+      ...rvf.home.lastHome, ...rvf.home.lastAway, ...rvf.away.lastHome, ...rvf.away.lastAway,
+    ].map((r: any) => r.fixtureId);
+    assert.ok(!allIds.includes(subjectAB), 'the current fixture never appears in its own venue form');
+    assert.ok(allIds.every((id: string) => id !== null));
+  });
+
   it('home_away_split respects the competition-edition scope; readiness is ALL_COMPETITIONS', async () => {
     // Correspondence with the persisted row for the requested edition.
     const [surfaceStatus, direct] = await withConnection(MODULE_ROLE, async (tx) => {
@@ -398,6 +429,9 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     assert.deepEqual(body.intelligence.away, { readiness: null, homeAwaySplit: null });
     assert.equal(body.form.home.length, 0);
     assert.equal(body.form.away.length, 0);
+    // No completed history → both venue-form sides empty for both teams (never fabricated).
+    assert.deepEqual(body.recentVenueForm.home, { lastHome: [], lastAway: [] });
+    assert.deepEqual(body.recentVenueForm.away, { lastHome: [], lastAway: [] });
     // No feature values for these teams → every panel slot null (never fabricated).
     assert.deepEqual(body.teamFeatures.home, { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null });
     assert.deepEqual(body.teamFeatures.away, { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null });

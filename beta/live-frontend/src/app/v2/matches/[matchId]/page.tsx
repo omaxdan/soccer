@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchMatch } from '@/lib/v2/api';
-import { Kickoff, StatusChip, Score, FormStrip, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
+import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import type { ApiTeamIntelligence } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,8 @@ function TeamIntel({ name, intel }: { name: string; intel: ApiTeamIntelligence }
   return (
     <section className="space-y-2" aria-label={`${name} intelligence`}>
       <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{name}</h3>
-      <ReadingCard title="Readiness Tracker" reading={intel.readiness} />
+      {/* PD-6: the user-facing concept is Form Momentum / Trajectory (module key readiness_tracker, unchanged). */}
+      <ReadingCard title="Form Momentum / Trajectory" reading={intel.readiness} />
       <ReadingCard title="Home / Away Split" reading={intel.homeAwaySplit} />
     </section>
   );
@@ -20,7 +21,7 @@ export default async function V2MatchPage({ params }: { params: Promise<{ matchI
   const { matchId } = await params;
   const data = await fetchMatch(matchId);
   if (!data) notFound();
-  const { match, form, intelligence, teamFeatures } = data;
+  const { match, recentVenueForm, intelligence, teamFeatures } = data;
 
   return (
     <main className="space-y-5" style={{ maxWidth: 820, margin: '0 auto', padding: 16 }}>
@@ -40,22 +41,19 @@ export default async function V2MatchPage({ params }: { params: Promise<{ matchI
         <p className="label-cap" style={{ textAlign: 'center', color: 'var(--muted)', marginTop: 8 }}><Kickoff iso={match.kickoffAt} /></p>
       </header>
 
-      {/* RECENT FORM — raw facts */}
-      <section className="space-y-3">
-        <p className="eyebrow">Recent form</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="panel" style={{ padding: 12 }}>
-            <p className="label-cap" style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{match.homeTeam.name}</p>
-            <FormStrip fixtures={form.home} />
-          </div>
-          <div className="panel" style={{ padding: 12 }}>
-            <p className="label-cap" style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{match.awayTeam.name}</p>
-            <FormStrip fixtures={form.away} />
-          </div>
+      {/* RECENT VENUE FORM — CONTEXT (PD-11). Last 5 home / last 5 away per team. */}
+      <section className="space-y-2">
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <p className="eyebrow">Recent venue form</p>
+          <span className="label-cap" style={{ color: 'var(--cool)', border: '1px solid var(--cool)', borderRadius: 4, padding: '0 5px', fontSize: 9 }}>context</span>
         </div>
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>
+          Descriptive recent results (all competitions), split by venue. Context for interpretation — not the calculation behind the Home / Away Split.
+        </p>
+        <RecentVenueForm homeName={match.homeTeam.name} awayName={match.awayTeam.name} home={recentVenueForm.home} away={recentVenueForm.away} />
       </section>
 
-      {/* INTELLIGENCE — clearly separated from raw facts */}
+      {/* INTELLIGENCE — the governed reading, with its Why? (module substrate) inside each card. */}
       <section className="space-y-3">
         <p className="eyebrow" style={{ color: 'var(--amber)' }}>PitchTerminal intelligence</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -64,9 +62,12 @@ export default async function V2MatchPage({ params }: { params: Promise<{ matchI
         </div>
       </section>
 
-      {/* TEAM INTELLIGENCE — supporting evidence: persisted feature comparison */}
-      <section className="space-y-3">
-        <p className="eyebrow">Team intelligence</p>
+      {/* RELATED CONTEXT — persisted feature comparison; not any module's substrate (PD-10). */}
+      <section className="space-y-2">
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <p className="eyebrow">Team comparison</p>
+          <span className="label-cap" style={{ color: 'var(--cool)', border: '1px solid var(--cool)', borderRadius: 4, padding: '0 5px', fontSize: 9 }}>context</span>
+        </div>
         <TeamIntelligencePanel home={teamFeatures.home} away={teamFeatures.away} homeName={match.homeTeam.name} awayName={match.awayTeam.name} />
       </section>
     </main>
