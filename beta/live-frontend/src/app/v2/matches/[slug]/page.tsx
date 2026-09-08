@@ -62,7 +62,8 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
       {/* INTELLIGENCE — the governed reading, with its Why? (module substrate) inside each card. */}
       <section className="space-y-3">
         <p className="eyebrow" style={{ color: 'var(--amber)' }}>PitchTerminal intelligence</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {/* Two team columns on tablet/desktop; stacked to one column on mobile. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <TeamIntel name={match.homeTeam.name} intel={intelligence.home} />
           <TeamIntel name={match.awayTeam.name} intel={intelligence.away} />
         </div>

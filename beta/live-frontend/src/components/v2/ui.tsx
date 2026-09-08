@@ -298,10 +298,13 @@ function ResultLetter({ row }: { row: ApiRecentFormRow }) {
 }
 
 // Fixed, deterministic column track so every row aligns vertically:
-// DATE · COMPETITION mark · OPPONENT · VENUE · SCORE · RESULT. The two flexible
-// columns use minmax(0, …) so long names truncate (ellipsis) instead of pushing
-// the fixed score/result columns out of alignment.
-const VENUE_FORM_ROW_GRID = '3.25rem 18px minmax(0, 1.4fr) minmax(0, 1.15fr) 2.4rem 0.85rem';
+// DATE · COMPETITION mark · OPPONENT · SCORE · RESULT. The venue name is
+// intentionally not a row column — the Last 5 Home / Last 5 Away heading already
+// establishes venue context, so per-row venue is redundant in this compact
+// surface. The one flexible column (opponent) uses minmax(0, …) so a long name
+// truncates (ellipsis) instead of pushing the fixed score/result columns out of
+// alignment. (venueName remains in the data contract; it is simply not rendered.)
+const VENUE_FORM_ROW_GRID = '3.25rem 18px minmax(0, 1fr) 2.4rem 0.85rem';
 
 /**
  * Compact competition mark for a venue-form row. The V2 surface carries no
@@ -352,9 +355,6 @@ function VenueSide({ label, rows }: { label: string; rows: ApiRecentFormRow[] })
               <span title={row.opponent.name} style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                 {row.opponent.name}
               </span>
-              <span title={row.venueName ?? undefined} style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-                {row.venueName ?? '—'}
-              </span>
               <span className="mono tnum" style={{ color: 'var(--text-secondary)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                 {row.goalsFor ?? '-'}–{row.goalsAgainst ?? '-'}
               </span>
@@ -380,10 +380,11 @@ export function TeamVenueForm({ name, form }: { name: string; form: ApiTeamRecen
   );
 }
 
-/** The full PD-11 Recent Venue Form surface for both teams. */
+/** The full PD-11 Recent Venue Form surface for both teams. Two columns on
+ *  tablet/desktop, stacked to one full-width column on narrow/mobile viewports. */
 export function RecentVenueForm({ homeName, awayName, home, away }: { homeName: string; awayName: string; home: ApiTeamRecentVenueForm; away: ApiTeamRecentVenueForm }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       <TeamVenueForm name={homeName} form={home} />
       <TeamVenueForm name={awayName} form={away} />
     </div>
