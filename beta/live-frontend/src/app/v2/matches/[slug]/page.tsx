@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchMatch } from '@/lib/v2/api';
+import { idFromParam } from '@/lib/v2/slug';
 import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import type { ApiTeamIntelligence } from '@/lib/v2/types';
 
@@ -17,9 +18,14 @@ function TeamIntel({ name, intel }: { name: string; intel: ApiTeamIntelligence }
   );
 }
 
-export default async function V2MatchPage({ params }: { params: Promise<{ matchId: string }> }) {
-  const { matchId } = await params;
-  const data = await fetchMatch(matchId);
+export default async function V2MatchPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  // Public URL is {home}-vs-{away}-{id}; the trailing numeric fixture id is the
+  // source of truth. Resolve it with the canonical extractor and 404 on a slug
+  // that carries no valid numeric id — never guess. The backend API stays numeric.
+  const fixtureId = idFromParam(slug);
+  if (fixtureId === null) notFound();
+  const data = await fetchMatch(String(fixtureId));
   if (!data) notFound();
   const { match, recentVenueForm, intelligence, teamFeatures } = data;
 

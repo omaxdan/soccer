@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchEditionFixtures } from '@/lib/v2/api';
+import { v2MatchSlug } from '@/lib/v2/slug';
 import { EmptyState, Kickoff, StatusChip, Score } from '@/components/v2/ui';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +24,7 @@ export default async function V2EditionPage({ params }: { params: Promise<{ edit
         <ul className="space-y-2" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {fixtures.map((f) => (
             <li key={f.fixtureId}>
-              <Link href={`/v2/matches/${f.fixtureId}`} className="panel" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: 12, textDecoration: 'none', color: 'inherit', alignItems: 'center' }}>
+              <Link href={`/v2/matches/${v2MatchSlug(f)}`} className="panel" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: 12, textDecoration: 'none', color: 'inherit', alignItems: 'center' }}>
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {f.homeTeam.name} <span style={{ color: 'var(--faint)' }}>v</span> {f.awayTeam.name}
