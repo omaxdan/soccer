@@ -228,7 +228,10 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
   const HIST2 = new Date(AS_OF.getTime() - 10 * 86_400_000);
 
   let editionId = '', teamA = '', teamB = '', teamC = '', teamD = '';
-  let subjectAB = '', bareCD = '';
+  let subjectAB = '', bareCD = '', postponedAB = '';
+  // A second, materialized edition that is deliberately NOT governed-authorized —
+  // it must never appear in Day-1 edition navigation (PD-D1.1).
+  let unauthEditionId = '';
   let server: Server;
   let base = '';
 
@@ -286,6 +289,45 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
       // Subject SCHEDULED fixture A vs B; a bare SCHEDULED fixture C vs D (no readings, no history).
       subjectAB = await fixture(tx, 'SAB', teamA, teamB, KICKOFF, 'SCHEDULED');
       bareCD = await fixture(tx, 'SCD', teamC, teamD, KICKOFF, 'SCHEDULED');
+      // A POSTPONED fixture in the SAME edition — PD-D1.2 keeps non-playable
+      // lifecycle states visible in edition navigation (exposure ≠ eligibility).
+      postponedAB = await fixture(tx, 'PAB', teamA, teamB, new Date(KICKOFF.getTime() + 86_400_000), 'POSTPONED');
+
+      // A second edition under the same competition, with one fixture, left
+      // GOVERNED-UNAUTHORIZED — the negative case for Day-1 exposure (PD-D1.1).
+      const ed2 = await tx.query<{ id: string }>(
+        `INSERT INTO football.competition_edition (competition_id, provider_external_id, season_label, season_period)
+         VALUES ($1,$2,'B2 2025', daterange('2024-01-01','2026-01-01')) ON CONFLICT (provider_external_id) DO UPDATE SET season_label=EXCLUDED.season_label
+         RETURNING id::text`, [comp.rows[0].id, `B2-S2-${TAG}`]);
+      unauthEditionId = ed2.rows[0].id;
+      await tx.query(
+        `INSERT INTO football.fixture (provider_code, provider_external_id, fixture_partition_on, competition_edition_id,
+                                       is_neutral_venue, home_team_id, away_team_id, scheduled_kickoff_at, lifecycle_state_code)
+         VALUES ('SPORTSAPI_API',$1,$2::date,$3,false,$4,$5,$6,'SCHEDULED')
+         ON CONFLICT (provider_code, provider_external_id, fixture_partition_on) DO NOTHING`,
+        [`B2-F-UNAUTH-${TAG}`, day(KICKOFF), unauthEditionId, teamC, teamD, iso(KICKOFF)]);
+    });
+
+    // Day-1 governed exposure (PD-D1.1): authorize ONLY editionId — a TRACKED
+    // competition with an ACTIVE, authorized tracked_edition linked to it. The
+    // second edition is intentionally left un-authorized. Governance writes use the
+    // admin role (SIU on governance; migration 025).
+    await withConnection(ADMIN_ROLE, async (tx) => {
+      const tc = await tx.query<{ id: string }>(
+        `INSERT INTO governance.tracked_competition
+           (provider_code, provider_external_id, competition_type_code, competition_scope_code, tracking_status_code)
+         VALUES ('SPORTSAPI_API',$1,'LEAGUE','DOMESTIC','TRACKED')
+         ON CONFLICT (provider_code, provider_external_id) DO UPDATE SET tracking_status_code='TRACKED'
+         RETURNING id::text`, [`B2-GOVCOMP-${TAG}`]);
+      await tx.query(
+        `INSERT INTO governance.tracked_edition
+           (tracked_competition_id, provider_season_external_id, edition_status_code,
+            authorized_for_ingestion, season_period, competition_edition_id)
+         VALUES ($1,$2,'ACTIVE',true, daterange('2026-01-01','2028-01-01'), $3)
+         ON CONFLICT (tracked_competition_id, provider_season_external_id)
+           DO UPDATE SET edition_status_code='ACTIVE', authorized_for_ingestion=true,
+                         competition_edition_id=EXCLUDED.competition_edition_id`,
+        [tc.rows[0].id, `B2-GOVSEASON-${TAG}`, editionId]);
     });
     // Feature values for A & B at AS_OF (real writer), then readings via production path.
     await withConnection(FEATURE_ROLE, async (tx) => {
@@ -446,14 +488,27 @@ describe('v2 api · real match/edition through HTTP (requires a V2 database)', {
     const completed = body.fixtures.find((f: any) => f.score !== null);
     assert.ok(completed, 'a completed fixture carries a score');
     assert.ok(body.fixtures.every((f: any) => f.homeTeam.id && f.awayTeam.id && f.status));
+    // PD-D1.2: non-playable lifecycle states stay visible with their real status.
+    const postponed = body.fixtures.find((f: any) => f.fixtureId === postponedAB);
+    assert.ok(postponed, 'the postponed fixture remains visible in edition navigation');
+    assert.equal(postponed.status, 'POSTPONED', 'its real lifecycle status is shown, not hidden');
   });
 
-  it('GET the edition list → 200 including the seeded edition with its fixture count', async () => {
+  it('GET the edition list → 200 including the authorized edition, excluding the unauthorized one (PD-D1.1)', async () => {
     const body = await (await fetch(`${base}/api/v2/editions`)).json() as any;
     const mine = body.editions.find((e: any) => e.id === editionId);
-    assert.ok(mine, 'the seeded edition appears in the list');
+    assert.ok(mine, 'the authorized (ACTIVE, TRACKED) edition appears in the list');
     assert.equal(mine.competition.name, 'B2 League');
     assert.ok(mine.fixtureCount >= 4, 'reports its materialized fixture count');
+    // The un-authorized edition is materialized with a fixture but must not surface.
+    assert.equal(body.editions.find((e: any) => e.id === unauthEditionId), undefined,
+      'an un-authorized ingested edition is NOT exposed in Day-1 navigation');
+  });
+
+  it('GET fixtures for an un-authorized edition → 404 (PD-D1.1 direct-URL guard)', async () => {
+    const res = await fetch(`${base}/api/v2/editions/${unauthEditionId}/fixtures`);
+    assert.equal(res.status, 404, 'a governed-unauthorized edition is not reachable by direct URL');
+    assert.deepEqual(await res.json(), { error: 'edition_not_found' });
   });
 
   it('unknown match id → 404; unknown edition id → 404', async () => {

@@ -280,11 +280,35 @@ interface EditionFixtureRow {
   away_goals: number | null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DAY-1 GOVERNED EXPOSURE (PD-D1.1)
+//
+// The public Day-1 edition navigation exposes ONLY the authorized/certified active
+// edition. An edition is exposed iff it is linked to a governance.tracked_edition
+// that is ACTIVE and authorized_for_ingestion, under a tracked_competition whose
+// tracking_status is TRACKED — the existing governed authorization contract
+// (migration 025), never a name/date heuristic. This is a public READ/exposure
+// filter only: it changes no snapshot eligibility, no ingestion lifecycle, and no
+// fixture lifecycle semantics. Other ingested editions remain fully in the data;
+// they are simply not surfaced through Day-1 navigation until Product Owner policy
+// activates them. The read API role (pt_platform_admin) holds SELECT + policy on
+// these governance relations (migration 025), so the join is authorized under RLS.
+// ─────────────────────────────────────────────────────────────────────────────
+const DAY1_AUTHORIZED_EDITION_JOIN = `
+    JOIN governance.tracked_edition te
+      ON te.competition_edition_id = e.id
+     AND te.edition_status_code = 'ACTIVE'
+     AND te.authorized_for_ingestion = true
+    JOIN governance.tracked_competition tc
+      ON tc.id = te.tracked_competition_id
+     AND tc.tracking_status_code = 'TRACKED'`;
+
 const EDITION_HEADER_SQL = `
   SELECT e.id::text AS edition_id, e.season_label AS season_label,
          c.id::text AS competition_id, c.name AS competition_name, c.slug AS competition_slug
     FROM football.competition_edition e
     JOIN football.competition c ON c.id = e.competition_id
+${DAY1_AUTHORIZED_EDITION_JOIN}
    WHERE e.id = $1::bigint
 `;
 
@@ -318,14 +342,16 @@ const EDITION_LIST_SQL = `
     FROM football.competition_edition e
     JOIN football.competition c ON c.id = e.competition_id
     JOIN football.fixture f     ON f.competition_edition_id = e.id
+${DAY1_AUTHORIZED_EDITION_JOIN}
    GROUP BY e.id, e.season_label, c.id, c.name, c.slug
    ORDER BY c.name, e.season_label
 `;
 
 /**
- * Lists the editions that have materialized fixtures — the real, openable leagues
- * for the entry surface. Read-only; the smallest honest discovery mechanism (no
- * governance exposure, no writes).
+ * Lists the editions exposed for Day-1: those with materialized fixtures that are
+ * ALSO governed-authorized for public exposure (PD-D1.1 — ACTIVE, authorized
+ * tracked_edition under a TRACKED competition). Read-only; filters BY governance
+ * without exposing any governance data, and performs no writes.
  */
 export async function getEditions(tx: PoolClient): Promise<EditionListResponse> {
   const rows = await tx.query<EditionSummaryRow>(EDITION_LIST_SQL);
