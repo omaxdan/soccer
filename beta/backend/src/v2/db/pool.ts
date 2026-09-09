@@ -127,6 +127,26 @@ export function buildSslConfig(
   };
 }
 
+/**
+ * Milliseconds a socket may sit idle before the first TCP keepalive probe.
+ *
+ * CONSERVATIVE, AND WHY THIS VALUE. A pooled connection here is frequently held
+ * checked-out but query-idle for tens of seconds — the `control` connection in
+ * withRun sits idle across the whole work transaction, and every connection
+ * sits idle in the pool across the network walk between sweeps. A managed pooler
+ * (Supabase/Supavisor) and the NAT devices between it and this process reap
+ * silently idle TCP sockets; a reaped socket is not noticed until its next use,
+ * at which point pg raises 'Connection terminated unexpectedly'. Enabling
+ * keepalive keeps the socket demonstrably alive and surfaces a genuine drop as a
+ * clean error rather than a silent half-open connection.
+ *
+ * 10s is well inside the idle windows those intermediaries use (commonly 60s and
+ * up) so the socket stays warm, and it is not so short as to add meaningful
+ * probe traffic. It is a floor on how soon a dead socket is detected, not a
+ * timeout: keepalive never closes a healthy connection.
+ */
+export const KEEPALIVE_INITIAL_DELAY_MS = 10_000;
+
 export function buildPoolConfig(): PoolConfig {
   const cfg = loadV2Config();
   return {
@@ -142,6 +162,13 @@ export function buildPoolConfig(): PoolConfig {
     // process produces no telemetry and no failure row.
     connectionTimeoutMillis: cfg.database.connectionTimeoutMs,
     idleTimeoutMillis: cfg.database.idleTimeoutMs,
+    // TCP KEEPALIVE. Passed through to the client socket by pg. Without it a
+    // connection held query-idle behind the session-mode pooler could be dropped
+    // silently and surface the drop only on next use as an unhandled client
+    // 'error' — the failure that ended the England ingestion run. keepAlive holds
+    // the socket open and makes a real drop a clean, catchable error.
+    keepAlive: true,
+    keepAliveInitialDelayMillis: KEEPALIVE_INITIAL_DELAY_MS,
     // Attributes every session in pg_stat_activity, so the connection budget of
     // R-05 is observable rather than inferred.
     application_name: cfg.applicationNamePrefix,
@@ -337,7 +364,80 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  */
 export async function acquireConnection(role?: PipelineRole): Promise<PoolClient> {
   const target = poolFor(role);
-  return retryAcquisition(() => target.connect(), role);
+  const client = await retryAcquisition(() => target.connect(), role);
+  return guardCheckedOutClient(client, role);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHECKED-OUT CLIENT ERROR GUARD — why the process died, and why this is here
+//
+// pg-pool routes a connection's 'error' event to its own listener ONLY while the
+// client sits idle IN the pool. On checkout it removes that listener
+// (pg-pool 3.14.0, _acquireClient) and hands the caller a client with NO 'error'
+// listener; on release it re-attaches it (_release). So between checkout and
+// release the borrower owns the client's errors — and if the socket dies while
+// no query is in flight on it, the Client emits 'error' with no listener, which
+// Node turns into an uncaught exception that TERMINATES THE PROCESS.
+//
+// That is exactly how the England ingestion run ended: the control connection
+// in withRun sat checked-out and query-idle across the whole work transaction,
+// the session-mode pooler dropped its socket, and pg raised
+// 'Connection terminated unexpectedly' as an unhandled 'error' event — killing
+// Node after a clean 380-event provider retrieval, before the write committed.
+//
+// The idle-pool handler installed in poolFor (created.on('error')) does NOT
+// cover this: that handler fires only for clients idle in the pool, never for
+// checked-out ones. This guard closes the gap in ONE central place — every
+// production checkout goes through acquireConnection — rather than scattering
+// listeners through ingestion, module and operations code.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Attaches a lifetime 'error' listener to a freshly checked-out client so a
+ * socket error can never become an unhandled process-terminating event, and
+ * removes it again on release so listeners never accumulate.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT DO. It does not swallow, retry, or resurrect
+ * anything. pg marks a client non-queryable the moment its stream errors, so:
+ *   - the owner's in-flight or next query rejects through the normal path and
+ *     its transaction rolls back exactly as it would for any query failure;
+ *   - pg-pool's _release removes a non-queryable client rather than returning a
+ *     zombie to the pool.
+ * The listener's whole job is to make sure the 'error' EVENT has somewhere to go
+ * and is logged with context — not silenced.
+ *
+ * NO LISTENER LEAK. One physical connection is checked out and released many
+ * times. The listener is added once per checkout and removed on that checkout's
+ * release, so a connection at rest in the pool carries only pg-pool's own idle
+ * listener, never a growing stack of ours. The pooled release wrapper (which
+ * throws on double release) is preserved: we wrap it, call it unchanged, and let
+ * it enforce that invariant.
+ */
+export function guardCheckedOutClient(client: PoolClient, role?: PipelineRole): PoolClient {
+  const onError = (err: Error): void => {
+    logger.error(
+      { role, err: err.message },
+      'v2: checked-out client connection error — the connection is unusable; the owning ' +
+        'operation will fail and roll back, and pg-pool will remove the client from the pool'
+    );
+  };
+  client.on('error', onError);
+
+  // pg-pool has already installed its release-once wrapper on `client.release`
+  // by the time connect() resolves. Wrap THAT, so double-release still throws as
+  // pg-pool intends; our only addition is detaching our listener exactly once,
+  // before the pooled release re-attaches pg-pool's idle listener.
+  const pooledRelease = client.release.bind(client) as (err?: Error | boolean) => void;
+  let detached = false;
+  client.release = ((err?: Error | boolean): void => {
+    if (!detached) {
+      detached = true;
+      client.removeListener('error', onError);
+    }
+    return pooledRelease(err);
+  }) as PoolClient['release'];
+
+  return client;
 }
 
 /**

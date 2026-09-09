@@ -25,6 +25,8 @@ import {
 } from '../config/index';
 import type { PoolClient } from 'pg';
 
+import { EventEmitter } from 'node:events';
+
 import {
   poolFor,
   checkHealth,
@@ -38,6 +40,9 @@ import {
   poolStats,
   isPoolOpen,
   resetPoolsForTesting,
+  buildPoolConfig,
+  guardCheckedOutClient,
+  KEEPALIVE_INITIAL_DELAY_MS,
 } from './pool';
 import { roleDefinition } from './roles';
 import { testableRoles, skipReason, connectionSummary } from './testSupport';
@@ -370,6 +375,128 @@ describe('connection acquisition retry (no database required)', () => {
       [40, 40]
     );
     assert.ok(Date.now() - startedAt >= 35, 'the backoff was observed, not skipped');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHECKED-OUT CLIENT ERROR GUARD + TCP KEEPALIVE (no database required)
+//
+// The England ingestion run died because a checked-out connection's socket was
+// dropped while query-idle and pg emitted an 'error' event on a Client with no
+// listener — an unhandled event that terminates the Node process. These pin the
+// central fix: every checkout is guarded, the guard never leaks a listener, and
+// the pool is now configured with TCP keepalive.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A fake connection that reproduces the pg-pool 3.14.0 checkout/release contract
+ * that matters here: on checkout the idle 'error' listener is absent (the pool
+ * removed it), and on release the pool re-attaches exactly one idle listener and
+ * refuses a second release. Faithful enough to prove our guard composes with it
+ * without a database.
+ */
+function fakePooledConnection() {
+  const client = new EventEmitter() as unknown as PoolClient & EventEmitter;
+  const idleListener = (): void => undefined;
+
+  // Emulate pg-pool _acquireClient: caller receives a client with no 'error'
+  // listener and a release-once wrapper that re-adds the idle listener.
+  function checkout(): void {
+    client.removeListener('error', idleListener);
+    let released = false;
+    (client as unknown as { release: (err?: Error | boolean) => void }).release = (
+      _err?: Error | boolean
+    ): void => {
+      if (released) throw new Error('Release called on client which has already been released to the pool.');
+      released = true;
+      client.on('error', idleListener); // pg-pool _release re-attaches the idle listener
+    };
+  }
+
+  return { client, idleListener, checkout };
+}
+
+describe('checked-out client error guard (no database required)', () => {
+  test('a checked-out client socket error is handled, not thrown as an unhandled event', () => {
+    const { client, checkout } = fakePooledConnection();
+    checkout();
+    // Precondition: pg-pool left the checked-out client with no 'error' listener.
+    assert.equal(client.listenerCount('error'), 0);
+
+    guardCheckedOutClient(client, 'pt_pipeline_ingestion');
+    assert.equal(client.listenerCount('error'), 1, 'the guard attaches exactly one listener');
+
+    // With a listener present, EventEmitter delivers the event instead of
+    // throwing — which is precisely what stops the process from terminating. An
+    // unguarded emit('error') with no listener throws.
+    assert.doesNotThrow(() =>
+      client.emit('error', new Error('Connection terminated unexpectedly'))
+    );
+  });
+
+  test('the guard removes its listener on release — no leak across checkouts', () => {
+    const { client, checkout } = fakePooledConnection();
+
+    // Three full checkout/guard/release cycles on ONE physical connection. If the
+    // guard failed to detach, listeners would accumulate; the count must return
+    // to exactly one (pg-pool's re-attached idle listener) every time.
+    for (let cycle = 0; cycle < 3; cycle++) {
+      checkout();
+      assert.equal(client.listenerCount('error'), 0, `cycle ${cycle}: checked out, no listener`);
+      guardCheckedOutClient(client);
+      assert.equal(client.listenerCount('error'), 1, `cycle ${cycle}: guard attached`);
+      client.release();
+      assert.equal(
+        client.listenerCount('error'),
+        1,
+        `cycle ${cycle}: guard detached, only pg-pool's idle listener remains`
+      );
+    }
+  });
+
+  test('normal checkout, release, and double-release semantics are preserved', () => {
+    const { client, checkout } = fakePooledConnection();
+    checkout();
+    const guarded = guardCheckedOutClient(client);
+    assert.equal(guarded, client, 'the same client is returned');
+
+    assert.doesNotThrow(() => guarded.release(), 'a first release succeeds');
+    assert.throws(
+      () => guarded.release(),
+      /already been released/,
+      'double release still throws — the pooled release-once wrapper is preserved'
+    );
+  });
+});
+
+describe('TCP keepalive configuration (no database required)', () => {
+  const saved = { ...process.env };
+  after(() => {
+    process.env = { ...saved };
+    resetV2ConfigForTesting();
+  });
+
+  test('the constructed pool config carries conservative keepalive', () => {
+    resetV2ConfigForTesting();
+    process.env.PT_V2_DB_HOST = 'localhost';
+    process.env.PT_V2_DB_NAME = 'ptv2';
+    process.env.PT_V2_DB_PASSWORD = 'irrelevant-to-this-assertion';
+    process.env.PT_V2_ALLOW_NON_SESSION_PORT = 'true';
+
+    const config = buildPoolConfig();
+    assert.equal(config.keepAlive, true, 'keepAlive must be enabled on the pool');
+    assert.equal(
+      config.keepAliveInitialDelayMillis,
+      KEEPALIVE_INITIAL_DELAY_MS,
+      'the initial-delay must be the module default'
+    );
+
+    // Conservative, not aggressive: soon enough to keep a pooled socket warm,
+    // slow enough to add no meaningful probe traffic.
+    assert.ok(
+      KEEPALIVE_INITIAL_DELAY_MS >= 5_000 && KEEPALIVE_INITIAL_DELAY_MS <= 30_000,
+      `keepalive initial delay ${KEEPALIVE_INITIAL_DELAY_MS}ms is outside the conservative 5s–30s band`
+    );
   });
 });
 
