@@ -6,7 +6,14 @@
  *   - Schedule feed filter (which matches to store)
  *   - Squad sync (which teams to fetch players for)
  *
- * TWO MATCHING STRATEGIES:
+ * THREE MATCHING STRATEGIES, in descending order of trust:
+ *
+ *   ids           — EXACT match against the provider's tournament id. THE ONLY
+ *                   MATCHER THAT CANNOT LEAK. Numeric and globally unique, so it
+ *                   needs no country disambiguation and has no collision surface
+ *                   at all. Use isTrackedId() at every DB write boundary where an
+ *                   id is available; the two matchers below exist only for the
+ *                   paths where it isn't.
  *
  *   apiNameMatch  — Partial, case-insensitive match against tournament.name from API.
  *                   Used in syncDateMasterFeed.ts (schedule feed) where only the name
@@ -17,9 +24,20 @@
  *                   This is precise — no false positives from partial name collisions.
  *
  * ADDING A NEW LEAGUE:
- *   1. Run sync:today and check tournaments table for the exact name + slug
- *   2. Add entry below with both apiNameMatch (name fragment) and slug (exact DB slug)
+ *   1. Find the tournament in the provider's /tournaments dump — grab its id,
+ *      slug and countryName. Match on countryName, never on slug or name alone:
+ *      27 different countries publish a tournament slugged 'premier-league'.
+ *   2. Add entry below with ids (required), apiNameMatch (name fragment) and
+ *      slug (exact DB slug)
  *   3. Cron picks it up automatically
+ *
+ * IDS WERE BACKFILLED from the provider's /tournaments dump. That same pass
+ * found 12 entries whose slug here no longer matched anything the provider
+ * publishes (e.g. 'jupiler-pro-league' is 'pro-league' upstream, 'liga-i' is
+ * 'superliga'). Those slugs are now corrected. Slug drift like that fails
+ * SILENTLY and in the direction of under-fetching — the squad sync simply
+ * found nothing for those 12 leagues — which is exactly why ids are now the
+ * primary key here.
  *
  * Source: NinetyData League Coverage Map — June 2026
  */
@@ -28,6 +46,18 @@ export interface TrackedLeague {
   name: string;           // Human-readable label for logs
   apiNameMatch: string;   // Partial match against tournament.name from schedule API
   slug: string;           // EXACT match against tournaments.slug in DB
+  ids: number[];          // AUTHORITATIVE. Provider tournament IDs (SPORTSAPI
+                          // /tournaments -> leagues[].id). Numeric, stable, and
+                          // globally unique across countries, so unlike slug or
+                          // name they need no country disambiguation and cannot
+                          // collide: 'premier-league' exists in 27 countries and
+                          // 'bundesliga' in 2, but id 17 is only ever England's
+                          // Premier League. Prefer isTrackedId() over every other
+                          // matcher in this file wherever the ingest path has an
+                          // id in hand — that is the only check that cannot leak
+                          // an untracked tournament into the DB.
+                          // Array because some competitions are split upstream
+                          // into Apertura/Clausura or similar phases.
   country?: string | string[];  // Category/country — array for multi-country leagues
   dbNames?: string[];     // Exact tournament.name values actually found in the DB —
                           // handles cases where the API's name and what ends up
@@ -87,132 +117,132 @@ export const TRACKED_LEAGUES: TrackedLeague[] = [
   // ── EUROPE ────────────────────────────────────────────────────────────────
 
   // England
-  { name: 'Premier League',         apiNameMatch: 'Premier League',   slug: 'premier-league',        country: 'England',      tier: 1, band: 'A',         region: 'Europe' },
-  { name: 'EFL Championship',       apiNameMatch: 'Championship',     slug: 'championship',          country: ['England', 'Wales'],      tier: 2, band: 'A',         region: 'Europe' },
-  { name: 'EFL League One',         apiNameMatch: 'League One',       slug: 'league-one',            country: 'England',      tier: 3, band: 'B',         region: 'Europe' },
-  { name: 'EFL League Two',         apiNameMatch: 'League Two',       slug: 'league-two',            country: ['England', 'Wales'],      tier: 4, band: 'B',         region: 'Europe' },
+  { name: 'Premier League',         apiNameMatch: 'Premier League',   slug: 'premier-league',        ids: [17],      country: 'England',      tier: 1, band: 'A',         region: 'Europe' },
+  { name: 'EFL Championship',       apiNameMatch: 'Championship',     slug: 'championship',          ids: [18],      country: ['England', 'Wales'],      tier: 2, band: 'A',         region: 'Europe' },
+  { name: 'EFL League One',         apiNameMatch: 'League One',       slug: 'league-one',            ids: [24],      country: 'England',      tier: 3, band: 'B',         region: 'Europe' },
+  { name: 'EFL League Two',         apiNameMatch: 'League Two',       slug: 'league-two',            ids: [25],      country: ['England', 'Wales'],      tier: 4, band: 'B',         region: 'Europe' },
 
   // Spain
-  { name: 'La Liga',                apiNameMatch: 'La Liga',          slug: 'laliga',                country: 'Spain',        tier: 1, band: 'A',         region: 'Europe' },
-  { name: 'Segunda División',       apiNameMatch: 'Segunda División', slug: 'laliga-2',              country: ['Spain', 'Andorra'],        tier: 2, band: 'B',         region: 'Europe' },
+  { name: 'La Liga',                apiNameMatch: 'La Liga',          slug: 'laliga',                ids: [8],       country: 'Spain',        tier: 1, band: 'A',         region: 'Europe' },
+  { name: 'Segunda División',       apiNameMatch: 'Segunda División', slug: 'laliga-2',              ids: [54],      country: ['Spain', 'Andorra'],        tier: 2, band: 'B',         region: 'Europe' },
 
   // Germany
-  { name: 'Bundesliga',             apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            country: 'Germany',      tier: 1, band: 'A',         region: 'Europe' },
-  { name: '2. Bundesliga',          apiNameMatch: '2. Bundesliga',    slug: '2-bundesliga',          country: 'Germany',      tier: 2, band: 'B',         region: 'Europe' },
+  { name: 'Bundesliga',             apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            ids: [35],      country: 'Germany',      tier: 1, band: 'A',         region: 'Europe' },
+  { name: '2. Bundesliga',          apiNameMatch: '2. Bundesliga',    slug: '2-bundesliga',          ids: [44],      country: 'Germany',      tier: 2, band: 'B',         region: 'Europe' },
 
   // Italy
-  { name: 'Serie A',                apiNameMatch: 'Serie A',          slug: 'serie-a',               country: 'Italy',        tier: 1, band: 'A',         region: 'Europe' },
-  { name: 'Serie B (Italian)',      apiNameMatch: 'Serie B',          slug: 'serie-b',               country: 'Italy',        tier: 2, band: 'B',         region: 'Europe' },
+  { name: 'Serie A',                apiNameMatch: 'Serie A',          slug: 'serie-a',               ids: [23],      country: 'Italy',        tier: 1, band: 'A',         region: 'Europe' },
+  { name: 'Serie B (Italian)',      apiNameMatch: 'Serie B',          slug: 'serie-b',               ids: [53],      country: 'Italy',        tier: 2, band: 'B',         region: 'Europe' },
 
   // France
-  { name: 'Ligue 1',                apiNameMatch: 'Ligue 1',          slug: 'ligue-1',               country: ['France', 'Monaco'],       tier: 1, band: 'A',         region: 'Europe' },
+  { name: 'Ligue 1',                apiNameMatch: 'Ligue 1',          slug: 'ligue-1',               ids: [34],      country: ['France', 'Monaco'],       tier: 1, band: 'A',         region: 'Europe' },
 
   // Netherlands
-  { name: 'Eredivisie',             apiNameMatch: 'Eredivisie',       slug: 'eredivisie',            country: 'Netherlands',  tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Eredivisie',             apiNameMatch: 'Eredivisie',       slug: 'eredivisie',            ids: [37],      country: 'Netherlands',  tier: 1, band: 'B',         region: 'Europe' },
 
   // Portugal
-  { name: 'Primeira Liga',          apiNameMatch: 'Primeira Liga',    slug: 'liga-portugal-betclic', country: 'Portugal',     tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Primeira Liga',          apiNameMatch: 'Primeira Liga',    slug: 'liga-portugal-betclic', ids: [238],     country: 'Portugal',     tier: 1, band: 'B',         region: 'Europe' },
 
   // Belgium
-  { name: 'Jupiler Pro League',     apiNameMatch: 'Jupiler',          slug: 'jupiler-pro-league',    country: 'Belgium',      tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Jupiler Pro League',     apiNameMatch: 'Jupiler',          slug: 'pro-league',            ids: [38],      country: 'Belgium',      tier: 1, band: 'B',         region: 'Europe' },
 
   // Turkey
-  { name: 'Süper Lig',              apiNameMatch: 'Süper Lig',        slug: 'super-lig',             country: 'Turkey',       tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Süper Lig',              apiNameMatch: 'Süper Lig',        slug: 'trendyol-super-lig',     ids: [52],      country: 'Turkey',       tier: 1, band: 'B',         region: 'Europe' },
 
   // Scotland
-  { name: 'Scottish Premiership',   apiNameMatch: 'Premiership',      slug: 'premiership',           country: 'Scotland',     tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Scottish Premiership',   apiNameMatch: 'Premiership',      slug: 'premiership',           ids: [36],      country: 'Scotland',     tier: 1, band: 'B',         region: 'Europe' },
 
   // Russia
-  { name: 'Russian Premier League', apiNameMatch: 'Premier League',   slug: 'premier-league',        country: 'Russia',       tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Russian Premier League', apiNameMatch: 'Premier League',   slug: 'premier-liga',          ids: [203],     country: 'Russia',       tier: 1, band: 'B',         region: 'Europe' },
 
   // Norway
-  { name: 'Eliteserien',            apiNameMatch: 'Eliteserien',      slug: 'eliteserien',           country: 'Norway',       tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Eliteserien',            apiNameMatch: 'Eliteserien',      slug: 'eliteserien',           ids: [20],      country: 'Norway',       tier: 1, band: 'B',         region: 'Europe' },
 
   // Sweden
-  { name: 'Allsvenskan',            apiNameMatch: 'Allsvenskan',      slug: 'allsvenskan',           country: 'Sweden',       tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Allsvenskan',            apiNameMatch: 'Allsvenskan',      slug: 'allsvenskan',           ids: [40],      country: 'Sweden',       tier: 1, band: 'B',         region: 'Europe' },
 
   // Switzerland
-  { name: 'Swiss Super League',     apiNameMatch: 'Super League',     slug: 'super-league',          country: ['Switzerland', 'Liechtenstein'],  tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Swiss Super League',     apiNameMatch: 'Super League',     slug: 'super-league',          ids: [215],     country: ['Switzerland', 'Liechtenstein'],  tier: 1, band: 'B',         region: 'Europe' },
 
   // Austria
-  { name: 'Austrian Bundesliga',    apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            country: 'Austria',      tier: 1, band: 'B',         region: 'Europe' },
+  { name: 'Austrian Bundesliga',    apiNameMatch: 'Bundesliga',       slug: 'bundesliga',            ids: [45],      country: 'Austria',      tier: 1, band: 'B',         region: 'Europe' },
 
   // Romania
-  { name: 'Liga I',                  apiNameMatch: 'Liga I',            slug: 'liga-i',                country: 'Romania',           tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Liga I',                  apiNameMatch: 'Liga I',            slug: 'superliga',              ids: [152],     country: 'Romania',           tier: 1, band: 'B', region: 'Europe' },
 
   // Slovenia — confirmed from DB
-  { name: 'PrvaLiga',                apiNameMatch: 'PrvaLiga',          slug: 'prvaliga',              country: 'Slovenia',          tier: 1, band: 'C', region: 'Europe' },
+  { name: 'PrvaLiga',                apiNameMatch: 'PrvaLiga',          slug: 'prvaliga',              ids: [212],     country: 'Slovenia',          tier: 1, band: 'C', region: 'Europe' },
 
   // Denmark
-  { name: 'Danish Superliga',        apiNameMatch: 'Superliga',         slug: 'superliga',             country: 'Denmark',           tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Danish Superliga',        apiNameMatch: 'Superliga',         slug: 'superliga',             ids: [39],      country: 'Denmark',           tier: 1, band: 'B', region: 'Europe' },
 
   // Greece
-  { name: 'Greek Super League',      apiNameMatch: 'Super League',      slug: 'super-league',          country: 'Greece',            tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Greek Super League',      apiNameMatch: 'Super League',      slug: 'stoiximan-super-league', ids: [185],     country: 'Greece',            tier: 1, band: 'B', region: 'Europe' },
 
   // Czech Republic
-  { name: 'Czech First League',      apiNameMatch: 'Czech First',       slug: '1-liga',    country: 'Czech Republic',    tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Czech First League',      apiNameMatch: 'Czech First',       slug: '1-liga',    ids: [172],     country: 'Czech Republic',    tier: 1, band: 'B', region: 'Europe' },
 
   // Croatia
-  { name: 'HNL',                     apiNameMatch: 'HNL',               slug: 'hnl',                   country: 'Croatia',           tier: 1, band: 'B', region: 'Europe' },
+  { name: 'HNL',                     apiNameMatch: 'HNL',               slug: 'hnl',                   ids: [170],     country: 'Croatia',           tier: 1, band: 'B', region: 'Europe' },
 
   // Serbia
-  { name: 'Serbian SuperLiga',       apiNameMatch: 'SuperLiga',         slug: 'super-liga',            country: 'Serbia',            tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Serbian SuperLiga',       apiNameMatch: 'SuperLiga',         slug: 'mozzart-bet-superliga',  ids: [210],     country: 'Serbia',            tier: 1, band: 'B', region: 'Europe' },
 
   // Poland
-  { name: 'Ekstraklasa',             apiNameMatch: 'Ekstraklasa',       slug: 'ekstraklasa',           country: 'Poland',            tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Ekstraklasa',             apiNameMatch: 'Ekstraklasa',       slug: 'ekstraklasa',           ids: [202],     country: 'Poland',            tier: 1, band: 'B', region: 'Europe' },
 
   // Ukraine
-  { name: 'Ukrainian Premier League',apiNameMatch: 'Ukrainian Premier', slug: 'ukrainian-premier-league', country: 'Ukraine',         tier: 1, band: 'B', region: 'Europe' },
+  { name: 'Ukrainian Premier League',apiNameMatch: 'Ukrainian Premier', slug: 'premier-league',           ids: [218],     country: 'Ukraine',         tier: 1, band: 'B', region: 'Europe' },
 
   // Hungary
-  { name: 'NB I',                    apiNameMatch: 'NB I',              slug: 'nb-i',                  country: 'Hungary',           tier: 1, band: 'C', region: 'Europe' },
+  { name: 'NB I',                    apiNameMatch: 'NB I',              slug: 'nb-i',                  ids: [187],     country: 'Hungary',           tier: 1, band: 'C', region: 'Europe' },
 
   // Slovakia
-  { name: 'Slovak Super Liga',       apiNameMatch: 'Super Liga',        slug: 'super-liga',            country: 'Slovakia',          tier: 1, band: 'C', region: 'Europe' },
+  { name: 'Slovak Super Liga',       apiNameMatch: 'Super Liga',        slug: 'nike-liga',             ids: [211],     country: 'Slovakia',          tier: 1, band: 'C', region: 'Europe' },
 
   // Bulgaria
-  { name: 'Bulgarian First League',  apiNameMatch: 'First League',      slug: 'first-league',          country: 'Bulgaria',          tier: 1, band: 'C', region: 'Europe' },
+  { name: 'Bulgarian First League',  apiNameMatch: 'First League',      slug: 'parva-liga',            ids: [247],     country: 'Bulgaria',          tier: 1, band: 'C', region: 'Europe' },
 
   // Cyprus
-  { name: 'Cypriot First Division',  apiNameMatch: 'First Division',    slug: 'first-division',        country: 'Cyprus',            tier: 1, band: 'C', region: 'Europe' },
+  { name: 'Cypriot First Division',  apiNameMatch: 'First Division',    slug: '1-division',            ids: [171],     country: 'Cyprus',            tier: 1, band: 'C', region: 'Europe' },
   // Ireland
-  { name: 'League of Ireland',      apiNameMatch: 'League of Ireland',slug: 'premier-division',      country: 'Ireland',      dbNames: ['Premier Division', ' Premier Division'], tier: 1, band: 'Discovery', region: 'Europe' },
+  { name: 'League of Ireland',      apiNameMatch: 'League of Ireland',slug: 'premier-division',      ids: [192],     country: 'Ireland',      dbNames: ['Premier Division', ' Premier Division'], tier: 1, band: 'Discovery', region: 'Europe' },
 
   // Finland
-  { name: 'Veikkausliiga',          apiNameMatch: 'Veikkausliiga',    slug: 'veikkausliiga',         country: 'Finland',      tier: 1, band: 'Discovery', region: 'Europe' },
+  { name: 'Veikkausliiga',          apiNameMatch: 'Veikkausliiga',    slug: 'veikkausliiga',         ids: [41],      country: 'Finland',      tier: 1, band: 'Discovery', region: 'Europe' },
 
   // Lithuania
-  { name: 'A Lyga',                 apiNameMatch: 'A Lyga',           slug: 'a-lyga',                country: 'Lithuania',    dbNames: ['TOPLYGA', 'A Lyga'], tier: 1, band: 'Discovery', region: 'Europe' },
+  { name: 'A Lyga',                 apiNameMatch: 'A Lyga',           slug: 'a-lyga',                ids: [198],     country: 'Lithuania',    dbNames: ['TOPLYGA', 'A Lyga'], tier: 1, band: 'Discovery', region: 'Europe' },
 
   // ── SOUTH AMERICA ─────────────────────────────────────────────────────────
 
-  { name: 'Brasileirão Série A',    apiNameMatch: 'Série A',          slug: 'brasileirao-serie-a',   country: 'Brazil',       dbNames: ['Brasileirão Série A', 'Brasileirão Betano'], tier: 1, band: 'A',         region: 'South America' },
-  { name: 'Brasileirão Série B',    apiNameMatch: 'Série B',          slug: 'brasileirao-serie-b',   country: 'Brazil',       tier: 2, band: 'Mandated',  region: 'South America' },
-  { name: 'Liga Profesional',       apiNameMatch: 'Liga Profesional', slug: 'liga-profesional',      country: 'Argentina',    tier: 1, band: 'B',         region: 'South America' },
-  { name: 'Primera Nacional',       apiNameMatch: 'Primera Nacional', slug: 'primera-nacional',      country: 'Argentina',    tier: 2, band: 'Mandated',  region: 'South America' },
-  { name: 'Categoría Primera A',    apiNameMatch: 'Primera A',        slug: 'primera-a-apertura',    country: 'Colombia',     dbNames: ['Primera A, Apertura'], tier: 1, band: 'C',         region: 'South America' },
-  { name: 'Primera División',       apiNameMatch: 'Primera División', slug: 'primera-division',      country: 'Uruguay',      dbNames: ['Liga AUF Uruguaya'], tier: 1, band: 'C',         region: 'South America' },
-  { name: 'LigaPro',                apiNameMatch: 'LigaPro Serie A',  slug: 'ligapro-serie-a',       country: 'Ecuador',      tier: 1, band: 'B',         region: 'South America' },
-  { name: 'Liga MX Apertura',       apiNameMatch: 'Liga MX',          slug: 'liga-mx-apertura',      country: 'Mexico',       tier: 1, band: 'B',         region: 'North America' },
+  { name: 'Brasileirão Série A',    apiNameMatch: 'Série A',          slug: 'brasileirao-serie-a',   ids: [325],     country: 'Brazil',       dbNames: ['Brasileirão Série A', 'Brasileirão Betano'], tier: 1, band: 'A',         region: 'South America' },
+  { name: 'Brasileirão Série B',    apiNameMatch: 'Série B',          slug: 'brasileirao-serie-b',   ids: [390],     country: 'Brazil',       tier: 2, band: 'Mandated',  region: 'South America' },
+  { name: 'Liga Profesional',       apiNameMatch: 'Liga Profesional', slug: 'liga-profesional-de-futbol', ids: [155],     country: 'Argentina',    tier: 1, band: 'B',         region: 'South America' },
+  { name: 'Primera Nacional',       apiNameMatch: 'Primera Nacional', slug: 'primera-nacional',      ids: [703],     country: 'Argentina',    tier: 2, band: 'Mandated',  region: 'South America' },
+  { name: 'Categoría Primera A',    apiNameMatch: 'Primera A',        slug: 'primera-a-apertura',    ids: [11539],   country: 'Colombia',     dbNames: ['Primera A, Apertura'], tier: 1, band: 'C',         region: 'South America' },
+  { name: 'Primera División',       apiNameMatch: 'Primera División', slug: 'primera-division',      ids: [278],     country: 'Uruguay',      dbNames: ['Liga AUF Uruguaya'], tier: 1, band: 'C',         region: 'South America' },
+  { name: 'LigaPro',                apiNameMatch: 'LigaPro Serie A',  slug: 'ligapro-serie-a',       ids: [240],     country: 'Ecuador',      tier: 1, band: 'B',         region: 'South America' },
+  { name: 'Liga MX Apertura',       apiNameMatch: 'Liga MX',          slug: 'liga-mx-apertura',      ids: [11621],   country: 'Mexico',       tier: 1, band: 'B',         region: 'North America' },
   // ── NORTH AMERICA ─────────────────────────────────────────────────────────
 
-  { name: 'MLS',                    apiNameMatch: 'MLS',              slug: 'mls',                   country: ['USA', 'Canada'],          tier: 1, band: 'A',         region: 'North America' },
-  { name: 'Liga MX',                apiNameMatch: 'Liga MX',          slug: 'liga-mx',               country: 'Mexico',       tier: 1, band: 'B',         region: 'North America' },
+  { name: 'MLS',                    apiNameMatch: 'MLS',              slug: 'mls',                   ids: [242],     country: ['USA', 'Canada'],          tier: 1, band: 'A',         region: 'North America' },
+  { name: 'Liga MX',                apiNameMatch: 'Liga MX',          slug: 'liga-mx-clausura',       ids: [11620],   country: 'Mexico',       tier: 1, band: 'B',         region: 'North America' },
 
   // ── AFRICA ────────────────────────────────────────────────────────────────
 
-  { name: 'Egyptian Premier League',  apiNameMatch: 'Premier League', slug: 'premier-league',        country: 'Egypt',        tier: 1, band: 'B',         region: 'Africa' },
-  { name: 'PSL Betway Premiership',   apiNameMatch: 'Premiership',    slug: 'premiership',           country: 'South Africa', tier: 1, band: 'C',         region: 'Africa' },
+  { name: 'Egyptian Premier League',  apiNameMatch: 'Premier League', slug: 'premier-league',        ids: [808],     country: 'Egypt',        tier: 1, band: 'B',         region: 'Africa' },
+  { name: 'PSL Betway Premiership',   apiNameMatch: 'Premiership',    slug: 'premiership',           ids: [358],     country: 'South Africa', tier: 1, band: 'C',         region: 'Africa' },
 
   // ── ASIA ──────────────────────────────────────────────────────────────────
 
-  { name: 'J1 League',              apiNameMatch: 'J1',               slug: 'j1-league',             country: 'Japan',        tier: 1, band: 'B',         region: 'Asia' },
-  { name: 'J2 League',              apiNameMatch: 'J2',               slug: 'j2-league',             country: 'Japan',        tier: 2, band: 'B',         region: 'Asia' },
-  { name: 'K League 1',             apiNameMatch: 'K League 1',       slug: 'k-league-1',            country: 'South Korea',  tier: 1, band: 'B',         region: 'Asia' },
-  { name: 'K League 2',             apiNameMatch: 'K League 2',       slug: 'k-league-2',            country: 'South Korea',  tier: 2, band: 'C',         region: 'Asia' },
-  { name: 'Saudi Pro League',       apiNameMatch: 'Saudi',            slug: 'saudi-pro-league',      country: 'Saudi Arabia', tier: 1, band: 'B',         region: 'Asia' },
-  { name: 'Indian Super League',    apiNameMatch: 'Indian Super',     slug: 'indian-super-league',   country: 'India',        tier: 1, band: 'C',         region: 'Asia' },
-  { name: 'Chinese Super League',   apiNameMatch: 'Chinese Super',    slug: 'cfa-super-league',     country: 'China',        tier: 1, band: 'B',         region: 'Asia' },
+  { name: 'J1 League',              apiNameMatch: 'J1',               slug: 'j1-league',             ids: [196],     country: 'Japan',        tier: 1, band: 'B',         region: 'Asia' },
+  { name: 'J2 League',              apiNameMatch: 'J2',               slug: 'j2-league',             ids: [402],     country: 'Japan',        tier: 2, band: 'B',         region: 'Asia' },
+  { name: 'K League 1',             apiNameMatch: 'K League 1',       slug: 'k-league-1',            ids: [410],     country: 'South Korea',  tier: 1, band: 'B',         region: 'Asia' },
+  { name: 'K League 2',             apiNameMatch: 'K League 2',       slug: 'k-league-2',            ids: [777],     country: 'South Korea',  tier: 2, band: 'C',         region: 'Asia' },
+  { name: 'Saudi Pro League',       apiNameMatch: 'Saudi',            slug: 'saudi-pro-league',      ids: [955],     country: 'Saudi Arabia', tier: 1, band: 'B',         region: 'Asia' },
+  { name: 'Indian Super League',    apiNameMatch: 'Indian Super',     slug: 'indian-super-league',   ids: [1900],    country: 'India',        tier: 1, band: 'C',         region: 'Asia' },
+  { name: 'Chinese Super League',   apiNameMatch: 'Chinese Super',    slug: 'cfa-super-league',     ids: [649],     country: 'China',        tier: 1, band: 'B',         region: 'Asia' },
 ];
 
 // ── LOOKUP HELPERS ────────────────────────────────────────────────────────────
@@ -397,6 +427,13 @@ export function isTrackedBySlug(slug: string, category?: string): boolean {
  * confirmed by reading the actual TrackedLeague interface and every entry
  * in TRACKED_LEAGUES below, not assumed. Used by logApiSample() so API
  * reference samples are organized by real tier, not by country.
+ *
+ * AMBIGUOUS BY CONSTRUCTION — prefer getBandById(). Several slugs appear on
+ * more than one entry ('bundesliga' on Germany band A and Austria band B;
+ * 'premier-league' on England band A, Egypt band B and Ukraine band B;
+ * 'premiership' on Scotland band B and South Africa band C; 'superliga' on
+ * Denmark and Romania), and .find() returns whichever is declared first —
+ * so Austria silently reports band A. Kept only for callers that have no id.
  */
 export function getBandBySlug(slug: string): string | null {
   const sLower = slug.toLowerCase();
@@ -411,3 +448,87 @@ export function getTrackedLeaguesSummary(): Record<string, number> {
 }
 
 export const TRACKED_LEAGUE_COUNT = TRACKED_LEAGUES.length;
+
+// ── ID-BASED LOOKUPS (PREFERRED — USE THESE AT THE DB WRITE BOUNDARY) ────────
+
+/**
+ * Flat set of every tracked provider tournament id.
+ *
+ * This is the leak-proof gate. Name and slug matching both have a collision
+ * surface that has to be closed by a country check, and a country check can
+ * only be as good as the category data on the record — which is exactly the
+ * "permit on missing data" hole the countriesMatch() comment above warns
+ * about. An id has no such surface: 17 is England's Premier League and
+ * nothing else, in any feed, with or without country data attached.
+ */
+export const TRACKED_LEAGUE_IDS: ReadonlySet<number> = new Set(
+  TRACKED_LEAGUES.flatMap(l => l.ids)
+);
+
+/**
+ * THE ingest guard. Call this before inserting any tournament (and before
+ * inserting matches, standings or players hanging off one). Accepts strings
+ * because JSON feeds and query params hand ids over as strings often enough
+ * that a silent `'17' !== 17` mismatch is a real failure mode — but rejects
+ * anything that isn't a finite number, rather than coercing null/''/NaN into
+ * something that might accidentally hit.
+ */
+export function isTrackedId(id: number | string | null | undefined): boolean {
+  if (id === null || id === undefined || id === '') return false;
+  const n = typeof id === 'number' ? id : Number(id);
+  return Number.isFinite(n) && TRACKED_LEAGUE_IDS.has(n);
+}
+
+/** Resolves a provider tournament id to its tracked entry, or null. */
+export function findTrackedLeagueById(id: number | string): TrackedLeague | null {
+  const n = typeof id === 'number' ? id : Number(id);
+  if (!Number.isFinite(n)) return null;
+  return TRACKED_LEAGUES.find(l => l.ids.includes(n)) ?? null;
+}
+
+/** Unambiguous replacement for getBandBySlug() — see the warning on that fn. */
+export function getBandById(id: number | string): string | null {
+  return findTrackedLeagueById(id)?.band ?? null;
+}
+
+/** Every tracked id, for `WHERE tournament_id = ANY($1)` style queries. */
+export function getTrackedLeagueIds(): number[] {
+  return [...TRACKED_LEAGUE_IDS];
+}
+
+/**
+ * Convenience for filtering a raw provider payload in one pass.
+ * `pick` defaults to reading `.id`, override for feeds that nest it
+ * (e.g. `t => t.tournament?.id`).
+ */
+export function filterToTrackedIds<T>(
+  items: readonly T[],
+  pick: (item: T) => number | string | null | undefined = (i: any) => i?.id
+): T[] {
+  return items.filter(i => isTrackedId(pick(i)));
+}
+
+// Config integrity check. Runs once at import. A duplicate id means two
+// entries claim the same tournament, which would make findTrackedLeagueById()
+// and getBandById() silently return whichever was declared first — the same
+// class of bug getBandBySlug() already has. This is static config, so this
+// either always throws or never does; it cannot surprise you in production.
+(() => {
+  const seen = new Map<number, string>();
+  for (const league of TRACKED_LEAGUES) {
+    if (!league.ids || league.ids.length === 0) {
+      throw new Error(`trackedLeagues: "${league.name}" has no ids`);
+    }
+    for (const id of league.ids) {
+      const prev = seen.get(id);
+      if (prev) {
+        throw new Error(
+          `trackedLeagues: tournament id ${id} claimed by both "${prev}" and "${league.name}"`
+        );
+      }
+      seen.set(id, league.name);
+    }
+  }
+})();
+
+export const TRACKED_TOURNAMENT_ID_COUNT = TRACKED_LEAGUE_IDS.size;
