@@ -24,7 +24,7 @@ import type { PoolClient } from 'pg';
 import { PROVIDER_CODE } from '../provider/config';
 import { mapCountry } from '../mapping/index';
 import { IngestionCounts, upsertMutable } from '../write/index';
-import { slugify } from '../normalise';
+import { providerScopedSlug } from '../normalise';
 import { logger } from '../../../utils/logger';
 
 /** A competition as the provider reports it, already unwrapped from the feed. */
@@ -76,7 +76,7 @@ export async function resolveCompetition(
       PROVIDER_CODE,
       competition.externalId,
       competition.name,
-      slugify(competition.name),
+      providerScopedSlug(competition.name, competition.externalId),
       country.kind === 'MAPPED' ? country.code : null,
     ],
     conflictTarget: ['provider_code', 'provider_external_id'],

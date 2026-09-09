@@ -25,7 +25,7 @@ import type { PoolClient } from 'pg';
 import { PROVIDER_CODE } from '../provider/config';
 import { mapCountry } from '../mapping/index';
 import { IngestionCounts, upsertMutable } from '../write/index';
-import { slugify, toIsoDate, text } from '../normalise';
+import { slugify, providerScopedSlug, toIsoDate, text } from '../normalise';
 import { logger } from '../../../utils/logger';
 
 export interface ProviderTeam {
@@ -79,7 +79,7 @@ export async function resolveTeam(
       team.externalId,
       team.name,
       team.shortName,
-      slugify(team.name),
+      providerScopedSlug(team.name, team.externalId),
       country.kind === 'MAPPED' ? country.code : null,
       team.homeVenueId,
     ],

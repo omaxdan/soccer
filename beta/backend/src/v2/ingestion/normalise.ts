@@ -96,6 +96,26 @@ export function slugify(text: string): string {
 }
 
 /**
+ * A COLLISION-SAFE slug for an entity whose NAME is not globally unique.
+ *
+ * `slugify(name)` alone is name-only, and `uq_competition__slug` / `uq_team__slug`
+ * are UNIQUE \u2014 so two genuinely different entities that share a name (England vs
+ * Russia vs Egypt "Premier League"; Germany vs Austria "Bundesliga"; Scotland vs
+ * South Africa "Premiership") slugify to the same string and the SECOND ingest
+ * upsert (whose conflict target is the provider identity, not the slug) hits the
+ * unique-slug constraint and aborts the run. Folding the provider's own external
+ * id into the slug makes it unique BY CONSTRUCTION at write time, without merging
+ * two distinct entities into one. This is exactly the strategy `football.player`
+ * already uses (`{slugify(name)}-{providerExternalId}`); this helper generalises
+ * that one established pattern to competition and team. It is NOT the canonical
+ * identity \u2014 `id` and `(provider_code, provider_external_id)` remain authoritative;
+ * the slug is a public/URL-discovery label only.
+ */
+export function providerScopedSlug(name: string, providerExternalId: string): string {
+  return `${slugify(name)}-${providerExternalId}`;
+}
+
+/**
  * A non-negative integer, or null.
  *
  * Scores, capacities and counts. Returns null for a negative rather than
