@@ -111,13 +111,56 @@ describe('assessBudget · decision table', () => {
     assert.equal(p2.decision, 'DEFER');
   });
 
-  test('unknown retry reserve is flagged and treated as 0 (not guessed), decision still computed', () => {
-    const a = assessBudget(input({ retryReserve: UNKNOWN_RESERVE, demand: demand(13) }));
-    assert.equal(a.retryReserveKnown, false);
-    assert.equal(a.retryReserveUnits, null);
-    assert.equal(a.effectiveRemaining, 200, 'reserve unknown → subtract nothing, not a guessed %');
+  test('UNKNOWN retry reserve NEVER becomes an ordinary ALLOW (fail closed), and is not treated as 0', () => {
+    // P1 with ample nominal headroom (13 of 200) — must NOT be ordinary ALLOW.
+    const p1 = assessBudget(input({ priority: 'P1', retryReserve: UNKNOWN_RESERVE, demand: demand(13) }));
+    assert.equal(p1.decision, 'UNKNOWN');
+    assert.equal(p1.reasonCode, 'RESERVE_UNKNOWN');
+    assert.equal(p1.retryReserveKnown, false);
+    assert.equal(p1.retryReserveUnits, null);
+    assert.equal(p1.effectiveRemaining, null, 'unknown reserve is not rendered as spendable headroom');
+
+    // P2 and P3 with the same ample headroom → DEFER, never ALLOW.
+    const p2 = assessBudget(input({ priority: 'P2', retryReserve: UNKNOWN_RESERVE, demand: demand(13) }));
+    assert.equal(p2.decision, 'DEFER');
+    assert.equal(p2.reasonCode, 'DEFER_RESERVE_UNKNOWN');
+    const p3 = assessBudget(input({ priority: 'P3', retryReserve: UNKNOWN_RESERVE, demand: demand(13) }));
+    assert.equal(p3.decision, 'DEFER');
+    assert.equal(p3.reasonCode, 'DEFER_RESERVE_UNKNOWN');
+  });
+
+  test('P1 + UNKNOWN reserve reaches ALLOW ONLY via an explicit emergency override', () => {
+    const forced = assessBudget(input({
+      priority: 'P1', retryReserve: UNKNOWN_RESERVE, demand: demand(13), emergencyOverride: true,
+    }));
+    assert.equal(forced.decision, 'ALLOW');
+    assert.equal(forced.reasonCode, 'P1_EMERGENCY_OVERRIDE');
+    // The override does NOT apply to P2/P3 — those still DEFER.
+    const p2 = assessBudget(input({
+      priority: 'P2', retryReserve: UNKNOWN_RESERVE, demand: demand(13), emergencyOverride: true,
+    }));
+    assert.equal(p2.decision, 'DEFER');
+  });
+
+  test('UNKNOWN reserve does not override a hard capacity BLOCK', () => {
+    // Exhausted capacity BLOCKs regardless of reserve or override.
+    const exhausted = assessBudget(input({
+      consumed: 250, retryReserve: UNKNOWN_RESERVE, demand: demand(1), priority: 'P1', emergencyOverride: true,
+    }));
+    assert.equal(exhausted.decision, 'BLOCK');
+    assert.equal(exhausted.reasonCode, 'CAPACITY_EXHAUSTED');
+    // Over-capacity BLOCKs before the reserve gate too.
+    const over = assessBudget(input({
+      consumed: 190, retryReserve: UNKNOWN_RESERVE, demand: demand(20), priority: 'P1', emergencyOverride: true,
+    }));
+    assert.equal(over.decision, 'BLOCK');
+    assert.equal(over.reasonCode, 'INSUFFICIENT_CAPACITY');
+  });
+
+  test('zero demand is ALLOW even with UNKNOWN reserve (nothing is spent)', () => {
+    const a = assessBudget(input({ demand: [], retryReserve: UNKNOWN_RESERVE, priority: 'P1' }));
     assert.equal(a.decision, 'ALLOW');
-    assert.match(a.reason, /retry reserve UNKNOWN/i);
+    assert.equal(a.reasonCode, 'NO_DEMAND');
   });
 
   test('multiple editions: all measured sum; any unknown poisons the total to DEMAND_UNKNOWN', () => {

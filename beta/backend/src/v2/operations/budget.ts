@@ -66,7 +66,10 @@ export type BudgetReasonCode =
   | 'INSUFFICIENT_CAPACITY'
   | 'FITS'
   | 'PRIORITY_RESERVE_OVERRIDE'
-  | 'DEFER_RESERVE';
+  | 'DEFER_RESERVE'
+  | 'RESERVE_UNKNOWN'
+  | 'DEFER_RESERVE_UNKNOWN'
+  | 'P1_EMERGENCY_OVERRIDE';
 
 export interface BudgetAssessmentInput {
   readonly provider: string;
@@ -81,6 +84,13 @@ export interface BudgetAssessmentInput {
   readonly retryReserve: RetryReserve;
   readonly demand: readonly EditionDemand[];
   readonly priority: Priority;
+  /**
+   * Explicit, documented emergency override for the ONE case where a P1 (volatile
+   * pre-match) demand must proceed even though the retry reserve is UNKNOWN. It is
+   * OFF unless a caller deliberately sets it, and it never applies to P2/P3 or to
+   * unknown capacity/demand. Without it, an unknown reserve fails closed (below).
+   */
+  readonly emergencyOverride?: boolean;
 }
 
 export interface BudgetAssessment {
@@ -127,7 +137,11 @@ export function assessBudget(input: BudgetAssessmentInput): BudgetAssessment {
   const capacityVerified = input.capacity.provenance === 'VERIFIED';
   const remaining =
     input.capacity.units === null ? null : Math.max(0, input.capacity.units - consumed);
-  const effectiveRemaining = remaining === null ? null : Math.max(0, remaining - reserveUnits);
+  // effectiveRemaining is COMPUTABLE only when the reserve is known. When the
+  // reserve is UNKNOWN it is null (not remaining), so an unknown safety input is
+  // never silently rendered as spendable headroom.
+  const effectiveRemaining =
+    remaining === null || !retryReserveKnown ? null : Math.max(0, remaining - reserveUnits);
 
   const base = {
     provider: input.provider,
@@ -176,13 +190,30 @@ export function assessBudget(input: BudgetAssessmentInput): BudgetAssessment {
     return make('BLOCK', 'INSUFFICIENT_CAPACITY',
       `planned ${plannedCalls} exceeds remaining ${rem} (capacity ${input.capacity.units}, consumed ${consumed})`);
   }
-  // 5. Fits within the retry-reserve-protected budget.
+  // 5. RETRY RESERVE IS A REQUIRED SAFETY INPUT. If it is UNKNOWN, an otherwise
+  // sufficient nominal capacity must NOT become an ordinary ALLOW — an unknown
+  // safety input is not zero risk and is never silently treated as reserve 0.
+  // Fail closed by priority: P2/P3 DEFER; P1 UNKNOWN unless an explicit,
+  // documented emergency override is set.
+  if (!retryReserveKnown) {
+    if (input.priority === 'P1' && input.emergencyOverride === true) {
+      return make('ALLOW', 'P1_EMERGENCY_OVERRIDE',
+        `P1 emergency override: proceeding with planned ${plannedCalls} of remaining ${rem} despite an UNKNOWN retry reserve — explicit, documented, caller-authorized`);
+    }
+    if (input.priority === 'P1') {
+      return make('UNKNOWN', 'RESERVE_UNKNOWN',
+        `retry reserve is UNKNOWN (no throttling evidence); refusing to spend on nominal capacity alone. Set an explicit emergency override to force a P1 run.`);
+    }
+    return make('DEFER', 'DEFER_RESERVE_UNKNOWN',
+      `retry reserve is UNKNOWN; deferring ${input.priority} demand rather than spending on nominal capacity without a measured reserve`);
+  }
+  // 6. Fits within the retry-reserve-protected budget (reserve is known here).
   if (plannedCalls <= (effectiveRemaining as number)) {
     return make('ALLOW', 'FITS',
       `planned ${plannedCalls} fits effective remaining ${effectiveRemaining}` +
         (retryReserveKnown ? '' : ' (retry reserve UNKNOWN — treated as 0, not guessed)'));
   }
-  // 6. Fits raw capacity but intrudes on the retry reserve. Priority decides.
+  // 7. Fits raw capacity but intrudes on a KNOWN retry reserve. Priority decides.
   if (input.priority === 'P1') {
     return make('ALLOW', 'PRIORITY_RESERVE_OVERRIDE',
       `P1 volatile demand ${plannedCalls} intrudes on retry reserve (effective ${effectiveRemaining}, remaining ${rem}) — allowed by priority`);
