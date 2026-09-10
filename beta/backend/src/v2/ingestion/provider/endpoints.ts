@@ -137,6 +137,30 @@ export const ENDPOINTS = {
     parameters: ['tournamentId', 'seasonId', 'page'],
   },
 
+  match_lineups: {
+    key: 'match_lineups',
+    path: '/match/{matchId}/lineups',
+    costClass: 'PER_ENTITY',
+    description:
+      'CANONICAL per-fixture player source. VERIFIED 200 for a completed fixture: envelope ' +
+      '{success, matchId, endpoint:"lineups", data:{confirmed, home:{players[]}, away:{players[]}}}. ' +
+      'Each player carries player.id, teamId, shirtNumber, position, substitute, captain (present only ' +
+      'when true), minutesPlayed, played, and a flat `statistics` OBJECT keyed by statistic name. ' +
+      '/match/{id}/player-statistics is a VERIFIED ALIAS of this (its body reports endpoint:"lineups") ' +
+      'and is deliberately NOT registered — one call, one source. One call per fixture.',
+    parameters: ['matchId'],
+  },
+  match_statistics: {
+    key: 'match_statistics',
+    path: '/match/{matchId}/statistics',
+    costClass: 'PER_ENTITY',
+    description:
+      'Team-level match statistics. VERIFIED 200: {data:{statistics:[{period, groups:[{groupName, ' +
+      'statisticsItems:[{name, home, away, homeValue, awayValue, valueType, compareCode, statisticsType, ' +
+      'renderType, key}]}]}]}}. A provider key recurs across groups within one period, so (period, ' +
+      'groupName, key) is the natural identity. One call per fixture.',
+    parameters: ['matchId'],
+  },
   season_standings: {
     key: 'season_standings',
     path: '/tournament/{tournamentId}/season/{seasonId}/standings',
