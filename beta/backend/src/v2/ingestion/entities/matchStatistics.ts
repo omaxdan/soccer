@@ -52,6 +52,13 @@ export interface LineupRow {
 export interface LineupSelectionRow {
   readonly teamProviderId: string;
   readonly playerProviderId: string;
+  /**
+   * The provider's display name for the player, carried so identity resolution
+   * does not have to re-walk the payload. It is the ONE biographical field the
+   * lineup payload states; everything else (date of birth, height, nationality)
+   * is absent here and stays null until squad ingestion enriches it.
+   */
+  readonly playerName: string | null;
   readonly shirtNumber: number | null;
   readonly positionCode: string | null;
   readonly isStarting: boolean;
@@ -197,6 +204,7 @@ export function normaliseLineups(lineupsPayload: unknown): {
       selections.push({
         teamProviderId: tid,
         playerProviderId: pid,
+        playerName: text(asRecord(e?.player)?.name),
         shirtNumber: typeof shirtRaw === 'number' && Number.isFinite(shirtRaw) ? shirtRaw : null,
         positionCode: text(e?.position),
         isStarting: e?.substitute === false,

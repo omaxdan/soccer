@@ -53,6 +53,11 @@ import { sweepTeam } from './provider/teamPager';
 import { reconcileTeamSeason, type ReconcileCounts } from './stages/teamSpine';
 import { ingestTeamSquad, type SquadTeam } from './stages/squad';
 import type { StageCounts } from './stages/schedule';
+import {
+  persistMatchEnrichment,
+  MatchEnrichmentIdentityError,
+  MatchEnrichmentPayloadError,
+} from './stages/matchEnrichment';
 import { AmbiguousFixtureIdentityError } from './entities/fixtures';
 import { utcDateString } from './normalise';
 import { logger } from '../../utils/logger';
@@ -1009,5 +1014,163 @@ export async function ingestTeam(options: TeamIngestionOptions): Promise<TeamIng
     hardStopReason,
     resumeFromPage: sweep ? sweep.last.resumeFromPage ?? sweep.next.resumeFromPage : null,
     anomalies: recon ? recon.anomalies : [],
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MATCH ENRICHMENT — one completed fixture's RAW match substrate (Task 6C-P)
+//
+// TWO PROVIDER CALLS, BOTH PER_ENTITY, both bounded to the ONE fixture named.
+// There is no work list and no loop over the estate: a match endpoint costs a
+// call per fixture, so broad enrichment is a separate, budgeted decision this
+// controller deliberately does not make.
+//
+// FETCH OUTSIDE THE TRANSACTION, WRITE INSIDE IT — the season/team discipline.
+// The two payloads are retrieved first, stamped with one retrieval instant, then
+// the whole fixture is persisted in a single transaction so a re-run finds all
+// of it or none of it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MatchEnrichmentOptions {
+  /** Provider match id — equals fixture.provider_external_id. */
+  readonly fixtureProviderId: string;
+  /** Tests supply a client; production gets a real one. */
+  readonly client?: ProviderClient;
+}
+
+export interface MatchEnrichmentReport {
+  readonly fixtureProviderId: string;
+  /** Internal fixture id it resolved to, or null when it could not be resolved. */
+  readonly fixtureId: string | null;
+  readonly fixturePartitionOn: string | null;
+  readonly providerCalls: number;
+  /** What the provider last said it had left. Null when it said nothing. */
+  readonly quotaRemaining: number | null;
+  readonly counts: IngestionCounts;
+  readonly byRelation: ReadonlyMap<string, IngestionCounts>;
+  readonly runStatus: 'SUCCEEDED' | 'HARD_STOP';
+  readonly hardStopReason: string | null;
+}
+
+function classifyMatchHardStop(error: unknown): string {
+  if (error instanceof MatchEnrichmentIdentityError) {
+    return `${error.kind} identity unresolved (${error.providerExternalId})`;
+  }
+  if (error instanceof MatchEnrichmentPayloadError) return 'provider payload differs materially';
+  if (error instanceof ProviderRequestError) {
+    return error.isNotFound
+      ? 'provider has no match data (404)'
+      : `provider request failed (status ${error.status ?? 'none'})`;
+  }
+  return 'unrecoverable error';
+}
+
+/**
+ * Enriches exactly one fixture from its two verified match endpoints.
+ *
+ * A hard stop (unresolved identity, a materially different payload, a provider
+ * failure) is recorded through the operational layer and surfaced in the report
+ * rather than rethrown, so the controller always returns a verdict — matching
+ * `ingestTeam`.
+ */
+export async function enrichMatchFixture(
+  options: MatchEnrichmentOptions
+): Promise<MatchEnrichmentReport> {
+  assertDatabaseConfigured();
+  installOperationalLayer();
+
+  if (!options.fixtureProviderId) {
+    throw new Error('enrichMatchFixture requires a provider match id.');
+  }
+
+  const client = options.client ?? new ProviderClient(loadProviderConfig());
+  const scopeText = `match ${options.fixtureProviderId} (lineups + statistics)`;
+
+  interface MatchRunState {
+    stage: StageCounts | null;
+    fixtureId: string | null;
+    fixturePartitionOn: string | null;
+    quotaRemaining: number | null;
+    runStatus: 'SUCCEEDED' | 'HARD_STOP';
+    hardStopReason: string | null;
+  }
+
+  let providerCalls = 0;
+
+  const state = await withPipelineRun(
+    INGESTION_ROLE,
+    'v2.enrich.match',
+    async (): Promise<MatchRunState> => {
+      let stage: StageCounts | null = null;
+      let fixtureId: string | null = null;
+      let fixturePartitionOn: string | null = null;
+      let quotaRemaining: number | null = null;
+      let runStatus: 'SUCCEEDED' | 'HARD_STOP' = 'SUCCEEDED';
+      let hardStopReason: string | null = null;
+
+      try {
+        // ── READ, outside any transaction. ONLY the two verified endpoints. ──
+        const lineups = await client.getObserved('match_lineups', {
+          matchId: options.fixtureProviderId,
+        });
+        const statistics = await client.getObserved('match_statistics', {
+          matchId: options.fixtureProviderId,
+        });
+        // One retrieval instant for the whole fixture (S-5), captured after both
+        // payloads are in hand.
+        const retrievedAt = new Date();
+        quotaRemaining = statistics.quotaRemaining ?? lineups.quotaRemaining;
+
+        // ── WRITE, one transaction for the whole fixture. ────────────────────
+        const result = await withRun(
+          INGESTION_ROLE,
+          'enrich.match',
+          async (tx: PoolClient, job) => {
+            const persisted = await persistMatchEnrichment(tx, {
+              fixtureProviderId: options.fixtureProviderId,
+              lineupsPayload: lineups.data,
+              statisticsPayload: statistics.data,
+              retrievedAt,
+            });
+            await reportWrites(job, persisted);
+            return persisted;
+          },
+          { detail: { match: options.fixtureProviderId } }
+        );
+        stage = result;
+        fixtureId = result.fixture.id;
+        fixturePartitionOn = result.fixture.partitionOn;
+      } catch (error) {
+        runStatus = 'HARD_STOP';
+        hardStopReason = classifyMatchHardStop(error);
+        // NOT recorded here — `withRun` already wrote operations.failure with the
+        // job attribution this scope no longer has, on the control connection and
+        // outside the transaction that rolled back. Not rethrown, so a report is
+        // still produced.
+        logger.error(
+          { match: options.fixtureProviderId, error: buildDiagnostic(error) },
+          'v2 ingestion: match enrichment hard-stopped'
+        );
+      } finally {
+        providerCalls = client.pendingCallCount;
+        await withConnection(INGESTION_ROLE, (control) => client.flushUsage(control));
+      }
+
+      return { stage, fixtureId, fixturePartitionOn, quotaRemaining, runStatus, hardStopReason };
+    },
+    { scopeText }
+  );
+
+  return {
+    fixtureProviderId: options.fixtureProviderId,
+    fixtureId: state.fixtureId,
+    fixturePartitionOn: state.fixturePartitionOn,
+    providerCalls,
+    quotaRemaining: state.quotaRemaining,
+    counts: state.stage?.total ?? new IngestionCounts(),
+    byRelation: state.stage?.byRelation ?? new Map(),
+    runStatus: state.runStatus,
+    hardStopReason: state.hardStopReason,
   };
 }

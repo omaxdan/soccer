@@ -13,6 +13,9 @@
 //   npm run ingest:v2 -- season --tournament 325 --season 87678 \
 //                               --from 2026-05-31 --to 2026-08-11 --max-calls 10
 //
+//   npm run ingest:v2 -- match --match 15237975   one fixture's raw match data
+//                                                 (lineups + team/player stats)
+//
 // THE SEASON WINDOW IS REQUIRED AND HAS NO DEFAULT. `FIXTURE_WINDOW` in the
 // pager is the evidence-derived value tests and exploration use; a production
 // run states its own, and the resolved configuration is printed before the first
@@ -37,11 +40,16 @@
 // any module that reads `process.env` at load time is evaluated.
 import '../config/env';
 
-import { ingestSchedule, ingestSeason, ingestSquads, ingestTeam } from './pipeline';
-import type { IngestionReport, SeasonIngestionReport, TeamIngestionReport } from './pipeline';
+import { ingestSchedule, ingestSeason, ingestSquads, ingestTeam, enrichMatchFixture } from './pipeline';
+import type {
+  IngestionReport,
+  SeasonIngestionReport,
+  TeamIngestionReport,
+  MatchEnrichmentReport,
+} from './pipeline';
 import { closeAllPools } from '../db/pool';
 
-type Command = 'schedule' | 'squads' | 'season' | 'team';
+type Command = 'schedule' | 'squads' | 'season' | 'team' | 'match';
 
 interface ScheduleArguments {
   readonly command: 'schedule';
@@ -78,7 +86,18 @@ interface TeamArguments {
   readonly maxCalls: number;
 }
 
-export type Arguments = ScheduleArguments | SquadArguments | SeasonArguments | TeamArguments;
+interface MatchArguments {
+  readonly command: 'match';
+  /** Provider match id — equals fixture.provider_external_id. */
+  readonly fixtureProviderId: string;
+}
+
+export type Arguments =
+  | ScheduleArguments
+  | SquadArguments
+  | SeasonArguments
+  | TeamArguments
+  | MatchArguments;
 
 /** The whole sweep's budget. Four pages is the observed cost of one season. */
 export const DEFAULT_SEASON_MAX_CALLS = 10;
@@ -109,7 +128,9 @@ export function parseArguments(argv: readonly string[]): Arguments {
         ? 'season'
         : positional[0] === 'team'
           ? 'team'
-          : 'schedule';
+          : positional[0] === 'match'
+            ? 'match'
+            : 'schedule';
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -127,6 +148,19 @@ export function parseArguments(argv: readonly string[]): Arguments {
       values.set(arg, next);
       i += 1;
     }
+  }
+
+  if (command === 'match') {
+    // ONE FIXTURE, BY PROVIDER MATCH ID. No range, no work list — a match
+    // endpoint costs a call per fixture, so broad enrichment is a separate,
+    // budgeted decision this command does not make.
+    if (!values.has('--match')) {
+      throw new Error(
+        '--match is required for a match run. ' +
+          'Usage: ingest:v2 -- match --match 15237975'
+      );
+    }
+    return { command, fixtureProviderId: values.get('--match')! };
   }
 
   if (command === 'team') {
@@ -340,9 +374,42 @@ function reportTeam(result: TeamIngestionReport): void {
   /* eslint-enable no-console */
 }
 
+function reportMatch(result: MatchEnrichmentReport): void {
+  /* eslint-disable no-console */
+  console.log(
+    `\nv2 match enrichment — provider match ${result.fixtureProviderId} — ${result.runStatus}` +
+      (result.hardStopReason ? ` (${result.hardStopReason})` : '')
+  );
+  console.log(
+    `  fixture           ${result.fixtureId ?? 'unresolved'}` +
+      (result.fixturePartitionOn ? ` (partition ${result.fixturePartitionOn})` : '')
+  );
+  console.log(
+    `  provider calls    ${result.providerCalls}   quota remaining ${result.quotaRemaining ?? 'not reported'}`
+  );
+  console.log('\n  per relation:');
+  for (const [relation, counts] of result.byRelation) {
+    console.log(
+      `    ${relation.padEnd(38)} examined ${String(counts.examined).padStart(5)}  ` +
+        `written ${String(counts.written).padStart(5)}  ` +
+        `new ${String(counts.inserted).padStart(5)}  existing ${String(counts.updated).padStart(5)}  ` +
+        `skipped ${String(counts.skipped).padStart(5)}  rejected ${String(counts.rejected).padStart(5)}`
+    );
+  }
+  console.log('');
+  /* eslint-enable no-console */
+}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   try {
     const args = parseArguments(argv);
+
+    if (args.command === 'match') {
+      const matchResult = await enrichMatchFixture({ fixtureProviderId: args.fixtureProviderId });
+      reportMatch(matchResult);
+      if (matchResult.runStatus === 'HARD_STOP') process.exitCode = 1;
+      return;
+    }
 
     if (args.command === 'team') {
       const teamResult = await ingestTeam({
