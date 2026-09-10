@@ -1055,7 +1055,7 @@ export interface MatchEnrichmentReport {
 
 function classifyMatchHardStop(error: unknown): string {
   if (error instanceof MatchEnrichmentIdentityError) {
-    return `${error.kind} identity unresolved (${error.providerExternalId})`;
+    return `${error.kind} identity unresolved (${error.detail})`;
   }
   if (error instanceof MatchEnrichmentPayloadError) return 'provider payload differs materially';
   if (error instanceof ProviderRequestError) {

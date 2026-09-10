@@ -24,12 +24,14 @@
 // the endpoint registry does not carry them.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// TWO WAYS A PROVIDER ID BECOMES AN INTERNAL ID, AND WHY THEY DIFFER
+// HOW A LINEUP ROW GETS ITS INTERNAL TEAM, AND ITS INTERNAL PLAYER
 //
-//   team    read-only (`findByProviderId`). The fixture already references both
-//           teams, so they MUST exist; and the lineup payload carries no team
-//           name, so a team could not be honestly created from it. A team that
-//           does not resolve is a HARD STOP, not a shell row.
+//   team    from the FIXTURE, by side. The lineup payload's teamId is in a
+//           different id space than football.team (run-278: teamId 34318 for a
+//           fixture whose teams are 1961/1999), so it is ignored for identity.
+//           data.home → fixture.home_team_id, data.away → fixture.away_team_id.
+//           The fixture is authoritative; no team is ever created from a lineup,
+//           and a fixture genuinely missing a home/away team is a HARD STOP.
 //   player  resolve-or-create (`resolvePlayer`). `match_lineups` is the registry-
 //           declared CANONICAL per-fixture player source, so a player it names
 //           that is not yet stored is created with the one biographical fact the
@@ -51,7 +53,7 @@
 import type { PoolClient } from 'pg';
 import type { ProviderClient } from '../provider/client';
 import { PROVIDER_CODE } from '../provider/config';
-import { IngestionCounts, upsertMutable, findByProviderId } from '../write/index';
+import { IngestionCounts, upsertMutable } from '../write/index';
 import { resolvePlayer } from '../entities/participants';
 import { findFixtureByProviderIdentity, type StoredFixtureIdentity } from '../entities/fixtures';
 import { mapPosition } from '../mapping/index';
@@ -59,6 +61,7 @@ import {
   normaliseLineups,
   normalisePlayerMatchStatistics,
   normaliseTeamMatchStatistics,
+  type MatchSide,
 } from '../entities/matchStatistics';
 import type { StageCounts } from './schedule';
 import { logger } from '../../../utils/logger';
@@ -74,13 +77,16 @@ import { logger } from '../../../utils/logger';
 export class MatchEnrichmentIdentityError extends Error {
   constructor(
     readonly kind: 'fixture' | 'team',
-    readonly providerExternalId: string
+    /** For 'fixture', the provider match id; for 'team', the side that has no team. */
+    readonly detail: string
   ) {
     super(
-      `Match enrichment could not resolve ${kind} ${PROVIDER_CODE}/${providerExternalId}. ` +
-        (kind === 'fixture'
-          ? 'The fixture must be ingested (schedule/season/team) before its match data can be enriched.'
-          : 'The fixture references this team, so it must already exist; enrichment never creates a team from a lineup payload.')
+      kind === 'fixture'
+        ? `Match enrichment could not resolve fixture ${PROVIDER_CODE}/${detail}. ` +
+          'The fixture must be ingested (schedule/season/team) before its match data can be enriched.'
+        : `Match enrichment found no ${detail}-side team on the fixture. The fixture's home and ` +
+          'away teams are the authoritative source of lineup team identity, and both are NOT NULL; ' +
+          'a missing one is a fixture-integrity fault, not something enrichment invents around.'
     );
     this.name = 'MatchEnrichmentIdentityError';
   }
@@ -189,6 +195,29 @@ async function existingTeamStatKeys(
 }
 
 /**
+ * The fixture's authoritative home/away internal team ids.
+ *
+ * This is where lineup team identity comes from — NOT the lineup payload's
+ * teamId. Both columns are NOT NULL on football.fixture, so a null here is a
+ * fixture-integrity fault and a HARD STOP.
+ */
+async function fixtureTeamsBySide(
+  tx: PoolClient,
+  fixture: StoredFixtureIdentity
+): Promise<Record<MatchSide, string>> {
+  const { rows } = await tx.query<{ home_team_id: string; away_team_id: string }>(
+    `SELECT home_team_id::text, away_team_id::text
+       FROM football.fixture
+      WHERE id = $1 AND fixture_partition_on = $2`,
+    [fixture.id, fixture.partitionOn]
+  );
+  const row = rows[0];
+  if (!row?.home_team_id) throw new MatchEnrichmentIdentityError('team', 'home');
+  if (!row?.away_team_id) throw new MatchEnrichmentIdentityError('team', 'away');
+  return { home: row.home_team_id, away: row.away_team_id };
+}
+
+/**
  * Persists one fixture's raw match substrate. Runs inside a `withRun`
  * transaction as `pt_pipeline_ingestion`; everything commits together or not at
  * all, so a re-run never finds a half-written fixture.
@@ -220,18 +249,8 @@ export async function persistMatchEnrichment(
     );
   }
 
-  // ── Team identity — read-only; the fixture guarantees these exist ──────────
-  const providerTeamIds = new Set<string>();
-  for (const l of lineups) providerTeamIds.add(l.teamProviderId);
-  for (const s of selections) providerTeamIds.add(s.teamProviderId);
-  for (const p of playerStats) providerTeamIds.add(p.teamProviderId);
-
-  const teamByProvider = new Map<string, string>();
-  for (const providerTeamId of providerTeamIds) {
-    const internal = await findByProviderId(tx, 'football.team', PROVIDER_CODE, providerTeamId);
-    if (!internal) throw new MatchEnrichmentIdentityError('team', providerTeamId);
-    teamByProvider.set(providerTeamId, internal);
-  }
+  // ── Team identity — from the FIXTURE, by side. The lineup teamId is ignored. ─
+  const teamBySide = await fixtureTeamsBySide(tx, fixture);
 
   // ── Player identity — resolve-or-create through the established resolver ───
   // Selections enumerate every player in the payload; player statistics are a
@@ -257,9 +276,9 @@ export async function persistMatchEnrichment(
 
   // ── football.lineup ────────────────────────────────────────────────────────
   const existingLineups = await existingLineupsByTeam(tx, fixture);
-  const lineupIdByProviderTeam = new Map<string, string>();
+  const lineupIdBySide = new Map<MatchSide, string>();
   for (const l of lineups) {
-    const teamId = teamByProvider.get(l.teamProviderId)!;
+    const teamId = teamBySide[l.side];
     const row = await upsertMutable(tx, {
       relation: 'football.lineup',
       columns: ['fixture_id', 'fixture_partition_on', 'team_id', 'formation'],
@@ -269,19 +288,19 @@ export async function persistMatchEnrichment(
       returning: ['id'],
       existedBeforeWrite: existingLineups.has(teamId),
     });
-    lineupIdByProviderTeam.set(l.teamProviderId, String(row.id));
+    lineupIdBySide.set(l.side, String(row.id));
     stage.for('football.lineup').countUpsert(row);
   }
 
   // ── football.lineup_selection ──────────────────────────────────────────────
   const existingSelections = await existingSelectionKeys(tx, fixture, [
-    ...lineupIdByProviderTeam.values(),
+    ...lineupIdBySide.values(),
   ]);
   for (const s of selections) {
-    const lineupId = lineupIdByProviderTeam.get(s.teamProviderId);
+    const lineupId = lineupIdBySide.get(s.side);
     if (!lineupId) {
       // A selection whose side produced no lineup row means the side had no
-      // resolvable team — already a HARD STOP above — so this is unreachable.
+      // players at all — no lineup was created for it — so this is unreachable.
       stage.for('football.lineup_selection').reject('selection has no parent lineup');
       continue;
     }
@@ -322,7 +341,7 @@ export async function persistMatchEnrichment(
   const existingPlayerStats = await existingPlayerStatKeys(tx, fixture);
   for (const p of playerStats) {
     const playerId = playerByProvider.get(p.playerProviderId);
-    const teamId = teamByProvider.get(p.teamProviderId);
+    const teamId = teamBySide[p.side];
     if (!playerId || !teamId) {
       stage.for('football.player_match_statistic').reject('player-statistic identity unresolved');
       continue;

@@ -142,32 +142,39 @@ describe('normalisePlayerMatchStatistics', () => {
     assert.equal(new Set(keys).size, keys.length, 'confirms UNIQUE(fixture, player, key) is safe');
   });
 
-  test('carries provider team + player identity, never names/slugs', () => {
-    assert.ok(rows.every((r) => /^\d+$/.test(r.playerProviderId) && /^\d+$/.test(r.teamProviderId)));
+  test('carries provider player identity and the fixture side, never the lineup teamId', () => {
+    assert.ok(rows.every((r) => /^\d+$/.test(r.playerProviderId)));
+    assert.ok(rows.every((r) => r.side === 'home' || r.side === 'away'));
+    // The lineup teamId is deliberately absent from the row shape.
+    assert.ok(rows.every((r) => !('teamProviderId' in r)));
   });
 });
 
 describe('normaliseLineups', () => {
   const { lineups, selections } = normaliseLineups(LINEUPS);
 
-  test('one lineup per side, with formation preserved', () => {
+  test('one lineup per side, keyed by side (not by the lineup teamId), formation preserved', () => {
     assert.equal(lineups.length, 2);
-    assert.deepEqual(lineups.map((l) => l.teamProviderId).sort(), ['1961', '1999']);
-    assert.equal(lineups.find((l) => l.teamProviderId === '1961')?.formation, '4-3-3');
+    assert.deepEqual(lineups.map((l) => l.side).sort(), ['away', 'home']);
+    assert.equal(lineups.find((l) => l.side === 'home')?.formation, '4-3-3');
+    assert.equal(lineups.find((l) => l.side === 'away')?.formation, '4-4-2');
   });
 
-  test('starter/substitute and captain mapped from provider flags', () => {
+  test('starter/substitute and captain mapped from provider flags; side carried', () => {
     const fabio = selections.find((s) => s.playerProviderId === '17785');
+    assert.equal(fabio?.side, 'home');
     assert.equal(fabio?.isStarting, true); // substitute:false
     assert.equal(fabio?.isCaptain, true); // captain:true
     assert.equal(fabio?.shirtNumber, 1);
     assert.equal(fabio?.positionCode, 'G');
 
     const guga = selections.find((s) => s.playerProviderId === '928134');
+    assert.equal(guga?.side, 'home');
     assert.equal(guga?.isStarting, true);
     assert.equal(guga?.isCaptain, false); // captain key absent → false, not fabricated
 
     const sub = selections.find((s) => s.playerProviderId === '111111');
+    assert.equal(sub?.side, 'away');
     assert.equal(sub?.isStarting, false); // substitute:true
     assert.equal(sub?.isCaptain, false);
   });

@@ -5,16 +5,33 @@
 // shapes migration 034 stores. No database, no network, no derived metric — the
 // transformations only restructure what the provider returned, preserving raw
 // fidelity. Persistence (resolving provider ids to internal ids and upserting)
-// is a separate step; these functions emit PROVIDER identities so they stay pure
-// and fully testable against the captured payload.
+// is a separate step; these functions stay pure and fully testable against the
+// captured payload.
 //
 // Canonical sources (Task 6B, verified):
 //   team statistics  ← /match/{id}/statistics
 //   player statistics + lineups ← /match/{id}/lineups   (/player-statistics is a
 //                                  verified ALIAS and is never read separately)
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAM IDENTITY IS THE SIDE, NOT THE LINEUP'S teamId  (run-278 finding)
+//
+// The player's `teamId` in a lineup payload is in a DIFFERENT id space than the
+// fixture's teams: live match 15237975 carries `teamId 34318`, while the fixture
+// records Fluminense as provider id 1961 and Bragantino as 1999. So the lineup's
+// teamId cannot resolve a relational team and is IGNORED for identity. What the
+// payload states reliably is which SIDE a player is on (data.home / data.away),
+// and the fixture is the authoritative source of which internal team each side
+// is. These functions therefore emit `side`; the persistence step maps
+// home → fixture.home_team_id and away → fixture.away_team_id. Player identity
+// still travels as the provider player id, which IS a resolvable key.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { asRecord, externalId, text } from '../normalise';
+
+/** Which side of the fixture a lineup row belongs to. The relational team is the
+ * fixture's team for that side — never the lineup payload's teamId. */
+export type MatchSide = 'home' | 'away';
 
 /** A normalised team-level match statistic (one provider statisticsItem). */
 export interface TeamMatchStatisticRow {
@@ -35,7 +52,8 @@ export interface TeamMatchStatisticRow {
 /** A normalised per-player match statistic (one key of the player statistics object). */
 export interface PlayerMatchStatisticRow {
   readonly playerProviderId: string;
-  readonly teamProviderId: string;
+  /** The fixture side the player is on; the relational team is the fixture's team for this side. */
+  readonly side: MatchSide;
   readonly statisticKey: string;
   readonly statisticValue: string;
   /** Shape tag ONLY: 'number' for a scalar, 'json' for a nested object/array. Not a provider claim. */
@@ -44,13 +62,15 @@ export interface PlayerMatchStatisticRow {
 
 /** A normalised actual-lineup team row. */
 export interface LineupRow {
-  readonly teamProviderId: string;
+  /** The fixture side; the relational team is the fixture's team for this side. */
+  readonly side: MatchSide;
   readonly formation: string | null;
 }
 
 /** A normalised lineup selection (one player's participation facts). */
 export interface LineupSelectionRow {
-  readonly teamProviderId: string;
+  /** The fixture side; the relational team is the fixture's team for this side. */
+  readonly side: MatchSide;
   readonly playerProviderId: string;
   /**
    * The provider's display name for the player, carried so identity resolution
@@ -154,19 +174,21 @@ function lineupSides(payload: unknown): Array<{ side: 'home' | 'away'; players: 
  */
 export function normalisePlayerMatchStatistics(lineupsPayload: unknown): PlayerMatchStatisticRow[] {
   const rows: PlayerMatchStatisticRow[] = [];
-  for (const { players } of lineupSides(lineupsPayload)) {
+  for (const { side, players } of lineupSides(lineupsPayload)) {
     for (const entry of players) {
       const e = asRecord(entry);
       const playerProviderId = externalId(asRecord(e?.player)?.id);
-      const teamProviderId = externalId(e?.teamId);
       const stats = asRecord(e?.statistics);
-      if (!playerProviderId || !teamProviderId || !stats) continue;
+      // The lineup teamId is deliberately NOT read — the relational team is the
+      // fixture's team for this side. A row needs only a resolvable player id and
+      // a statistics object.
+      if (!playerProviderId || !stats) continue;
       for (const [key, value] of Object.entries(stats)) {
         const asText = rawText(value);
         if (asText === null) continue;
         rows.push({
           playerProviderId,
-          teamProviderId,
+          side,
           statisticKey: key,
           statisticValue: asText,
           valueType: isScalar(value) ? 'number' : 'json',
@@ -192,17 +214,18 @@ export function normaliseLineups(lineupsPayload: unknown): {
 
   for (const { side, players } of lineupSides(lineupsPayload)) {
     const sideObj = asRecord(data?.[side]);
-    // teamId is stated on each player; the side's team is their common teamId.
-    let teamProviderId: string | null = null;
+    // The side's relational team is the fixture's team for this side, resolved at
+    // persistence — the lineup teamId is not read here. A player needs only a
+    // resolvable provider id to be a selection.
+    let sawPlayer = false;
     for (const entry of players) {
       const e = asRecord(entry);
       const pid = externalId(asRecord(e?.player)?.id);
-      const tid = externalId(e?.teamId);
-      if (!pid || !tid) continue;
-      teamProviderId = teamProviderId ?? tid;
+      if (!pid) continue;
+      sawPlayer = true;
       const shirtRaw = e?.shirtNumber;
       selections.push({
-        teamProviderId: tid,
+        side,
         playerProviderId: pid,
         playerName: text(asRecord(e?.player)?.name),
         shirtNumber: typeof shirtRaw === 'number' && Number.isFinite(shirtRaw) ? shirtRaw : null,
@@ -211,8 +234,8 @@ export function normaliseLineups(lineupsPayload: unknown): {
         isCaptain: e?.captain === true,
       });
     }
-    if (teamProviderId) {
-      lineups.push({ teamProviderId, formation: text(sideObj?.formation) });
+    if (sawPlayer) {
+      lineups.push({ side, formation: text(sideObj?.formation) });
     }
   }
   return { lineups, selections };
