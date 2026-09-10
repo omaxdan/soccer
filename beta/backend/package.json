@@ -22,6 +22,7 @@
     "doctor:v2": "tsx src/v2/db/doctor.ts",
     "discover:v2": "tsx src/v2/ingestion/discover.ts",
     "discover:season": "tsx src/v2/ingestion/orchestration/seasonDiscovery.ts",
+    "onboard:v2": "tsx src/v2/ingestion/orchestration/onboard.ts",
     "quality:v2": "tsx src/v2/quality/cli.ts"
   },
   "dependencies": {
