@@ -44,7 +44,8 @@ import { ingestEvents, ingestScheduleDate } from '../stages/schedule';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 const stored = (over: Partial<StoredFixtureIdentity> = {}): StoredFixtureIdentity => ({
   id: '1',

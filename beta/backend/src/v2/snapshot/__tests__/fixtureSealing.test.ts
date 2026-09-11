@@ -29,7 +29,8 @@ import type { ModuleCalculator, ConsumedFeature } from '../../module/types';
 import { readSpokeReadings } from '../read/selection';
 import { runSnapshotSealing } from '../driver';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB-FREE: the selection SQL is subject-aware and binds the fixture id ($4).

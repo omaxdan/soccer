@@ -41,7 +41,8 @@ import { tallyConsensus, computeCompleteness, buildManifest, computeRestEdge, re
 import { buildContent, sealSnapshot } from '../seal';
 import { contentChecksum } from '../canonical';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 describe('S-7 sealing over a real migrated database', { skip: !hasDatabase }, () => {
   const INGESTION = 'pt_pipeline_ingestion' as const;

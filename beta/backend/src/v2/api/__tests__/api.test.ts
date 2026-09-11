@@ -37,7 +37,8 @@ import { readConsumedFeatures, consumedKey } from '../../module/read/consumedFea
 import { writeReading } from '../../module/write/readings';
 import type { ModuleCalculator } from '../../module/types';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 const listen = (server: Server): Promise<number> =>
   new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port)));

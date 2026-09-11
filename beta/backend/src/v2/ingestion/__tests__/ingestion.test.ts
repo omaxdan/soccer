@@ -54,7 +54,8 @@ import { NON_ISO_ASSOCIATION_CODES } from '../../seed/vocabulary';
 import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Declaration tests

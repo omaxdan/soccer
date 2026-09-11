@@ -16,7 +16,8 @@ import { closeAllPools } from '../../db/pool';
 import { readFixturesToSeal } from '../read/selection';
 import { runSnapshotSealing } from '../driver';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB-FREE — Option A: the selection SQL joins the lifecycle vocabulary and filters

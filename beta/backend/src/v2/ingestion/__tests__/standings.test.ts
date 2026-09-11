@@ -31,7 +31,8 @@ import { closeAllPools } from '../../db/pool';
 
 const CAPTURE = join(EVIDENCE_DIR, 'season_standings__seasonId-87678__tournamentId-325.json');
 const hasCapture = existsSync(CAPTURE);
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 /** The captured provider body, or null where the evidence is not checked out. */
 function capturedBody(): { standings?: unknown } {

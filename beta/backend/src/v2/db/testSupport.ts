@@ -79,3 +79,120 @@ export function connectionSummary(): string {
   const { database } = loadV2Config();
   return `${database.host}:${database.port}/${database.database} ssl=${database.ssl}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCTION-IDENTITY SAFETY GUARD FOR DB-CAPABLE TESTS (S-6 remediation)
+//
+// The incident: DB-capable test suites gate only on `hasV2Database()` (host +
+// name present), so a process whose environment carries PRODUCTION `PT_V2_DB_*`
+// (a developer shell or CI that sourced the production `.env`) will run those
+// suites against production. The snapshot-sealing tests seed `module_reading`
+// directly, which is how 175 anomalous rows reached production on 2026-09-01.
+//
+// This guard classifies the configured target FROM ENVIRONMENT IDENTITY ALONE —
+// no connection, no `loadV2Config()` side effects — so it is a pure function of
+// configuration and cannot itself touch a database.
+//
+// INVARIANT: a production database can NEVER become test-authorized. Production
+// is recognized by the STABLE Supabase project (tenant) id — the shared pooler
+// host is reused across projects, so host alone cannot classify — and the opt-in
+// below is consulted ONLY for an already-recognized non-production identity, so
+// no flag can convert production or an unknown target into an accepted one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The Supabase project (tenant) id of the production database — the stable invariant. */
+const PRODUCTION_TENANT_ID = 'nwxafrvwimoyhcnvvuji';
+/** The production Supabase pooler host — a corroborating production signal. */
+const PRODUCTION_HOST = 'aws-0-eu-west-1.pooler.supabase.com';
+
+/**
+ * The ONLY variable that authorizes running DB tests, and only against an
+ * ALREADY-recognized non-production identity. It is necessary, never sufficient:
+ * `classifyDatabaseTarget()` decides production/unknown BEFORE this is consulted,
+ * so setting it can never accept production or an unrecognized database.
+ */
+export const TEST_DB_OPT_IN = 'PT_V2_TEST_DB';
+
+export type DatabaseTargetClass =
+  | 'absent'
+  | 'production'
+  | 'recognized-nonproduction'
+  | 'unknown';
+
+/** A loopback/local host cannot be the remote production database. */
+function isLoopbackHost(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  return (
+    h === 'localhost' ||
+    h === '127.0.0.1' ||
+    h === '::1' ||
+    h === '[::1]' ||
+    h.endsWith('.localhost') ||
+    h.endsWith('.local')
+  );
+}
+
+/**
+ * Classifies the configured database from environment identity ALONE. Opens no
+ * connection and calls no `loadV2Config()` (which validates port and could
+ * throw); reads the identity env vars directly so the classification is total.
+ */
+export function classifyDatabaseTarget(): DatabaseTargetClass {
+  if (!hasV2Database()) return 'absent';
+  const host = (process.env.PT_V2_DB_HOST ?? '').trim().toLowerCase();
+  const suffix = (process.env.PT_V2_DB_USER_SUFFIX ?? '').trim().replace(/^\.+/, '').toLowerCase();
+
+  // Production first, and non-overridable: the tenant id is decisive; the prod
+  // pooler host corroborates (a same-host staging project is over-blocked, which
+  // is the fail-closed side to err on).
+  if (suffix === PRODUCTION_TENANT_ID) return 'production';
+  if (host === PRODUCTION_HOST) return 'production';
+
+  // Positively recognized non-production.
+  if (isLoopbackHost(host)) return 'recognized-nonproduction';
+
+  // A remote host we cannot positively classify as non-production is refused.
+  return 'unknown';
+}
+
+/**
+ * The HARD safety boundary. Throws — never returns — when the configured target
+ * is production or unknown/ambiguous, before any connection is opened. No
+ * override can pass production. Safe to call from the test-runner preload and
+ * from the per-suite gate; it is the single authoritative enforcement point.
+ */
+export function assertDatabaseTargetSafe(): void {
+  const target = classifyDatabaseTarget();
+  if (target === 'production') {
+    throw new Error(
+      'REFUSING to run DB-capable tests: the configured database is the PRODUCTION ' +
+        'identity (Supabase project id / pooler host). This is NEVER overridable — ' +
+        'no environment flag authorizes it. Unset PT_V2_DB_* or point them at a local ' +
+        `test database. (${connectionSummary()})`
+    );
+  }
+  if (target === 'unknown') {
+    throw new Error(
+      'REFUSING to run DB-capable tests (fail-closed): PT_V2_DB_* is set but the database ' +
+        'identity is not positively recognized as non-production. Only a loopback/local test ' +
+        'database is accepted; extend the recognized-non-production allowlist in testSupport.ts ' +
+        `for a known CI database rather than overriding. (${connectionSummary()})`
+    );
+  }
+  // 'absent' and 'recognized-nonproduction' may proceed.
+}
+
+/**
+ * The single gate DB-capable suites use in place of the former inline
+ * `Boolean(PT_V2_DB_HOST && PT_V2_DB_NAME)`:
+ *   1. enforce the hard boundary (production / unknown → throw);
+ *   2. skip (return false) when no DB is configured — unchanged behavior;
+ *   3. run (return true) ONLY for a recognized non-production identity WITH the
+ *      explicit `PT_V2_TEST_DB` opt-in; otherwise skip.
+ */
+export function testDatabaseReady(): boolean {
+  assertDatabaseTargetSafe(); // production / unknown → throw (fail closed)
+  if (classifyDatabaseTarget() !== 'recognized-nonproduction') return false; // absent → skip
+  const optIn = (process.env[TEST_DB_OPT_IN] ?? '').trim().toLowerCase();
+  return optIn === '1' || optIn === 'true';
+}

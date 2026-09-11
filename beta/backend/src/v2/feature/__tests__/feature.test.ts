@@ -77,7 +77,8 @@ import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 import { seedWorld, REFERENCE_AS_OF, TEST_PREFIX, type SeededWorld } from './fixtures';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 const FEATURE_DIR = join(__dirname, '..');
 
 // ─────────────────────────────────────────────────────────────────────────────

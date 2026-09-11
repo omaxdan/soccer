@@ -38,7 +38,8 @@ import {
   writeEvents,
 } from './support/replay';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 const runnable = hasDatabase && hasEvidence();
 
 /** Provider ids of the representative fixtures, chosen from the captures. */

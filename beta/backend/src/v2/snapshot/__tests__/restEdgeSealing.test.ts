@@ -30,7 +30,8 @@ import { buildContent } from '../seal';
 import { tallyConsensus, computeCompleteness, buildManifest, computeRestEdge, computeFormEdge } from '../verdict';
 import { contentChecksum } from '../canonical';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 describe('S-8 rest edge sealing over a real database', { skip: !hasDatabase }, () => {
   const INGESTION = 'pt_pipeline_ingestion' as const;

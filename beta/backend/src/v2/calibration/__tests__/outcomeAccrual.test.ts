@@ -13,7 +13,8 @@ import { withConnection } from '../../db/tx';
 import { closeAllPools } from '../../db/pool';
 import { runOutcomeAccrual } from '../driver';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 describe('S-9B outcome accrual over a real database', { skip: !hasDatabase }, () => {
   const INGESTION = 'pt_pipeline_ingestion' as const;

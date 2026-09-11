@@ -35,7 +35,8 @@ import { writeReading } from '../write/readings';
 import type { ConsumedFeature } from '../types';
 import type { ModuleDefinition, ModuleVersion } from '../registry/load';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 const INGESTION_ROLE = 'pt_pipeline_ingestion' as const;
 const FEATURE_ROLE = 'pt_pipeline_feature' as const;
 const MODULE_ROLE = 'pt_pipeline_module' as const;

@@ -32,7 +32,8 @@ import { buildContent } from '../seal';
 import { tallyConsensus, computeCompleteness, buildManifest, computeRestEdge, computeFormEdge } from '../verdict';
 import { contentChecksum } from '../canonical';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 const REST = 'team.rest_advantage';
 const HOME_FORM = 'team.home_form';
 const AWAY_FORM = 'team.away_form';

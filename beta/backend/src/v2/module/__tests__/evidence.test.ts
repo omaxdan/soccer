@@ -44,7 +44,8 @@ import { readConsumedFeatures, consumedKey } from '../read/consumedFeatures';
 import { writeReading } from '../write/readings';
 import type { ModuleCalculator } from '../types';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB-FREE

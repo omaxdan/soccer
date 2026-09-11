@@ -23,7 +23,8 @@ import { goalMarginVolatility } from '../calculators/goalMarginVolatility';
 import { compare, fromInt, toNumericString, ZERO } from '../write/scale';
 import type { CalculationContext, CompletedFixture } from '../calculators/types';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 const INGESTION_ROLE = 'pt_pipeline_ingestion' as const;
 const FEATURE_ROLE = 'pt_pipeline_feature' as const;
 

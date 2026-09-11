@@ -40,7 +40,8 @@ import { fromInt, roundHalfUp, toNumericString } from '../write/scale';
 import { venueWinRate } from '../calculators/venueWinRate';
 import { seedWorld, TEST_PREFIX, type SeededWorld } from './fixtures';
 
-const hasDatabase = Boolean(process.env.PT_V2_DB_HOST && process.env.PT_V2_DB_NAME);
+import { testDatabaseReady } from '../../db/testSupport';
+const hasDatabase = testDatabaseReady();
 
 const INGESTION_ROLE = 'pt_pipeline_ingestion' as const;
 const FEATURE_ROLE = 'pt_pipeline_feature' as const;
