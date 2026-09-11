@@ -147,6 +147,33 @@ export interface CompletedFixture {
 }
 
 /**
+ * One team's starting XI at one completed fixture — the selection-continuity
+ * substrate for `team.squad_stability` (doc 98). Player IDENTITY only: no
+ * position, no minutes, no rating.
+ */
+export interface StartingLineupObservation {
+  readonly fixtureId: string;
+  readonly fixturePartitionOn: string;
+  readonly kickoffAt: Date;
+  /**
+   * The STARTERS' player ids (`is_starting = true`) for this team. A fixture is
+   * ELIGIBLE only when exactly 11 are determinable; a completed fixture with no
+   * usable XI carries an empty array and is a chain-breaking gap (doc 98 §6/§7).
+   */
+  readonly starterPlayerIds: readonly string[];
+}
+
+/**
+ * A team's per-fixture starting XIs — every COMPLETED fixture before `as_of`,
+ * ascending `(kickoffAt, fixtureId)`, so adjacency in this sequence is the
+ * transition adjacency the metric requires (gaps break, never bridge).
+ */
+export interface TeamStartingLineups {
+  readonly teamId: string;
+  readonly fixtures: readonly StartingLineupObservation[];
+}
+
+/**
  * An opponent's rank band at the pre-match snapshot — the V1 tertile.
  *
  * V1 `processHistoricalContext.ts` reconstructs each opponent's league position
@@ -234,6 +261,15 @@ export interface CalculationContext {
    * treats absence as empty. It never alters what existing calculators read.
    */
   readonly editionRankedHistoryByTeam?: ReadonlyMap<string, RankedTeamHistory>;
+  /**
+   * Per-team starting XIs for selection continuity (`team.squad_stability`, doc
+   * 98) — every COMPLETED fixture before each subject's `as_of`, with the team's
+   * starter player ids. Populated ONLY for calculators that declare
+   * `needsStartingLineups`; an empty map otherwise (a consumer treats absence as
+   * empty). OPTIONAL so existing context constructors stay valid; it never alters
+   * what existing calculators read.
+   */
+  readonly startingLineupsByTeam?: ReadonlyMap<string, TeamStartingLineups>;
   /** Home venue per team, for travel origin. */
   readonly homeVenueByTeam: ReadonlyMap<string, string | null>;
   readonly venuesById: ReadonlyMap<string, VenueLocation>;
@@ -278,6 +314,13 @@ export interface Calculator {
    * unchanged. Additive.
    */
   readonly needsEditionRankedHistory?: boolean;
+  /**
+   * When true, the pipeline populates `context.startingLineupsByTeam` (per-team
+   * completed-fixture starting XIs) for this calculator. Omitted/false → empty
+   * map — the default for every existing calculator, whose behaviour is therefore
+   * unchanged. Additive (doc 98, `squad_continuity`).
+   */
+  readonly needsStartingLineups?: boolean;
   calculate(context: CalculationContext): readonly CandidateValue[];
 }
 

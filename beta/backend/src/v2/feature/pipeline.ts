@@ -70,6 +70,7 @@ import {
   type SubjectBatch,
 } from './driver/eligibility';
 import { readCompletedFixtures, readCompletedFixturesInWindow } from './read/fixtures';
+import { readStartingLineups } from './read/lineups';
 import { readEditionVenueResults } from './read/editionVenueResults';
 import { readEditionRankingFixtures } from './read/editionRanking';
 import { readHomeVenues, readVenueLocations } from './read/venues';
@@ -95,6 +96,7 @@ import { venueWinRate } from './calculators/venueWinRate';
 import { goalMarginVolatility } from './calculators/goalMarginVolatility';
 import { giantKillerPpg } from './calculators/giantKillerPpg';
 import { rankEditionFixtures } from './calculators/giantKillerRanking';
+import { squadContinuity } from './calculators/squadContinuity';
 import { logger } from '../../utils/logger';
 
 /** The only role S-5 authenticates as. */
@@ -104,10 +106,10 @@ export const FEATURE_ROLE = 'pt_pipeline_feature' as const;
  * The implemented calculators.
  *
  * NOT AN EXECUTION ORDER — a set. The order comes from `feature_dependency`.
- * `squad_continuity` is deliberately absent (R-1): `team.squad_stability` stays
- * registered and is never calculated, because its registered meaning is
- * selection continuity and the lineup data that would measure it is not
- * ingested.
+ * `squad_continuity` (selection continuity → `team.squad_stability`) is now
+ * implemented per the governed doc-98 definition, on the lineup substrate that
+ * Task 6C‑P made available. It is source-based (fixture/lineup/lineup_selection),
+ * consumes no feature, and runs in stage 1 like the other Layer‑1 calculators.
  */
 export const CALCULATORS: readonly Calculator[] = [
   formBackfill,
@@ -130,6 +132,10 @@ export const CALCULATORS: readonly Calculator[] = [
   // The first COMPETITION_SCOPED calculator — runs in the scoped pass (Gate
   // C-ii), never the ALL_COMPETITIONS one, because it declares its context kind.
   venueWinRate,
+  // ALL_COMPETITIONS selection continuity → team.squad_stability (doc 98).
+  // Declares `needsStartingLineups`; reads per-team completed-fixture starting
+  // XIs. Source-based, consumes no feature. Runs in the default pass.
+  squadContinuity,
 ];
 
 export interface FeatureRunOptions extends EligibilityOptions {
@@ -494,6 +500,8 @@ export async function buildScopedContext(
     longWindowFixturesByTeam: new Map(),
     // No scoped calculator declares needsEditionRankedHistory today; empty by default.
     editionRankedHistoryByTeam: new Map(),
+    // No scoped calculator declares needsStartingLineups today; empty by default.
+    startingLineupsByTeam: new Map(),
     homeVenueByTeam: new Map(),
     venuesById: new Map(),
     priorValues: new Map(),
@@ -530,6 +538,12 @@ async function buildContext(
   const editionRankedHistoryByTeam = calculator.needsEditionRankedHistory
     ? rankEditionFixtures(await readEditionRankingFixtures(tx, batch.teamIds, batch.asOf))
     : new Map();
+  // Additive selection-continuity substrate (doc 98): per-team completed-fixture
+  // starting XIs, read ONCE per batch and ONLY for a calculator that declares it,
+  // so existing calculators (which leave it empty) are entirely unaffected.
+  const startingLineupsByTeam = calculator.needsStartingLineups
+    ? await readStartingLineups(tx, batch.teamIds, batch.asOf)
+    : new Map();
   const homeVenueByTeam = await readHomeVenues(tx, batch.teamIds);
 
   const venueIds = new Set<string>();
@@ -551,6 +565,7 @@ async function buildContext(
     fixturesByTeam,
     longWindowFixturesByTeam,
     editionRankedHistoryByTeam,
+    startingLineupsByTeam,
     homeVenueByTeam,
     venuesById,
     priorValues,

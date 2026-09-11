@@ -35,10 +35,12 @@
 //                          so it has no source to declare. Its inputs are
 //                          dependencies, which is the distinction above.
 //
-//   team.squad_stability   NEVER CALCULATED (R-1). Declaring a source for a
-//                          calculation that does not exist would assert a
-//                          dependency nobody has — the same reason it gets no
-//                          calculator.
+//   team.squad_stability   SOURCE-BASED, now implemented (doc 98). It reads
+//                          football fixture/lineup/lineup_selection to measure
+//                          starting-XI selection continuity, and — like every
+//                          other Layer-1 feature — declares those sources and NO
+//                          feature dependency. (Superseded R-1 once the lineup
+//                          substrate existed; see doc 98.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg';
@@ -52,9 +54,13 @@ import { CALCULATION_CONTEXT_KIND } from '../calculators/types';
  * declaration that drifted from what a calculator actually reads would make
  * freshness report on the wrong relation, which is worse than not reporting.
  *
- * `team.squad_stability` is absent and must stay absent.
+ * `team.squad_stability` reads the actual-lineup relations (doc 98).
  */
 export const FEATURE_SOURCES: Readonly<Record<string, readonly string[]>> = {
+  // Selection continuity: the fixture for participation/ordering, the lineup and
+  // its selections for the starting XI. Player identity only — no position, no
+  // minutes. Source-based (doc 98); consumes no feature.
+  'team.squad_stability': ['fixture', 'lineup', 'lineup_selection'],
   // Result quality over completed fixtures — the fixture for the participation
   // and the result for the score.
   'team.home_form': ['fixture', 'result'],

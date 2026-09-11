@@ -49,12 +49,14 @@ import { declareRegistryInputs, FEATURE_SOURCES, FEATURE_DEPENDENCIES } from '..
 import { loadRegistry, assertCalculatorCoverage, type FeatureDefinition, type Registry } from '../registry/load';
 import { deriveAsOf, selectBatches } from '../driver/eligibility';
 import { readCompletedFixtures } from '../read/fixtures';
+import { readStartingLineups } from '../read/lineups';
 import { readHomeVenues, readVenueLocations } from '../read/venues';
 import { readPriorValues } from '../read/featureValues';
 import { runVerification, VERIFICATIONS } from '../verify';
 import { formBackfill } from '../calculators/formBackfill';
 import { fixtureLoad } from '../calculators/fixtureLoad';
 import { travelLoad } from '../calculators/travelLoad';
+import { squadContinuity } from '../calculators/squadContinuity';
 import { haversineKm, itineraryNodes, travelItinerary } from '../calculators/travelItinerary';
 import { FEATURE_KEYS, CALCULATOR_KEYS } from '../../seed/featureRegistry';
 import { teamReadiness } from '../calculators/teamReadiness';
@@ -67,6 +69,8 @@ import {
   type CompletedFixture,
   type VenueLocation,
   type ConsumedValueRef,
+  type StartingLineupObservation,
+  type TeamStartingLineups,
 } from '../calculators/types';
 import { parseArguments } from '../cli';
 import { withConnection } from '../../db/tx';
@@ -99,6 +103,7 @@ const IMPLEMENTED_FEATURES = [
   'team.momentum',
   'team.readiness_score',
   'team.rest_advantage',
+  'team.squad_stability',
   'team.travel_distance',
   'team.travel_impact',
 ] as const;
@@ -328,18 +333,19 @@ describe('execution ordering', () => {
     }))), null, 'the declared S-5 graph must be acyclic');
   });
 
-  it('16. ignores edges touching an unimplemented calculator', () => {
-    // team.squad_stability is registered and never calculated (R-1). An edge
-    // touching it must not block the plan.
+  it('16. ignores edges touching a calculator absent from the run', () => {
+    // A registered feature whose calculator is not in THIS run's calculator set
+    // must not block the plan — the edge touching it is pruned. (Synthetic: the
+    // second feature's calculator is deliberately left out of the passed set.)
     const registry = syntheticRegistry(
       [
         definition({ featureKey: 'team.a', calculatorKey: 'implemented' }),
-        definition({ featureKey: 'team.squad_stability', calculatorKey: 'squad_continuity' }),
+        definition({ featureKey: 'team.other', calculatorKey: 'absent_calc' }),
       ],
       [
         {
           consumerFeatureKey: 'team.a',
-          consumedFeatureKey: 'team.squad_stability',
+          consumedFeatureKey: 'team.other',
           consumerContextKindCode: 'X',
           consumedContextKindCode: 'X',
         },
@@ -360,25 +366,45 @@ describe('scope', () => {
     assert.deepEqual(claimed, [...IMPLEMENTED_FEATURES]);
   });
 
-  it('18. has no calculator for team.squad_stability', () => {
-    // R-1. Registered, never implemented — its meaning is selection continuity,
-    // and the lineup data that would measure it is not ingested.
-    for (const calculator of CALCULATORS) {
-      assert.ok(!calculator.featureKeys.includes('team.squad_stability'));
-      assert.notEqual(calculator.calculatorKey, 'squad_continuity');
-    }
+  it('18. implements team.squad_stability with the squad_continuity calculator', () => {
+    // doc 98: the lineup substrate now exists, so selection continuity is
+    // calculated. Exactly one calculator claims the feature, and it is
+    // squad_continuity — the calculatorKey the registry owns it under.
+    const owners = CALCULATORS.filter((calculator) =>
+      calculator.featureKeys.includes('team.squad_stability')
+    );
+    assert.equal(owners.length, 1, 'exactly one calculator claims squad_stability');
+    assert.equal(owners[0].calculatorKey, 'squad_continuity');
   });
 
-  it('19. declares no feature_source for team.squad_stability', () => {
-    // Declaring a source for a calculation that does not exist would assert a
-    // dependency nobody has.
-    assert.equal(FEATURE_SOURCES['team.squad_stability'], undefined);
+  it('19. declares the football sources team.squad_stability reads', () => {
+    // Source-based (doc 98): the fixture for participation/ordering, the lineup
+    // and its selections for the starting XI. It consumes no feature, so it has
+    // no dependency edge.
+    assert.deepEqual(FEATURE_SOURCES['team.squad_stability'], [
+      'fixture',
+      'lineup',
+      'lineup_selection',
+    ]);
+    assert.ok(
+      !FEATURE_DEPENDENCIES.some((edge) => edge.consumer === 'team.squad_stability'),
+      'squad_stability consumes no feature'
+    );
   });
 
   it('20. declares only Layer 1 relations as sources', () => {
     // ck_feature_source__layer_one_only enforces schema `football`; the relation
     // names here must be football relations.
-    const layerOne = new Set(['fixture', 'result', 'venue', 'team', 'competition_edition', 'standing']);
+    const layerOne = new Set([
+      'fixture',
+      'result',
+      'venue',
+      'team',
+      'competition_edition',
+      'standing',
+      'lineup',
+      'lineup_selection',
+    ]);
     for (const [featureKey, relations] of Object.entries(FEATURE_SOURCES)) {
       for (const relation of relations) {
         assert.ok(layerOne.has(relation), `${featureKey} declares non-Layer-1 source '${relation}'`);
@@ -1090,6 +1116,177 @@ describe('team_readiness', () => {
   });
 });
 
+describe('squad_continuity', () => {
+  const teamId = '77';
+
+  /** 11 consecutive player ids starting at `start` — one eligible starting XI. */
+  function seq(start: number): string[] {
+    return Array.from({ length: 11 }, (_, i) => String(start + i));
+  }
+
+  /** One observation `daysBefore` the reference as_of, with the given starters. */
+  function xi(
+    fixtureId: string,
+    daysBefore: number,
+    players: readonly string[]
+  ): StartingLineupObservation {
+    return {
+      fixtureId,
+      fixturePartitionOn: '2026-01-01',
+      kickoffAt: new Date(REFERENCE_AS_OF.getTime() - daysBefore * 86_400_000),
+      starterPlayerIds: players,
+    };
+  }
+
+  /** Runs the calculator over one team's history (given in any order). */
+  function run(
+    observations: readonly StartingLineupObservation[],
+    asOf = REFERENCE_AS_OF
+  ): readonly CandidateValue[] {
+    const history: TeamStartingLineups = { teamId, fixtures: observations };
+    return squadContinuity.calculate(
+      context({
+        subjects: [{ teamId, asOf }],
+        startingLineupsByTeam: new Map<string, TeamStartingLineups>([[teamId, history]]),
+      })
+    );
+  }
+
+  it('S1. full retention over four identical XIs is a mean of 1', () => {
+    // 4 eligible fixtures → 3 transitions, each |XIₙ ∩ XIₙ₋₁| = 11 → mean 1.
+    const produced = run([
+      xi('a', 40, seq(1)),
+      xi('b', 30, seq(1)),
+      xi('c', 20, seq(1)),
+      xi('d', 10, seq(1)),
+    ]);
+    assert.equal(produced.length, 1);
+    assert.equal(produced[0].featureKey, 'team.squad_stability');
+    assert.equal(toNumericString(roundHalfUp(produced[0].value, 4)), '1.0000');
+    // sampleObservationCount counts TRANSITIONS, not fixtures (doc 98).
+    assert.equal(produced[0].sampleObservationCount, 3);
+    // Source-based: it consumes no feature, so lineage is empty.
+    assert.deepEqual(produced[0].consumed, []);
+  });
+
+  it('S2. computes the exact mean of the per-transition retention ratios', () => {
+    // b→a 11, c→b 10 (drop 1, add 12), d→c 10 (drop 2, add 13):
+    // (11 + 10 + 10) / (11·3) = 31/33 = 0.93939… → scale 4 → 0.9394.
+    const produced = run([
+      xi('a', 40, seq(1)), // 1..11
+      xi('b', 30, seq(1)), // 1..11
+      xi('c', 20, seq(2)), // 2..12
+      xi('d', 10, seq(3)), // 3..13
+    ]);
+    assert.equal(produced.length, 1);
+    assert.equal(toNumericString(roundHalfUp(produced[0].value, 4)), '0.9394');
+    assert.equal(produced[0].sampleObservationCount, 3);
+  });
+
+  it('S3. full turnover over four disjoint XIs is a mean of 0', () => {
+    const produced = run([
+      xi('a', 40, seq(1)),
+      xi('b', 30, seq(12)),
+      xi('c', 20, seq(23)),
+      xi('d', 10, seq(34)),
+    ]);
+    assert.equal(produced.length, 1);
+    assert.equal(toNumericString(roundHalfUp(produced[0].value, 4)), '0.0000');
+    assert.equal(produced[0].sampleObservationCount, 3);
+  });
+
+  it('S4. fewer than three transitions yields NO value (no row)', () => {
+    // 3 eligible fixtures → only 2 transitions → below the governed threshold.
+    const produced = run([xi('a', 30, seq(1)), xi('b', 20, seq(1)), xi('c', 10, seq(1))]);
+    assert.equal(produced.length, 0);
+  });
+
+  it('S5. an ineligible fixture is a gap that breaks the chain, never a bridge', () => {
+    // Five completed fixtures, the middle one with only 10 determinable starters.
+    // Adjacent-both-eligible transitions: a→b (1) and d→e (1) = 2 < 3. If the gap
+    // bridged (b→d counted) it would reach 3 and wrongly produce a value.
+    const produced = run([
+      xi('a', 50, seq(1)),
+      xi('b', 40, seq(1)),
+      xi('gap', 30, seq(1).slice(0, 10)), // 10 starters → ineligible
+      xi('d', 20, seq(1)),
+      xi('e', 10, seq(1)),
+    ]);
+    assert.equal(produced.length, 0);
+  });
+
+  it('S6. exactly eleven determinable starters is the eligibility test', () => {
+    // Twelve starters is as ineligible as ten — the count must be exactly 11.
+    const twelve = run([
+      xi('a', 30, seq(1).concat('99')), // 12 starters
+      xi('b', 20, seq(1).concat('99')),
+      xi('c', 10, seq(1).concat('99')),
+      xi('d', 5, seq(1).concat('99')),
+    ]);
+    assert.equal(twelve.length, 0, 'twelve starters is ineligible');
+  });
+
+  it('S7. the window is the last six eligible fixtures; older churn is excluded', () => {
+    // Two ancient fixtures with a full-turnover transition into the recent run,
+    // then six identical recent XIs. The window keeps only the last 6 eligible →
+    // 5 transitions, all fully retained → mean 1. Were the window uncapped the
+    // old disjoint transition would drag the mean to 66/77 = 0.8571.
+    const produced = run([
+      xi('old1', 100, seq(500)),
+      xi('old2', 90, seq(500)),
+      xi('n1', 60, seq(1)),
+      xi('n2', 50, seq(1)),
+      xi('n3', 40, seq(1)),
+      xi('n4', 30, seq(1)),
+      xi('n5', 20, seq(1)),
+      xi('n6', 10, seq(1)),
+    ]);
+    assert.equal(produced.length, 1);
+    assert.equal(toNumericString(roundHalfUp(produced[0].value, 4)), '1.0000');
+    assert.equal(produced[0].sampleObservationCount, 5, 'window caps at 5 transitions');
+  });
+
+  it('S8. a fixture at or after as_of is excluded (no future leakage)', () => {
+    // Four identical eligible XIs before as_of → 3 transitions, mean 1. A fifth,
+    // fully-disjoint XI kicks off AFTER as_of: excluded. Were it counted the
+    // sample would be 4 and the mean would fall to 33/44 = 0.75.
+    const produced = run([
+      xi('a', 40, seq(1)),
+      xi('b', 30, seq(1)),
+      xi('c', 20, seq(1)),
+      xi('d', 10, seq(1)),
+      xi('future', -5, seq(200)), // kickoff after as_of
+    ]);
+    assert.equal(produced.length, 1);
+    assert.equal(toNumericString(roundHalfUp(produced[0].value, 4)), '1.0000');
+    assert.equal(produced[0].sampleObservationCount, 3, 'the future fixture is not a transition');
+  });
+
+  it('S9. a team with no history produces nothing', () => {
+    assert.equal(run([]).length, 0);
+  });
+
+  it('S10. is deterministic regardless of input ordering', () => {
+    const ordered = run([
+      xi('a', 40, seq(1)),
+      xi('b', 30, seq(2)),
+      xi('c', 20, seq(3)),
+      xi('d', 10, seq(4)),
+    ]);
+    const shuffled = run([
+      xi('c', 20, seq(3)),
+      xi('a', 40, seq(1)),
+      xi('d', 10, seq(4)),
+      xi('b', 30, seq(2)),
+    ]);
+    assert.equal(ordered.length, 1);
+    assert.equal(
+      toNumericString(roundHalfUp(ordered[0].value, 4)),
+      toNumericString(roundHalfUp(shuffled[0].value, 4))
+    );
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // E — Provenance and sampling
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1250,6 +1447,9 @@ describe('mutation: wall clock inside a calculator', () => {
     // as_of-anchored recency deviation exists precisely to avoid the wall clock.
     'calculators/giantKillerPpg.ts',
     'calculators/giantKillerRanking.ts',
+    // doc 98: selection continuity is pure over the pre-read starting XIs and
+    // re-applies the as_of bound against the observation kickoff, never a clock.
+    'calculators/squadContinuity.ts',
   ];
 
   it('63. no calculator reads the wall clock', () => {
@@ -1449,7 +1649,7 @@ describe('feature pipeline against a V2 database', { skip: !hasDatabase }, () =>
       for (const featureKey of IMPLEMENTED_FEATURES) {
         assert.ok(registry.definitionsByKey.get(featureKey), `${featureKey} must be registered`);
       }
-      // The one registered but never implemented.
+      // Selection continuity, now implemented (doc 98) and in IMPLEMENTED_FEATURES.
       assert.ok(registry.definitionsByKey.get('team.squad_stability'));
     });
   });
@@ -1615,15 +1815,40 @@ describe('feature pipeline against a V2 database', { skip: !hasDatabase }, () =>
     });
   });
 
-  it('82. writes no value for team.squad_stability', async () => {
+  it('82. reads starting XIs against the real schema; the seeded world yields no squad_stability', async () => {
+    // Proves readStartingLineups compiles and runs against the live football
+    // schema (lineup, lineup_selection) and that its LEFT JOIN surfaces every
+    // completed fixture — the seeded world has completed fixtures but NO lineups,
+    // so each observation is a chain-breaking gap (empty starters). With zero
+    // eligible transitions the calculator is below the governed threshold (doc 98
+    // §5) and writes no value. This is the eligibility gate, not R-1.
     await inRolledBackTx(async (tx) => {
-      await writeStageOne(tx, REFERENCE_AS_OF, new Date('2026-11-10T13:00:00Z'));
-      const { rows } = await tx.query(
-        `SELECT 1 FROM feature.feature_value fv
-           JOIN feature.feature_definition d ON d.id = fv.feature_definition_id
-          WHERE d.feature_key = 'team.squad_stability'`
+      const teamIds = [world.alphaTeamId, world.betaTeamId];
+      const histories = await readStartingLineups(tx, teamIds, REFERENCE_AS_OF);
+
+      let observedFixtures = 0;
+      for (const teamId of teamIds) {
+        const history = histories.get(teamId);
+        if (!history) continue;
+        for (const observation of history.fixtures) {
+          observedFixtures += 1;
+          // No lineup seeded → empty starters → ineligible (≠ 11 determinable).
+          assert.equal(observation.starterPlayerIds.length, 0, 'unenriched fixture is a gap');
+          assert.ok(
+            observation.kickoffAt.getTime() < REFERENCE_AS_OF.getTime(),
+            'the as_of bound is strict'
+          );
+        }
+      }
+      assert.ok(observedFixtures > 0, 'the read must reach the seeded completed fixtures');
+
+      const candidates = squadContinuity.calculate(
+        context({
+          subjects: teamIds.map((teamId) => ({ teamId, asOf: REFERENCE_AS_OF })),
+          startingLineupsByTeam: histories,
+        })
       );
-      assert.equal(rows.length, 0, 'R-1: registered, never calculated');
+      assert.equal(candidates.length, 0, 'no eligible transitions → no value');
     });
   });
 
@@ -1737,7 +1962,10 @@ describe('feature pipeline against a V2 database', { skip: !hasDatabase }, () =>
           ORDER BY d.feature_key`
       );
       const declared = rows.map((row) => row.feature_key);
-      assert.ok(!declared.includes('team.squad_stability'));
+      assert.ok(
+        declared.includes('team.squad_stability'),
+        'source-based (doc 98): its football sources are declared'
+      );
       assert.ok(!declared.includes('team.readiness_score'), 'the pure composite declares no source');
     });
   });
