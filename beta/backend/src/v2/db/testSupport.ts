@@ -35,15 +35,31 @@ export function hasV2Database(): boolean {
  */
 export function testableRoles(): PipelineRole[] {
   if (!hasV2Database() || !isDatabaseConfigured()) return [];
+  // FAIL-CLOSED: a configured target must be a recognized non-production database
+  // before any role connects. This makes the connection-layer suites (which gate
+  // via testableRoles/skipReason rather than testDatabaseReady) route through the
+  // SAME single authoritative guard — production / unknown throw here too.
+  assertDatabaseTargetSafe();
   // One connection now serves every layer, so every role label is exercisable
   // whenever the database is configured at all.
   return [...PIPELINE_ROLES];
 }
 
-/** A one-line reason for a skip, so the runner output explains itself. */
+/**
+ * A one-line reason for a skip, so the runner output explains itself — and the
+ * run/skip decision for the connection-layer DB suites. Consistent with
+ * `testDatabaseReady()`: production / unknown HARD-FAIL (via the guard), a
+ * recognized non-production database runs only with the explicit `PT_V2_TEST_DB`
+ * opt-in, and everything else skips.
+ */
 export function skipReason(): string {
   if (!hasV2Database()) {
     return 'PT_V2_DB_HOST / PT_V2_DB_NAME not set — V2 integration tests skipped';
+  }
+  assertDatabaseTargetSafe(); // production / unknown → throw (fail closed)
+  if (!testDbOptInPresent()) {
+    return 'PT_V2_TEST_DB not set — a recognized non-production DB requires the ' +
+      'explicit test opt-in; V2 integration tests skipped';
   }
   if (testableRoles().length === 0) {
     return 'PT_V2_DB_PASSWORD not set — V2 integration tests skipped';
@@ -193,6 +209,11 @@ export function assertDatabaseTargetSafe(): void {
 export function testDatabaseReady(): boolean {
   assertDatabaseTargetSafe(); // production / unknown → throw (fail closed)
   if (classifyDatabaseTarget() !== 'recognized-nonproduction') return false; // absent → skip
+  return testDbOptInPresent();
+}
+
+/** The explicit test-run opt-in — necessary, never sufficient (see the guard). */
+function testDbOptInPresent(): boolean {
   const optIn = (process.env[TEST_DB_OPT_IN] ?? '').trim().toLowerCase();
   return optIn === '1' || optIn === 'true';
 }

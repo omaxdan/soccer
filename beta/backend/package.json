@@ -7,6 +7,7 @@
     "build": "tsc",
     "cli": "ts-node src/cli.ts",
     "lint:reads": "bash scripts/check-raw-reads.sh",
+    "lint:test-db-gate": "node scripts/check-test-db-gate.mjs",
     "test": "tsc --noEmit && node --test --import tsx \"src/**/*.test.ts\"",
     "seed:v2": "tsx src/v2/seed/runAll.ts",
     "ingest:v2": "tsx src/v2/ingestion/cli.ts",
