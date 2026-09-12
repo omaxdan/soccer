@@ -96,6 +96,17 @@ export const CURRENT_TEAM_READINGS_SQL = `
      AND (mr.context_competition_edition_id IS NULL
           OR $4::bigint IS NULL
           OR mr.context_competition_edition_id = $4::bigint)
+     -- GOVERNED INVALIDATION (035). A quarantined reading is not fit for product
+     -- intelligence, so it is excluded HERE — among the DISTINCT ON candidates,
+     -- before "current" is chosen — so the most recent NON-quarantined reading
+     -- becomes current rather than the surface simply going dark. Empty quarantine
+     -- table ⇒ NOT EXISTS is always true ⇒ no-op. The DISTINCT ON / ORDER BY are
+     -- unchanged.
+     AND NOT EXISTS (
+       SELECT 1 FROM module.module_reading_quarantine q
+        WHERE q.module_reading_id = mr.id
+          AND q.reading_as_of = mr.as_of
+     )
    ORDER BY mr.subject_team_id, mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id,
             mr.as_of DESC, mr.calculated_at DESC, mr.id DESC
 `;

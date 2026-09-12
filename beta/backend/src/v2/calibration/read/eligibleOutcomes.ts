@@ -41,7 +41,7 @@ interface Row {
   existing_ordinal: number | null; existing_outcome_value: string | null; existing_result_id: string | null;
 }
 
-const ELIGIBLE_SQL = `
+export const ELIGIBLE_SQL = `
   SELECT ms.id::text                       AS match_snapshot_id,
          ms.fixture_partition_on::text     AS fixture_partition_on,
          ms.snapshot_as_of                 AS snapshot_as_of,
@@ -77,6 +77,16 @@ const ELIGIBLE_SQL = `
    WHERE ms.snapshot_point_code = 'KICKOFF'
      AND f.lifecycle_state_code = 'COMPLETED'
      AND ($2::bigint IS NULL OR f.id = $2::bigint)
+     -- GOVERNED INVALIDATION (035): a quarantined snapshot must not accrue a
+     -- calibration outcome — an outcome link on it would let a corrupt/test
+     -- snapshot enter reliability measurement. Excluded by anti-join here; the
+     -- attach path (outcome/attach.ts) re-asserts it as defense in depth. Empty
+     -- quarantine table ⇒ NOT EXISTS is always true ⇒ no-op.
+     AND NOT EXISTS (
+       SELECT 1 FROM snapshot.match_snapshot_quarantine q
+        WHERE q.match_snapshot_id = ms.id
+          AND q.fixture_partition_on = ms.fixture_partition_on
+     )
    ORDER BY ms.fixture_partition_on, ms.id
 `;
 

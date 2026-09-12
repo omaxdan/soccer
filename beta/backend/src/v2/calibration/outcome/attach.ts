@@ -13,6 +13,8 @@
 //     pinned on the link; a later version never re-scores an existing link.
 //   • Idempotent: re-running with the same prevailing result and same derived
 //     outcome creates nothing new.
+//   • 035: a QUARANTINED snapshot never accrues an outcome. Asserted here at the
+//     write boundary (defense in depth) in addition to the eligibility anti-join.
 //
 // NO calibration, NO hit-rate, NO confidence, NO reliability is computed here.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,6 +63,25 @@ export async function attachOutcomeLink(
   unit: EligibleOutcomeUnit,
   derivationVersionId: string
 ): Promise<AttachResult> {
+  // GOVERNED INVALIDATION (035) — DEFENSE IN DEPTH. Eligibility selection already
+  // anti-joins out quarantined snapshots, but this writer can be called directly,
+  // so it re-asserts the invariant at the write boundary: an outcome link is never
+  // attached to a quarantined snapshot. Fail-closed (throws) rather than silently
+  // skipping, so a mis-wired caller is surfaced, not hidden. Empty table ⇒ never
+  // fires.
+  const quarantined = await tx.query(
+    `SELECT 1 FROM snapshot.match_snapshot_quarantine
+      WHERE match_snapshot_id = $1::bigint AND fixture_partition_on = $2::date
+      LIMIT 1`,
+    [unit.matchSnapshotId, unit.fixturePartitionOn]
+  );
+  if ((quarantined.rowCount ?? 0) > 0) {
+    throw new Error(
+      `refusing to attach an outcome to quarantined snapshot ${unit.matchSnapshotId} ` +
+        `(partition ${unit.fixturePartitionOn}): a quarantined snapshot must not accrue calibration`
+    );
+  }
+
   const action = decideOutcomeLink(unit);
   if (action.kind === 'SKIP') return { linked: 0, superseded: 0, skipped: 1 };
 

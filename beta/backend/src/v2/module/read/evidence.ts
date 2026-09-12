@@ -107,6 +107,15 @@ export const CURRENT_READING_EVIDENCE_SQL = `
        AND (mr.context_competition_edition_id IS NULL
             OR $4::bigint IS NULL
             OR mr.context_competition_edition_id = $4::bigint)
+       -- GOVERNED INVALIDATION (035): exclude quarantined readings among the
+       -- DISTINCT ON candidates, so evidence resolves for the current
+       -- NON-quarantined reading — exactly the reading the readings surface (B.1)
+       -- shows, which applies the identical exclusion. Empty table ⇒ no-op.
+       AND NOT EXISTS (
+         SELECT 1 FROM module.module_reading_quarantine q
+          WHERE q.module_reading_id = mr.id
+            AND q.reading_as_of = mr.as_of
+       )
      ORDER BY mr.subject_team_id, mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id,
               mr.as_of DESC, mr.calculated_at DESC, mr.id DESC
   )

@@ -142,7 +142,7 @@ export async function readEligibleModules(tx: PoolClient): Promise<EligibleModul
 // subject columns so a TEAM reading can never suppress a FIXTURE one, and one
 // team's reading can never suppress the other's.
 //   $1 team ids, $2 as_of ceiling, $3 context edition | null, $4 fixture id
-const CURRENT_SPOKE_CTE = `
+export const CURRENT_SPOKE_CTE = `
   WITH current_reading AS (
     SELECT DISTINCT ON (mr.subject_kind_code, mr.subject_team_id, mr.subject_fixture_id,
                         mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id)
@@ -168,6 +168,16 @@ const CURRENT_SPOKE_CTE = `
        AND (mr.context_competition_edition_id IS NULL
             OR $3::bigint IS NULL
             OR mr.context_competition_edition_id = $3::bigint)
+       -- GOVERNED INVALIDATION (035): a quarantined reading must never be CITED
+       -- into a new snapshot. Excluding it among the DISTINCT ON candidates means
+       -- sealing selects the current NON-quarantined reading (or none), so a
+       -- corrupt/test reading can no longer enter the sealed record. Empty
+       -- table ⇒ no-op; DISTINCT ON / ORDER BY unchanged.
+       AND NOT EXISTS (
+         SELECT 1 FROM module.module_reading_quarantine q
+          WHERE q.module_reading_id = mr.id
+            AND q.reading_as_of = mr.as_of
+       )
      ORDER BY mr.subject_kind_code, mr.subject_team_id, mr.subject_fixture_id,
               mr.module_definition_id, mr.context_kind_code, mr.context_competition_edition_id,
               mr.as_of DESC, mr.calculated_at DESC, mr.id DESC
