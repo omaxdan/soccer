@@ -97,7 +97,7 @@ function CountChip({ label, count, color }: { label: string; count: number; colo
  * The sealed verdict: non-directional module consensus counts + completeness, then
  * the governed comparative edges and the graded fields — with governed values shown
  * plainly and ungoverned/uncalibrated fields shown as honest unavailable states.
- * Never a prediction, an odds figure, or a fabricated confidence.
+ * Never a forecast, a market figure, or a fabricated confidence.
  */
 export function VerdictBand({ verdict }: { verdict: IntelligenceVerdict }) {
   return (
@@ -140,8 +140,8 @@ export function VerdictBand({ verdict }: { verdict: IntelligenceVerdict }) {
           })}
         </div>
         <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 6 }}>
-          Edges are governed comparative readings, not predictions or odds. Fields with no governed value are shown as such —
-          never as zero or a fabricated confidence.
+          Edges are governed comparative readings — descriptive, not forecasts or recommendations. Fields with no governed
+          value are shown as such, never as zero or a fabricated confidence.
         </p>
       </div>
     </section>
