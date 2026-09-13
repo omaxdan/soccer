@@ -25,7 +25,7 @@ export default async function V2LeaguesPage() {
         <ul className="space-y-2" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {editions.map((e) => (
             <li key={e.id}>
-              <Link href={routes.edition(e.id)} className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, textDecoration: 'none', color: 'inherit' }}>
+              <Link href={routes.edition({ id: e.id, competition: { slug: e.competition.slug }, seasonLabel: e.seasonLabel })} className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, textDecoration: 'none', color: 'inherit' }}>
                 <span>
                   <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)' }}>{e.competition.name}</span>
                   <span className="label-cap" style={{ color: 'var(--muted)' }}>{e.seasonLabel}</span>

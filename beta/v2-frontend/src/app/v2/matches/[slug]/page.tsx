@@ -128,6 +128,11 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
   const editionId = detail?.match.edition.id;
   const seasonLabel = detail?.match.edition.seasonLabel;
   const competitionName = detail?.match.competition.name;
+  // Readable edition link when the competition slug is available; the numeric id
+  // stays authoritative underneath.
+  const editionHref = detail
+    ? routes.edition({ id: detail.match.edition.id, competition: { slug: detail.match.competition.slug }, seasonLabel: detail.match.edition.seasonLabel })
+    : null;
   const homeName = detail?.match.homeTeam.name ?? 'Home';
   const awayName = detail?.match.awayTeam.name ?? 'Away';
 
@@ -143,7 +148,7 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
 
   const crumbs = [
     { label: 'Leagues', href: routes.leagues() },
-    ...(editionId ? [{ label: `${competitionName ?? 'Competition'} · ${seasonLabel ?? ''}`.trim(), href: routes.edition(editionId) }] : []),
+    ...(editionId && editionHref ? [{ label: `${competitionName ?? 'Competition'} · ${seasonLabel ?? ''}`.trim(), href: editionHref }] : []),
     { label: `${homeName} v ${awayName}` },
   ];
 

@@ -8,7 +8,7 @@
 // does not serve them (see the competition page's honest "unavailable" states).
 
 import type { ApiEditionFixture, ApiEditionSummary, ApiTeam } from './types';
-import { routes } from './routes';
+import { routes, type V2EditionRef } from './routes';
 
 // ── tabs ─────────────────────────────────────────────────────────────────────────
 
@@ -31,9 +31,10 @@ export function resolveEditionTab(raw: string | undefined): EditionTab {
 
 /** Href for a competition tab. 'overview' is the clean canonical URL (no query), so
  *  the base edition route and the Overview tab are the same address. Built on the
- *  centralized route helper — namespace-neutral, no hardcoded /v2. */
-export function editionTabHref(editionId: string, tab: EditionTab): string {
-  const base = routes.edition(editionId);
+ *  centralized route helper — namespace-neutral, no hardcoded /v2. Accepts a bare id
+ *  or an edition ref (for the readable slug). */
+export function editionTabHref(edition: string | V2EditionRef, tab: EditionTab): string {
+  const base = routes.edition(edition);
   return tab === 'overview' ? base : `${base}?tab=${tab}`;
 }
 

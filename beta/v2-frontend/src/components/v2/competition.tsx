@@ -8,7 +8,7 @@
 // no fabrication, no betting language.
 
 import Link from 'next/link';
-import { routes } from '@/lib/v2/routes';
+import { routes, type V2EditionRef } from '@/lib/v2/routes';
 import {
   EDITION_TABS, editionTabHref, groupFixturesByDay,
   type EditionTab, type GroupedFixtures,
@@ -41,7 +41,7 @@ function SeasonSelector({ seasons, currentEditionId }: { seasons: readonly ApiEd
       {seasons.map((s) => {
         const active = s.id === currentEditionId;
         return (
-          <Link key={s.id} href={routes.edition(s.id)} aria-current={active ? 'true' : undefined}
+          <Link key={s.id} href={routes.edition({ id: s.id, competition: { slug: s.competition.slug }, seasonLabel: s.seasonLabel })} aria-current={active ? 'true' : undefined}
             className="label-cap tnum" style={{
               padding: '2px 8px', borderRadius: 4, textDecoration: 'none',
               color: active ? 'var(--text)' : 'var(--muted)',
@@ -79,13 +79,13 @@ export function CompetitionHeader({ competitionName, seasonLabel, seasons, curre
 
 // ── tab navigation ───────────────────────────────────────────────────────────────
 
-export function EditionTabNav({ editionId, active }: { editionId: string; active: EditionTab }) {
+export function EditionTabNav({ edition, active }: { edition: string | V2EditionRef; active: EditionTab }) {
   return (
     <nav aria-label="competition sections" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--line)', overflowX: 'auto' }}>
       {EDITION_TABS.map((t) => {
         const isActive = t.key === active;
         return (
-          <Link key={t.key} href={editionTabHref(editionId, t.key)} aria-current={isActive ? 'page' : undefined}
+          <Link key={t.key} href={editionTabHref(edition, t.key)} aria-current={isActive ? 'page' : undefined}
             className="label-cap" style={{
               padding: '8px 12px', textDecoration: 'none', whiteSpace: 'nowrap',
               color: isActive ? 'var(--text)' : 'var(--muted)',

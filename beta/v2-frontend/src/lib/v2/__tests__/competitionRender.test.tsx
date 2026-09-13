@@ -46,7 +46,7 @@ describe('CompetitionHeader', () => {
 });
 
 describe('EditionTabNav', () => {
-  const markup = html(<EditionTabNav editionId="88" active="matches" />);
+  const markup = html(<EditionTabNav edition="88" active="matches" />);
   test('renders all tabs, marks the active one, links under /v2, none to /pitch', () => {
     assert.match(markup, /href="\/v2\/editions\/88"/);            // Overview = clean base
     assert.match(markup, /href="\/v2\/editions\/88\?tab=standings"/);
@@ -87,7 +87,7 @@ describe('no betting language across competition surfaces', () => {
   test('header, tabs, standings, intelligence and teams carry no betting/odds lexicon', () => {
     const all = [
       text(<CompetitionHeader competitionName="Série A" seasonLabel="2026" seasons={SEASONS} currentEditionId="11" teamCount={20} fixtureCount={120} />),
-      text(<EditionTabNav editionId="88" active="overview" />),
+      text(<EditionTabNav edition="88" active="overview" />),
       text(<StandingsUnavailable />),
       text(<CompetitionIntelligenceNote hasMatches={true} />),
       text(<TeamsPanel teams={TEAMS} />),

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { fetchEditionFixtures, fetchEditions } from '@/lib/v2/api';
-import { routes } from '@/lib/v2/routes';
+import { routes, type V2EditionRef } from '@/lib/v2/routes';
+import { idFromParam } from '@/lib/v2/slug';
 import {
   resolveEditionTab, classifyFixtures, deriveEditionTeams, siblingSeasons,
 } from '@/lib/v2/competition';
@@ -37,16 +38,23 @@ function Overview({ grouped, teams, hasMatches }: { grouped: GroupedFixtures; te
 }
 
 export default async function V2EditionPage({ params, searchParams }: {
-  params: Promise<{ editionId: string }>;
+  params: Promise<{ slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { editionId } = await params;
+  const { slug } = await params;
   const sp = await searchParams;
   const tab = resolveEditionTab(typeof sp.tab === 'string' ? sp.tab : undefined);
 
-  const data = await fetchEditionFixtures(editionId);
+  // Public URL is {competition}-{season}-{id}; the trailing numeric edition id is the
+  // source of truth. Parse it and 404 on a slug with no numeric id — the API only
+  // ever receives the numeric id, so the backend contract is unchanged.
+  const editionId = idFromParam(slug);
+  if (editionId === null) notFound();
+
+  const data = await fetchEditionFixtures(String(editionId));
   if (!data) notFound();
   const { edition, fixtures } = data;
+  const editionRef: V2EditionRef = { id: edition.id, competition: { slug: edition.competition.slug }, seasonLabel: edition.seasonLabel };
 
   const grouped = classifyFixtures(fixtures);
   const teams = deriveEditionTeams(fixtures);
@@ -68,7 +76,7 @@ export default async function V2EditionPage({ params, searchParams }: {
         fixtureCount={fixtures.length}
       />
 
-      <EditionTabNav editionId={editionId} active={tab} />
+      <EditionTabNav edition={editionRef} active={tab} />
 
       {tab === 'overview' && <Overview grouped={grouped} teams={teams} hasMatches={hasMatches} />}
       {tab === 'matches' && <MatchesPanel grouped={grouped} />}

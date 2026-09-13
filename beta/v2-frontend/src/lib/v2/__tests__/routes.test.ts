@@ -8,7 +8,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { routes, v2Path, V2_BASE } from '../routes';
+import { routes, v2Path, v2EditionSlug, V2_BASE } from '../routes';
 import { idFromParam } from '../slug';
 
 const FIXTURE = {
@@ -60,6 +60,26 @@ describe('routes — internal consistency + no /pitch', () => {
     assert.equal(routes.players(), '/v2/players');
     assert.equal(routes.team({ id: '599', name: 'Flamengo' }), '/v2/teams/flamengo-599');
     assert.equal(routes.player({ id: '7', fullName: 'Ada Hegerberg' }), '/v2/players/ada-hegerberg-7');
+  });
+});
+
+describe('edition slug-id routing (readable URL, numeric id authoritative)', () => {
+  const ref = { id: '18', competition: { slug: 'premier-league' }, seasonLabel: '2026' };
+  test('v2EditionSlug builds {competition}-{season}-{id}', () => {
+    assert.equal(v2EditionSlug(ref), 'premier-league-2026-18');
+    assert.equal(v2EditionSlug({ id: '42', competition: { slug: 'champions-league' }, seasonLabel: '2025/26' }), 'champions-league-2025-26-42');
+  });
+  test('routes.edition accepts a ref (readable slug) or a bare id (back-compatible)', () => {
+    assert.equal(routes.edition(ref), '/v2/editions/premier-league-2026-18');
+    assert.equal(routes.edition('18'), '/v2/editions/18'); // bare id still works
+    assert.equal(routes.edition(ref).includes('/pitch'), false);
+  });
+  test('the numeric edition id round-trips out of the readable slug (API gets the id)', () => {
+    const href = routes.edition(ref);
+    const slug = href.slice(href.lastIndexOf('/') + 1);
+    assert.equal(slug, 'premier-league-2026-18');
+    assert.equal(idFromParam(slug), 18);                     // what the page parses → API
+    assert.equal(idFromParam('champions-league-2025-26-42'), 42);
   });
 });
 

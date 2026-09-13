@@ -38,6 +38,11 @@ describe('tab resolution & hrefs', () => {
     for (const t of EDITION_TABS) assert.equal(editionTabHref('88', t.key).includes('/pitch'), false);
     for (const t of EDITION_TABS) assert.equal(editionTabHref('88', t.key).startsWith('/v2/editions/88'), true);
   });
+  test('editionTabHref accepts an edition ref to build the readable slug base', () => {
+    const ref = { id: '18', competition: { slug: 'premier-league' }, seasonLabel: '2026' };
+    assert.equal(editionTabHref(ref, 'overview'), '/v2/editions/premier-league-2026-18');
+    assert.equal(editionTabHref(ref, 'standings'), '/v2/editions/premier-league-2026-18?tab=standings');
+  });
 });
 
 describe('fixture classification & ordering', () => {
