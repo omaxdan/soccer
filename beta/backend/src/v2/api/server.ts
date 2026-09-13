@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getEditionFixtures, getEditions, getTeams, getTeamDetail, getPlayers, getPlayerDetail, isValidId } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getEditionFixtures, getEditions, getTeams, getTeamDetail, getPlayers, getPlayerDetail, isValidId } from './handlers';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -28,6 +28,7 @@ export const DEFAULT_API_PORT = 8787;
 /** Injectable data seams so routing is testable without a database. */
 export interface ApiDeps {
   readonly getMatch: (id: string) => Promise<unknown | null>;
+  readonly getMatchIntelligence: (id: string) => Promise<unknown | null>;
   readonly getEdition: (id: string) => Promise<unknown | null>;
   readonly getEditions: () => Promise<unknown>;
   readonly getTeams: () => Promise<unknown>;
@@ -38,6 +39,7 @@ export interface ApiDeps {
 
 const productionDeps: ApiDeps = {
   getMatch: (id) => withConnection(API_ROLE, (tx: PoolClient) => getMatchDetail(tx, id)),
+  getMatchIntelligence: (id) => withConnection(API_ROLE, (tx: PoolClient) => getMatchIntelligence(tx, id)),
   getEdition: (id) => withConnection(API_ROLE, (tx: PoolClient) => getEditionFixtures(tx, id)),
   getEditions: () => withConnection(API_ROLE, (tx: PoolClient) => getEditions(tx)),
   getTeams: () => withConnection(API_ROLE, (tx: PoolClient) => getTeams(tx)),
@@ -49,6 +51,7 @@ const productionDeps: ApiDeps = {
 export type Route =
   | { kind: 'editionList' }
   | { kind: 'match'; id: string }
+  | { kind: 'matchIntelligence'; id: string }
   | { kind: 'editionFixtures'; id: string }
   | { kind: 'teamList' }
   | { kind: 'team'; id: string }
@@ -63,17 +66,22 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const isEditionList = pathname === '/api/v2/editions';
   const isTeamList = pathname === '/api/v2/teams';
   const isPlayerList = pathname === '/api/v2/players';
+  const matchIntelligence = pathname.match(/^\/api\/v2\/matches\/([^/]+)\/intelligence$/);
   const match = pathname.match(/^\/api\/v2\/matches\/([^/]+)$/);
   const editionFixtures = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/fixtures$/);
   const team = pathname.match(/^\/api\/v2\/teams\/([^/]+)$/);
   const player = pathname.match(/^\/api\/v2\/players\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !match && !editionFixtures && !team && !player) {
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !match && !editionFixtures && !team && !player) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
   if (isEditionList) return { kind: 'editionList' };
   if (isTeamList) return { kind: 'teamList' };
   if (isPlayerList) return { kind: 'playerList' };
+  if (matchIntelligence) {
+    const id = decodeURIComponent(matchIntelligence[1]);
+    return isValidId(id) ? { kind: 'matchIntelligence', id } : { kind: 'badRequest' };
+  }
   if (match) {
     const id = decodeURIComponent(match[1]);
     return isValidId(id) ? { kind: 'match', id } : { kind: 'badRequest' };
@@ -114,6 +122,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getMatch(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'match_not_found' });
       }
+      case 'matchIntelligence': {
+        const body = await deps.getMatchIntelligence(route.id);
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'match_intelligence_not_found' });
+      }
       case 'editionFixtures': {
         const body = await deps.getEdition(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'edition_not_found' });
@@ -151,7 +163,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/matches/:matchId\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n`);
   });
 }
 

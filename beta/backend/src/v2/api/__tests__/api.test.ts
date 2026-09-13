@@ -55,6 +55,9 @@ describe('v2 api · id validation and routing', () => {
 
   test('resolveRoute maps method + path to intent', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/18'), { kind: 'match', id: '18' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/matches/18/intelligence'), { kind: 'matchIntelligence', id: '18' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc/intelligence'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18/intelligence'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/fixtures'), { kind: 'editionFixtures', id: '42' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions'), { kind: 'editionList' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams'), { kind: 'teamList' });
@@ -164,6 +167,117 @@ describe('v2 api · team-feature mapping (missing values → null, never fabrica
   });
 });
 
+// A canned Slice-2 Match Intelligence response, modelled on the production sealed
+// snapshot 1163 (fixture 1384, home 599 / away 602): PARTIAL 55/60, squad absent,
+// governed edge present, ungoverned graded fields null. Used to prove the wire
+// contract keeps `intelligence` (sealed) and `context` (live) strictly separate.
+const INTEL_18 = {
+  intelligence: {
+    provenance: {
+      fixtureId: '18', matchSnapshotId: '1163', fixturePartitionOn: '2026-09-13',
+      snapshotPointCode: 'T_MINUS_7D', snapshotAsOf: '2026-09-13T12:30:00.000Z',
+      sealedAt: '2026-09-13T12:36:35.000Z', verdictCompositionVersion: '1.3.0',
+      checksumAlgorithmVersion: 'v1', contentChecksumHex: 'deadbeef', immutable: true,
+    },
+    verdict: {
+      consensusSupportsCount: 1, consensusContradictsCount: 0, consensusNeutralCount: 1,
+      consensusInactiveCount: 2, evidenceCount: 2, completenessRatio: '0.500000',
+      formEdge: '5.2000', restEdge: null, readinessEdge: null, travelEdge: null,
+      congestionEdge: null, availabilityEdge: null, riskScore: null, confidence: null,
+      historicalReliabilityBaselineId: null,
+    },
+    preparedness: [
+      { side: 'AWAY', teamId: '602', preparednessPoints: '28.6000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167' },
+      { side: 'HOME', teamId: '599', preparednessPoints: '13.5000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167' },
+    ],
+    citedEvidence: [
+      { featureKey: 'team.home_form', subjectTeamId: '599', value: '0.00', featureVersionId: '11', featureValueId: '903', citedAsOf: '2026-08-30T00:00:00.000Z', provenanceClassCode: 'DERIVED', sampleObservationCount: 5, sampleMeetsThreshold: true },
+      { featureKey: 'team.congestion_index', subjectTeamId: '599', value: '10.00', featureVersionId: '13', featureValueId: '902', citedAsOf: '2026-08-30T00:00:00.000Z', provenanceClassCode: 'DERIVED', sampleObservationCount: 3, sampleMeetsThreshold: true },
+    ],
+  },
+  // `context` carries a live value (recent form) that must NEVER be treated as cited evidence.
+  context: { match: { fixtureId: '18' }, teamFeatures: { home: { homeForm: { value: 73 } } } },
+};
+
+describe('v2 api · match intelligence wire contract (Slice 2, injected seams)', () => {
+  let server: Server;
+  let base = '';
+  before(async () => {
+    const deps: ApiDeps = {
+      getMatch: async () => null,
+      getMatchIntelligence: async (id) => (id === '18' ? INTEL_18 : null),
+      getEdition: async () => null, getEditions: async () => ({ editions: [] }),
+      getTeams: async () => ({ teams: [] }), getTeam: async () => null,
+      getPlayers: async () => ({ players: [] }), getPlayer: async () => null,
+    };
+    server = createServer(deps);
+    base = `http://127.0.0.1:${await listen(server)}`;
+  });
+  after(async () => { await stop(server); });
+
+  it('200: intelligence and context are separate top-level properties', async () => {
+    const res = await fetch(`${base}/api/v2/matches/18/intelligence`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.ok('intelligence' in body && 'context' in body);
+    assert.notEqual(body.intelligence, undefined);
+    assert.notEqual(body.context, undefined);
+  });
+
+  it('provenance + VCV preserved (sealed analysis is identifiable)', async () => {
+    const body = await (await fetch(`${base}/api/v2/matches/18/intelligence`)).json() as any;
+    assert.equal(body.intelligence.provenance.verdictCompositionVersion, '1.3.0');
+    assert.equal(body.intelligence.provenance.snapshotAsOf, '2026-09-13T12:30:00.000Z');
+    assert.equal(body.intelligence.provenance.matchSnapshotId, '1163');
+    assert.equal(body.intelligence.provenance.immutable, true);
+    assert.equal(body.intelligence.verdict.formEdge, '5.2000');
+  });
+
+  it('Team Preparedness preserves HOME/AWAY mapping, 55/60, 0.9167 and exact values', async () => {
+    const body = await (await fetch(`${base}/api/v2/matches/18/intelligence`)).json() as any;
+    const home = body.intelligence.preparedness.find((p: any) => p.side === 'HOME');
+    const away = body.intelligence.preparedness.find((p: any) => p.side === 'AWAY');
+    assert.equal(home.teamId, '599');
+    assert.equal(away.teamId, '602');
+    assert.equal(home.preparednessPoints, '13.5000');
+    assert.equal(away.preparednessPoints, '28.6000');
+    assert.equal(home.availablePoints, '55');
+    assert.equal(home.declaredPoints, '60');
+    assert.equal(home.coverageRatio, '0.9167');
+  });
+
+  it('absent squad_stability stays absent; present-but-zero preserved; ungoverned fields null', async () => {
+    const body = await (await fetch(`${base}/api/v2/matches/18/intelligence`)).json() as any;
+    const keys = body.intelligence.citedEvidence.map((e: any) => e.featureKey);
+    assert.equal(keys.includes('team.squad_stability'), false); // absent stays absent
+    const homeForm = body.intelligence.citedEvidence.find((e: any) => e.featureKey === 'team.home_form');
+    assert.equal(homeForm.value, '0.00'); // present-but-zero preserved (not dropped, not treated as missing)
+    assert.equal(body.intelligence.verdict.restEdge, null);
+    assert.equal(body.intelligence.verdict.confidence, null); // never a fabricated percentage
+    assert.equal(body.intelligence.verdict.riskScore, null);
+  });
+
+  it('cited evidence does not contain context; a live context value is not presented as evidence', async () => {
+    const body = await (await fetch(`${base}/api/v2/matches/18/intelligence`)).json() as any;
+    // The live recent-form value 73 lives only under context, never in citedEvidence.
+    assert.equal(body.context.teamFeatures.home.homeForm.value, 73);
+    assert.equal(body.intelligence.citedEvidence.some((e: any) => e.value === '73' || e.value === 73), false);
+    // citedEvidence carries only sealed feature citations, each with lineage.
+    assert.ok(body.intelligence.citedEvidence.every((e: any) => typeof e.featureVersionId === 'string'));
+  });
+
+  it('no sealed snapshot → 404 match_intelligence_not_found (never a live fabrication)', async () => {
+    const res = await fetch(`${base}/api/v2/matches/19/intelligence`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'match_intelligence_not_found' });
+  });
+
+  it('invalid id → 400; POST → 405', async () => {
+    assert.equal((await fetch(`${base}/api/v2/matches/abc/intelligence`)).status, 400);
+    assert.equal((await fetch(`${base}/api/v2/matches/18/intelligence`, { method: 'POST' })).status, 405);
+  });
+});
+
 describe('v2 api · HTTP layer over injected seams (no database)', () => {
   let server: Server;
   let base = '';
@@ -173,6 +287,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
   before(async () => {
     const deps: ApiDeps = {
       getMatch: async (id) => { matchCalls.push(id); return id === '18' ? { match: { fixtureId: '18' } } : null; },
+      getMatchIntelligence: async (id) => (id === '18' ? INTEL_18 : null),
       getEdition: async (id) => { editionCalls.push(id); return id === '42' ? { edition: { id: '42' }, fixtures: [] } : null; },
       getEditions: async () => ({ editions: [{ id: '42', seasonLabel: 'S', competition: { id: '1', name: 'L', slug: 'l' }, fixtureCount: 3 }] }),
       getTeams: async () => ({ teams: [{ id: '7', name: 'T', slug: 't', shortName: null, countryCode: null }] }),

@@ -18,8 +18,10 @@ import { readRecentVenueFormRows, selectRecentVenueForm, type RecentVenueFormRow
 import { readCurrentTeamFeatures, TEAM_PANEL_FEATURE_KEYS, type TeamFeatureValue } from '../feature/read/currentValues';
 import { readActiveMatchReadings, ACTIVE_MODULE_KEYS, type TeamModuleReading } from '../module/read/readings';
 import { readCurrentReadingEvidence, type ReadingEvidence } from '../module/read/evidence';
+import { readMatchIntelligence } from '../snapshot/read/matchIntelligence';
 import type {
   MatchDetailResponse,
+  MatchIntelligenceResponse,
   EditionFixtureListResponse,
   EditionListResponse,
   ApiTeamIntelligence,
@@ -267,6 +269,32 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     intelligence: mapIntelligence(readings, h.home_id, h.away_id, evidence),
     teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),
   };
+}
+
+/**
+ * Match Intelligence (Slice 2): the SEALED governed intelligence for a fixture,
+ * plus the live contextual match detail, as two strictly separate properties.
+ *
+ * SEALED-ONLY for `intelligence`: it is produced solely by the Slice-1 read model
+ * `readMatchIntelligence` (verdict, edges, Team Preparedness, cited evidence,
+ * provenance). If the fixture has no sealed snapshot, this returns null → the route
+ * responds with the established not-found convention. It NEVER fabricates an
+ * intelligence object from live data.
+ *
+ * `context` is the existing live `getMatchDetail` composition (header, recent form,
+ * venue form, live module readings, team features) — useful surrounding information,
+ * NOT calculation substrate. The two are never merged: cited evidence lives only in
+ * `intelligence.citedEvidence`; nothing from `context` is presented as cited evidence.
+ * No writes, no calculation, no mutation — pure read orchestration reusing Slice 1.
+ */
+export async function getMatchIntelligence(
+  tx: PoolClient,
+  fixtureId: string
+): Promise<MatchIntelligenceResponse | null> {
+  const intelligence = await readMatchIntelligence(tx, fixtureId);
+  if (intelligence === null) return null; // sealed-only: no snapshot ⇒ 404, never a live fabrication
+  const context = await getMatchDetail(tx, fixtureId); // live/contextual, kept strictly separate
+  return { intelligence, context };
 }
 
 interface EditionRow {

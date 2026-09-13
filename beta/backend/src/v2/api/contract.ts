@@ -11,6 +11,8 @@
 // that exists — the API never fabricates a default reading or score.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { MatchIntelligence } from '../snapshot/read/matchIntelligence';
+
 export interface ApiTeam {
   readonly id: string;
   readonly name: string;
@@ -162,6 +164,27 @@ export interface MatchDetailResponse {
   readonly recentVenueForm: { readonly home: ApiTeamRecentVenueForm; readonly away: ApiTeamRecentVenueForm };
   readonly intelligence: { readonly home: ApiTeamIntelligence; readonly away: ApiTeamIntelligence };
   readonly teamFeatures: { readonly home: ApiTeamFeatures; readonly away: ApiTeamFeatures };
+}
+
+/**
+ * The Match Intelligence wire contract (Slice 2). Two strictly separate top-level
+ * properties, so the UI can never confuse the two:
+ *   • `intelligence` — the SEALED, governed calculation output, sourced exclusively
+ *     from the sealed-snapshot read model (`readMatchIntelligence`). It carries its
+ *     own provenance (snapshot id, snapshot_as_of, sealed_at, VCV designation,
+ *     checksum, immutable), the governed verdict + edges, Team Preparedness, and the
+ *     evidence the calculation actually CITED (`intelligence.citedEvidence`).
+ *   • `context` — supporting live/contextual match information for the product
+ *     surface (the existing MatchDetailResponse: header, recent form, venue form,
+ *     live module readings, team features). It is NOT calculation substrate and must
+ *     never be presented as cited evidence. `null` only in the pathological case
+ *     where the fixture header cannot be composed.
+ * The endpoint is sealed-only for intelligence: no sealed snapshot ⇒ 404, never a
+ * live-data fabrication of an intelligence object.
+ */
+export interface MatchIntelligenceResponse {
+  readonly intelligence: MatchIntelligence;
+  readonly context: MatchDetailResponse | null;
 }
 
 /** One fixture in a league/edition list. */
