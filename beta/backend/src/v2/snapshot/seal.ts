@@ -39,9 +39,11 @@ import {
   computeFormEdge,
   formEdgeGovernedIn,
   buildManifest,
+  compareNumericId,
   computeRestEdge,
   restEdgeGovernedIn,
   type SpokeReading,
+  type ManifestComponent,
 } from './verdict';
 import {
   contentChecksum,
@@ -50,6 +52,41 @@ import {
   type Canonical,
   type SnapshotContent,
 } from './canonical';
+import { readPreparednessInputs } from './read/preparednessInputs';
+import {
+  computeTeamPreparedness,
+  preparednessGovernedIn,
+  type PreparednessSideResult,
+} from './preparedness';
+
+/**
+ * Adds any preparedness input feature versions missing from the manifest as
+ * FEATURE_VERSION components, then re-sorts with the SAME (kind, id) order
+ * buildManifest uses — so the manifest stays LC-103-complete (every feature
+ * version the sealed content references appears) and deterministic. Preparedness
+ * inputs already cited by a module reading are already present; only the extras
+ * are added.
+ */
+function mergeFeatureVersions(
+  manifest: readonly ManifestComponent[],
+  extraFeatureVersionIds: readonly string[]
+): ManifestComponent[] {
+  const base = [...manifest];
+  if (extraFeatureVersionIds.length === 0) return base;
+  const present = new Set(
+    base.filter((m) => m.componentKind === 'FEATURE_VERSION').map((m) => m.componentVersionId)
+  );
+  const additions: ManifestComponent[] = [];
+  for (const id of new Set(extraFeatureVersionIds)) {
+    if (!present.has(id)) additions.push({ componentKind: 'FEATURE_VERSION', componentVersionId: id });
+  }
+  if (additions.length === 0) return base;
+  return [...base, ...additions].sort((a, b) =>
+    a.componentKind < b.componentKind ? -1
+    : a.componentKind > b.componentKind ? 1
+    : compareNumericId(a.componentVersionId, b.componentVersionId)
+  );
+}
 
 export type SealOutcome =
   | { readonly status: 'SEALED'; readonly matchSnapshotId: string; readonly snapshotAsOf: Date; readonly evidenceCount: number; readonly completenessRatio: string }
@@ -80,6 +117,20 @@ export function buildContent(args: {
     restEdge: string | null;
     /** Governed form edge (numeric text) under composition 1.2.0+, else null. */
     formEdge: string | null;
+    /**
+     * Governed Team Preparedness (composition 1.3.0+): the per-side results,
+     * ALREADY ordered by side. Omitted/undefined under an earlier version, so the
+     * verdict object — and therefore the checksum — is byte-identical to a
+     * pre-1.3.0 snapshot's. Each numeric is canonical decimal text (scale 4);
+     * preparednessPoints is null when no component was present.
+     */
+    teamPreparedness?: readonly {
+      side: string;
+      preparednessPoints: string | null;
+      availablePoints: string;
+      declaredPoints: string;
+      coverageRatio: string;
+    }[];
   };
 }): SnapshotContent {
   const header: Canonical = {
@@ -137,7 +188,7 @@ export function buildContent(args: {
     .map((i) => ({ absenceKind: i.absenceKind, featureDefinitionId: i.featureDefinitionId, moduleDefinitionId: i.moduleDefinitionId }))
     .sort((a, b) => canonKey(a) < canonKey(b) ? -1 : canonKey(a) > canonKey(b) ? 1 : 0);
 
-  const verdict: Canonical = {
+  const verdict: { [key: string]: Canonical } = {
     consensusSupportsCount: args.verdict.consensusSupportsCount,
     consensusContradictsCount: args.verdict.consensusContradictsCount,
     consensusNeutralCount: args.verdict.consensusNeutralCount,
@@ -154,6 +205,22 @@ export function buildContent(args: {
     congestionEdge: null, availabilityEdge: null, riskScore: null,
     confidence: null, historicalReliabilityBaselineId: null,
   };
+
+  // Team Preparedness (composition 1.3.0+): fold the per-side results INTO the
+  // existing verdict object — a new key within the SAME canonical v1 form (object
+  // keys stay lexicographically sorted; no new top-level section), so no
+  // checksum_algorithm_version change. The key is added ONLY when governed, so a
+  // pre-1.3.0 verdict hashes byte-identically to before. The array is already
+  // ordered by side; canon preserves that order.
+  if (args.verdict.teamPreparedness && args.verdict.teamPreparedness.length > 0) {
+    verdict.teamPreparedness = args.verdict.teamPreparedness.map((p) => ({
+      side: p.side,
+      preparednessPoints: p.preparednessPoints === null ? null : decimal(p.preparednessPoints),
+      availablePoints: decimal(p.availablePoints),
+      declaredPoints: decimal(p.declaredPoints),
+      coverageRatio: decimal(p.coverageRatio),
+    }));
+  }
 
   return { header, versionManifest, featureState, moduleReadings, modelOutputs: [], completenessItems, verdict };
 }
@@ -203,11 +270,36 @@ export async function sealSnapshot(
   const restEdge = restEdgeGovernedIn(verdictV.designation) ? computeRestEdge(spoke, fixtureSides) : null;
   const formEdge = formEdgeGovernedIn(verdictV.designation) ? computeFormEdge(spoke, fixtureSides) : null;
   const verdict = buildVerdict(consensus, completeness, restEdge, formEdge);
-  const manifest = buildManifest(spoke, {
-    verdictCompositionVersionId: verdictV.id,
-    consensusRuleVersionId: consensusV.id,
-    checksumAlgorithmVersionId: checksumV.id,
-  });
+
+  // Team Preparedness (composition 1.3.0+): read the four governed inputs for both
+  // sides at the SNAPSHOT's own as-of ceiling and governed scope (Layer 2 stays
+  // team+as_of — home/away orientation and edition resolution happen HERE), then
+  // compose the two per-side absolute scores. Ungoverned (< 1.3.0) → no read, no
+  // rows, verdict object and checksum unchanged.
+  let preparedness: readonly PreparednessSideResult[] | null = null;
+  if (preparednessGovernedIn(verdictV.designation)) {
+    const inputs = await readPreparednessInputs(tx, {
+      homeTeamId: fixture.homeTeamId,
+      awayTeamId: fixture.awayTeamId,
+      asOf: snapshotAsOf,
+      competitionEditionId: fixture.competitionEditionId,
+    });
+    preparedness = computeTeamPreparedness(inputs.home, inputs.away);
+  }
+
+  // Manifest — every referenced version (LC-103). Preparedness input feature
+  // versions are added, deduped against the module-cited ones.
+  const prepFeatureVersionIds = preparedness
+    ? preparedness.flatMap((p) => p.citedValues.map((c) => c.featureVersionId))
+    : [];
+  const manifest = mergeFeatureVersions(
+    buildManifest(spoke, {
+      verdictCompositionVersionId: verdictV.id,
+      consensusRuleVersionId: consensusV.id,
+      checksumAlgorithmVersionId: checksumV.id,
+    }),
+    prepFeatureVersionIds
+  );
   const completenessRatioTxt = ratioText(completeness.engagedModuleCount, completeness.expectedModuleCount);
 
   // 3. Canonical content → checksum.
@@ -230,6 +322,7 @@ export async function sealSnapshot(
       completenessRatioText: completenessRatioTxt,
       restEdge: verdict.restEdge,
       formEdge: verdict.formEdge,
+      teamPreparedness: preparedness ?? undefined,
     },
   });
   const checksum = contentChecksum(content);
@@ -277,17 +370,31 @@ export async function sealSnapshot(
   }
 
   // 7. Cited feature values (distinct), materialised as sealed feature state.
+  //    Both the module-cited values AND the Team Preparedness inputs are sealed
+  //    here, sharing ONE dedup set: a value cited by both a module and preparedness
+  //    is materialised once. This is what lets preparedness carry no citation/as-of
+  //    column — its evidence and its temporal integrity live in snapshot_feature_state.
   const seenValue = new Set<string>();
+  const citeFeatureValue = async (featureValueId: string, citedAsOf: Date): Promise<void> => {
+    if (seenValue.has(featureValueId)) return;
+    seenValue.add(featureValueId);
+    await tx.query(
+      `INSERT INTO snapshot.snapshot_feature_state
+         (fixture_partition_on, match_snapshot_id, snapshot_as_of, cited_feature_value_id, cited_as_of)
+       VALUES ($1::date, $2::bigint, $3::timestamptz, $4::bigint, $5::timestamptz)`,
+      [partitionOn, snapshotId, snapshotAsOf, featureValueId, citedAsOf]
+    );
+  };
   for (const r of spoke) {
     for (const cv of r.citedValues) {
-      if (seenValue.has(cv.featureValueId)) continue;
-      seenValue.add(cv.featureValueId);
-      await tx.query(
-        `INSERT INTO snapshot.snapshot_feature_state
-           (fixture_partition_on, match_snapshot_id, snapshot_as_of, cited_feature_value_id, cited_as_of)
-         VALUES ($1::date, $2::bigint, $3::timestamptz, $4::bigint, $5::timestamptz)`,
-        [partitionOn, snapshotId, snapshotAsOf, cv.featureValueId, cv.featureValueAsOf]
-      );
+      await citeFeatureValue(cv.featureValueId, cv.featureValueAsOf);
+    }
+  }
+  if (preparedness) {
+    for (const p of preparedness) {
+      for (const c of p.citedValues) {
+        await citeFeatureValue(c.featureValueId, c.featureValueAsOf);
+      }
     }
   }
 
@@ -316,6 +423,25 @@ export async function sealSnapshot(
       completenessRatioTxt,
     ]
   );
+
+  // 8.5. Team Preparedness (composition 1.3.0+) — two sealed per-side rows. Their
+  //      evidence is the feature-state citations sealed in step 7; the row carries
+  //      no citation/as-of column. preparednessPoints is bound as NULL when no
+  //      component was present. Absent entirely under an earlier composition version.
+  if (preparedness) {
+    for (const p of preparedness) {
+      await tx.query(
+        `INSERT INTO snapshot.snapshot_team_preparedness
+           (fixture_partition_on, match_snapshot_id, side,
+            preparedness_points, available_points, declared_points, coverage_ratio)
+         VALUES ($1::date, $2::bigint, $3::text, $4::numeric, $5::numeric, $6::numeric, $7::numeric)`,
+        [
+          partitionOn, snapshotId, p.side,
+          p.preparednessPoints, p.availablePoints, p.declaredPoints, p.coverageRatio,
+        ]
+      );
+    }
+  }
 
   // 9. Completeness + items.
   const comp = await tx.query<{ id: string }>(
