@@ -1,0 +1,31 @@
+{
+  "name": "pitchterminal-v2-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PitchTerminal V2 — a pre-match football intelligence terminal. Renders the governed, sealed Match Intelligence served by the V2 API. Not a betting product.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "tsx --test src/lib/v2/__tests__/*.test.ts"
+  },
+  "dependencies": {
+    "next": "15.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}
