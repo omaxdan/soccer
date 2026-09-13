@@ -4,7 +4,7 @@
 // never expose a credential to the browser. Base URL is configurable.
 
 import type {
-  MatchDetailResponse, EditionFixtureListResponse, EditionListResponse,
+  MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse,
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
 } from './types';
 
@@ -46,6 +46,16 @@ export function fetchEditionFixtures(editionId: string): Promise<EditionFixtureL
 /** One match's detail, or null when the fixture does not exist. */
 export function fetchMatch(matchId: string): Promise<MatchDetailResponse | null> {
   return getJson<MatchDetailResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}`);
+}
+
+/**
+ * A fixture's SEALED Match Intelligence + its live context, or null when the
+ * fixture has no sealed snapshot (the endpoint is sealed-only for `intelligence`
+ * and 404s otherwise). A null here does NOT prove the fixture is absent — the page
+ * distinguishes "unsealed" from "no such fixture" by falling back to fetchMatch.
+ */
+export function fetchMatchIntelligence(matchId: string): Promise<MatchIntelligenceResponse | null> {
+  return getJson<MatchIntelligenceResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/intelligence`);
 }
 
 /** Teams in the governed authorized-active edition(s). Never 404s. */
