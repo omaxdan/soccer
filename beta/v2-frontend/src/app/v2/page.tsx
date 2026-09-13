@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { fetchEditions } from '@/lib/v2/api';
+import { routes } from '@/lib/v2/routes';
 import { EmptyState } from '@/components/v2/ui';
 
 export const dynamic = 'force-dynamic';
@@ -14,8 +15,8 @@ export default async function V2LeaguesPage() {
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Leagues</h1>
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 2 }}>Tracked competition editions with ingested fixtures.</p>
         <nav style={{ display: 'flex', gap: 12, marginTop: 10 }}>
-          <Link href="/v2/teams" className="label-cap" style={{ color: 'var(--cool)' }}>Teams →</Link>
-          <Link href="/v2/players" className="label-cap" style={{ color: 'var(--cool)' }}>Players →</Link>
+          <Link href={routes.teams()} className="label-cap" style={{ color: 'var(--cool)' }}>Teams →</Link>
+          <Link href={routes.players()} className="label-cap" style={{ color: 'var(--cool)' }}>Players →</Link>
         </nav>
       </header>
       {editions.length === 0 ? (
@@ -24,7 +25,7 @@ export default async function V2LeaguesPage() {
         <ul className="space-y-2" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {editions.map((e) => (
             <li key={e.id}>
-              <Link href={`/v2/editions/${e.id}`} className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, textDecoration: 'none', color: 'inherit' }}>
+              <Link href={routes.edition(e.id)} className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, textDecoration: 'none', color: 'inherit' }}>
                 <span>
                   <span style={{ display: 'block', fontWeight: 600, color: 'var(--text)' }}>{e.competition.name}</span>
                   <span className="label-cap" style={{ color: 'var(--muted)' }}>{e.seasonLabel}</span>

@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { fetchMatchIntelligence, fetchMatch } from '@/lib/v2/api';
+import { fetchMatchIntelligence, fetchMatch, fetchEditionFixtures } from '@/lib/v2/api';
 import { idFromParam } from '@/lib/v2/slug';
+import { routes } from '@/lib/v2/routes';
+import { findAdjacentFixtures } from '@/lib/v2/matchNav';
+import { Breadcrumb, MatchNav } from '@/components/v2/nav';
 import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import { ProvenanceBar, VerdictBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
-import type { ApiTeamIntelligence, MatchDetailResponse, MatchIntelligence } from '@/lib/v2/types';
+import type { ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,9 +75,13 @@ function MatchHeader({ context }: { context: MatchDetailResponse }) {
         <StatusChip status={match.status} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginTop: 12 }}>
-        <div style={{ textAlign: 'right', fontWeight: 700, fontSize: 18, color: 'var(--text)' }}>{match.homeTeam.name}</div>
+        <div style={{ textAlign: 'right' }}>
+          <Link href={routes.team(match.homeTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.homeTeam.name}</Link>
+        </div>
         <div style={{ textAlign: 'center', fontSize: 22 }}><Score score={match.score} /></div>
-        <div style={{ textAlign: 'left', fontWeight: 700, fontSize: 18, color: 'var(--text)' }}>{match.awayTeam.name}</div>
+        <div style={{ textAlign: 'left' }}>
+          <Link href={routes.team(match.awayTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.awayTeam.name}</Link>
+        </div>
       </div>
       <p className="label-cap" style={{ textAlign: 'center', color: 'var(--muted)', marginTop: 8 }}><Kickoff iso={match.kickoffAt} /></p>
     </header>
@@ -116,15 +123,30 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
   // path (sealed response carries it; fallback fetched it).
   const detail = sealed?.context ?? context;
   const editionId = detail?.match.edition.id;
+  const seasonLabel = detail?.match.edition.seasonLabel;
   const competitionName = detail?.match.competition.name;
   const homeName = detail?.match.homeTeam.name ?? 'Home';
   const awayName = detail?.match.awayTeam.name ?? 'Away';
 
+  // Prev/next within the same competition edition — derived from the existing
+  // fixtures read, never fabricated. Purely additive navigation around the match
+  // page; the sealed intelligence itself is unaffected.
+  let prev: ApiEditionFixture | null = null;
+  let next: ApiEditionFixture | null = null;
+  if (editionId) {
+    const editionData = await fetchEditionFixtures(editionId);
+    if (editionData) ({ prev, next } = findAdjacentFixtures(editionData.fixtures, id));
+  }
+
+  const crumbs = [
+    { label: 'Leagues', href: routes.leagues() },
+    ...(editionId ? [{ label: `${competitionName ?? 'Competition'} · ${seasonLabel ?? ''}`.trim(), href: routes.edition(editionId) }] : []),
+    { label: `${homeName} v ${awayName}` },
+  ];
+
   return (
     <main className="space-y-6" style={{ maxWidth: 860, margin: '0 auto', padding: 16 }}>
-      {editionId && (
-        <nav><Link href={`/v2/editions/${editionId}`} className="label-cap" style={{ color: 'var(--cool)' }}>← {competitionName}</Link></nav>
-      )}
+      <Breadcrumb items={crumbs} />
 
       {detail && <MatchHeader context={detail} />}
 
@@ -135,6 +157,9 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
 
       {/* MATCH CONTEXT — strictly separate from the calculation. */}
       {detail && <MatchContext context={detail} />}
+
+      {/* SHELL CONTINUITY — navigation around (not into) the sealed surfaces. */}
+      <MatchNav prev={prev} next={next} editionId={editionId ?? null} competitionName={competitionName ?? null} />
     </main>
   );
 }

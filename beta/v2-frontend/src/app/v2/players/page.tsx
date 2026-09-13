@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { fetchPlayers } from '@/lib/v2/api';
-import { v2PlayerSlug } from '@/lib/v2/slug';
+import { routes } from '@/lib/v2/routes';
 import { EmptyState } from '@/components/v2/ui';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ export default async function V2PlayersPage() {
   const { players } = await fetchPlayers();
   return (
     <main className="space-y-4" style={{ maxWidth: 760, margin: '0 auto', padding: 16 }}>
-      <nav><Link href="/v2" className="label-cap" style={{ color: 'var(--cool)' }}>← PitchTerminal V2</Link></nav>
+      <nav><Link href={routes.leagues()} className="label-cap" style={{ color: 'var(--cool)' }}>← Leagues</Link></nav>
       <header>
         <p className="eyebrow">PitchTerminal V2</p>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Players</h1>
@@ -22,7 +22,7 @@ export default async function V2PlayersPage() {
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-2" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {players.map((p) => (
             <li key={p.id}>
-              <Link href={`/v2/players/${v2PlayerSlug(p)}`} className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: 12, textDecoration: 'none', color: 'inherit' }}>
+              <Link href={routes.player(p)} className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: 12, textDecoration: 'none', color: 'inherit' }}>
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--text)' }}>{p.fullName}</span>
                 {p.team && <span className="label-cap" style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>{p.team.shortName ?? p.team.name}</span>}
               </Link>

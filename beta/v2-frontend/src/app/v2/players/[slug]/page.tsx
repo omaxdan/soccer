@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchPlayer } from '@/lib/v2/api';
-import { idFromParam, v2TeamSlug } from '@/lib/v2/slug';
+import { idFromParam } from '@/lib/v2/slug';
+import { routes } from '@/lib/v2/routes';
+import { Breadcrumb } from '@/components/v2/nav';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +40,7 @@ export default async function V2PlayerPage({ params }: { params: Promise<{ slug:
 
   return (
     <main className="space-y-5" style={{ maxWidth: 760, margin: '0 auto', padding: 16 }}>
-      <nav><Link href="/v2/players" className="label-cap" style={{ color: 'var(--cool)' }}>← Players</Link></nav>
+      <Breadcrumb items={[{ label: 'Players', href: routes.players() }, { label: player.fullName }]} />
 
       {/* IDENTITY — biography context */}
       <header className="panel" style={{ padding: 16 }}>
@@ -46,7 +48,7 @@ export default async function V2PlayerPage({ params }: { params: Promise<{ slug:
         {player.shortName && <p className="label-cap" style={{ color: 'var(--muted)', marginTop: 4 }}>{player.shortName}</p>}
         <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 8 }}>
           {currentTeam ? (
-            <Link href={`/v2/teams/${v2TeamSlug(currentTeam)}`} style={{ color: 'var(--cool)' }}>{currentTeam.name}</Link>
+            <Link href={routes.team(currentTeam)} style={{ color: 'var(--cool)' }}>{currentTeam.name}</Link>
           ) : 'No current team'}
           {competition ? ` · ${competition.name} · ${competition.seasonLabel}` : ''}
         </p>

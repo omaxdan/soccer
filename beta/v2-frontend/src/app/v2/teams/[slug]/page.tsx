@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchTeam } from '@/lib/v2/api';
-import { idFromParam, v2PlayerSlug } from '@/lib/v2/slug';
+import { idFromParam } from '@/lib/v2/slug';
+import { routes } from '@/lib/v2/routes';
+import { Breadcrumb } from '@/components/v2/nav';
 import { Kickoff } from '@/components/v2/ui';
 import { formResult } from '@/lib/v2/types';
 import type { ApiTeamResult } from '@/lib/v2/types';
@@ -26,7 +28,7 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
 
   return (
     <main className="space-y-5" style={{ maxWidth: 820, margin: '0 auto', padding: 16 }}>
-      <nav><Link href="/v2/teams" className="label-cap" style={{ color: 'var(--cool)' }}>← Teams</Link></nav>
+      <Breadcrumb items={[{ label: 'Teams', href: routes.teams() }, { label: team.name }]} />
 
       {/* IDENTITY — context */}
       <header className="panel" style={{ padding: 16 }}>
@@ -79,7 +81,7 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
           <ul className="grid grid-cols-1 md:grid-cols-2 gap-2" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {squad.map((p) => (
               <li key={p.id}>
-                <Link href={`/v2/players/${v2PlayerSlug(p)}`} className="panel" style={{ display: 'block', padding: 10, textDecoration: 'none', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Link href={routes.player(p)} className="panel" style={{ display: 'block', padding: 10, textDecoration: 'none', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.fullName}{p.shortName ? <span className="label-cap" style={{ color: 'var(--faint)', marginLeft: 6 }}>{p.shortName}</span> : null}
                 </Link>
               </li>

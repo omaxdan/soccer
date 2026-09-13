@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { PrimaryNav } from "@/components/v2/nav";
+import { routes } from "@/lib/v2/routes";
 
 // PitchTerminal V2 shell.
 //
@@ -40,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh">
         <header className="sticky top-0 z-30 border-b border-line bg-ink">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-            <Link href="/" className="flex items-baseline gap-1.5">
+            <Link href={routes.leagues()} className="flex items-baseline gap-1.5">
               <span className="mono text-base font-bold tracking-tight text-text">
                 Pitch<span className="text-amber">Terminal</span>
               </span>
@@ -52,10 +54,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="mono hidden text-[0.6rem] tracking-wide text-muted sm:block">
               Football Intelligence
             </span>
+            <div className="ml-auto">
+              <PrimaryNav />
+            </div>
           </div>
         </header>
 
-        <main className="mx-auto min-w-0 max-w-6xl px-3 py-4 md:px-4">{children}</main>
+        {/* The shell provides the header/nav only; each page owns its own <main>
+            landmark and content container, so this wrapper is a plain div (never a
+            second <main>). */}
+        <div className="min-w-0">{children}</div>
       </body>
     </html>
   );
