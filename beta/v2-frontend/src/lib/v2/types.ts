@@ -254,10 +254,31 @@ export interface CitedEvidenceItem {
   sampleMeetsThreshold: boolean;
 }
 
+/** One SEALED, governed module reading (from snapshot_module_reading → module_reading)
+ *  — the per-module intelligence the verdict was tallied from, surfaced as an
+ *  individual governed component. NOT the live module reading (which the API composes
+ *  separately as context). Numeric fields stay exact text or null (null at v1.0.0). */
+export interface IntelligenceModuleReading {
+  moduleKey: string;
+  displayName: string;
+  displayNumber: number;
+  moduleVersion: string;        // module_version.designation, e.g. '1.0.0'
+  subjectKindCode: string;      // 'TEAM' | 'FIXTURE' | …
+  subjectTeamId: string | null; // set for TEAM-subject readings
+  status: string;               // SUPPORTS / NEUTRAL / CONTRADICTS / INACTIVE
+  strength: string | null;      // numeric text or null
+  confidence: string | null;    // numeric text or null (S-9 out of scope → null)
+  sampleObservationCount: number;
+  sampleMeetsThreshold: boolean;
+  asOf: string;                 // ISO-8601 UTC
+  verdictText: string | null;
+}
+
 /** The consolidated sealed Match Intelligence for one fixture (sealed content only). */
 export interface MatchIntelligence {
   provenance: IntelligenceProvenance;
   verdict: IntelligenceVerdict;
+  modules: IntelligenceModuleReading[];
   preparedness: PreparednessSideView[];
   citedEvidence: CitedEvidenceItem[];
 }

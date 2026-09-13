@@ -15,11 +15,13 @@ import {
   mapProvenance,
   mapVerdict,
   mapCitedEvidence,
+  mapModuleReading,
   attachPreparednessTeams,
   assembleMatchIntelligence,
   type SnapshotHeadRow,
   type VerdictRow,
   type CitedEvidenceRow,
+  type ModuleReadingRow,
 } from '../read/matchIntelligence';
 import type { SnapshotPreparednessSide } from '../read/snapshotPreparedness';
 
@@ -153,6 +155,7 @@ describe('match intelligence — cited evidence vs context separation', () => {
     const mi = assembleMatchIntelligence({
       provenance: mapProvenance(HEAD_1163),
       verdict: mapVerdict(VERDICT_1163),
+      modules: [],
       preparedness: attachPreparednessTeams(
         [{ side: 'HOME', preparednessPoints: '13.5000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167' }],
         { homeTeamId: '599', awayTeamId: '602' }
@@ -167,5 +170,68 @@ describe('match intelligence — cited evidence vs context separation', () => {
     // verdict/edges come only from the sealed verdict source.
     assert.equal(mi.verdict.formEdge, '5.2000');
     assert.equal(mi.provenance.verdictCompositionVersion, '1.3.0');
+  });
+});
+
+describe('match intelligence — sealed module readings (home_away_split)', () => {
+  // The two SEALED home_away_split readings 1163 would carry (one per team), exactly
+  // as module_reading holds them at v1.0.0: strength/confidence NULL, status per team.
+  const MODULE_ROWS: ModuleReadingRow[] = [
+    { module_key: 'home_away_split', display_name: 'Home/Away Split', display_number: 1, module_version: '1.0.0', subject_kind_code: 'TEAM', subject_team_id: '599', module_status_code: 'SUPPORTS', strength: null, confidence: null, sample_observation_count: 6, sample_meets_threshold: true, as_of: new Date('2026-09-13T12:30:00.000Z'), verdict_text: 'Strongly home-reliant' },
+    { module_key: 'home_away_split', display_name: 'Home/Away Split', display_number: 1, module_version: '1.0.0', subject_kind_code: 'TEAM', subject_team_id: '602', module_status_code: 'NEUTRAL', strength: null, confidence: null, sample_observation_count: 4, sample_meets_threshold: false, as_of: new Date('2026-09-13T12:30:00.000Z'), verdict_text: null },
+  ];
+
+  test('maps a sealed module reading with governance + subject team, honest nulls', () => {
+    const [home, away] = MODULE_ROWS.map(mapModuleReading);
+    assert.equal(home.moduleKey, 'home_away_split');
+    assert.equal(home.displayName, 'Home/Away Split');
+    assert.equal(home.displayNumber, 1);
+    assert.equal(home.moduleVersion, '1.0.0');    // governed module version, verbatim
+    assert.equal(home.subjectKindCode, 'TEAM');
+    assert.equal(home.subjectTeamId, '599');       // resolved to the home team
+    assert.equal(home.status, 'SUPPORTS');
+    assert.equal(home.asOf, '2026-09-13T12:30:00.000Z');
+    assert.equal(home.verdictText, 'Strongly home-reliant');
+    // strength/confidence NULL at v1.0.0 — never fabricated to a number/zero (D-5a/D-5b, S-9 out).
+    assert.equal(home.strength, null);
+    assert.equal(home.confidence, null);
+    // below-threshold sample preserved honestly on the away side
+    assert.equal(away.subjectTeamId, '602');
+    assert.equal(away.status, 'NEUTRAL');
+    assert.equal(away.sampleMeetsThreshold, false);
+    assert.equal(away.verdictText, null);          // absent verdict text stays null
+  });
+
+  test('numeric strength passes through as EXACT TEXT when a future version produces it', () => {
+    const graded: ModuleReadingRow = { ...MODULE_ROWS[0], strength: '0.7500', confidence: '0.80' };
+    const m = mapModuleReading(graded);
+    assert.equal(m.strength, '0.7500'); // verbatim text, not a float
+    assert.equal(m.confidence, '0.80');
+  });
+
+  test('assembled intelligence carries modules as its own governed array (sealed, not context)', () => {
+    const mi = assembleMatchIntelligence({
+      provenance: mapProvenance(HEAD_1163),
+      verdict: mapVerdict(VERDICT_1163),
+      modules: MODULE_ROWS.map(mapModuleReading),
+      preparedness: [],
+      citedEvidence: [],
+    });
+    assert.ok(Array.isArray(mi.modules));
+    assert.equal(mi.modules.length, 2);
+    assert.equal(mi.modules.every((m) => m.moduleKey === 'home_away_split'), true);
+    // modules are governed (carry a module version) and sealed — never a live substitute.
+    assert.equal(mi.modules[0].moduleVersion, '1.0.0');
+  });
+
+  test('a snapshot with no sealed module readings yields an empty array (absence, not fabrication)', () => {
+    const mi = assembleMatchIntelligence({
+      provenance: mapProvenance(HEAD_1163),
+      verdict: mapVerdict(VERDICT_1163),
+      modules: [],
+      preparedness: [],
+      citedEvidence: [],
+    });
+    assert.deepEqual(mi.modules, []);
   });
 });

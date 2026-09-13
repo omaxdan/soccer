@@ -91,11 +91,38 @@ export interface CitedEvidenceItem {
   readonly sampleMeetsThreshold: boolean;
 }
 
+/**
+ * One SEALED, governed module reading (from snapshot_module_reading → module_reading).
+ * The per-module intelligence the aggregate verdict was tallied from — e.g. the
+ * Home/Away Split reading for a team — surfaced as an individual governed component,
+ * NOT the live module_reading (which the API composes separately as context).
+ * Numeric fields (strength/confidence) stay exact text or null; graded fields with
+ * no governed value are null, never a fabricated zero. TEAM-subject modules carry
+ * `subjectTeamId`; a non-team subject leaves it null.
+ */
+export interface IntelligenceModuleReading {
+  readonly moduleKey: string;
+  readonly displayName: string;
+  readonly displayNumber: number;
+  readonly moduleVersion: string;        // module_version.designation, e.g. '1.0.0'
+  readonly subjectKindCode: string;      // 'TEAM' | 'FIXTURE' | …
+  readonly subjectTeamId: string | null; // set for TEAM-subject readings
+  readonly status: string;               // module_status_code (SUPPORTS/NEUTRAL/CONTRADICTS/INACTIVE)
+  readonly strength: string | null;      // numeric text or null (null at v1.0.0)
+  readonly confidence: string | null;    // numeric text or null (S-9 out of scope → null)
+  readonly sampleObservationCount: number;
+  readonly sampleMeetsThreshold: boolean;
+  readonly asOf: string;                 // ISO-8601 UTC — the reading's as_of
+  readonly verdictText: string | null;
+}
+
 /** The consolidated sealed Match Intelligence for one fixture. Sealed content only;
  *  displayed context is composed separately at the API layer. */
 export interface MatchIntelligence {
   readonly provenance: IntelligenceProvenance;
   readonly verdict: IntelligenceVerdict;
+  /** The individual governed module readings the verdict was tallied from (sealed). */
+  readonly modules: readonly IntelligenceModuleReading[];
   readonly preparedness: readonly PreparednessSideView[];
   readonly citedEvidence: readonly CitedEvidenceItem[];
 }
@@ -147,6 +174,22 @@ export interface CitedEvidenceRow {
   provenance_class_code: string;
   sample_observation_count: number | string;
   sample_meets_threshold: boolean;
+}
+
+export interface ModuleReadingRow {
+  module_key: string;
+  display_name: string;
+  display_number: number | string;
+  module_version: string;
+  subject_kind_code: string;
+  subject_team_id: string | null;
+  module_status_code: string;
+  strength: string | null;
+  confidence: string | null;
+  sample_observation_count: number | string;
+  sample_meets_threshold: boolean;
+  as_of: Date | string;
+  verdict_text: string | null;
 }
 
 // ── Pure mappers (DB-free; unit-tested) ─────────────────────────────────────────
@@ -204,6 +247,26 @@ export function mapCitedEvidence(row: CitedEvidenceRow): CitedEvidenceItem {
   };
 }
 
+/** Maps one sealed module reading. Integer sample count → number; strength/confidence
+ *  stay exact text or null (null at v1.0.0 / pre-S-9 — never a fabricated 0). Pure. */
+export function mapModuleReading(row: ModuleReadingRow): IntelligenceModuleReading {
+  return {
+    moduleKey: row.module_key,
+    displayName: row.display_name,
+    displayNumber: Number(row.display_number),
+    moduleVersion: row.module_version,
+    subjectKindCode: row.subject_kind_code,
+    subjectTeamId: row.subject_team_id,
+    status: row.module_status_code,
+    strength: row.strength,
+    confidence: row.confidence,
+    sampleObservationCount: Number(row.sample_observation_count),
+    sampleMeetsThreshold: row.sample_meets_threshold,
+    asOf: isoOf(row.as_of),
+    verdictText: row.verdict_text,
+  };
+}
+
 /** Attaches the scored team id to each preparedness side (HOME→home, AWAY→away).
  *  A side keeps its sealed values verbatim; nothing is invented. Pure. */
 export function attachPreparednessTeams(
@@ -221,12 +284,14 @@ export function attachPreparednessTeams(
 export function assembleMatchIntelligence(parts: {
   readonly provenance: IntelligenceProvenance;
   readonly verdict: IntelligenceVerdict;
+  readonly modules: readonly IntelligenceModuleReading[];
   readonly preparedness: readonly PreparednessSideView[];
   readonly citedEvidence: readonly CitedEvidenceItem[];
 }): MatchIntelligence {
   return {
     provenance: parts.provenance,
     verdict: parts.verdict,
+    modules: parts.modules,
     preparedness: parts.preparedness,
     citedEvidence: parts.citedEvidence,
   };
@@ -292,6 +357,32 @@ const FIXTURE_TEAMS_SQL = `
     FROM football.fixture WHERE id = $1::bigint
 `;
 
+// The SEALED module readings tallied into this snapshot's verdict — read strictly
+// through snapshot_module_reading (never the live module_reading population), joined
+// to the reading's governed definition + version. Ordered for stable presentation
+// (module display order, then team). strength/confidence carried as exact text.
+const MODULE_READINGS_SQL = `
+  SELECT dd.module_key                     AS module_key,
+         dd.display_name                   AS display_name,
+         dd.display_number                 AS display_number,
+         mv.designation                    AS module_version,
+         mr.subject_kind_code              AS subject_kind_code,
+         mr.subject_team_id::text          AS subject_team_id,
+         mr.module_status_code             AS module_status_code,
+         mr.strength::text                 AS strength,
+         mr.confidence::text               AS confidence,
+         mr.sample_observation_count       AS sample_observation_count,
+         mr.sample_meets_threshold         AS sample_meets_threshold,
+         mr.as_of                          AS as_of,
+         mr.verdict_text                   AS verdict_text
+    FROM snapshot.snapshot_module_reading smr
+    JOIN module.module_reading   mr ON mr.id = smr.cited_module_reading_id
+    JOIN module.module_definition dd ON dd.id = mr.module_definition_id
+    JOIN module.module_version    mv ON mv.id = mr.module_version_id
+   WHERE smr.match_snapshot_id = $1::bigint AND smr.fixture_partition_on = $2::date
+   ORDER BY dd.display_number, mr.subject_team_id
+`;
+
 /**
  * The consolidated sealed Match Intelligence for one fixture, or null when the
  * fixture has no sealed snapshot. Read-only; reuses `readSnapshotPreparedness`.
@@ -304,8 +395,9 @@ export async function readMatchIntelligence(
   if (head.rows.length === 0) return null;
   const h = head.rows[0];
 
-  const [verdictRes, citedRes, teamsRes, preparednessSides] = await Promise.all([
+  const [verdictRes, modulesRes, citedRes, teamsRes, preparednessSides] = await Promise.all([
     tx.query<VerdictRow>(VERDICT_SQL, [h.match_snapshot_id, h.fixture_partition_on]),
+    tx.query<ModuleReadingRow>(MODULE_READINGS_SQL, [h.match_snapshot_id, h.fixture_partition_on]),
     tx.query<CitedEvidenceRow>(CITED_EVIDENCE_SQL, [h.match_snapshot_id, h.fixture_partition_on]),
     tx.query<{ home_team_id: string; away_team_id: string }>(FIXTURE_TEAMS_SQL, [h.fixture_id]),
     readSnapshotPreparedness(tx, {
@@ -323,6 +415,7 @@ export async function readMatchIntelligence(
   return assembleMatchIntelligence({
     provenance: mapProvenance(h),
     verdict: mapVerdict(verdictRes.rows[0]),
+    modules: modulesRes.rows.map(mapModuleReading),
     preparedness: attachPreparednessTeams(preparednessSides, {
       homeTeamId: teams.home_team_id,
       awayTeamId: teams.away_team_id,

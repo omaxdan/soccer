@@ -24,8 +24,10 @@ import {
   preparednessScoreDisplay,
   formatProvenanceTime,
   humanizeFeatureKey,
+  groupModuleReadings,
+  moduleStatusDescriptor,
 } from '../matchIntelligence';
-import type { IntelligenceVerdict, CitedEvidenceItem } from '../types';
+import type { IntelligenceVerdict, CitedEvidenceItem, IntelligenceModuleReading } from '../types';
 
 // ── canary shapes (snapshot 1163, fixture 1384, home 599 / away 602) ─────────────
 
@@ -202,5 +204,60 @@ describe('cited-evidence labelling & provenance time', () => {
   test('provenance timestamp renders a friendly UTC string', () => {
     // Node's ICU abbreviates September as "Sept"; assert on the real rendered form.
     assert.equal(formatProvenanceTime('2026-09-13T12:30:00.000Z'), '13 Sept 2026, 12:30 UTC');
+  });
+});
+
+describe('sealed module readings — grouping & status descriptor', () => {
+  function mod(teamId: string, status: string, extra: Partial<IntelligenceModuleReading> = {}): IntelligenceModuleReading {
+    return {
+      moduleKey: 'home_away_split', displayName: 'Home/Away Split', displayNumber: 1, moduleVersion: '1.0.0',
+      subjectKindCode: 'TEAM', subjectTeamId: teamId, status, strength: null, confidence: null,
+      sampleObservationCount: 6, sampleMeetsThreshold: true, asOf: '2026-09-13T12:30:00.000Z', verdictText: null, ...extra,
+    };
+  }
+
+  test('groups by module and resolves HOME/AWAY by subject team', () => {
+    const modules = [mod('599', 'SUPPORTS'), mod('602', 'NEUTRAL')];
+    const [g] = groupModuleReadings(modules, '599', '602');
+    assert.equal(g.moduleKey, 'home_away_split');
+    assert.equal(g.moduleVersion, '1.0.0');
+    assert.equal(g.home!.subjectTeamId, '599');
+    assert.equal(g.home!.status, 'SUPPORTS');
+    assert.equal(g.away!.subjectTeamId, '602');
+    assert.equal(g.away!.status, 'NEUTRAL');
+    assert.deepEqual(g.other, []);
+  });
+
+  test('a side with no reading resolves to null (honest empty, not fabricated)', () => {
+    const [g] = groupModuleReadings([mod('599', 'SUPPORTS')], '599', '602');
+    assert.equal(g.home!.subjectTeamId, '599');
+    assert.equal(g.away, null); // away had no sealed reading
+  });
+
+  test('a non-team subject reading falls into `other`, never mis-assigned to a side', () => {
+    const fixtureMod = mod('', 'NEUTRAL', { subjectKindCode: 'FIXTURE', subjectTeamId: null, moduleKey: 'rest_advantage', displayName: 'Rest Advantage', displayNumber: 5 });
+    const [, restGroup] = groupModuleReadings([mod('599', 'SUPPORTS'), fixtureMod], '599', '602');
+    assert.equal(restGroup.moduleKey, 'rest_advantage');
+    assert.equal(restGroup.home, null);
+    assert.equal(restGroup.away, null);
+    assert.equal(restGroup.other.length, 1);
+  });
+
+  test('groups are ordered by governed display number', () => {
+    const a = mod('599', 'SUPPORTS', { moduleKey: 'readiness_tracker', displayNumber: 2 });
+    const b = mod('599', 'SUPPORTS', { moduleKey: 'home_away_split', displayNumber: 1 });
+    const groups = groupModuleReadings([a, b], '599', '602');
+    assert.deepEqual(groups.map((g) => g.moduleKey), ['home_away_split', 'readiness_tracker']);
+  });
+
+  test('status descriptor uses analyst framing, never betting language', () => {
+    assert.deepEqual(moduleStatusDescriptor('SUPPORTS'), { label: 'Signal', tone: 'positive', engaged: true });
+    assert.deepEqual(moduleStatusDescriptor('CONTRADICTS'), { label: 'Counter-signal', tone: 'negative', engaged: true });
+    assert.deepEqual(moduleStatusDescriptor('NEUTRAL'), { label: 'Neutral', tone: 'neutral', engaged: true });
+    assert.deepEqual(moduleStatusDescriptor('INACTIVE'), { label: 'Not enough data', tone: 'inactive', engaged: false });
+    for (const s of ['SUPPORTS', 'CONTRADICTS', 'NEUTRAL', 'INACTIVE']) {
+      const label = moduleStatusDescriptor(s).label.toLowerCase();
+      for (const term of ['odds', 'bet', 'stake', 'pick', 'bookmaker']) assert.equal(label.includes(term), false);
+    }
   });
 });

@@ -20,7 +20,7 @@
 // per-side feature key only — presence and values are read exclusively from the
 // API's citedEvidence. It invents no component and no score.
 
-import type { CitedEvidenceItem, IntelligenceVerdict, PreparednessSide } from './types';
+import type { CitedEvidenceItem, IntelligenceModuleReading, IntelligenceVerdict, PreparednessSide } from './types';
 
 // ── null-honest numeric text formatting ─────────────────────────────────────────
 
@@ -214,4 +214,77 @@ export function humanizeFeatureKey(key: string): string {
   if (!tail) return key;
   const words = tail.replace(/_/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// ── sealed governed module readings (Intelligence Modules) ───────────────────────
+//
+// Grouping/labelling for the sealed per-module readings the verdict was tallied
+// from (e.g. Home/Away Split). Pure presentation: it groups the readings by module
+// and resolves each reading to the HOME or AWAY side, and it maps the governed
+// module_status_code to an analyst-framed descriptor (never betting language). It
+// computes no football and invents no reading.
+
+/** One module's sealed readings, resolved to sides for a home-vs-away view. */
+export interface GroupedModule {
+  readonly moduleKey: string;
+  readonly displayName: string;
+  readonly displayNumber: number;
+  readonly moduleVersion: string;
+  readonly home: IntelligenceModuleReading | null;
+  readonly away: IntelligenceModuleReading | null;
+  /** Readings not resolvable to home/away (e.g. a FIXTURE-subject module). */
+  readonly other: readonly IntelligenceModuleReading[];
+}
+
+/**
+ * Group sealed module readings by module (in governed display order) and resolve
+ * each reading to HOME/AWAY by subject team. Readings whose subject is neither team
+ * (or has no team) fall into `other` — never dropped, never mis-assigned. Pure.
+ */
+export function groupModuleReadings(
+  modules: readonly IntelligenceModuleReading[],
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+): GroupedModule[] {
+  const order: string[] = [];
+  const byKey = new Map<string, IntelligenceModuleReading[]>();
+  for (const m of modules) {
+    if (!byKey.has(m.moduleKey)) { byKey.set(m.moduleKey, []); order.push(m.moduleKey); }
+    byKey.get(m.moduleKey)!.push(m);
+  }
+  const groups = order.map((key) => {
+    const readings = byKey.get(key)!;
+    const first = readings[0];
+    const home = homeTeamId ? readings.find((r) => r.subjectTeamId === homeTeamId) ?? null : null;
+    const away = awayTeamId ? readings.find((r) => r.subjectTeamId === awayTeamId) ?? null : null;
+    const other = readings.filter((r) => r !== home && r !== away);
+    return { moduleKey: key, displayName: first.displayName, displayNumber: first.displayNumber, moduleVersion: first.moduleVersion, home, away, other };
+  });
+  return groups.sort((a, b) => a.displayNumber - b.displayNumber);
+}
+
+export type ModuleTone = 'positive' | 'negative' | 'neutral' | 'inactive';
+
+export interface ModuleStatusDescriptor {
+  /** Human, analyst-framed label — never betting language. */
+  readonly label: string;
+  readonly tone: ModuleTone;
+  /** Whether the module produced an engaged reading (i.e. not INACTIVE). */
+  readonly engaged: boolean;
+}
+
+/**
+ * Map a governed module_status_code to a descriptor. Statuses are the non-directional
+ * consensus classes (SUPPORTS/NEUTRAL/CONTRADICTS/INACTIVE) — analytical signal
+ * language, never a betting pick or an odds implication. Unknown codes fall back to
+ * a neutral, honestly-labelled descriptor rather than being hidden.
+ */
+export function moduleStatusDescriptor(status: string): ModuleStatusDescriptor {
+  switch (status) {
+    case 'SUPPORTS': return { label: 'Signal', tone: 'positive', engaged: true };
+    case 'CONTRADICTS': return { label: 'Counter-signal', tone: 'negative', engaged: true };
+    case 'NEUTRAL': return { label: 'Neutral', tone: 'neutral', engaged: true };
+    case 'INACTIVE': return { label: 'Not enough data', tone: 'inactive', engaged: false };
+    default: return { label: status.toLowerCase(), tone: 'neutral', engaged: status !== 'INACTIVE' };
+  }
 }

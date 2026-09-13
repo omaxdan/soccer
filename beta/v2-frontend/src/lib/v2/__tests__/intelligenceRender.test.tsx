@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
-  ProvenanceBar, VerdictBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable,
+  ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable,
 } from '@/components/v2/intelligence';
 import type { MatchIntelligence } from '@/lib/v2/types';
 
@@ -34,6 +34,10 @@ const INTEL: MatchIntelligence = {
     congestionEdge: null, availabilityEdge: null, riskScore: null, confidence: null,
     historicalReliabilityBaselineId: null,
   },
+  modules: [
+    { moduleKey: 'home_away_split', displayName: 'Home/Away Split', displayNumber: 1, moduleVersion: '1.0.0', subjectKindCode: 'TEAM', subjectTeamId: '599', status: 'SUPPORTS', strength: null, confidence: null, sampleObservationCount: 6, sampleMeetsThreshold: true, asOf: '2026-09-13T12:30:00.000Z', verdictText: 'Strongly home-reliant' },
+    { moduleKey: 'home_away_split', displayName: 'Home/Away Split', displayNumber: 1, moduleVersion: '1.0.0', subjectKindCode: 'TEAM', subjectTeamId: '602', status: 'NEUTRAL', strength: null, confidence: null, sampleObservationCount: 4, sampleMeetsThreshold: false, asOf: '2026-09-13T12:30:00.000Z', verdictText: null },
+  ],
   preparedness: [
     { side: 'HOME', preparednessPoints: '13.5000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167', teamId: '599' },
     { side: 'AWAY', preparednessPoints: '28.6000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167', teamId: '602' },
@@ -61,6 +65,7 @@ const sealedText = visibleText(
     <div>
       <ProvenanceBar provenance={INTEL.provenance} />
       <VerdictBand verdict={INTEL.verdict} />
+      <ModulesBand intelligence={INTEL} homeName="Flamengo" awayName="Botafogo" />
       <PreparednessBand intelligence={INTEL} homeName="Flamengo" awayName="Botafogo" />
       <CitedEvidencePanel citedEvidence={INTEL.citedEvidence} />
     </div>,
@@ -103,6 +108,22 @@ describe('honest states render literally (#3 / #7)', () => {
     assert.match(sealedText, /Not yet calibrated/); // null confidence, not a meter
     assert.match(sealedText, /13\.5 \/ 60/);        // exact preparedness score preserved
     assert.match(sealedText, /91\.67%/);            // coverage rendered as percentage
+  });
+});
+
+describe('sealed intelligence modules render as governed home-vs-away components', () => {
+  const band = visibleText(renderToStaticMarkup(<ModulesBand intelligence={INTEL} homeName="Flamengo" awayName="Botafogo" />));
+  test('surfaces the module name, governed version, and per-side analyst signals', () => {
+    assert.match(band, /Intelligence modules/);
+    assert.match(band, /Home\/Away Split/);
+    assert.match(band, /v1\.0\.0/);            // governed module version shown
+    assert.match(band, /Signal/);              // HOME 599 SUPPORTS → analyst-framed "Signal"
+    assert.match(band, /Neutral/);             // AWAY 602 NEUTRAL
+    assert.match(band, /Strongly home-reliant/); // verdict text surfaced
+  });
+  test('an empty modules array renders nothing (absence, not a fabricated card)', () => {
+    const empty = renderToStaticMarkup(<ModulesBand intelligence={{ ...INTEL, modules: [] }} homeName="Flamengo" awayName="Botafogo" />);
+    assert.equal(empty, '');
   });
 });
 

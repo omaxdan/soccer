@@ -186,6 +186,10 @@ const INTEL_18 = {
       congestionEdge: null, availabilityEdge: null, riskScore: null, confidence: null,
       historicalReliabilityBaselineId: null,
     },
+    modules: [
+      { moduleKey: 'home_away_split', displayName: 'Home/Away Split', displayNumber: 1, moduleVersion: '1.0.0', subjectKindCode: 'TEAM', subjectTeamId: '599', status: 'SUPPORTS', strength: null, confidence: null, sampleObservationCount: 6, sampleMeetsThreshold: true, asOf: '2026-09-13T12:30:00.000Z', verdictText: 'Strongly home-reliant' },
+      { moduleKey: 'home_away_split', displayName: 'Home/Away Split', displayNumber: 1, moduleVersion: '1.0.0', subjectKindCode: 'TEAM', subjectTeamId: '602', status: 'NEUTRAL', strength: null, confidence: null, sampleObservationCount: 4, sampleMeetsThreshold: false, asOf: '2026-09-13T12:30:00.000Z', verdictText: null },
+    ],
     preparedness: [
       { side: 'AWAY', teamId: '602', preparednessPoints: '28.6000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167' },
       { side: 'HOME', teamId: '599', preparednessPoints: '13.5000', availablePoints: '55', declaredPoints: '60', coverageRatio: '0.9167' },
@@ -244,6 +248,21 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
     assert.equal(home.availablePoints, '55');
     assert.equal(home.declaredPoints, '60');
     assert.equal(home.coverageRatio, '0.9167');
+  });
+
+  it('sealed governed module readings (home_away_split) are surfaced, per team, governed and not from context', async () => {
+    const body = await (await fetch(`${base}/api/v2/matches/18/intelligence`)).json() as any;
+    const has = body.intelligence.modules.filter((m: any) => m.moduleKey === 'home_away_split');
+    assert.equal(has.length, 2); // one governed reading per team
+    const home = has.find((m: any) => m.subjectTeamId === '599');
+    const away = has.find((m: any) => m.subjectTeamId === '602');
+    assert.equal(home.moduleVersion, '1.0.0');   // governed module version travels on the wire
+    assert.equal(home.status, 'SUPPORTS');
+    assert.equal(away.status, 'NEUTRAL');
+    assert.equal(home.strength, null);           // v1.0.0 → null, never a fabricated number
+    assert.equal(away.sampleMeetsThreshold, false);
+    // the live context value (73) is never smuggled into a governed module reading
+    assert.equal(body.intelligence.modules.some((m: any) => m.strength === 73 || m.verdictText === 73), false);
   });
 
   it('absent squad_stability stays absent; present-but-zero preserved; ungoverned fields null', async () => {

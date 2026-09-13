@@ -6,7 +6,7 @@ import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
 import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
-import { ProvenanceBar, VerdictBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
+import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
 import type { ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
@@ -95,6 +95,9 @@ function SealedIntelligence({ intelligence, homeName, awayName }: { intelligence
     <div className="space-y-5">
       <ProvenanceBar provenance={intelligence.provenance} />
       <VerdictBand verdict={intelligence.verdict} />
+      {/* INTELLIGENCE MODULES — sealed per-module readings (e.g. Home/Away Split),
+          each a governed component; Team Preparedness follows as another module. */}
+      <ModulesBand intelligence={intelligence} homeName={homeName} awayName={awayName} />
       <PreparednessBand intelligence={intelligence} homeName={homeName} awayName={awayName} />
       <CitedEvidencePanel citedEvidence={intelligence.citedEvidence} />
     </div>

@@ -13,12 +13,13 @@
 
 import type {
   MatchIntelligence, IntelligenceProvenance, IntelligenceVerdict,
-  PreparednessSideView, CitedEvidenceItem,
+  PreparednessSideView, CitedEvidenceItem, IntelligenceModuleReading,
 } from '@/lib/v2/types';
 import {
   VERDICT_GRADED_FIELDS, verdictFieldDisplay, resolveTeamComponents,
   preparednessScoreDisplay, formatRatioPercent, formatProvenanceTime,
-  humanizeFeatureKey, trimNumericText, type ResolvedComponent,
+  humanizeFeatureKey, trimNumericText, groupModuleReadings, moduleStatusDescriptor,
+  type ResolvedComponent, type GroupedModule, type ModuleTone,
 } from '@/lib/v2/matchIntelligence';
 
 // ── shared bits ──────────────────────────────────────────────────────────────
@@ -143,6 +144,79 @@ export function VerdictBand({ verdict }: { verdict: IntelligenceVerdict }) {
           Edges are governed comparative readings — descriptive, not forecasts or recommendations. Fields with no governed
           value are shown as such, never as zero or a fabricated confidence.
         </p>
+      </div>
+    </section>
+  );
+}
+
+// ── 3b. INTELLIGENCE MODULES — sealed per-module readings ────────────────────────
+
+const MODULE_TONE_COLOR: Record<ModuleTone, string> = {
+  positive: 'var(--edge)', negative: 'var(--risk)', neutral: 'var(--muted)', inactive: 'var(--faint)',
+};
+
+/** One side's sealed reading for a module, or an honest empty state. */
+function ModuleSideCell({ reading }: { reading: IntelligenceModuleReading | null }) {
+  if (!reading) return <Unavailable text="No reading" />;
+  const d = moduleStatusDescriptor(reading.status);
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <span className="label-cap" style={{ color: MODULE_TONE_COLOR[d.tone], fontWeight: 700 }} aria-label={`status ${reading.status.toLowerCase()}`}>{d.label}</span>
+      {d.engaged && reading.verdictText && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{reading.verdictText}</span>}
+      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        sample {reading.sampleObservationCount}{reading.sampleMeetsThreshold ? '' : ' · below threshold'}
+      </span>
+    </span>
+  );
+}
+
+/** One governed module as a HOME-vs-AWAY sealed reading card. */
+function ModuleCard({ group, homeName, awayName }: { group: GroupedModule; homeName: string; awayName: string }) {
+  return (
+    <div className="panel-raised" style={{ padding: 12, borderRadius: 8 }} aria-label={`${group.displayName} module`}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <p className="eyebrow" style={{ color: 'var(--amber)' }}>{group.displayName}</p>
+        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>v{group.moduleVersion}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+        <div>
+          <p className="label-cap" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeName}</p>
+          <div style={{ marginTop: 3 }}><ModuleSideCell reading={group.home} /></div>
+        </div>
+        <div>
+          <p className="label-cap" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayName}</p>
+          <div style={{ marginTop: 3 }}><ModuleSideCell reading={group.away} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The sealed per-module intelligence the verdict was tallied from (e.g. Home/Away
+ * Split), each surfaced as an individual governed component with its module version.
+ * This is the SEALED reading (as of the snapshot), distinct from the live module
+ * reading shown separately under context. Renders nothing when no module was sealed.
+ */
+export function ModulesBand({ intelligence, homeName, awayName }: {
+  intelligence: MatchIntelligence; homeName: string; awayName: string;
+}) {
+  const home = intelligence.preparedness.find((p) => p.side === 'HOME')?.teamId ?? null;
+  const away = intelligence.preparedness.find((p) => p.side === 'AWAY')?.teamId ?? null;
+  const groups = groupModuleReadings(intelligence.modules, home, away);
+  if (groups.length === 0) return null;
+  return (
+    <section className="space-y-2" aria-label="intelligence modules">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <p className="eyebrow" style={{ color: 'var(--amber)' }}>Intelligence modules</p>
+        <SealedBadge />
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>
+        The governed per-module readings the verdict was composed from, sealed as of this snapshot. Analytical signals — not
+        forecasts or recommendations.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {groups.map((g) => <ModuleCard key={g.moduleKey} group={g} homeName={homeName} awayName={awayName} />)}
       </div>
     </section>
   );
