@@ -12,6 +12,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MatchIntelligence } from '../snapshot/read/matchIntelligence';
+import type {
+  PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
+} from './read/playerStatistics';
+
+export type {
+  PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
+  PlayerStatAggregate, PlayerEditionParticipation, PlayerMatchStatLine,
+} from './read/playerStatistics';
 
 export interface ApiTeam {
   readonly id: string;
@@ -293,6 +301,19 @@ export interface PlayerDetailResponse {
   readonly currentTeam: ApiTeamSummary | null;
   /** Governed competition/season context for the current registration, when known. */
   readonly competition: { readonly id: string; readonly name: string; readonly slug: string; readonly seasonLabel: string } | null;
+  /** The player's current governed registration (kind, period, edition), or null. Raw evidence. */
+  readonly registration: PlayerRegistrationView | null;
+  /** The current/most-recent availability spell (injury/suspension), or null. Raw evidence. */
+  readonly availability: PlayerAvailabilityView | null;
+  /** The latest stored valuation, or null. Raw evidence. */
+  readonly valuation: PlayerValuationView | null;
+  /**
+   * Statistics projected from stored `player_match_statistic` rows only: which keys
+   * exist, per-key DERIVED arithmetic aggregates (never a governed score), editions
+   * participated, and recent match-by-match lines with fixture/opponent context.
+   * Empty (matchesRepresented 0, empty arrays) when the player has no stored stats.
+   */
+  readonly statistics: PlayerStatistics;
 }
 
 /** Uniform error body. */

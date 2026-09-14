@@ -40,6 +40,10 @@ import type {
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
+import {
+  aggregatePlayerStatistics, mapRegistration, mapAvailability, mapValuation,
+  type PlayerStatRow, type PlayerRegistrationRow, type PlayerAvailabilityRow, type PlayerValuationRow,
+} from './read/playerStatistics';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -624,9 +628,75 @@ ${GOVERNED_EDITION_JOIN_CE}
    LIMIT 1
 `;
 
+// The player's current governed registration (kind + period + edition). Mirrors the
+// exposure gate's join so the registration shown is the one that surfaced the player.
+const PLAYER_REGISTRATION_SQL = `
+  SELECT pr.team_id::text AS team_id, pr.registration_kind_code AS registration_kind_code,
+         to_char(lower(pr.registration_period), 'YYYY-MM-DD') AS registration_from,
+         to_char(upper(pr.registration_period), 'YYYY-MM-DD') AS registration_to,
+         pr.competition_edition_id::text AS competition_edition_id, ce.season_label AS season_label
+    FROM football.player_registration pr
+    JOIN football.competition_edition ce ON ce.id = pr.competition_edition_id
+   WHERE pr.player_id = $1::bigint
+     AND pr.registration_kind_code <> 'LOAN_OUT'
+     AND pr.registration_period @> current_date
+   ORDER BY ce.season_label DESC
+   LIMIT 1
+`;
+
+// The most relevant availability spell: a current one (covering today) first, else
+// the most recent. `is_current` reports whether the spell covers today. Raw evidence.
+const PLAYER_AVAILABILITY_SQL = `
+  SELECT pa.unavailability_kind_code AS unavailability_kind_code,
+         to_char(lower(pa.spell_period), 'YYYY-MM-DD') AS spell_from,
+         to_char(upper(pa.spell_period), 'YYYY-MM-DD') AS spell_to,
+         to_char(pa.expected_return_on, 'YYYY-MM-DD') AS expected_return_on,
+         pa.reason AS reason, pa.severity_rank AS severity_rank,
+         (pa.spell_period @> current_date) AS is_current
+    FROM football.player_availability pa
+   WHERE pa.player_id = $1::bigint
+   ORDER BY (pa.spell_period @> current_date) DESC, lower(pa.spell_period) DESC
+   LIMIT 1
+`;
+
+// The latest stored valuation for the player. Raw evidence (amount + currency + date).
+const PLAYER_VALUATION_SQL = `
+  SELECT v.amount::text AS amount, v.currency_code AS currency_code,
+         to_char(v.as_of_on, 'YYYY-MM-DD') AS as_of_on, v.source_code AS source_code
+    FROM football.player_valuation v
+   WHERE v.player_id = $1::bigint
+   ORDER BY v.as_of_on DESC, v.id DESC
+   LIMIT 1
+`;
+
+// Every stored per-match statistic row for the player, with fixture/team/opponent/
+// result context, ordered newest-first. RAW rows — the read model aggregates them.
+const PLAYER_STAT_ROWS_SQL = `
+  SELECT pms.fixture_id::text AS fixture_id, pms.team_id::text AS team_id,
+         pms.statistic_key AS statistic_key, pms.statistic_value AS statistic_value, pms.value_type AS value_type,
+         f.scheduled_kickoff_at AS scheduled_kickoff_at,
+         f.competition_edition_id::text AS competition_edition_id, ce.season_label AS season_label,
+         c.id::text AS competition_id, c.name AS competition_name, c.slug AS competition_slug,
+         f.home_team_id::text AS home_team_id, f.away_team_id::text AS away_team_id,
+         ht.name AS home_name, at.name AS away_name,
+         r.home_goals AS home_goals, r.away_goals AS away_goals
+    FROM football.player_match_statistic pms
+    JOIN football.fixture f ON f.id = pms.fixture_id AND f.fixture_partition_on = pms.fixture_partition_on
+    JOIN football.competition_edition ce ON ce.id = f.competition_edition_id
+    JOIN football.competition c ON c.id = ce.competition_id
+    JOIN football.team ht ON ht.id = f.home_team_id
+    JOIN football.team at ON at.id = f.away_team_id
+    LEFT JOIN football.result r ON r.fixture_id = f.id AND r.fixture_partition_on = f.fixture_partition_on
+   WHERE pms.player_id = $1::bigint
+   ORDER BY f.scheduled_kickoff_at DESC, f.id DESC, pms.statistic_key ASC
+`;
+
 /**
- * A player's biography + current governed team/competition, or null when the
- * player has no current registration within a governed authorized edition.
+ * A player's biography, current governed team/competition, registration, availability,
+ * valuation, and statistics projected from stored `player_match_statistic` rows.
+ * Null when the player has no current registration within a governed authorized
+ * edition (the exposure gate — unchanged). Statistics are raw evidence + derived
+ * arithmetic aggregates only; NO governed intelligence is produced here.
  */
 export async function getPlayerDetail(tx: PoolClient, playerId: string): Promise<PlayerDetailResponse | null> {
   // Exposure gate: only players in a governed edition's current squad are surfaced.
@@ -638,6 +708,13 @@ export async function getPlayerDetail(tx: PoolClient, playerId: string): Promise
   const p = idRes.rows[0];
   const ct = teamRes.rows[0];
 
+  const [regRes, availRes, valRes, statRes] = await Promise.all([
+    tx.query<PlayerRegistrationRow>(PLAYER_REGISTRATION_SQL, [playerId]),
+    tx.query<PlayerAvailabilityRow>(PLAYER_AVAILABILITY_SQL, [playerId]),
+    tx.query<PlayerValuationRow>(PLAYER_VALUATION_SQL, [playerId]),
+    tx.query<PlayerStatRow>(PLAYER_STAT_ROWS_SQL, [playerId]),
+  ]);
+
   return {
     player: {
       id: p.id, fullName: p.full_name, shortName: p.short_name, slug: p.slug,
@@ -646,5 +723,9 @@ export async function getPlayerDetail(tx: PoolClient, playerId: string): Promise
     },
     currentTeam: { id: ct.team_id, name: ct.team_name, slug: ct.team_slug, shortName: ct.team_short, countryCode: ct.team_country },
     competition: { id: ct.competition_id, name: ct.competition_name, slug: ct.competition_slug, seasonLabel: ct.season_label },
+    registration: mapRegistration(regRes.rows[0]),
+    availability: mapAvailability(availRes.rows[0]),
+    valuation: mapValuation(valRes.rows[0]),
+    statistics: aggregatePlayerStatistics(statRes.rows),
   };
 }
