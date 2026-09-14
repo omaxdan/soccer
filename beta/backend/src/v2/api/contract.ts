@@ -26,6 +26,7 @@ import type { TeamPerformanceOverall, CompetitionPerformance, TeamPerformanceCov
 import type { TeamReadinessReading, TeamReadinessCoverage } from './read/teamReadiness';
 import type { Venue } from './read/matchVenue';
 import type { VenueCoverage } from './read/venue';
+import type { CountryIdentity, CountryCoverage } from './read/country';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -75,6 +76,10 @@ export type {
 export type {
   VenueDetail, VenueCoverage,
 } from './read/venue';
+
+export type {
+  CountryDetail, CountryIdentity, CountryCoverage,
+} from './read/country';
 
 export interface ApiTeam {
   readonly id: string;
@@ -424,6 +429,13 @@ export interface TeamListResponse {
   readonly teams: readonly ApiTeamSummary[];
 }
 
+/** One competition, identity only, for country navigation and cross-links. */
+export interface ApiCompetitionSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+}
+
 /** One player, identity only, for the directory and squad lists. */
 export interface ApiPlayerSummary {
   readonly id: string;
@@ -518,6 +530,24 @@ export interface VenueResponse {
   readonly venue: Venue;
   readonly homeTeams: readonly ApiTeamSummary[];
   readonly coverage: VenueCoverage;
+}
+
+/**
+ * The canonical Country entity — the parent keystone of the entity hierarchy.
+ * Identity (football.country: ISO alpha-2 code, display name, ISO alpha-3) plus its
+ * canonical members: teams whose `team.country_code` is this country and competitions
+ * whose `competition.country_code` is this country. Membership is the canonical FK,
+ * never match/venue/fixture inference; both collections are exposed through the SAME
+ * Day-1 governed gate as the teams directory and edition list (no ungoverned leaks,
+ * no broken cross-links). Identity/Context ONLY — no geography, ranking, readiness,
+ * performance, prediction, or travel. Empty collections are truthful absences (never
+ * zero-filled, never a 404). Null (→ 404) only when the country code is unknown.
+ */
+export interface CountryResponse {
+  readonly country: CountryIdentity;
+  readonly teams: readonly ApiTeamSummary[];
+  readonly competitions: readonly ApiCompetitionSummary[];
+  readonly coverage: CountryCoverage;
 }
 
 export interface PlayerDetailResponse {

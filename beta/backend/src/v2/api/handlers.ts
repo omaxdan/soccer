@@ -46,6 +46,7 @@ import type {
   TeamPerformanceResponse,
   TeamReadinessResponse,
   VenueResponse,
+  CountryResponse,
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
@@ -63,10 +64,16 @@ import { readMatchVenue } from './read/matchVenue';
 import { readTeamPerformance } from './read/teamPerformance';
 import { readTeamReadiness } from './read/teamReadiness';
 import { readVenue } from './read/venue';
+import { mapCountry, mapCompetitionSummary, buildCountryCoverage, type CountryRow, type CountryCompetitionRow } from './read/country';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
   return /^[1-9][0-9]{0,18}$/.test(raw);
+}
+
+/** A country is addressed by its ISO 3166-1 alpha-2 code (already upper-cased by the router). */
+export function isValidCountryCode(raw: string): boolean {
+  return /^[A-Z]{2}$/.test(raw);
 }
 
 const iso = (d: Date): string => new Date(d).toISOString();
@@ -801,6 +808,72 @@ export async function getTeamReadiness(tx: PoolClient, teamId: string): Promise<
  */
 export async function getVenue(tx: PoolClient, venueId: string): Promise<VenueResponse | null> {
   return readVenue(tx, venueId);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COUNTRY — canonical entity keystone (identity + canonical members). Read-only.
+//
+// football.country is a governed code vocabulary keyed by ISO alpha-2 `code`. The
+// country's own existence is the gate (404 when the code is unknown). Its members —
+// teams and competitions — are the CANONICAL foreign-key relationships
+// (team.country_code / competition.country_code), never inferred from matches,
+// venues, or fixtures, and each is surfaced through the SAME Day-1 governed exposure
+// gate as the teams directory and edition list. So Country never lists an entity that
+// /teams/:id or the edition list would hide: no ungoverned/V1 leaks, no broken links.
+// Identity/Context only — no geography, ranking, readiness, performance, or prediction.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COUNTRY_SQL = `
+  SELECT c.code AS code, c.display_name AS display_name, c.alpha3_code AS alpha3_code
+    FROM football.country c
+   WHERE c.code = $1::text
+   LIMIT 1
+`;
+
+// Teams whose CANONICAL country is this one, exposed through the governed gate
+// (mirrors TEAMS_LIST_SQL, adding only the canonical country filter).
+const COUNTRY_TEAMS_SQL = `
+  SELECT DISTINCT t.id::text AS id, t.name AS name, t.slug AS slug,
+         t.short_name AS short_name, t.country_code AS country_code
+    FROM football.team t
+    JOIN football.team_registration tr ON tr.team_id = t.id AND tr.withdrawn_on IS NULL
+    JOIN football.competition_edition ce ON ce.id = tr.competition_edition_id
+${GOVERNED_EDITION_JOIN_CE}
+   WHERE t.country_code = $1::text
+   ORDER BY t.name
+`;
+
+// Competitions whose CANONICAL country is this one, exposed through the governed gate
+// (only competitions with an authorized-active edition, mirroring the edition list).
+const COUNTRY_COMPETITIONS_SQL = `
+  SELECT DISTINCT c.id::text AS id, c.name AS name, c.slug AS slug
+    FROM football.competition c
+    JOIN football.competition_edition e ON e.competition_id = c.id
+${DAY1_AUTHORIZED_EDITION_JOIN}
+   WHERE c.country_code = $1::text
+   ORDER BY c.name
+`;
+
+/**
+ * The canonical Country entity (identity + canonically-related governed teams and
+ * competitions), or null when the country code is unknown (→ 404). The country
+ * existence check gates BEFORE the member reads, so an unknown code never queries
+ * teams or competitions. Read-only Identity/Context; no governed intelligence.
+ */
+export async function getCountry(tx: PoolClient, countryCode: string): Promise<CountryResponse | null> {
+  const cRes = await tx.query<CountryRow>(COUNTRY_SQL, [countryCode]);
+  if (cRes.rows.length === 0) return null;
+
+  const teamRes = await tx.query<TeamSummaryRow>(COUNTRY_TEAMS_SQL, [countryCode]);
+  const compRes = await tx.query<CountryCompetitionRow>(COUNTRY_COMPETITIONS_SQL, [countryCode]);
+  const teams = teamRes.rows.map(toTeamSummary);
+  const competitions = compRes.rows.map(mapCompetitionSummary);
+  return {
+    country: mapCountry(cRes.rows[0]),
+    teams,
+    competitions,
+    coverage: buildCountryCoverage(teams, competitions),
+  };
 }
 
 interface PlayerDirectoryRow extends PlayerSummaryRow {
