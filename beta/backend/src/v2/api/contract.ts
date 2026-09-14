@@ -19,6 +19,7 @@ import type { TeamIntelligence } from './read/teamIntelligence';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
+import type { MatchResult, MatchResultCoverage } from './read/matchResult';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -43,6 +44,10 @@ export type {
   MatchTeamStatistics, PeriodStatistics, TeamStatLine, TeamStatValue,
   MatchTeamStatisticsCoverage, TeamStatisticsCoverageState,
 } from './read/matchTeamStatistics';
+
+export type {
+  MatchResult, ResultScore, MatchResultCoverage, ResultCoverageState, MatchResultProjection,
+} from './read/matchResult';
 
 export interface ApiTeam {
   readonly id: string;
@@ -256,6 +261,27 @@ export interface MatchTeamStatisticsResponse {
     readonly awayTeam: ApiTeam;
   };
   readonly teamStatistics: MatchTeamStatistics;
+}
+
+/**
+ * A fixture's COMPLETE observed scoreline (football.result): final, half-time,
+ * extra-time and penalty scores plus the confirmation instant, oriented to
+ * match.homeTeam / match.awayTeam. Observed evidence only — no derived W/D/L or
+ * outcome label. A phase the provider did not report is null (never a fabricated
+ * 0-0); `result` is null and `coverage.result` is 'absent' when no result is
+ * persisted. Null (→ 404) only when the fixture does not exist.
+ */
+export interface MatchResultResponse {
+  readonly match: {
+    readonly fixtureId: string;
+    readonly kickoffAt: string;               // ISO-8601
+    readonly status: string;                  // fixture lifecycle_state_code
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+    readonly homeTeam: ApiTeam;
+    readonly awayTeam: ApiTeam;
+  };
+  readonly result: MatchResult | null;
+  readonly coverage: MatchResultCoverage;
 }
 
 /** One fixture in a league/edition list. */

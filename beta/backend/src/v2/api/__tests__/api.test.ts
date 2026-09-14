@@ -62,6 +62,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/18/team-statistics'), { kind: 'matchTeamStatistics', id: '18' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc/team-statistics'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18/team-statistics'), { kind: 'methodNotAllowed' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/matches/18/result'), { kind: 'matchResult', id: '18' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc/result'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18/result'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc/intelligence'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18/intelligence'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/fixtures'), { kind: 'editionFixtures', id: '42' });
@@ -221,6 +224,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchIntelligence: async (id) => (id === '18' ? INTEL_18 : null),
       getMatchLineups: async () => null,
       getMatchTeamStatistics: async () => null,
+      getMatchResult: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null,
@@ -320,6 +324,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getMatchIntelligence: async (id) => (id === '18' ? INTEL_18 : null),
       getMatchLineups: async (id) => (id === '18' ? { match: { fixtureId: '18' }, lineups: { home: null, away: null, coverage: { lineups: 'absent', lineupsAreObserved: true } } } : null),
       getMatchTeamStatistics: async (id) => (id === '18' ? { match: { fixtureId: '18' }, teamStatistics: { periods: [], coverage: { teamStatistics: 'absent', periodsPresent: [], statisticsAreObserved: true, provider: null, retrievedAt: null } } } : null),
+      getMatchResult: async (id) => (id === '18' ? { match: { fixtureId: '18' }, result: null, coverage: { result: 'absent', resultIsObserved: true } } : null),
       getEdition: async (id) => { editionCalls.push(id); return id === '42' ? { edition: { id: '42' }, fixtures: [] } : null; },
       getEditionStandings: async (id) => (id === '42' ? { edition: { id: '42' }, standings: { tables: [], coverage: { standings: 'absent', variantsPresent: [], goalDifferenceIsDerived: true, standingsAreObservedSnapshots: true } } } : null),
       getEditions: async () => ({ editions: [{ id: '42', seasonLabel: 'S', competition: { id: '1', name: 'L', slug: 'l' }, fixtureCount: 3 }] }),
@@ -382,6 +387,20 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
 
   it('GET team-statistics for an unknown fixture → 404 match_not_found', async () => {
     const res = await fetch(`${base}/api/v2/matches/19/team-statistics`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'match_not_found' });
+  });
+
+  it('GET a known fixture result → 200 with observed-evidence coverage', async () => {
+    const res = await fetch(`${base}/api/v2/matches/18/result`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.match.fixtureId, '18');
+    assert.equal(body.coverage.resultIsObserved, true);
+  });
+
+  it('GET result for an unknown fixture → 404 match_not_found', async () => {
+    const res = await fetch(`${base}/api/v2/matches/19/result`);
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: 'match_not_found' });
   });
