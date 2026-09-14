@@ -141,6 +141,20 @@ function isoDate(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
+/**
+ * A stored `YYYY-MM-DD` date is meaningful only if it is a real observation. The
+ * provider's "no expected return" is a zero/absent value that ingestion routed
+ * through `new Date(0)` and stored as the Unix epoch (`1970-01-01`) — a substituted
+ * value, not a genuine return date (LC-05). Any date at or before the epoch is that
+ * sentinel and is reported as absent (null) rather than exposed as a fabricated
+ * 1970 return. Real future return dates are returned unchanged. Pure.
+ */
+const EPOCH_SENTINEL = '1970-01-01';
+export function meaningfulDate(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return value <= EPOCH_SENTINEL ? null : value;
+}
+
 /** Parse a stored stat value as a finite number iff the provider tagged it 'number'.
  *  Anything else (json, null, unparseable) is NOT numeric — never coerced to 0. */
 function numericValue(value: string | null, valueType: string | null): number | null {
@@ -182,7 +196,8 @@ export function mapAvailability(row: PlayerAvailabilityRow | null | undefined): 
     unavailabilityKindCode: row.unavailability_kind_code,
     from: row.spell_from,
     to: row.spell_to,
-    expectedReturnOn: row.expected_return_on,
+    // Never expose a zero/epoch (1970-01-01) sentinel as a real return date.
+    expectedReturnOn: meaningfulDate(row.expected_return_on),
     reason: row.reason,
     severityRank: row.severity_rank === null || row.severity_rank === undefined ? null : Number(row.severity_rank),
     current: row.is_current,

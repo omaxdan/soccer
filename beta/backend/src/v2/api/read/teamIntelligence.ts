@@ -21,6 +21,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg';
+import { meaningfulDate } from './playerStatistics';
 
 // ── small pure helpers ──────────────────────────────────────────────────────────
 
@@ -188,7 +189,8 @@ export function mapSquadMember(r: SquadRow): TeamSquadMember {
 }
 
 export function mapAvailability(r: AvailabilityRow): TeamAvailabilityRecord {
-  return { playerId: r.player_id, fullName: r.full_name, unavailabilityKindCode: r.unavailability_kind_code, from: r.spell_from, to: r.spell_to, expectedReturnOn: r.expected_return_on, reason: r.reason, severityRank: r.severity_rank === null || r.severity_rank === undefined ? null : Number(r.severity_rank), current: r.is_current };
+  // Never expose a zero/epoch (1970-01-01) sentinel as a real return date.
+  return { playerId: r.player_id, fullName: r.full_name, unavailabilityKindCode: r.unavailability_kind_code, from: r.spell_from, to: r.spell_to, expectedReturnOn: meaningfulDate(r.expected_return_on), reason: r.reason, severityRank: r.severity_rank === null || r.severity_rank === undefined ? null : Number(r.severity_rank), current: r.is_current };
 }
 
 export function mapValuation(r: ValuationRow): TeamValuationRecord {

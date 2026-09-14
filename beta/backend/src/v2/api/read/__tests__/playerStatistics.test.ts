@@ -11,7 +11,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  aggregatePlayerStatistics, mapRegistration, mapAvailability, mapValuation,
+  aggregatePlayerStatistics, mapRegistration, mapAvailability, mapValuation, meaningfulDate,
   type PlayerStatRow,
 } from '../playerStatistics';
 
@@ -57,6 +57,36 @@ describe('raw mappers — present and absent', () => {
     const v = mapAvailability({ unavailability_kind_code: 'INJURY', spell_from: '2026-08-01', spell_to: null, expected_return_on: '2026-09-01', reason: 'knee', severity_rank: '3', is_current: true });
     assert.deepEqual(v, { unavailabilityKindCode: 'INJURY', from: '2026-08-01', to: null, expectedReturnOn: '2026-09-01', reason: 'knee', severityRank: 3, current: true });
     assert.equal(mapAvailability({ unavailability_kind_code: 'SUSPENSION', spell_from: null, spell_to: null, expected_return_on: null, reason: null, severity_rank: null, is_current: false })!.severityRank, null);
+  });
+
+  // ── Issue 1: an epoch/zero expected-return sentinel must not surface as 1970-01-01 ──
+  test('meaningfulDate: real future date kept, null/epoch/pre-epoch reported absent', () => {
+    assert.equal(meaningfulDate('2026-09-01'), '2026-09-01'); // real return date kept
+    assert.equal(meaningfulDate(null), null);
+    assert.equal(meaningfulDate(undefined), null);
+    assert.equal(meaningfulDate('1970-01-01'), null);         // the exact new Date(0) artifact
+    assert.equal(meaningfulDate('1969-12-31'), null);         // any pre-epoch sentinel too
+  });
+
+  test('availability: valid expectedReturnOn survives; current is independent of it', () => {
+    const valid = mapAvailability({ unavailability_kind_code: 'INJURY', spell_from: '2026-08-01', spell_to: null, expected_return_on: '2026-09-01', reason: 'knee', severity_rank: '3', is_current: true })!;
+    assert.equal(valid.expectedReturnOn, '2026-09-01');
+    assert.equal(valid.current, true);
+  });
+
+  test('availability: a stored epoch (1970-01-01) expected-return becomes null, never 1970', () => {
+    const epoch = mapAvailability({ unavailability_kind_code: 'INJURY', spell_from: '2026-08-01', spell_to: null, expected_return_on: '1970-01-01', reason: 'hamstring', severity_rank: '2', is_current: true })!;
+    assert.equal(epoch.expectedReturnOn, null);
+    // current availability is derived from the open spell, NOT from expectedReturnOn.
+    assert.equal(epoch.current, true);
+    assert.equal(epoch.from, '2026-08-01');
+    assert.equal(epoch.unavailabilityKindCode, 'INJURY');
+  });
+
+  test('availability: an absent (null) expected-return stays null (unchanged)', () => {
+    const none = mapAvailability({ unavailability_kind_code: 'SUSPENSION', spell_from: '2026-08-01', spell_to: '2026-08-15', expected_return_on: null, reason: null, severity_rank: null, is_current: false })!;
+    assert.equal(none.expectedReturnOn, null);
+    assert.equal(none.current, false);
   });
   test('valuation maps amount/currency/date; null when absent', () => {
     assert.equal(mapValuation(null), null);

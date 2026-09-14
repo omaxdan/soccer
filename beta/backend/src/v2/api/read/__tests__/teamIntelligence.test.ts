@@ -82,6 +82,25 @@ describe('mapSquadMember / mapAvailability / mapValuation', () => {
     const v: ValuationRow = { player_id: '1', full_name: 'X', amount: '12000000.50', currency_code: 'EUR', as_of_on: '2026-06-01', source_code: 'TM' };
     assert.equal(mapValuation(v).amount, '12000000.50');
   });
+
+  // ── Issue 1: epoch/zero expected-return sentinel must not surface as 1970-01-01 ──
+  test('availability: valid expectedReturnOn survives; current independent of it', () => {
+    const v = mapAvailability({ player_id: '2', full_name: 'Cano', unavailability_kind_code: 'INJURY', spell_from: '2026-07-01', spell_to: null, expected_return_on: '2026-08-01', reason: 'hamstring', severity_rank: '3', is_current: true });
+    assert.equal(v.expectedReturnOn, '2026-08-01');
+    assert.equal(v.current, true);
+  });
+
+  test('availability: a stored epoch (1970-01-01) expected-return becomes null, current stays true', () => {
+    const v = mapAvailability({ player_id: '2', full_name: 'Cano', unavailability_kind_code: 'INJURY', spell_from: '2026-07-01', spell_to: null, expected_return_on: '1970-01-01', reason: 'hamstring', severity_rank: '3', is_current: true });
+    assert.equal(v.expectedReturnOn, null); // not '1970-01-01'
+    assert.equal(v.current, true);
+    assert.equal(v.from, '2026-07-01');
+  });
+
+  test('availability: absent expected-return stays null', () => {
+    const v = mapAvailability({ player_id: '3', full_name: 'X', unavailability_kind_code: 'SUSPENSION', spell_from: '2026-07-01', spell_to: '2026-07-15', expected_return_on: null, reason: null, severity_rank: null, is_current: false });
+    assert.equal(v.expectedReturnOn, null);
+  });
 });
 
 // ── fixtures ───────────────────────────────────────────────────────────────────────
