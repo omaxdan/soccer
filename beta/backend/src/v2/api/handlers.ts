@@ -22,6 +22,7 @@ import { readMatchIntelligence } from '../snapshot/read/matchIntelligence';
 import type {
   MatchDetailResponse,
   MatchIntelligenceResponse,
+  MatchLineupsResponse,
   EditionFixtureListResponse,
   EditionListResponse,
   EditionStandingsResponse,
@@ -47,6 +48,7 @@ import {
 } from './read/playerStatistics';
 import { readTeamIntelligence } from './read/teamIntelligence';
 import { readEditionStandings } from './read/editionStandings';
+import { readMatchLineups } from './read/matchLineups';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -275,6 +277,34 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     },
     intelligence: mapIntelligence(readings, h.home_id, h.away_id, evidence),
     teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),
+  };
+}
+
+/**
+ * A fixture's ACTUAL reported lineups (football.lineup / lineup_selection), or null
+ * when the fixture does not exist. Reuses the match-surface existence gate
+ * (FIXTURE_HEADER_SQL) for identity, then delegates the lineup projection to the read
+ * model. Observed evidence only — never a predicted XI. No writes, no calculation.
+ */
+export async function getMatchLineups(tx: PoolClient, fixtureId: string): Promise<MatchLineupsResponse | null> {
+  const header = await tx.query<HeaderRow>(FIXTURE_HEADER_SQL, [fixtureId]);
+  if (header.rows.length === 0) return null;
+  const h = header.rows[0];
+
+  const homeTeam = { id: h.home_id, name: h.home_name, slug: h.home_slug };
+  const awayTeam = { id: h.away_id, name: h.away_name, slug: h.away_slug };
+  const lineups = await readMatchLineups(tx, fixtureId, homeTeam, awayTeam);
+
+  return {
+    match: {
+      fixtureId: h.fixture_id,
+      kickoffAt: iso(h.scheduled_kickoff_at),
+      status: h.lifecycle_state_code,
+      competition: { id: h.competition_id, name: h.competition_name, slug: h.competition_slug },
+      homeTeam,
+      awayTeam,
+    },
+    lineups,
   };
 }
 

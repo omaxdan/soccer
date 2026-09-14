@@ -17,6 +17,7 @@ import type {
 } from './read/playerStatistics';
 import type { TeamIntelligence } from './read/teamIntelligence';
 import type { EditionStandings } from './read/editionStandings';
+import type { MatchLineups } from './read/matchLineups';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -32,6 +33,10 @@ export type {
 export type {
   EditionStandings, StandingTable, StandingLine, EditionStandingsCoverage, StandingsCoverageState,
 } from './read/editionStandings';
+
+export type {
+  MatchLineups, TeamLineup, LineupPlayer, MatchLineupsCoverage, LineupCoverageState, TeamRef,
+} from './read/matchLineups';
 
 export interface ApiTeam {
   readonly id: string;
@@ -205,6 +210,25 @@ export interface MatchDetailResponse {
 export interface MatchIntelligenceResponse {
   readonly intelligence: MatchIntelligence;
   readonly context: MatchDetailResponse | null;
+}
+
+/**
+ * A fixture's ACTUAL reported lineups (football.lineup / lineup_selection): each
+ * team's formation, starting XI and substitutes, with position and shirt number.
+ * Observed evidence only — NEVER a predicted XI (`coverage.lineupsAreObserved`).
+ * A team with no reported lineup is null (a coverage fact), never fabricated.
+ * Null (→ 404) only when the fixture does not exist.
+ */
+export interface MatchLineupsResponse {
+  readonly match: {
+    readonly fixtureId: string;
+    readonly kickoffAt: string;               // ISO-8601
+    readonly status: string;                  // fixture lifecycle_state_code
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+    readonly homeTeam: ApiTeam;
+    readonly awayTeam: ApiTeam;
+  };
+  readonly lineups: MatchLineups;
 }
 
 /** One fixture in a league/edition list. */
