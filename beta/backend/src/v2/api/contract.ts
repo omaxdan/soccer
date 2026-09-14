@@ -15,11 +15,18 @@ import type { MatchIntelligence } from '../snapshot/read/matchIntelligence';
 import type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
 } from './read/playerStatistics';
+import type { TeamIntelligence } from './read/teamIntelligence';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
   PlayerStatAggregate, PlayerEditionParticipation, PlayerMatchStatLine,
 } from './read/playerStatistics';
+
+export type {
+  TeamIntelligence, TeamParticipation, TeamSquadMember, TeamAvailabilityRecord,
+  TeamValuationRecord, TeamFixtureLine, TeamStatKeyCoverage, TeamPlayerPerformance,
+  TeamNextFixtureContext, TeamCoverageMeta, CoverageState,
+} from './read/teamIntelligence';
 
 export interface ApiTeam {
   readonly id: string;
@@ -284,6 +291,15 @@ export interface TeamDetailResponse {
   readonly squad: readonly ApiPlayerSummary[];
   /** A short tail of recent completed results, oriented to the team (context). */
   readonly recentResults: readonly ApiTeamResult[];
+  /**
+   * The Team Intelligence workspace projection — participation, current governed squad,
+   * availability, valuations, recent/upcoming fixtures, home/away context, per-key
+   * DERIVED statistic aggregates over stored `player_match_statistic` rows, latest
+   * per-player performances, and explicit-only next-fixture availability. RAW evidence +
+   * read-model arithmetic only; NO governed intelligence (no verdict/score/readiness/
+   * predicted XI/derived suspension) is produced here. See `intelligence.coverage`.
+   */
+  readonly intelligence: TeamIntelligence;
 }
 
 export interface PlayerDetailResponse {

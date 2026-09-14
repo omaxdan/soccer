@@ -44,6 +44,7 @@ import {
   aggregatePlayerStatistics, mapRegistration, mapAvailability, mapValuation,
   type PlayerStatRow, type PlayerRegistrationRow, type PlayerAvailabilityRow, type PlayerValuationRow,
 } from './read/playerStatistics';
+import { readTeamIntelligence } from './read/teamIntelligence';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -546,6 +547,8 @@ export async function getTeamDetail(tx: PoolClient, teamId: string): Promise<Tea
   const squadRes = await tx.query<PlayerSummaryRow>(TEAM_SQUAD_SQL, [teamId]);
   const resultsRes = await tx.query<TeamResultRow>(TEAM_RESULTS_SQL, [teamId]);
   const teamSummary = toTeamSummary(t);
+  // The Team Intelligence workspace projection (raw evidence + read-model aggregation only).
+  const intelligence = await readTeamIntelligence(tx, teamId);
 
   return {
     team: { ...teamSummary, homeVenueName: t.home_venue_name },
@@ -563,6 +566,7 @@ export async function getTeamDetail(tx: PoolClient, teamId: string): Promise<Tea
       goalsFor: r.goals_for === null ? null : Number(r.goals_for),
       goalsAgainst: r.goals_against === null ? null : Number(r.goals_against),
     })),
+    intelligence,
   };
 }
 
