@@ -75,6 +75,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18/intelligence'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/fixtures'), { kind: 'editionFixtures', id: '42' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/standings'), { kind: 'editionStandings', id: '42' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/editions/18'), { kind: 'edition', id: '18' });          // bare edition entity
+    assert.deepEqual(resolveRoute('GET', '/api/v2/editions/abc'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/editions/18'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/abc/standings'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/editions/42/standings'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions'), { kind: 'editionList' });
@@ -252,7 +255,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null,
-      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null,
+      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -364,6 +367,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getVenue: async (id) => (id === '25' ? { venue: { id: '25', name: 'Maracanã', city: 'Rio de Janeiro', countryCode: 'BR', latitude: -22.9, longitude: -43.2, elevationMetres: 9, timezoneName: 'America/Sao_Paulo', capacity: 78838, surface: 'grass' }, homeTeams: [{ id: '67', name: 'Fluminense', slug: 'fluminense', shortName: 'FLU', countryCode: 'BR' }], coverage: { venue: 'present', homeTeams: 'present' } } : null),
       getCountry: async (code) => (code === 'BR' ? { country: { code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }, teams: [{ id: '68', name: 'Flamengo', slug: 'flamengo-5981', shortName: 'Flamengo', countryCode: 'BR' }], competitions: [{ id: '1', name: 'Brasileirão Série A', slug: 'brasileirao-serie-a' }], coverage: { country: 'present', teams: 'present', competitions: 'present' } } : null),
       getCompetition: async (id) => (id === '28' ? { competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325', countryCode: 'BR' }, editions: [{ id: '42', seasonLabel: '2025', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixtureCount: 380 }], coverage: { competition: 'present', editions: 'present' } } : null),
+      getEditionDetail: async (id) => (id === '18' ? { edition: { id: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' } }, coverage: { edition: 'present', competition: 'present' } } : null),
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -560,6 +564,21 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     assert.equal(miss.status, 404);
     assert.deepEqual(await miss.json(), { error: 'competition_not_found' });
     assert.equal((await fetch(`${base}/api/v2/competitions/abc`)).status, 400); // malformed identifier
+  });
+
+  it('GET a known edition → 200 with identity + competition; unknown → 404; malformed → 400', async () => {
+    const res = await fetch(`${base}/api/v2/editions/18`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.edition.id, '18');
+    assert.equal(body.edition.seasonLabel, 'Brasileiro Serie A 2026');
+    assert.equal(body.edition.competition.id, '28');
+    assert.equal(body.edition.fixtureCount, undefined); // fixtureCount intentionally not exposed here
+    assert.deepEqual(body.coverage, { edition: 'present', competition: 'present' });
+    const miss = await fetch(`${base}/api/v2/editions/19`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'edition_not_found' });
+    assert.equal((await fetch(`${base}/api/v2/editions/abc`)).status, 400);
   });
 
   it('GET the player list → 200; known player → 200; unknown player → 404', async () => {

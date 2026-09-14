@@ -48,6 +48,7 @@ import type {
   VenueResponse,
   CountryResponse,
   CompetitionResponse,
+  EditionResponse,
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
@@ -67,6 +68,7 @@ import { readTeamReadiness } from './read/teamReadiness';
 import { readVenue } from './read/venue';
 import { mapCountry, mapCompetitionSummary, buildCountryCoverage, type CountryRow, type CountryCompetitionRow } from './read/country';
 import { mapCompetition, mapCompetitionEdition, buildCompetitionCoverage, type CompetitionRow, type CompetitionEditionRow } from './read/competition';
+import { mapEditionIdentity, buildEditionCoverage, type EditionIdentityRow } from './read/edition';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -938,6 +940,21 @@ export async function getCompetition(tx: PoolClient, competitionId: string): Pro
     editions,
     coverage: buildCompetitionCoverage(editions),
   };
+}
+
+/**
+ * The canonical Competition Edition entity (identity + its parent competition), or
+ * null when the edition is unknown or not a governed-exposed edition (→ 404). REUSES
+ * the existing EDITION_HEADER_SQL — the SAME DAY1_AUTHORIZED_EDITION_JOIN gate as the
+ * fixtures and standings surfaces — so no new authorization rule is introduced and no
+ * ungoverned edition is surfaced. The gated header is the entire read (competition
+ * comes from its canonical join, not a dependent fixtures query), so the governance
+ * gate necessarily precedes any projection. Read-only Identity/Context.
+ */
+export async function getEditionDetail(tx: PoolClient, editionId: string): Promise<EditionResponse | null> {
+  const ed = await tx.query<EditionIdentityRow>(EDITION_HEADER_SQL, [editionId]);
+  if (ed.rows.length === 0) return null;
+  return { edition: mapEditionIdentity(ed.rows[0]), coverage: buildEditionCoverage() };
 }
 
 interface PlayerDirectoryRow extends PlayerSummaryRow {

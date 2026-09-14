@@ -396,6 +396,37 @@ export interface EditionListResponse {
 }
 
 /**
+ * An edition's canonical identity + its parent competition — the fixtureCount-free
+ * header shape already projected by the fixtures and standings endpoints, formalized
+ * for the Edition entity surface. Distinct from ApiEditionSummary, which additionally
+ * carries a fixtureCount for the edition-list directory.
+ */
+export interface ApiEditionIdentity {
+  readonly id: string;
+  readonly seasonLabel: string;
+  readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+}
+
+export interface EditionCoverage {
+  readonly edition: 'present';                    // always 'present' in a 200 (404 when unknown/unauthorized)
+  readonly competition: 'present' | 'absent';     // invariantly 'present' (competition_id is a mandatory FK)
+}
+
+/**
+ * The canonical Competition Edition entity — a competition in a specific season
+ * (E1.03). Identity (id, season label) plus its parent competition via the canonical
+ * competition_edition.competition_id relationship, gated by the SAME
+ * DAY1_AUTHORIZED_EDITION_JOIN governance as the edition list, fixtures and standings
+ * surfaces. Identity/Context ONLY — no fixtures, standings, fixture count, roster, or
+ * intelligence. Null (→ 404 edition_not_found) when the edition is unknown or not a
+ * governed-exposed edition — nonexistent and unauthorized are not distinguished.
+ */
+export interface EditionResponse {
+  readonly edition: ApiEditionIdentity;
+  readonly coverage: EditionCoverage;
+}
+
+/**
  * An edition's league table(s), projected from `football.standing`. Observed
  * point-in-time snapshots (latest as-of per variant) — NOT governed intelligence,
  * NOT a ranking projection. `goalDifference` inside each row is a labeled read-layer
