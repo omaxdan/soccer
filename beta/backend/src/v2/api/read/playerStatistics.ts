@@ -47,8 +47,8 @@ export interface PlayerRegistrationRow {
   readonly registration_kind_code: string;
   readonly registration_from: string | null; // ISO date or null (unbounded)
   readonly registration_to: string | null;   // ISO date or null (open)
-  readonly competition_edition_id: string;
-  readonly season_label: string;
+  readonly competition_edition_id: string | null; // null when the registration carries no edition link
+  readonly season_label: string | null;           // null when no edition link (LEFT JOIN)
 }
 
 export interface PlayerAvailabilityRow {
@@ -75,8 +75,10 @@ export interface PlayerRegistrationView {
   readonly registrationKindCode: string;
   readonly registrationFrom: string | null;
   readonly registrationTo: string | null;
-  readonly competitionEditionId: string;
-  readonly seasonLabel: string;
+  /** null when the stored registration carries no edition link (e.g. squad-ingested rows).
+   *  Governed competition/season context is on the response's top-level `competition`. */
+  readonly competitionEditionId: string | null;
+  readonly seasonLabel: string | null;
 }
 
 export interface PlayerAvailabilityView {

@@ -52,6 +52,17 @@ describe('raw mappers — present and absent', () => {
       { teamId: '67', registrationKindCode: 'PERMANENT', registrationFrom: '2026-01-01', registrationTo: null, competitionEditionId: '18', seasonLabel: '2026' },
     );
   });
+
+  // A squad-ingested registration carries NO edition link (competition_edition_id is
+  // null). The read model MUST still surface it — team/kind/period intact, edition
+  // fields honestly null — never drop the whole registration. (Live cause of the
+  // player-27 "registration empty" symptom: an INNER JOIN dropped exactly this row.)
+  test('registration with no edition link still maps (edition fields null, not dropped)', () => {
+    assert.deepEqual(
+      mapRegistration({ team_id: '67', registration_kind_code: 'PERMANENT', registration_from: '2026-09-14', registration_to: null, competition_edition_id: null, season_label: null }),
+      { teamId: '67', registrationKindCode: 'PERMANENT', registrationFrom: '2026-09-14', registrationTo: null, competitionEditionId: null, seasonLabel: null },
+    );
+  });
   test('availability maps kind/spell/current; null when absent; severity coerced', () => {
     assert.equal(mapAvailability(undefined), null);
     const v = mapAvailability({ unavailability_kind_code: 'INJURY', spell_from: '2026-08-01', spell_to: null, expected_return_on: '2026-09-01', reason: 'knee', severity_rank: '3', is_current: true });

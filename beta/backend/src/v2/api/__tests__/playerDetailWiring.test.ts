@@ -35,10 +35,12 @@ function fakeTx(opts: { expose: boolean }): PoolClient {
       return [{ id: '27', full_name: 'Germán Cano', short_name: 'Cano', slug: 'german-cano',
                 date_of_birth: '1988-01-02', nationality_code: 'ARG', height_cm: 181, preferred_foot: 'RIGHT' }];
     }
-    // Registration query (no team_registration join).
+    // Registration query (no team_registration join). Mirrors the real squad-ingested
+    // row: NO edition link (competition_edition_id null) — the LEFT JOIN must still
+    // return it. An INNER JOIN would have dropped this row (the live player-27 bug).
     if (q.includes('AS registration_kind_code') && !q.includes('team_registration')) {
-      return [{ team_id: '67', registration_kind_code: 'PERMANENT', registration_from: '2026-01-01', registration_to: null,
-                competition_edition_id: '18', season_label: 'Brasileiro Serie A 2026' }];
+      return [{ team_id: '67', registration_kind_code: 'PERMANENT', registration_from: '2026-09-14', registration_to: null,
+                competition_edition_id: null, season_label: null }];
     }
     if (q.includes('football.player_availability')) {
       // expected_return_on stored as the epoch sentinel (provider "no return" → 1970-01-01).
@@ -70,9 +72,13 @@ describe('getPlayerDetail wiring (DB-free)', () => {
     assert.equal(r.player.id, '27');
     assert.notEqual(r.currentTeam, null);
     assert.notEqual(r.competition, null);
-    // The rich read model that must be present.
+    // The rich read model that must be present. Registration surfaces even though the
+    // stored row has no edition link (competition_edition_id null) — the LEFT-JOIN fix.
     assert.notEqual(r.registration, null);
     assert.equal(r.registration!.registrationKindCode, 'PERMANENT');
+    assert.equal(r.registration!.teamId, '67');
+    assert.equal(r.registration!.competitionEditionId, null); // honest absence, not dropped
+    assert.equal(r.registration!.seasonLabel, null);
     assert.notEqual(r.availability, null);
     assert.equal(r.availability!.unavailabilityKindCode, 'INJURY');
     assert.notEqual(r.valuation, null);

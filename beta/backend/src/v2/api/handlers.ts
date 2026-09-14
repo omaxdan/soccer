@@ -632,19 +632,26 @@ ${GOVERNED_EDITION_JOIN_CE}
    LIMIT 1
 `;
 
-// The player's current governed registration (kind + period + edition). Mirrors the
-// exposure gate's join so the registration shown is the one that surfaced the player.
+// The player's current registration (kind + period), with its edition link when one
+// is recorded. Squad ingestion records the registration WITHOUT a competition_edition_id
+// (that column stays null — the edition is carried on the TEAM's registration, which is
+// what the exposure gate above resolves). The join to competition_edition MUST therefore
+// be a LEFT JOIN: an INNER JOIN drops the whole registration whenever the edition link is
+// absent, which is every squad-ingested row — surfacing a null registration for a player
+// who is in fact registered. Edition fields are null when the link is absent (honest
+// absence); the governed competition/season context is still carried by the top-level
+// `competition` field, which the gate derives via team_registration.
 const PLAYER_REGISTRATION_SQL = `
   SELECT pr.team_id::text AS team_id, pr.registration_kind_code AS registration_kind_code,
          to_char(lower(pr.registration_period), 'YYYY-MM-DD') AS registration_from,
          to_char(upper(pr.registration_period), 'YYYY-MM-DD') AS registration_to,
          pr.competition_edition_id::text AS competition_edition_id, ce.season_label AS season_label
     FROM football.player_registration pr
-    JOIN football.competition_edition ce ON ce.id = pr.competition_edition_id
+    LEFT JOIN football.competition_edition ce ON ce.id = pr.competition_edition_id
    WHERE pr.player_id = $1::bigint
      AND pr.registration_kind_code <> 'LOAN_OUT'
      AND pr.registration_period @> current_date
-   ORDER BY ce.season_label DESC
+   ORDER BY ce.season_label DESC NULLS LAST, lower(pr.registration_period) DESC
    LIMIT 1
 `;
 
