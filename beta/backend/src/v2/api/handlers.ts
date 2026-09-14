@@ -44,6 +44,7 @@ import type {
   TeamListResponse,
   TeamDetailResponse,
   TeamPerformanceResponse,
+  TeamReadinessResponse,
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
@@ -59,6 +60,7 @@ import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
 import { readTeamPerformance } from './read/teamPerformance';
+import { readTeamReadiness } from './read/teamReadiness';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -768,6 +770,25 @@ export async function getTeamPerformance(tx: PoolClient, teamId: string): Promis
     byCompetition: performance.byCompetition,
     coverage: performance.coverage,
   };
+}
+
+/**
+ * A team's GOVERNED readiness reading (readiness_tracker), or null when the team is
+ * not in a governed authorized edition. Reuses the SAME exposure gate as Team Detail
+ * (TEAM_COMPETITIONS_SQL) — the readiness reader is reached only after the gate
+ * succeeds — then delegates to the read model, which reuses the existing
+ * quarantine-aware current-reading reader. No calculation, no writes.
+ */
+export async function getTeamReadiness(tx: PoolClient, teamId: string): Promise<TeamReadinessResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  const idRes = await tx.query<TeamIdentityRow>(TEAM_IDENTITY_SQL, [teamId]);
+  if (idRes.rows.length === 0) return null;
+
+  const { readiness, coverage } = await readTeamReadiness(tx, teamId);
+  return { team: toTeamSummary(idRes.rows[0]), readiness, coverage };
 }
 
 interface PlayerDirectoryRow extends PlayerSummaryRow {

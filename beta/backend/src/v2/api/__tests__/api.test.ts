@@ -83,6 +83,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18/performance'), { kind: 'teamPerformance', id: '18' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc/performance'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/teams/18/performance'), { kind: 'methodNotAllowed' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18/readiness'), { kind: 'teamReadiness', id: '18' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc/readiness'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/teams/18/readiness'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players'), { kind: 'playerList' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players/9'), { kind: 'player', id: '9' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc'), { kind: 'badRequest' });
@@ -237,7 +240,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchLifecycle: async () => null,
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
-      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null,
+      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null,
     };
     server = createServer(deps);
@@ -344,6 +347,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeams: async () => ({ teams: [{ id: '7', name: 'T', slug: 't', shortName: null, countryCode: null }] }),
       getTeam: async (id) => (id === '7' ? { team: { id: '7' } } : null),
       getTeamPerformance: async (id) => (id === '7' ? { team: { id: '7' }, overall: { homeForm: null, awayForm: null, momentum: null, goalMarginVolatility: null, giantKillerPpg: null }, byCompetition: [], coverage: { overall: 'absent', performanceIsDescriptive: true } } : null),
+      getTeamReadiness: async (id) => (id === '7' ? { team: { id: '7' }, readiness: { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null }, coverage: { readiness: 'present', readinessIsGoverned: true } } : null),
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
     };
@@ -484,6 +488,19 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     assert.equal(body.team.id, '7');
     assert.equal(body.coverage.performanceIsDescriptive, true);
     const miss = await fetch(`${base}/api/v2/teams/8/performance`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'team_not_found' });
+  });
+
+  it('GET team readiness → 200 governed reading; unauthorized team → 404', async () => {
+    const res = await fetch(`${base}/api/v2/teams/7/readiness`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.team.id, '7');
+    assert.equal(body.readiness.moduleKey, 'readiness_tracker');
+    assert.equal(body.coverage.readinessIsGoverned, true);
+    assert.equal(Object.prototype.hasOwnProperty.call(body.readiness, 'score'), false); // no fabricated score
+    const miss = await fetch(`${base}/api/v2/teams/8/readiness`);
     assert.equal(miss.status, 404);
     assert.deepEqual(await miss.json(), { error: 'team_not_found' });
   });

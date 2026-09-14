@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getPlayers, getPlayerDetail, isValidId } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getPlayers, getPlayerDetail, isValidId } from './handlers';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -40,6 +40,7 @@ export interface ApiDeps {
   readonly getTeams: () => Promise<unknown>;
   readonly getTeam: (id: string) => Promise<unknown | null>;
   readonly getTeamPerformance: (id: string) => Promise<unknown | null>;
+  readonly getTeamReadiness: (id: string) => Promise<unknown | null>;
   readonly getPlayers: () => Promise<unknown>;
   readonly getPlayer: (id: string) => Promise<unknown | null>;
 }
@@ -58,6 +59,7 @@ const productionDeps: ApiDeps = {
   getTeams: () => withConnection(API_ROLE, (tx: PoolClient) => getTeams(tx)),
   getTeam: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamDetail(tx, id)),
   getTeamPerformance: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamPerformance(tx, id)),
+  getTeamReadiness: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamReadiness(tx, id)),
   getPlayers: () => withConnection(API_ROLE, (tx: PoolClient) => getPlayers(tx)),
   getPlayer: (id) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerDetail(tx, id)),
 };
@@ -76,6 +78,7 @@ export type Route =
   | { kind: 'teamList' }
   | { kind: 'team'; id: string }
   | { kind: 'teamPerformance'; id: string }
+  | { kind: 'teamReadiness'; id: string }
   | { kind: 'playerList' }
   | { kind: 'player'; id: string }
   | { kind: 'badRequest' }
@@ -97,9 +100,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const editionFixtures = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/fixtures$/);
   const editionStandings = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/standings$/);
   const teamPerformance = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/performance$/);
+  const teamReadiness = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/readiness$/);
   const team = pathname.match(/^\/api\/v2\/teams\/([^/]+)$/);
   const player = pathname.match(/^\/api\/v2\/players\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !teamPerformance && !team && !player) {
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !teamPerformance && !teamReadiness && !team && !player) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
@@ -145,6 +149,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   if (teamPerformance) {
     const id = decodeURIComponent(teamPerformance[1]);
     return isValidId(id) ? { kind: 'teamPerformance', id } : { kind: 'badRequest' };
+  }
+  if (teamReadiness) {
+    const id = decodeURIComponent(teamReadiness[1]);
+    return isValidId(id) ? { kind: 'teamReadiness', id } : { kind: 'badRequest' };
   }
   if (team) {
     const id = decodeURIComponent(team[1]);
@@ -216,6 +224,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getTeamPerformance(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
       }
+      case 'teamReadiness': {
+        const body = await deps.getTeamReadiness(route.id);
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
+      }
       case 'team': {
         const body = await deps.getTeam(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
@@ -247,7 +259,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n`);
   });
 }
 

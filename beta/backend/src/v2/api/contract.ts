@@ -23,6 +23,7 @@ import type { MatchResult, MatchResultCoverage } from './read/matchResult';
 import type { MatchLifecycle } from './read/matchLifecycle';
 import type { MatchVenue } from './read/matchVenue';
 import type { TeamPerformanceOverall, CompetitionPerformance, TeamPerformanceCoverage } from './read/teamPerformance';
+import type { TeamReadinessReading, TeamReadinessCoverage } from './read/teamReadiness';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -64,6 +65,10 @@ export type {
   TeamPerformance, TeamPerformanceOverall, CompetitionPerformance, EditionRef,
   PerformanceMetric, MetricDirection, TeamPerformanceCoverage, PerformanceCoverageState,
 } from './read/teamPerformance';
+
+export type {
+  TeamReadiness, TeamReadinessReading, TeamReadinessCoverage, ReadinessCoverageState,
+} from './read/teamReadiness';
 
 export interface ApiTeam {
   readonly id: string;
@@ -476,6 +481,23 @@ export interface TeamPerformanceResponse {
   readonly overall: TeamPerformanceOverall;
   readonly byCompetition: readonly CompetitionPerformance[];
   readonly coverage: TeamPerformanceCoverage;
+}
+
+/**
+ * A team's GOVERNED readiness reading (module.module_reading, module_key
+ * 'readiness_tracker', ALL_COMPETITIONS) — a governed status + verdict over
+ * momentum, with sample, provenance and cited evidence. This is governed
+ * intelligence, NOT descriptive Performance and NOT the orphan `team.readiness_score`
+ * feature. There is deliberately no numeric score: `strength`/`confidence` are
+ * exposed exactly as persisted (NULL at 1.0.0). `readiness` is null and
+ * `coverage.readiness` is 'absent' when no valid non-quarantined reading exists;
+ * an INACTIVE reading surfaces with `status: 'INACTIVE'` + `inactiveReason`, not as
+ * absence. Null (→ 404) only when the team is not a governed authorized team.
+ */
+export interface TeamReadinessResponse {
+  readonly team: ApiTeamSummary;
+  readonly readiness: TeamReadinessReading | null;
+  readonly coverage: TeamReadinessCoverage;
 }
 
 export interface PlayerDetailResponse {
