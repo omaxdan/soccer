@@ -16,6 +16,7 @@ import type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
 } from './read/playerStatistics';
 import type { TeamIntelligence } from './read/teamIntelligence';
+import type { EditionStandings } from './read/editionStandings';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -27,6 +28,10 @@ export type {
   TeamValuationRecord, TeamFixtureLine, TeamStatKeyCoverage, TeamPlayerPerformance,
   TeamNextFixtureContext, TeamCoverageMeta, CoverageState,
 } from './read/teamIntelligence';
+
+export type {
+  EditionStandings, StandingTable, StandingLine, EditionStandingsCoverage, StandingsCoverageState,
+} from './read/editionStandings';
 
 export interface ApiTeam {
   readonly id: string;
@@ -231,6 +236,23 @@ export interface ApiEditionSummary {
 
 export interface EditionListResponse {
   readonly editions: readonly ApiEditionSummary[];
+}
+
+/**
+ * An edition's league table(s), projected from `football.standing`. Observed
+ * point-in-time snapshots (latest as-of per variant) — NOT governed intelligence,
+ * NOT a ranking projection. `goalDifference` inside each row is a labeled read-layer
+ * derivation (goalsFor − goalsAgainst). `standings.tables` is empty and
+ * `coverage.standings` is 'absent' when no standings have been ingested for the
+ * edition. Null (→ 404) only when the edition is not a governed-exposed edition.
+ */
+export interface EditionStandingsResponse {
+  readonly edition: {
+    readonly id: string;
+    readonly seasonLabel: string;
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+  };
+  readonly standings: EditionStandings;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import type {
   MatchIntelligenceResponse,
   EditionFixtureListResponse,
   EditionListResponse,
+  EditionStandingsResponse,
   ApiTeamIntelligence,
   ApiTeamFeatures,
   ApiModuleReading,
@@ -45,6 +46,7 @@ import {
   type PlayerStatRow, type PlayerRegistrationRow, type PlayerAvailabilityRow, type PlayerValuationRow,
 } from './read/playerStatistics';
 import { readTeamIntelligence } from './read/teamIntelligence';
+import { readEditionStandings } from './read/editionStandings';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -401,6 +403,28 @@ export async function getEditions(tx: PoolClient): Promise<EditionListResponse> 
       competition: { id: e.competition_id, name: e.competition_name, slug: e.competition_slug },
       fixtureCount: Number(e.fixture_count),
     })),
+  };
+}
+
+/**
+ * An edition's league table(s) — the standings projection — or null when the edition
+ * is not governed-exposed. Reuses the SAME Day-1 exposure gate as the fixtures list
+ * (EDITION_HEADER_SQL) so no ungoverned edition is surfaced, then delegates the
+ * standings projection to the read model. Observed evidence only; no intelligence.
+ */
+export async function getEditionStandings(tx: PoolClient, editionId: string): Promise<EditionStandingsResponse | null> {
+  const ed = await tx.query<EditionRow>(EDITION_HEADER_SQL, [editionId]);
+  if (ed.rows.length === 0) return null;
+  const e = ed.rows[0];
+
+  const standings = await readEditionStandings(tx, editionId);
+  return {
+    edition: {
+      id: e.edition_id,
+      seasonLabel: e.season_label,
+      competition: { id: e.competition_id, name: e.competition_name, slug: e.competition_slug },
+    },
+    standings,
   };
 }
 
