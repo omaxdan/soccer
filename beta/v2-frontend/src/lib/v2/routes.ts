@@ -14,7 +14,7 @@
 // reuses the canonical slug helpers — there is no second slug system.
 
 import { slugify } from '../slug';
-import { v2MatchSlug, v2TeamSlug, v2PlayerSlug, type V2SlugFixture } from './slug';
+import { v2MatchSlug, v2TeamSlug, v2PlayerSlug, v2CompetitionSlug, v2VenueSlug, type V2SlugFixture } from './slug';
 
 /** Enough of an edition to build a readable public slug. The numeric `id` stays the
  *  authoritative identity; the rest is presentation/SEO. */
@@ -60,10 +60,20 @@ export const routes = {
   matchBySlug: (slug: string): string => v2Path(V2_BASE, `/matches/${slug}`),
   /** Teams directory. */
   teams: (): string => v2Path(V2_BASE, '/teams'),
-  /** One team's page. */
-  team: (team: { id: string; name: string }): string => v2Path(V2_BASE, `/teams/${v2TeamSlug(team)}`),
+  /** One team's page. Human part is the CANONICAL STORED slug; DB id resolves. */
+  team: (team: { id: string; slug: string }): string => v2Path(V2_BASE, `/teams/${v2TeamSlug(team)}`),
   /** Players directory. */
   players: (): string => v2Path(V2_BASE, '/players'),
-  /** One player's page. */
-  player: (player: { id: string; fullName: string }): string => v2Path(V2_BASE, `/players/${v2PlayerSlug(player)}`),
+  /** One player's page. Human part is the CANONICAL STORED slug; DB id resolves. */
+  player: (player: { id: string; slug: string }): string => v2Path(V2_BASE, `/players/${v2PlayerSlug(player)}`),
+  /** One competition's page. Human part is the CANONICAL STORED slug; DB id resolves.
+   *  (Helper only — the competition page is a separate slice.) */
+  competition: (competition: { id: string; slug: string }): string =>
+    v2Path(V2_BASE, `/competitions/${v2CompetitionSlug(competition)}`),
+  /** One venue's page. Venue has no stored slug, so `slugify(name)-{id}`; DB id resolves.
+   *  (Helper only — the venue page is a separate slice.) */
+  venue: (venue: { id: string; name: string }): string => v2Path(V2_BASE, `/venues/${v2VenueSlug(venue)}`),
+  /** One country's page, addressed by its canonical ISO alpha-2 `code`.
+   *  (Helper only — the country page is a separate slice.) */
+  country: (country: { code: string }): string => v2Path(V2_BASE, `/countries/${encodeURIComponent(country.code)}`),
 } as const;

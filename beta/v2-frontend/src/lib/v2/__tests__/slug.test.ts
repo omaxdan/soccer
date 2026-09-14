@@ -8,11 +8,12 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { v2MatchSlug, idFromParam } from '../slug';
+import { v2MatchSlug, v2TeamSlug, v2PlayerSlug, v2CompetitionSlug, v2VenueSlug, idFromParam } from '../slug';
 
 describe('v2 match slug · idFromParam', () => {
   test('extracts the trailing numeric fixture id from a canonical slug', () => {
     assert.equal(idFromParam('flamengo-vs-botafogo-338'), 338);
+    assert.equal(idFromParam('foo-28'), 28);
   });
 
   test('a slug with no numeric suffix yields null (route must 404, never guess)', () => {
@@ -22,6 +23,24 @@ describe('v2 match slug · idFromParam', () => {
 
   test('a bare numeric id is still resolvable', () => {
     assert.equal(idFromParam('338'), 338);
+    assert.equal(idFromParam('28'), 28);
+  });
+});
+
+describe('entity slug helpers · canonical stored slug + DB id', () => {
+  test('v2TeamSlug / v2PlayerSlug / v2CompetitionSlug use the STORED slug (not slugify(name)) + id', () => {
+    assert.equal(v2TeamSlug({ id: '68', slug: 'flamengo-5981' }), 'flamengo-5981-68');
+    assert.equal(v2PlayerSlug({ id: '7', slug: 'ada-hegerberg-441' }), 'ada-hegerberg-441-7');
+    assert.equal(v2CompetitionSlug({ id: '28', slug: 'brasileirao-betano-325' }), 'brasileirao-betano-325-28');
+  });
+  test('v2VenueSlug slugifies the name (no stored slug) + mandatory id', () => {
+    assert.equal(v2VenueSlug({ id: '25', name: 'Estádio do Maracanã' }), 'estadio-do-maracana-25');
+  });
+  test('each entity slug round-trips to its DB id via idFromParam', () => {
+    assert.equal(idFromParam(v2TeamSlug({ id: '68', slug: 'flamengo-5981' })), 68);
+    assert.equal(idFromParam(v2PlayerSlug({ id: '7', slug: 'ada-hegerberg-441' })), 7);
+    assert.equal(idFromParam(v2CompetitionSlug({ id: '28', slug: 'brasileirao-betano-325' })), 28);
+    assert.equal(idFromParam(v2VenueSlug({ id: '25', name: 'Estádio do Maracanã' })), 25);
   });
 });
 
