@@ -45,6 +45,7 @@ import type {
   TeamDetailResponse,
   TeamPerformanceResponse,
   TeamReadinessResponse,
+  VenueResponse,
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
@@ -61,6 +62,7 @@ import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
 import { readTeamPerformance } from './read/teamPerformance';
 import { readTeamReadiness } from './read/teamReadiness';
+import { readVenue } from './read/venue';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -789,6 +791,16 @@ export async function getTeamReadiness(tx: PoolClient, teamId: string): Promise<
 
   const { readiness, coverage } = await readTeamReadiness(tx, teamId);
   return { team: toTeamSummary(idRes.rows[0]), readiness, coverage };
+}
+
+/**
+ * The canonical Venue entity (identity + geography + canonical home teams), or null
+ * when the venue does not exist. Read-only Evidence/Context; delegates entirely to
+ * the venue read model. No governance gate (venues are not governed entities), no
+ * travel/map calculation, no governed reading.
+ */
+export async function getVenue(tx: PoolClient, venueId: string): Promise<VenueResponse | null> {
+  return readVenue(tx, venueId);
 }
 
 interface PlayerDirectoryRow extends PlayerSummaryRow {

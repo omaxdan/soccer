@@ -24,6 +24,8 @@ import type { MatchLifecycle } from './read/matchLifecycle';
 import type { MatchVenue } from './read/matchVenue';
 import type { TeamPerformanceOverall, CompetitionPerformance, TeamPerformanceCoverage } from './read/teamPerformance';
 import type { TeamReadinessReading, TeamReadinessCoverage } from './read/teamReadiness';
+import type { Venue } from './read/matchVenue';
+import type { VenueCoverage } from './read/venue';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -69,6 +71,10 @@ export type {
 export type {
   TeamReadiness, TeamReadinessReading, TeamReadinessCoverage, ReadinessCoverageState,
 } from './read/teamReadiness';
+
+export type {
+  VenueDetail, VenueCoverage,
+} from './read/venue';
 
 export interface ApiTeam {
   readonly id: string;
@@ -498,6 +504,20 @@ export interface TeamReadinessResponse {
   readonly team: ApiTeamSummary;
   readonly readiness: TeamReadinessReading | null;
   readonly coverage: TeamReadinessCoverage;
+}
+
+/**
+ * The canonical Venue entity — the geospatial keystone. Identity + geography
+ * (football.venue: coordinates, elevation, timezone, capacity, surface, city,
+ * country) plus the teams whose canonical home_venue_id points here. Observed
+ * Evidence/Context ONLY — no travel distance, no travel impact, no map calculation,
+ * no governed reading. Nullable geographic fields are null when absent (never
+ * fabricated or inferred). Null (→ 404) only when the venue does not exist.
+ */
+export interface VenueResponse {
+  readonly venue: Venue;
+  readonly homeTeams: readonly ApiTeamSummary[];
+  readonly coverage: VenueCoverage;
 }
 
 export interface PlayerDetailResponse {
