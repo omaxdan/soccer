@@ -43,9 +43,12 @@ describe('routes — internal consistency + no /pitch', () => {
     routes.match(FIXTURE),
     routes.matchBySlug('flamengo-vs-botafogo-1384'),
     routes.teams(),
-    routes.team({ id: '599', name: 'Flamengo' }),
+    routes.team({ id: '68', slug: 'flamengo-5981' }),
     routes.players(),
-    routes.player({ id: '7', fullName: 'Ada Hegerberg' }),
+    routes.player({ id: '7', slug: 'ada-hegerberg-441' }),
+    routes.competition({ id: '28', slug: 'brasileirao-betano-325' }),
+    routes.venue({ id: '25', name: 'Estádio do Maracanã' }),
+    routes.country({ code: 'BR' }),
   ];
   test('every route begins with the current base and never contains /pitch', () => {
     for (const href of all) {
@@ -58,8 +61,45 @@ describe('routes — internal consistency + no /pitch', () => {
     assert.equal(routes.edition('88'), '/v2/editions/88');
     assert.equal(routes.teams(), '/v2/teams');
     assert.equal(routes.players(), '/v2/players');
-    assert.equal(routes.team({ id: '599', name: 'Flamengo' }), '/v2/teams/flamengo-599');
-    assert.equal(routes.player({ id: '7', fullName: 'Ada Hegerberg' }), '/v2/players/ada-hegerberg-7');
+    // Human part is the CANONICAL STORED slug (not slugify(name)); DB id is the trailing resolver.
+    assert.equal(routes.team({ id: '68', slug: 'flamengo-5981' }), '/v2/teams/flamengo-5981-68');
+    assert.equal(routes.player({ id: '7', slug: 'ada-hegerberg-441' }), '/v2/players/ada-hegerberg-441-7');
+  });
+});
+
+describe('canonical-slug reconciliation — stored slug + DB id (id is the resolver)', () => {
+  test('competition uses competition.slug + id', () => {
+    assert.equal(routes.competition({ id: '28', slug: 'brasileirao-betano-325' }), '/v2/competitions/brasileirao-betano-325-28');
+    assert.equal(idFromParam('brasileirao-betano-325-28'), 28); // API receives the id
+  });
+  test('team uses team.slug + id', () => {
+    assert.equal(routes.team({ id: '68', slug: 'flamengo-5981' }), '/v2/teams/flamengo-5981-68');
+    assert.equal(idFromParam('flamengo-5981-68'), 68);
+  });
+  test('player uses player.slug + id', () => {
+    assert.equal(routes.player({ id: '7', slug: 'ada-hegerberg-441' }), '/v2/players/ada-hegerberg-441-7');
+    assert.equal(idFromParam('ada-hegerberg-441-7'), 7);
+  });
+  test('edition retains the established {competition}-{season}-{id} hybrid (unchanged)', () => {
+    assert.equal(routes.edition({ id: '18', competition: { slug: 'brasileirao-betano-325' }, seasonLabel: '2026' }), '/v2/editions/brasileirao-betano-325-2026-18');
+    assert.equal(idFromParam('brasileirao-betano-325-2026-18'), 18);
+  });
+  test('venue has no stored slug → slugify(name)-id (unchanged)', () => {
+    assert.equal(routes.venue({ id: '25', name: 'Estádio do Maracanã' }), '/v2/venues/estadio-do-maracana-25');
+    assert.equal(idFromParam('estadio-do-maracana-25'), 25);
+  });
+  test('country is addressed by its ISO alpha-2 code (no trailing id)', () => {
+    assert.equal(routes.country({ code: 'BR' }), '/v2/countries/BR');
+  });
+
+  test('CRITICAL: changing the human-readable portion does not change which id resolves', () => {
+    // Same DB id (68), different (even wrong) human parts — all resolve to 68.
+    assert.equal(idFromParam('flamengo-5981-68'), 68);
+    assert.equal(idFromParam('flamengo-68'), 68);
+    assert.equal(idFromParam('completely-different-name-68'), 68);
+    assert.equal(idFromParam('68'), 68);                 // bare id still resolves (back-compat)
+    // A different trailing id is a different entity — the human part is never consulted.
+    assert.notEqual(idFromParam('flamengo-5981-99'), 68);
   });
 });
 
