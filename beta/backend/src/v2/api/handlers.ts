@@ -26,6 +26,7 @@ import type {
   MatchTeamStatisticsResponse,
   MatchResultResponse,
   MatchLifecycleResponse,
+  MatchVenueResponse,
   EditionFixtureListResponse,
   EditionListResponse,
   EditionStandingsResponse,
@@ -55,6 +56,7 @@ import { readMatchLineups } from './read/matchLineups';
 import { readMatchTeamStatistics } from './read/matchTeamStatistics';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
+import { readMatchVenue } from './read/matchVenue';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -389,6 +391,34 @@ export async function getMatchLifecycle(tx: PoolClient, fixtureId: string): Prom
       awayTeam: { id: h.away_id, name: h.away_name, slug: h.away_slug },
     },
     lifecycle,
+  };
+}
+
+/**
+ * A fixture's ACTUAL recorded venue (football.venue via football.fixture.venue_id)
+ * and neutral-venue flag, or null when the fixture does not exist. Reuses the
+ * match-surface existence gate (FIXTURE_HEADER_SQL) for identity, then delegates the
+ * venue projection to the read model. Observed evidence only — no derived
+ * home-advantage/travel/risk. No writes.
+ */
+export async function getMatchVenue(tx: PoolClient, fixtureId: string): Promise<MatchVenueResponse | null> {
+  const header = await tx.query<HeaderRow>(FIXTURE_HEADER_SQL, [fixtureId]);
+  if (header.rows.length === 0) return null;
+  const h = header.rows[0];
+
+  const { venue, isNeutralVenue, coverage } = await readMatchVenue(tx, fixtureId);
+  return {
+    match: {
+      fixtureId: h.fixture_id,
+      kickoffAt: iso(h.scheduled_kickoff_at),
+      status: h.lifecycle_state_code,
+      competition: { id: h.competition_id, name: h.competition_name, slug: h.competition_slug },
+      homeTeam: { id: h.home_id, name: h.home_name, slug: h.home_slug },
+      awayTeam: { id: h.away_id, name: h.away_name, slug: h.away_slug },
+    },
+    venue,
+    isNeutralVenue,
+    coverage,
   };
 }
 

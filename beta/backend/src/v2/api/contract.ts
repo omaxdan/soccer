@@ -21,6 +21,7 @@ import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
 import type { MatchResult, MatchResultCoverage } from './read/matchResult';
 import type { MatchLifecycle } from './read/matchLifecycle';
+import type { MatchVenue } from './read/matchVenue';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -53,6 +54,10 @@ export type {
 export type {
   MatchLifecycle, LifecycleTransition, LifecycleState, MatchLifecycleCoverage, LifecycleCoverageState,
 } from './read/matchLifecycle';
+
+export type {
+  MatchVenue, Venue, MatchVenueCoverage, VenueCoverageState,
+} from './read/matchVenue';
 
 export interface ApiTeam {
   readonly id: string;
@@ -307,6 +312,29 @@ export interface MatchLifecycleResponse {
     readonly awayTeam: ApiTeam;
   };
   readonly lifecycle: MatchLifecycle;
+}
+
+/**
+ * A fixture's ACTUAL recorded venue (football.venue via football.fixture.venue_id)
+ * and its neutral-venue flag. Observed evidence only — every field is a stored
+ * provider fact; nullable fields are null when absent (never fabricated), and
+ * `isNeutralVenue` is the OBSERVED fixture attribute, not a derived home-advantage
+ * conclusion (`coverage.venueIsObserved`). `venue` is null and `coverage.venue` is
+ * 'absent' when the fixture has no recorded venue. Null (→ 404) only when the
+ * fixture does not exist.
+ */
+export interface MatchVenueResponse {
+  readonly match: {
+    readonly fixtureId: string;
+    readonly kickoffAt: string;               // ISO-8601
+    readonly status: string;                  // fixture lifecycle_state_code
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+    readonly homeTeam: ApiTeam;
+    readonly awayTeam: ApiTeam;
+  };
+  readonly venue: MatchVenue['venue'];
+  readonly isNeutralVenue: boolean;
+  readonly coverage: MatchVenue['coverage'];
 }
 
 /** One fixture in a league/edition list. */
