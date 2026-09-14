@@ -18,6 +18,7 @@ import type {
 import type { TeamIntelligence } from './read/teamIntelligence';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
+import type { MatchTeamStatistics } from './read/matchTeamStatistics';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -37,6 +38,11 @@ export type {
 export type {
   MatchLineups, TeamLineup, LineupPlayer, MatchLineupsCoverage, LineupCoverageState, TeamRef,
 } from './read/matchLineups';
+
+export type {
+  MatchTeamStatistics, PeriodStatistics, TeamStatLine, TeamStatValue,
+  MatchTeamStatisticsCoverage, TeamStatisticsCoverageState,
+} from './read/matchTeamStatistics';
 
 export interface ApiTeam {
   readonly id: string;
@@ -229,6 +235,27 @@ export interface MatchLineupsResponse {
     readonly awayTeam: ApiTeam;
   };
   readonly lineups: MatchLineups;
+}
+
+/**
+ * A fixture's TEAM-level match statistics (football.team_match_statistic): the
+ * provider's observed statistics per period, each carrying both teams' raw value and
+ * display strings, oriented to match.homeTeam / match.awayTeam. Observed evidence
+ * only — raw provider strings passed through, nothing parsed or recomputed, and no
+ * verdict/score/probability (`coverage.statisticsAreObserved`). A fixture with no
+ * statistics yields empty periods and coverage 'absent'. Null (→ 404) only when the
+ * fixture does not exist.
+ */
+export interface MatchTeamStatisticsResponse {
+  readonly match: {
+    readonly fixtureId: string;
+    readonly kickoffAt: string;               // ISO-8601
+    readonly status: string;                  // fixture lifecycle_state_code
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+    readonly homeTeam: ApiTeam;
+    readonly awayTeam: ApiTeam;
+  };
+  readonly teamStatistics: MatchTeamStatistics;
 }
 
 /** One fixture in a league/edition list. */
