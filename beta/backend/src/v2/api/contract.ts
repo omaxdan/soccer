@@ -22,6 +22,7 @@ import type { MatchTeamStatistics } from './read/matchTeamStatistics';
 import type { MatchResult, MatchResultCoverage } from './read/matchResult';
 import type { MatchLifecycle } from './read/matchLifecycle';
 import type { MatchVenue } from './read/matchVenue';
+import type { TeamPerformanceOverall, CompetitionPerformance, TeamPerformanceCoverage } from './read/teamPerformance';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -58,6 +59,11 @@ export type {
 export type {
   MatchVenue, Venue, MatchVenueCoverage, VenueCoverageState,
 } from './read/matchVenue';
+
+export type {
+  TeamPerformance, TeamPerformanceOverall, CompetitionPerformance, EditionRef,
+  PerformanceMetric, MetricDirection, TeamPerformanceCoverage, PerformanceCoverageState,
+} from './read/teamPerformance';
 
 export interface ApiTeam {
   readonly id: string;
@@ -452,6 +458,24 @@ export interface TeamDetailResponse {
    * predicted XI/derived suspension) is produced here. See `intelligence.coverage`.
    */
   readonly intelligence: TeamIntelligence;
+}
+
+/**
+ * A team's DESCRIPTIVE performance evidence, projected from persisted
+ * feature.feature_value (no recalculation). `overall` carries ALL_COMPETITIONS
+ * metrics (form, momentum, goal-margin volatility, giant-killer PPG); `byCompetition`
+ * carries COMPETITION_SCOPED venue win rates per governed edition. Every metric is
+ * null when not persisted (never zero-filled). This is descriptive/derived evidence —
+ * NOT a governed reading, verdict, prediction, or readiness
+ * (`coverage.performanceIsDescriptive`). Null (→ 404) only when the team is not in a
+ * governed authorized edition. (congestion/rest/travel/squad-stability/readiness are
+ * deliberately excluded — condition/readiness/context/governed domains.)
+ */
+export interface TeamPerformanceResponse {
+  readonly team: ApiTeamSummary;
+  readonly overall: TeamPerformanceOverall;
+  readonly byCompetition: readonly CompetitionPerformance[];
+  readonly coverage: TeamPerformanceCoverage;
 }
 
 export interface PlayerDetailResponse {

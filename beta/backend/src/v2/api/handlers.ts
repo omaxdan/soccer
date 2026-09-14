@@ -43,6 +43,7 @@ import type {
   ApiPlayerSummary,
   TeamListResponse,
   TeamDetailResponse,
+  TeamPerformanceResponse,
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
@@ -57,6 +58,7 @@ import { readMatchTeamStatistics } from './read/matchTeamStatistics';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
+import { readTeamPerformance } from './read/teamPerformance';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -735,6 +737,36 @@ export async function getTeamDetail(tx: PoolClient, teamId: string): Promise<Tea
       goalsAgainst: r.goals_against === null ? null : Number(r.goals_against),
     })),
     intelligence,
+  };
+}
+
+/**
+ * A team's descriptive performance evidence (persisted features), or null when the
+ * team is not in a governed authorized edition. Reuses the SAME governed exposure
+ * gate as Team Detail (TEAM_COMPETITIONS_SQL) for identity + the scoped-edition list,
+ * then delegates the projection to the read model. No calculation, no writes; every
+ * value is read verbatim from feature.feature_value.
+ */
+export async function getTeamPerformance(tx: PoolClient, teamId: string): Promise<TeamPerformanceResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  const idRes = await tx.query<TeamIdentityRow>(TEAM_IDENTITY_SQL, [teamId]);
+  if (idRes.rows.length === 0) return null;
+
+  const editions = comps.rows.map((c) => ({
+    id: c.edition_id,
+    seasonLabel: c.season_label,
+    competition: { id: c.competition_id, name: c.competition_name, slug: c.competition_slug },
+  }));
+  const performance = await readTeamPerformance(tx, teamId, editions);
+
+  return {
+    team: toTeamSummary(idRes.rows[0]),
+    overall: performance.overall,
+    byCompetition: performance.byCompetition,
+    coverage: performance.coverage,
   };
 }
 
