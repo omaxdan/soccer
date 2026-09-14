@@ -88,6 +88,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('POST', '/api/v2/teams/18/readiness'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players'), { kind: 'playerList' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players/9'), { kind: 'player', id: '9' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/venues/25'), { kind: 'venue', id: '25' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/venues/abc'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/venues/25'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/matches/abc'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18'), { kind: 'methodNotAllowed' });
@@ -241,7 +244,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null,
-      getPlayers: async () => ({ players: [] }), getPlayer: async () => null,
+      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getVenue: async () => null,
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -350,6 +353,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeamReadiness: async (id) => (id === '7' ? { team: { id: '7' }, readiness: { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null }, coverage: { readiness: 'present', readinessIsGoverned: true } } : null),
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
+      getVenue: async (id) => (id === '25' ? { venue: { id: '25', name: 'Maracanã', city: 'Rio de Janeiro', countryCode: 'BR', latitude: -22.9, longitude: -43.2, elevationMetres: 9, timezoneName: 'America/Sao_Paulo', capacity: 78838, surface: 'grass' }, homeTeams: [{ id: '67', name: 'Fluminense', slug: 'fluminense', shortName: 'FLU', countryCode: 'BR' }], coverage: { venue: 'present', homeTeams: 'present' } } : null),
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -503,6 +507,18 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     const miss = await fetch(`${base}/api/v2/teams/8/readiness`);
     assert.equal(miss.status, 404);
     assert.deepEqual(await miss.json(), { error: 'team_not_found' });
+  });
+
+  it('GET a known venue → 200 with geography + homeTeams; unknown venue → 404', async () => {
+    const res = await fetch(`${base}/api/v2/venues/25`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.venue.id, '25');
+    assert.equal(body.venue.name, 'Maracanã');
+    assert.equal(body.coverage.homeTeams, 'present');
+    const miss = await fetch(`${base}/api/v2/venues/26`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'venue_not_found' });
   });
 
   it('GET the player list → 200; known player → 200; unknown player → 404', async () => {
