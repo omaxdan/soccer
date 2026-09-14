@@ -47,6 +47,7 @@ import type {
   TeamReadinessResponse,
   VenueResponse,
   CountryResponse,
+  CompetitionResponse,
   PlayerListResponse,
   PlayerDetailResponse,
 } from './contract';
@@ -65,6 +66,7 @@ import { readTeamPerformance } from './read/teamPerformance';
 import { readTeamReadiness } from './read/teamReadiness';
 import { readVenue } from './read/venue';
 import { mapCountry, mapCompetitionSummary, buildCountryCoverage, type CountryRow, type CountryCompetitionRow } from './read/country';
+import { mapCompetition, mapCompetitionEdition, buildCompetitionCoverage, type CompetitionRow, type CompetitionEditionRow } from './read/competition';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -873,6 +875,68 @@ export async function getCountry(tx: PoolClient, countryCode: string): Promise<C
     teams,
     competitions,
     coverage: buildCountryCoverage(teams, competitions),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPETITION — canonical entity keystone (identity + canonical editions). Read-only.
+//
+// A competition is EXPOSED iff it has an authorized-active edition under a TRACKED
+// competition — the SAME Day-1 governed gate as the edition list and Country's
+// competitions. So the competition's existence-under-governance IS the gate: an
+// unknown OR unauthorized competition is a 404 (the two are not distinguished
+// externally), and the gate runs BEFORE the editions read. Editions come from the
+// canonical competition_edition.competition_id relationship (never inferred from
+// fixtures/matches/standings); the LEFT JOIN to fixture only counts them. Because the
+// gate is itself edition-based, a gated competition always has ≥1 governed edition —
+// so editions:'absent' is a defensive coverage state, not expected in production.
+// Identity/Context only — no standings, league intelligence, ranking, or prediction.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMPETITION_SQL = `
+  SELECT c.id::text AS id, c.name AS name, c.slug AS slug, c.country_code AS country_code
+    FROM football.competition c
+   WHERE c.id = $1::bigint
+     AND EXISTS (
+       SELECT 1
+         FROM football.competition_edition e
+${DAY1_AUTHORIZED_EDITION_JOIN}
+        WHERE e.competition_id = c.id
+     )
+   LIMIT 1
+`;
+
+// Governed authorized-active editions of this competition (canonical competition_id
+// relationship; fixtures LEFT-joined only to count them, mirroring the edition list).
+const COMPETITION_EDITIONS_SQL = `
+  SELECT e.id::text AS edition_id, e.season_label AS season_label,
+         c.id::text AS competition_id, c.name AS competition_name, c.slug AS competition_slug,
+         count(f.id)::text AS fixture_count
+    FROM football.competition_edition e
+    JOIN football.competition c ON c.id = e.competition_id
+${DAY1_AUTHORIZED_EDITION_JOIN}
+    LEFT JOIN football.fixture f ON f.competition_edition_id = e.id
+   WHERE e.competition_id = $1::bigint
+   GROUP BY e.id, e.season_label, c.id, c.name, c.slug
+   ORDER BY e.season_label
+`;
+
+/**
+ * The canonical Competition entity (identity + its governed editions), or null when
+ * the competition is unknown or has no governed edition (→ 404). The governed gate
+ * check runs BEFORE the editions read, so a hidden competition never queries editions.
+ * Read-only Identity/Context; no standings, no league intelligence.
+ */
+export async function getCompetition(tx: PoolClient, competitionId: string): Promise<CompetitionResponse | null> {
+  const cRes = await tx.query<CompetitionRow>(COMPETITION_SQL, [competitionId]);
+  if (cRes.rows.length === 0) return null;
+
+  const edRes = await tx.query<CompetitionEditionRow>(COMPETITION_EDITIONS_SQL, [competitionId]);
+  const editions = edRes.rows.map(mapCompetitionEdition);
+  return {
+    competition: mapCompetition(cRes.rows[0]),
+    editions,
+    coverage: buildCompetitionCoverage(editions),
   };
 }
 

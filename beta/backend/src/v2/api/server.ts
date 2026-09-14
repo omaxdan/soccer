@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getPlayers, getPlayerDetail, getVenue, getCountry, isValidId, isValidCountryCode } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getPlayers, getPlayerDetail, getVenue, getCountry, getCompetition, isValidId, isValidCountryCode } from './handlers';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -45,6 +45,7 @@ export interface ApiDeps {
   readonly getPlayer: (id: string) => Promise<unknown | null>;
   readonly getVenue: (id: string) => Promise<unknown | null>;
   readonly getCountry: (code: string) => Promise<unknown | null>;
+  readonly getCompetition: (id: string) => Promise<unknown | null>;
 }
 
 const productionDeps: ApiDeps = {
@@ -66,6 +67,7 @@ const productionDeps: ApiDeps = {
   getPlayer: (id) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerDetail(tx, id)),
   getVenue: (id) => withConnection(API_ROLE, (tx: PoolClient) => getVenue(tx, id)),
   getCountry: (code) => withConnection(API_ROLE, (tx: PoolClient) => getCountry(tx, code)),
+  getCompetition: (id) => withConnection(API_ROLE, (tx: PoolClient) => getCompetition(tx, id)),
 };
 
 export type Route =
@@ -87,6 +89,7 @@ export type Route =
   | { kind: 'player'; id: string }
   | { kind: 'venue'; id: string }
   | { kind: 'country'; code: string }
+  | { kind: 'competition'; id: string }
   | { kind: 'badRequest' }
   | { kind: 'methodNotAllowed' }
   | { kind: 'notFound' };
@@ -111,7 +114,8 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const player = pathname.match(/^\/api\/v2\/players\/([^/]+)$/);
   const venue = pathname.match(/^\/api\/v2\/venues\/([^/]+)$/);
   const country = pathname.match(/^\/api\/v2\/countries\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !teamPerformance && !teamReadiness && !team && !player && !venue && !country) {
+  const competition = pathname.match(/^\/api\/v2\/competitions\/([^/]+)$/);
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !teamPerformance && !teamReadiness && !team && !player && !venue && !country && !competition) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
@@ -176,8 +180,12 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   }
   // Countries are addressed by ISO alpha-2 code (case-insensitive in the URL); the
   // stored code is upper-case, so normalize before validating and dispatching.
-  const code = decodeURIComponent(country![1]).toUpperCase();
-  return isValidCountryCode(code) ? { kind: 'country', code } : { kind: 'badRequest' };
+  if (country) {
+    const code = decodeURIComponent(country[1]).toUpperCase();
+    return isValidCountryCode(code) ? { kind: 'country', code } : { kind: 'badRequest' };
+  }
+  const id = decodeURIComponent(competition![1]);
+  return isValidId(id) ? { kind: 'competition', id } : { kind: 'badRequest' };
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -264,6 +272,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getCountry(route.code);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'country_not_found' });
       }
+      case 'competition': {
+        const body = await deps.getCompetition(route.id);
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'competition_not_found' });
+      }
     }
   } catch (error) {
     logger.error({ path: pathname, err: error instanceof Error ? error.message : String(error) }, 'v2 api: request failed');
@@ -285,7 +297,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
   });
 }
 

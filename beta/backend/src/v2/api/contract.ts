@@ -27,6 +27,7 @@ import type { TeamReadinessReading, TeamReadinessCoverage } from './read/teamRea
 import type { Venue } from './read/matchVenue';
 import type { VenueCoverage } from './read/venue';
 import type { CountryIdentity, CountryCoverage } from './read/country';
+import type { CompetitionIdentity, CompetitionCoverage } from './read/competition';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -80,6 +81,10 @@ export type {
 export type {
   CountryDetail, CountryIdentity, CountryCoverage,
 } from './read/country';
+
+export type {
+  CompetitionDetail, CompetitionIdentity, CompetitionCoverage,
+} from './read/competition';
 
 export interface ApiTeam {
   readonly id: string;
@@ -548,6 +553,24 @@ export interface CountryResponse {
   readonly teams: readonly ApiTeamSummary[];
   readonly competitions: readonly ApiCompetitionSummary[];
   readonly coverage: CountryCoverage;
+}
+
+/**
+ * The canonical Competition entity — the Country → Competition → Edition keystone.
+ * Identity (football.competition: id, name, slug, country_code) plus its canonical
+ * editions: competition_edition rows whose competition_id is this competition,
+ * exposed through the SAME Day-1 governed gate as the edition list and projected to
+ * the shared ApiEditionSummary. Editions come from the canonical competition_id
+ * relationship, never inferred from fixtures/matches/standings. Identity/Context
+ * ONLY — no standings, no league intelligence, ranking, readiness, or prediction.
+ * Empty editions are a truthful absence (never zero-filled, never a 404). Null
+ * (→ 404 competition_not_found) when the competition is unknown or has no governed
+ * edition — nonexistent and unauthorized are not distinguished externally.
+ */
+export interface CompetitionResponse {
+  readonly competition: CompetitionIdentity;
+  readonly editions: readonly ApiEditionSummary[];
+  readonly coverage: CompetitionCoverage;
 }
 
 export interface PlayerDetailResponse {
