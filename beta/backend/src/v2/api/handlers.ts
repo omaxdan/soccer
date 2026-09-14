@@ -25,6 +25,7 @@ import type {
   MatchLineupsResponse,
   MatchTeamStatisticsResponse,
   MatchResultResponse,
+  MatchLifecycleResponse,
   EditionFixtureListResponse,
   EditionListResponse,
   EditionStandingsResponse,
@@ -53,6 +54,7 @@ import { readEditionStandings } from './read/editionStandings';
 import { readMatchLineups } from './read/matchLineups';
 import { readMatchTeamStatistics } from './read/matchTeamStatistics';
 import { readMatchResult } from './read/matchResult';
+import { readMatchLifecycle } from './read/matchLifecycle';
 
 /** A fixture id is a bigint. Reject anything else BEFORE touching the database. */
 export function isValidId(raw: string): boolean {
@@ -362,6 +364,31 @@ export async function getMatchResult(tx: PoolClient, fixtureId: string): Promise
     },
     result,
     coverage,
+  };
+}
+
+/**
+ * A fixture's APPEND-ONLY lifecycle history (football.fixture_lifecycle_transition),
+ * or null when the fixture does not exist. Reuses the match-surface existence gate
+ * (FIXTURE_HEADER_SQL) for identity, then delegates the projection to the read model.
+ * Observed evidence only — no derived risk/prediction. No writes.
+ */
+export async function getMatchLifecycle(tx: PoolClient, fixtureId: string): Promise<MatchLifecycleResponse | null> {
+  const header = await tx.query<HeaderRow>(FIXTURE_HEADER_SQL, [fixtureId]);
+  if (header.rows.length === 0) return null;
+  const h = header.rows[0];
+
+  const lifecycle = await readMatchLifecycle(tx, fixtureId);
+  return {
+    match: {
+      fixtureId: h.fixture_id,
+      kickoffAt: iso(h.scheduled_kickoff_at),
+      status: h.lifecycle_state_code,
+      competition: { id: h.competition_id, name: h.competition_name, slug: h.competition_slug },
+      homeTeam: { id: h.home_id, name: h.home_name, slug: h.home_slug },
+      awayTeam: { id: h.away_id, name: h.away_name, slug: h.away_slug },
+    },
+    lifecycle,
   };
 }
 

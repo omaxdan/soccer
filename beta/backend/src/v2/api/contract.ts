@@ -20,6 +20,7 @@ import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
 import type { MatchResult, MatchResultCoverage } from './read/matchResult';
+import type { MatchLifecycle } from './read/matchLifecycle';
 
 export type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
@@ -48,6 +49,10 @@ export type {
 export type {
   MatchResult, ResultScore, MatchResultCoverage, ResultCoverageState, MatchResultProjection,
 } from './read/matchResult';
+
+export type {
+  MatchLifecycle, LifecycleTransition, LifecycleState, MatchLifecycleCoverage, LifecycleCoverageState,
+} from './read/matchLifecycle';
 
 export interface ApiTeam {
   readonly id: string;
@@ -282,6 +287,26 @@ export interface MatchResultResponse {
   };
   readonly result: MatchResult | null;
   readonly coverage: MatchResultCoverage;
+}
+
+/**
+ * A fixture's APPEND-ONLY lifecycle history (football.fixture_lifecycle_transition):
+ * each observed state transition (from→to, when, provider raw status), chronological.
+ * Observed evidence only — no risk score, postponement prediction, or verdict
+ * (`lifecycle.coverage.transitionsAreObserved`). The initial transition has
+ * fromState null. Empty history + coverage 'absent' when none recorded. Null (→ 404)
+ * only when the fixture does not exist.
+ */
+export interface MatchLifecycleResponse {
+  readonly match: {
+    readonly fixtureId: string;
+    readonly kickoffAt: string;               // ISO-8601
+    readonly status: string;                  // fixture lifecycle_state_code (current)
+    readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+    readonly homeTeam: ApiTeam;
+    readonly awayTeam: ApiTeam;
+  };
+  readonly lifecycle: MatchLifecycle;
 }
 
 /** One fixture in a league/edition list. */
