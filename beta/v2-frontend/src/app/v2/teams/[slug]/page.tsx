@@ -46,7 +46,7 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
   );
 
   return (
-    <main className="space-y-5" style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
+    <main className="space-y-5 mx-auto w-full max-w-6xl px-4 py-4">
       <Breadcrumb items={[{ label: 'Teams', href: routes.teams() }, { label: team.name }]} />
 
       {/* IDENTITY */}

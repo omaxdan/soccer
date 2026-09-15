@@ -19,7 +19,7 @@ export default async function V2CompetitionPage({ params }: { params: Promise<{ 
   const { competition, editions } = data;
 
   return (
-    <main className="space-y-5" style={{ maxWidth: 820, margin: '0 auto', padding: 16 }}>
+    <main className="space-y-5 mx-auto w-full max-w-6xl px-4 py-4">
       <Breadcrumb items={[{ label: 'Leagues', href: routes.leagues() }, { label: competition.name }]} />
       <CompetitionHeaderPanel competition={competition} />
       <CompetitionEditionsPanel editions={editions} />
