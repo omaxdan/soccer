@@ -21,7 +21,7 @@ export default async function V2PlayerPage({ params }: { params: Promise<{ slug:
   const { player, currentTeam, competition, registration, availability, valuation, statistics } = data;
 
   return (
-    <main className="space-y-5" style={{ maxWidth: 820, margin: '0 auto', padding: 16 }}>
+    <main className="space-y-5 mx-auto w-full max-w-6xl px-4 py-4">
       <Breadcrumb items={[{ label: 'Players', href: routes.players() }, { label: player.fullName }]} />
 
       {/* IDENTITY + team/competition/edition context (date of birth verbatim — age is not computed) */}
