@@ -293,6 +293,72 @@ export interface TeamReadinessResponse {
   coverage: { readiness: 'present' | 'absent'; readinessIsGoverned: true };
 }
 
+// ─── PLAYER detail views — mirror of the backend read model (raw evidence only) ─────
+
+export interface PlayerRegistrationView {
+  teamId: string;
+  registrationKindCode: string;
+  registrationFrom: string | null;
+  registrationTo: string | null;
+  competitionEditionId: string | null;
+  seasonLabel: string | null;
+}
+
+export interface PlayerAvailabilityView {
+  unavailabilityKindCode: string;
+  from: string | null;
+  to: string | null;
+  expectedReturnOn: string | null;
+  reason: string | null;
+  severityRank: number | null;
+  current: boolean;
+}
+
+export interface PlayerValuationView {
+  amount: string;
+  currencyCode: string | null;
+  asOfOn: string;
+  sourceCode: string | null;
+}
+
+/** DERIVED arithmetic aggregate over stored rows for one provider statistic key
+ *  (computed by the backend — never recomputed in the UI). total/mean null for json keys. */
+export interface PlayerStatAggregate {
+  statisticKey: string;
+  valueType: string | null;
+  matchesWithValue: number;
+  numericTotal: string | null;
+  numericMean: string | null;
+}
+
+export interface PlayerEditionParticipation {
+  competitionEditionId: string;
+  seasonLabel: string;
+  competition: { id: string; name: string; slug: string };
+  matches: number;
+}
+
+export interface PlayerMatchStatLine {
+  fixtureId: string;
+  kickoffAt: string;
+  competitionEditionId: string;
+  seasonLabel: string;
+  teamId: string;
+  opponentTeamId: string;
+  opponentName: string;
+  isHome: boolean;
+  score: { home: number; away: number } | null;
+  statistics: { key: string; value: string | null; valueType: string | null }[];
+}
+
+export interface PlayerStatistics {
+  matchesRepresented: number;
+  availableStatisticKeys: string[];
+  summary: PlayerStatAggregate[];
+  editions: PlayerEditionParticipation[];
+  recentMatches: PlayerMatchStatLine[];
+}
+
 export interface PlayerDetailResponse {
   player: {
     id: string;
@@ -306,6 +372,10 @@ export interface PlayerDetailResponse {
   };
   currentTeam: ApiTeamSummary | null;
   competition: { id: string; name: string; slug: string; seasonLabel: string } | null;
+  registration: PlayerRegistrationView | null;
+  availability: PlayerAvailabilityView | null;
+  valuation: PlayerValuationView | null;
+  statistics: PlayerStatistics;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
