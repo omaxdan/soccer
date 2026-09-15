@@ -9,6 +9,9 @@ import type { ApiMatchHeader, MatchDetailResponse, MatchResult, MatchVenueInfo }
 
 export type CoverageFlag = readonly [string, 'present' | 'absent' | 'partial' | 'not-supported'];
 
+/** The Match Hub outer boundary — aligned with the global header's max-w-6xl (72rem). */
+export const MATCH_MAIN_CLASS = 'space-y-4 mx-auto w-full max-w-6xl px-4 py-4';
+
 function orDash(v: string | number | null | undefined): string {
   return v === null || v === undefined || v === '' ? '—' : String(v);
 }

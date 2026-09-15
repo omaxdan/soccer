@@ -8,7 +8,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { MatchHeader, MatchBrief, MatchTabNav, Collapsible } from '@/components/v2/matchWorkspace';
+import { MatchHeader, MatchBrief, MatchTabNav, Collapsible, MATCH_MAIN_CLASS } from '@/components/v2/matchWorkspace';
 import { resolveMatchTab, matchTabHref, MATCH_TABS } from '@/lib/v2/matchTabs';
 import type { ApiMatchHeader, MatchDetailResponse, MatchResult, MatchVenueInfo, CoverageState } from '@/lib/v2/types';
 
@@ -35,6 +35,15 @@ const DETAIL = (over: Partial<ApiMatchHeader> = {}): MatchDetailResponse => ({
   recentVenueForm: { home: { lastHome: [], lastAway: [] }, away: { lastHome: [], lastAway: [] } },
   intelligence: { home: { readiness: null, homeAwaySplit: null }, away: { readiness: null, homeAwaySplit: null } },
   teamFeatures: { home: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null }, away: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null } },
+});
+
+describe('Match Hub width boundary', () => {
+  test('main container aligns to the header 72rem (max-w-6xl), centered, with gutters', () => {
+    assert.match(MATCH_MAIN_CLASS, /\bmax-w-6xl\b/);
+    assert.match(MATCH_MAIN_CLASS, /\bmx-auto\b/);
+    assert.match(MATCH_MAIN_CLASS, /\bpx-4\b/);
+    assert.doesNotMatch(MATCH_MAIN_CLASS, /max-w-(sm|md|lg|xl|2xl|3xl|4xl|5xl)\b/);
+  });
 });
 
 describe('MatchHeader — who/when/where', () => {

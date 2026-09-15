@@ -13,7 +13,7 @@ import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidenc
 import {
   MatchResultPanel, MatchTeamStatisticsPanel, MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel, MatchCoverage,
 } from '@/components/v2/match';
-import { MatchHeader, MatchBrief, MatchTabNav, Collapsible, type CoverageFlag } from '@/components/v2/matchWorkspace';
+import { MatchHeader, MatchBrief, MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
 import type {
   ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse, MatchLifecycleResponse, MatchVenueResponse,
@@ -92,7 +92,7 @@ export default async function V2MatchPage({ params, searchParams }: {
   ];
 
   return (
-    <main className="space-y-4" style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
+    <main className={MATCH_MAIN_CLASS}>
       <Breadcrumb items={crumbs} />
       <MatchHeader context={detail} venue={venueRes?.venue ?? null} />
 
