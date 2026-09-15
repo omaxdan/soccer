@@ -6,6 +6,7 @@
 import type {
   MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse,
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
+  CompetitionResponse, CountryResponse, VenueResponse,
 } from './types';
 
 export const V2_API_BASE =
@@ -78,4 +79,22 @@ export async function fetchPlayers(): Promise<PlayerListResponse> {
 /** One player's biography/context, or null when not in a governed edition squad. */
 export function fetchPlayer(playerId: string): Promise<PlayerDetailResponse | null> {
   return getJson<PlayerDetailResponse>(`/api/v2/players/${encodeURIComponent(playerId)}`);
+}
+
+/** One competition's identity + governed editions, or null when unknown/unauthorized.
+ *  Addressed by the numeric DB id (the trailing id parsed from the public slug). */
+export function fetchCompetition(competitionId: string): Promise<CompetitionResponse | null> {
+  return getJson<CompetitionResponse>(`/api/v2/competitions/${encodeURIComponent(competitionId)}`);
+}
+
+/** One country's identity + governed members, or null when the ISO code is unknown.
+ *  Addressed by the ISO alpha-2 code. */
+export function fetchCountry(countryCode: string): Promise<CountryResponse | null> {
+  return getJson<CountryResponse>(`/api/v2/countries/${encodeURIComponent(countryCode)}`);
+}
+
+/** One venue's identity/geography + canonical home teams, or null when unknown.
+ *  Addressed by the numeric DB id (the trailing id parsed from the public slug). */
+export function fetchVenue(venueId: string): Promise<VenueResponse | null> {
+  return getJson<VenueResponse>(`/api/v2/venues/${encodeURIComponent(venueId)}`);
 }
