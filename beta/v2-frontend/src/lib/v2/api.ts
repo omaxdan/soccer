@@ -8,6 +8,8 @@ import type {
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
   CompetitionResponse, CountryResponse, VenueResponse,
   TeamPerformanceResponse, TeamReadinessResponse,
+  MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse,
+  MatchLifecycleResponse, MatchVenueResponse,
 } from './types';
 
 export const V2_API_BASE =
@@ -58,6 +60,31 @@ export function fetchMatch(matchId: string): Promise<MatchDetailResponse | null>
  */
 export function fetchMatchIntelligence(matchId: string): Promise<MatchIntelligenceResponse | null> {
   return getJson<MatchIntelligenceResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/intelligence`);
+}
+
+/** A fixture's observed result (final/HT/ET/pens), or null when the fixture is absent. */
+export function fetchMatchResult(matchId: string): Promise<MatchResultResponse | null> {
+  return getJson<MatchResultResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/result`);
+}
+
+/** A fixture's observed lineups (XI/bench/formation), or null when the fixture is absent. */
+export function fetchMatchLineups(matchId: string): Promise<MatchLineupsResponse | null> {
+  return getJson<MatchLineupsResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/lineups`);
+}
+
+/** A fixture's observed team statistics per period, or null when the fixture is absent. */
+export function fetchMatchTeamStatistics(matchId: string): Promise<MatchTeamStatisticsResponse | null> {
+  return getJson<MatchTeamStatisticsResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/team-statistics`);
+}
+
+/** A fixture's observed lifecycle transitions, or null when the fixture is absent. */
+export function fetchMatchLifecycle(matchId: string): Promise<MatchLifecycleResponse | null> {
+  return getJson<MatchLifecycleResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/lifecycle`);
+}
+
+/** A fixture's observed venue + neutral flag, or null when the fixture is absent. */
+export function fetchMatchVenue(matchId: string): Promise<MatchVenueResponse | null> {
+  return getJson<MatchVenueResponse>(`/api/v2/matches/${encodeURIComponent(matchId)}/venue`);
 }
 
 /** Teams in the governed authorized-active edition(s). Never 404s. */
