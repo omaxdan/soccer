@@ -17,7 +17,7 @@ import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
 import { lineGoals, lineResult, lineMatchFixture } from '@/lib/v2/team';
 import type {
-  ApiPlayerSummary, CompetitionPerformance, PerformanceMetric, StandingLine,
+  ApiPlayerSummary, PerformanceMetric, StandingLine,
   TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
@@ -61,19 +61,66 @@ const th: React.CSSProperties = { textAlign: 'left', color: 'var(--faint)', font
 const td: React.CSSProperties = { padding: '4px 6px', color: 'var(--text)', whiteSpace: 'nowrap' };
 
 // ═══ IDENTITY ══════════════════════════════════════════════════════════════════════
+//
+// Merged header: identity (name · short · country · venue), the current season, the
+// governed observed standings row, and the home/away win-rate features (top-right).
+// Standings and win rate are surfaced verbatim from existing reads — nothing computed.
 
-export function TeamIdentityHeader({ team, competitions }: {
+function WinRateCell({ label, metric }: { label: string; metric: PerformanceMetric | null }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 84 }}>
+      <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{label}</span>
+      <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 15, fontWeight: 700 }}>{metric ? orDash(metric.value) : '—'}</span>
+      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        {metric ? `n=${metric.sample.matches}${metric.sample.meetsThreshold ? '' : ' ·below thresh'}` : 'no sample'}
+      </span>
+    </div>
+  );
+}
+
+export function TeamIdentityHeader({ team, competitions, season, standing, homeWinRate, awayWinRate }: {
   team: TeamDetailResponse['team'];
   competitions: TeamDetailResponse['competitions'];
+  season: string | null;
+  standing: StandingLine | null;
+  homeWinRate: PerformanceMetric | null;
+  awayWinRate: PerformanceMetric | null;
 }) {
   return (
     <header className="panel" style={{ padding: 16 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{team.name}</h1>
-      <p className="label-cap" style={{ color: 'var(--muted)', marginTop: 4 }}>
-        {orDash(team.shortName)}
-        {team.countryCode ? <> · <Link href={routes.country({ code: team.countryCode })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{team.countryCode}</Link></> : null}
-        {team.homeVenueName ? ` · ${team.homeVenueName}` : ''}
-      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 16 }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{team.name}</h1>
+          <p className="label-cap" style={{ color: 'var(--muted)', marginTop: 4 }}>
+            {orDash(team.shortName)}
+            {team.countryCode ? <> · <Link href={routes.country({ code: team.countryCode })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{team.countryCode}</Link></> : null}
+            {team.homeVenueName ? ` · ${team.homeVenueName}` : ''}
+          </p>
+          {season && (
+            <div style={{ marginTop: 8 }}>
+              <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Season</p>
+              <p className="label-cap" style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{season}</p>
+            </div>
+          )}
+        </div>
+        {/* Descriptive home/away win rate (context evidence), top-right */}
+        <div style={{ display: 'flex', gap: 16 }}>
+          <WinRateCell label="Home win rate" metric={homeWinRate} />
+          <WinRateCell label="Away win rate" metric={awayWinRate} />
+        </div>
+      </div>
+
+      {/* Governed observed standings snapshot — read verbatim, not computed here */}
+      {standing && (
+        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+          <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 20, fontWeight: 700 }}>#{standing.position}</span>
+          <span className="mono tnum" style={{ color: 'var(--text)' }}>{standing.points} pts</span>
+          <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 10 }}>
+            P{standing.played} · {standing.won}W {standing.drawn}D {standing.lost}L · GD {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
+          </span>
+        </div>
+      )}
+
       {competitions.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
           {competitions.map((c) => (
@@ -103,65 +150,6 @@ function MetricCell({ label, metric }: { label: string; metric: PerformanceMetri
         {metric ? `${metric.unit} · n=${metric.sample.matches}${metric.sample.meetsThreshold ? '' : ' ·below thresh'}` : 'no sample'}
       </span>
     </div>
-  );
-}
-
-export function TeamPerformanceSnapshot({ overall, coverage }: {
-  overall: TeamPerformanceOverall;
-  coverage: 'present' | 'partial' | 'absent';
-}) {
-  return (
-    <section className="space-y-2">
-      <Eyebrow label="Descriptive performance" />
-      {coverage === 'absent' ? (
-        <EmptyState message="No descriptive performance features available yet." />
-      ) : (
-        <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 12 }}>
-          <MetricCell label="Home form" metric={overall.homeForm} />
-          <MetricCell label="Away form" metric={overall.awayForm} />
-          <MetricCell label="Momentum" metric={overall.momentum} />
-          <MetricCell label="Goal-margin vol." metric={overall.goalMarginVolatility} />
-          <MetricCell label="Giant-killer PPG" metric={overall.giantKillerPpg} />
-        </div>
-      )}
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Persisted descriptive features — not a governed reading.</p>
-    </section>
-  );
-}
-
-// ═══ STANDINGS POSITION — the team's row from the governed edition standings ════════
-
-export function TeamStandings({ entries }: { entries: readonly TeamStandingEntry[] }) {
-  return (
-    <section className="space-y-2">
-      <Eyebrow label="Standings" count={entries.length || undefined} />
-      {entries.length === 0 ? (
-        <EmptyState message="No competition standings available." />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {entries.map((e) => {
-            const href = `${routes.edition({ id: e.editionId, competition: { slug: e.competition.slug }, seasonLabel: e.seasonLabel })}?tab=standings`;
-            return (
-              <Link key={e.editionId} href={href} className="panel" style={{ display: 'block', padding: 12, textDecoration: 'none', color: 'inherit' }}>
-                <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{e.competition.name} · {e.seasonLabel}</p>
-                {e.line ? (
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
-                    <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 20, fontWeight: 700 }}>#{e.line.position}</span>
-                    <span className="mono tnum" style={{ color: 'var(--text)' }}>{e.line.points} pts</span>
-                    <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 10 }}>
-                      P{e.line.played} · {e.line.won}W {e.line.drawn}D {e.line.lost}L · GD {e.line.goalDifference > 0 ? `+${e.line.goalDifference}` : e.line.goalDifference}
-                    </span>
-                  </div>
-                ) : (
-                  <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 6 }}>Position — · not in the current standings snapshot</p>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Governed observed standings snapshot — read verbatim, not computed here.</p>
-    </section>
   );
 }
 
@@ -199,64 +187,85 @@ export function TeamCompetitionContext({ participation }: { participation: reado
   );
 }
 
-// ═══ CURRENT FORM — the CANONICAL recent completed fixtures surface (evidence) ═══════
+// ═══ CURRENT FORM — recent form + descriptive features + venue-split fixtures ════════
 //
-// Single home for "how has this team performed recently?": the W/D/L sequence plus one
-// fixture table carrying the team-relative score/result AND the competition + opponent
-// link (the only genuinely unique columns the former Match History added). Recent lines
-// are all COMPLETED, so the status column is dropped here. Venue-specific PERFORMANCE
-// lives in TeamHomeAwaySplit; venue-split fixture tables are not duplicated.
+// One "how is this team doing recently?" surface, grouped as requested: the W/D/L
+// sequence, the persisted descriptive performance features (context, not governed),
+// and the recent home / away fixtures split by venue (GF/GA + result per match). All
+// values are read verbatim; scores are team-relative via lineGoals (never re-oriented).
 
-export function TeamCurrentForm({ recent, teamName }: { recent: readonly TeamFixtureLine[]; teamName: string }) {
+function VenueFormTable({ title, lines, teamName }: { title: string; lines: readonly TeamFixtureLine[]; teamName: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{title}</p>
+      {lines.length === 0 ? (
+        <EmptyState message="None recorded." />
+      ) : (
+        <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
+          <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+            <thead><tr><th style={th}>Date</th><th style={th}>Opponent</th><th style={th}>Res</th><th style={th}>GF</th><th style={th}>GA</th></tr></thead>
+            <tbody>
+              {lines.map((l) => {
+                const { gf, ga } = lineGoals(l);
+                return (
+                  <tr key={l.fixtureId}>
+                    <td style={td}><Kickoff iso={l.kickoffAt} /></td>
+                    <td style={{ ...td, whiteSpace: 'normal' }}>
+                      <Link href={routes.match(lineMatchFixture(l, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{l.opponent.name}</Link>
+                    </td>
+                    <td style={td}><FormLetter res={lineResult(l)} /></td>
+                    <td style={td}>{orDash(gf)}</td><td style={td}>{orDash(ga)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TeamCurrentForm({ recent, home, away, teamName, overall, coverage }: {
+  recent: readonly TeamFixtureLine[];
+  home: readonly TeamFixtureLine[];
+  away: readonly TeamFixtureLine[];
+  teamName: string;
+  overall: TeamPerformanceOverall;
+  coverage: 'present' | 'partial' | 'absent';
+}) {
   return (
     <section className="space-y-2">
       <Eyebrow label="Current form" count={recent.length} />
       {recent.length === 0 ? (
         <EmptyState message="No completed matches yet." />
       ) : (
-        <div className="space-y-2">
-          <div className="panel" style={{ padding: 12 }}>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} aria-label="recent result sequence">
-              {recent.map((l) => <FormLetter key={l.fixtureId} res={lineResult(l)} />)}
-            </div>
+        <div className="panel" style={{ padding: 12 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} aria-label="recent result sequence">
+            {recent.map((l) => <FormLetter key={l.fixtureId} res={lineResult(l)} />)}
           </div>
-          <FixtureTable lines={recent} teamName={teamName} showScore showStatus={false} />
         </div>
       )}
-    </section>
-  );
-}
-
-// ═══ HOME / AWAY performance features (context) ═════════════════════════════════════
-
-export function TeamHomeAwaySplit({ overall, byCompetition }: {
-  overall: TeamPerformanceOverall;
-  byCompetition: readonly CompetitionPerformance[];
-}) {
-  const hasScoped = byCompetition.some((c) => c.homeWinRate || c.awayWinRate);
-  return (
-    <section className="space-y-2">
-      <Eyebrow label="Home / away form" />
-      <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <MetricCell label="Home form" metric={overall.homeForm} />
-        <MetricCell label="Away form" metric={overall.awayForm} />
-      </div>
-      {hasScoped && (
-        <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
-          <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={th}>Season</th><th style={th}>Home win rate</th><th style={th}>Away win rate</th></tr></thead>
-            <tbody>
-              {byCompetition.map((c) => (
-                <tr key={c.edition.id}>
-                  <td style={td}>{c.edition.competition.name} · {c.edition.seasonLabel}</td>
-                  <td style={td}>{c.homeWinRate ? `${orDash(c.homeWinRate.value)} (n=${c.homeWinRate.sample.matches})` : '—'}</td>
-                  <td style={td}>{c.awayWinRate ? `${orDash(c.awayWinRate.value)} (n=${c.awayWinRate.sample.matches})` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Descriptive persisted performance features (context — not a governed reading) */}
+      {coverage !== 'absent' && (
+        <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 12 }}>
+          <MetricCell label="Home form" metric={overall.homeForm} />
+          <MetricCell label="Away form" metric={overall.awayForm} />
+          <MetricCell label="Momentum" metric={overall.momentum} />
+          <MetricCell label="Goal-margin vol." metric={overall.goalMarginVolatility} />
+          <MetricCell label="Giant-killer PPG" metric={overall.giantKillerPpg} />
         </div>
       )}
+      {recent.length > 0 && (
+        <>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Recent home/away fixtures — supporting evidence, not a home/away calculation.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <VenueFormTable title="Recent home matches" lines={home} teamName={teamName} />
+            <VenueFormTable title="Recent away matches" lines={away} teamName={teamName} />
+          </div>
+        </>
+      )}
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Persisted descriptive features — not a governed reading.</p>
     </section>
   );
 }
