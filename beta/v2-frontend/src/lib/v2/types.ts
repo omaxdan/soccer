@@ -167,6 +167,130 @@ export interface TeamDetailResponse {
   competitions: { editionId: string; seasonLabel: string; competition: { id: string; name: string; slug: string } }[];
   squad: ApiPlayerSummary[];
   recentResults: ApiTeamResult[];
+  intelligence: TeamIntelligence;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAM INTELLIGENCE WORKSPACE — the getTeamDetail `intelligence` projection.
+// Mirror of the backend read model (RAW evidence + read-model arithmetic ONLY —
+// participation counts, registrations, availability, valuations, recent/upcoming
+// fixtures, home/away fixture context, per-key DERIVED statistic aggregates,
+// explicit-only next-fixture availability). NO governed verdict/score/prediction.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CoverageState = 'present' | 'absent' | 'partial' | 'not-supported';
+
+export interface TeamParticipation {
+  competitionEditionId: string;
+  seasonLabel: string;
+  competition: { id: string; name: string; slug: string };
+  fixturesTotal: number;
+  completed: number;
+  scheduled: number;
+  postponed: number;
+  registered: boolean;
+  firstKickoff: string | null;
+  lastKickoff: string | null;
+}
+
+export interface TeamAvailabilityRecord {
+  playerId: string;
+  fullName: string;
+  unavailabilityKindCode: string;
+  from: string | null;
+  to: string | null;
+  expectedReturnOn: string | null;
+  reason: string | null;
+  severityRank: number | null;
+  current: boolean;
+}
+
+export interface TeamFixtureLine {
+  fixtureId: string;
+  kickoffAt: string;
+  competition: { id: string; name: string; slug: string };
+  opponent: { id: string; name: string; slug: string };
+  isHome: boolean;
+  status: string;
+  score: { home: number; away: number } | null;
+}
+
+export interface TeamIntelligence {
+  participation: TeamParticipation[];
+  squad: {
+    playerId: string; fullName: string; shortName: string | null; slug: string;
+    registrationKindCode: string; registrationFrom: string | null; registrationTo: string | null;
+  }[];
+  availability: TeamAvailabilityRecord[];
+  valuations: { playerId: string; fullName: string; amount: string; currencyCode: string | null; asOfOn: string; sourceCode: string | null }[];
+  fixtures: { recent: TeamFixtureLine[]; upcoming: TeamFixtureLine[] };
+  homeAwayContext: { home: TeamFixtureLine[]; away: TeamFixtureLine[] };
+  playerStatistics: { playersWithStats: number; statisticKeys: { statisticKey: string; valueType: string | null; fixtures: number; players: number; numericTotal: string | null; numericMean: string | null }[] };
+  playerPerformances: { fixture: TeamFixtureLine | null; performances: { playerId: string; fullName: string; statistics: { key: string; value: string | null; valueType: string | null }[] }[] };
+  nextFixture: {
+    fixture: TeamFixtureLine;
+    registeredCount: number;
+    explicitlyUnavailable: { playerId: string; fullName: string; unavailabilityKindCode: string; reason: string | null; expectedReturnOn: string | null }[];
+    availabilityUnknown: { playerId: string; fullName: string }[];
+  } | null;
+  coverage: {
+    registrations: CoverageState; availability: CoverageState; valuations: CoverageState;
+    playerMatchStatistics: CoverageState; appearances: CoverageState; perPlayerCards: CoverageState;
+    standings: CoverageState; managerReferee: CoverageState; statisticsAreDerivedAggregates: true;
+  };
+}
+
+// ─── TEAM PERFORMANCE — descriptive persisted features (NOT governed intelligence) ──
+
+export type MetricDirection = 'HIGHER_IS_STRONGER' | 'LOWER_IS_STRONGER' | 'UNSIGNED';
+
+export interface PerformanceMetric {
+  value: number;
+  unit: string;
+  direction: MetricDirection;
+  sample: { matches: number; meetsThreshold: boolean };
+  asOf: string;
+}
+
+export interface TeamPerformanceOverall {
+  homeForm: PerformanceMetric | null;
+  awayForm: PerformanceMetric | null;
+  momentum: PerformanceMetric | null;
+  goalMarginVolatility: PerformanceMetric | null;
+  giantKillerPpg: PerformanceMetric | null;
+}
+
+export interface CompetitionPerformance {
+  edition: { id: string; seasonLabel: string; competition: { id: string; name: string; slug: string } };
+  homeWinRate: PerformanceMetric | null;
+  awayWinRate: PerformanceMetric | null;
+}
+
+export interface TeamPerformanceResponse {
+  team: ApiTeamSummary;
+  overall: TeamPerformanceOverall;
+  byCompetition: CompetitionPerformance[];
+  coverage: { overall: 'present' | 'partial' | 'absent'; performanceIsDescriptive: true };
+}
+
+// ─── TEAM READINESS — the GOVERNED reading (readiness_tracker) ───────────────────────
+
+export interface TeamReadinessReading {
+  moduleKey: string;
+  status: string;
+  strength: number | null;
+  confidence: number | null;
+  sample: { matches: number; meetsThreshold: boolean };
+  verdictText: string | null;
+  inactiveReason: string | null;
+  asOf: string;
+  evidence: ApiModuleEvidence | null;
+}
+
+export interface TeamReadinessResponse {
+  team: ApiTeamSummary;
+  readiness: TeamReadinessReading | null;
+  coverage: { readiness: 'present' | 'absent'; readinessIsGoverned: true };
 }
 
 export interface PlayerDetailResponse {
