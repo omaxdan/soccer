@@ -539,3 +539,117 @@ export function formResult(f: { goalsFor: number | null; goalsAgainst: number | 
   if (f.goalsFor < f.goalsAgainst) return 'L';
   return 'D';
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MATCH SURFACES — result / lineups / team-statistics / lifecycle / venue.
+// Mirror of the backend read models (observed evidence only; no derived W/D/L,
+// no percentages, no verdicts). Nullable fields stay nullable.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface MatchRef {
+  fixtureId: string;
+  kickoffAt: string;
+  status: string;
+  competition: { id: string; name: string; slug: string };
+  homeTeam: ApiTeam;
+  awayTeam: ApiTeam;
+}
+
+export interface ResultScore { home: number; away: number }
+export interface MatchResult {
+  final: ResultScore;
+  halfTime: ResultScore | null;
+  extraTime: ResultScore | null;
+  penalties: ResultScore | null;
+  confirmedAt: string | null;
+}
+export interface MatchResultResponse {
+  match: MatchRef;
+  result: MatchResult | null;
+  coverage: { result: 'present' | 'absent'; resultIsObserved: true };
+}
+
+export interface LineupPlayer {
+  player: { id: string; fullName: string; slug: string };
+  positionCode: string | null;
+  positionName: string | null;
+  positionGroup: string | null;
+  shirtNumber: number | null;
+}
+export interface TeamLineup {
+  team: { id: string; name: string; slug: string };
+  formation: string | null;
+  starting: LineupPlayer[];
+  substitutes: LineupPlayer[];
+}
+export interface MatchLineups {
+  home: TeamLineup | null;
+  away: TeamLineup | null;
+  coverage: { lineups: 'present' | 'partial' | 'absent'; lineupsAreObserved: true };
+}
+export interface MatchLineupsResponse {
+  match: MatchRef;
+  lineups: MatchLineups;
+}
+
+export interface TeamStatValue { value: string | null; display: string | null }
+export interface TeamStatLine {
+  groupName: string;
+  statisticKey: string;
+  statisticName: string | null;
+  home: TeamStatValue;
+  away: TeamStatValue;
+  valueType: string | null;
+  compareCode: string | null;
+  statisticsType: string | null;
+  renderType: string | null;
+}
+export interface PeriodStatistics { period: string; statistics: TeamStatLine[] }
+export interface MatchTeamStatistics {
+  periods: PeriodStatistics[];
+  coverage: { teamStatistics: 'present' | 'partial' | 'absent'; periodsPresent: string[]; statisticsAreObserved: true; provider: string | null; retrievedAt: string | null };
+}
+export interface MatchTeamStatisticsResponse {
+  match: MatchRef;
+  teamStatistics: MatchTeamStatistics;
+}
+
+export interface LifecycleState { code: string; displayName: string | null }
+export interface LifecycleTransition {
+  fromState: LifecycleState | null;
+  toState: LifecycleState;
+  transitionedAt: string;
+  providerStatusRaw: string | null;
+}
+export interface MatchLifecycle {
+  transitions: LifecycleTransition[];
+  coverage: { transitions: 'present' | 'absent'; transitionsAreObserved: true };
+}
+export interface MatchLifecycleResponse {
+  match: MatchRef;
+  lifecycle: MatchLifecycle;
+}
+
+export interface MatchVenueInfo {
+  id: string;
+  name: string;
+  city: string | null;
+  countryCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  elevationMetres: number | null;
+  timezoneName: string | null;
+  capacity: number | null;
+  surface: string | null;
+}
+export interface MatchVenue {
+  venue: MatchVenueInfo | null;
+  isNeutralVenue: boolean;
+  coverage: { venue: 'present' | 'absent'; venueIsObserved: true };
+}
+export interface MatchVenueResponse {
+  match: MatchRef;
+  venue: MatchVenue['venue'];
+  isNeutralVenue: boolean;
+  coverage: MatchVenue['coverage'];
+}

@@ -1,12 +1,18 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { fetchMatchIntelligence, fetchMatch, fetchEditionFixtures } from '@/lib/v2/api';
+import {
+  fetchMatchIntelligence, fetchMatch, fetchEditionFixtures,
+  fetchMatchResult, fetchMatchLineups, fetchMatchTeamStatistics, fetchMatchLifecycle, fetchMatchVenue,
+} from '@/lib/v2/api';
 import { idFromParam } from '@/lib/v2/slug';
 import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
 import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
+import {
+  MatchResultPanel, MatchTeamStatisticsPanel, MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel, MatchCoverage,
+} from '@/components/v2/match';
 import type { ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
@@ -122,6 +128,13 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
   const context: MatchDetailResponse | null = sealed?.context ?? (sealed ? null : await fetchMatch(id));
   if (!sealed && !context) notFound();
 
+  // The five quantitative match sub-resources (observed evidence). Fetched together;
+  // each returns 200 with its own coverage flags for an existing fixture, so an
+  // empty surface is an honest 'absent', never a 404.
+  const [resultRes, lineupsRes, statsRes, lifecycleRes, venueRes] = await Promise.all([
+    fetchMatchResult(id), fetchMatchLineups(id), fetchMatchTeamStatistics(id), fetchMatchLifecycle(id), fetchMatchVenue(id),
+  ]);
+
   // The header/context need a MatchDetailResponse; it is present in every non-404
   // path (sealed response carries it; fallback fetched it).
   const detail = sealed?.context ?? context;
@@ -158,13 +171,41 @@ export default async function V2MatchPage({ params }: { params: Promise<{ slug: 
 
       {detail && <MatchHeader context={detail} />}
 
+      {/* RESULT — observed scoreline (FT/HT/ET/pens) */}
+      {resultRes && <MatchResultPanel result={resultRes.result} coverage={resultRes.coverage} homeName={homeName} awayName={awayName} />}
+
       {/* SEALED, GOVERNED INTELLIGENCE — evidence-first. Honest unavailable state when unsealed. */}
       {sealed
         ? <SealedIntelligence intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
         : <IntelligenceUnavailable />}
 
+      {/* TEAM STATISTICS — observed, side-by-side per period */}
+      {statsRes && <MatchTeamStatisticsPanel teamStatistics={statsRes.teamStatistics} homeName={homeName} awayName={awayName} />}
+
+      {/* LINEUPS — observed XI / bench (player links) */}
+      {lineupsRes && <MatchLineupsPanel lineups={lineupsRes.lineups} />}
+
+      {/* VENUE — observed context; links to the canonical Venue page (no travel/weather) */}
+      {venueRes && <MatchVenuePanel matchVenue={{ venue: venueRes.venue, isNeutralVenue: venueRes.isNeutralVenue, coverage: venueRes.coverage }} />}
+
+      {/* LIFECYCLE — observed state transitions */}
+      {lifecycleRes && <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />}
+
       {/* MATCH CONTEXT — strictly separate from the calculation. */}
       {detail && <MatchContext context={detail} />}
+
+      {/* COVERAGE — honest present/absent/not-supported (weather & H2H are future substrate) */}
+      <MatchCoverage flags={[
+        ['match', detail ? 'present' : 'absent'],
+        ['result', resultRes?.coverage.result ?? 'absent'],
+        ['intelligence', sealed ? 'present' : 'absent'],
+        ['team statistics', statsRes?.teamStatistics.coverage.teamStatistics ?? 'absent'],
+        ['lineups', lineupsRes?.lineups.coverage.lineups ?? 'absent'],
+        ['venue', venueRes?.coverage.venue ?? 'absent'],
+        ['lifecycle', lifecycleRes?.lifecycle.coverage.transitions ?? 'absent'],
+        ['weather', 'not-supported'],
+        ['h2h', 'not-supported'],
+      ]} />
 
       {/* SHELL CONTINUITY — navigation around (not into) the sealed surfaces. */}
       <MatchNav prev={prev} next={next} editionId={editionId ?? null} competitionName={competitionName ?? null} />
