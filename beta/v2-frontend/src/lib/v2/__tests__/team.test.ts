@@ -13,16 +13,21 @@ const base = (over: Partial<TeamFixtureLine>): TeamFixtureLine => ({
   isHome: true, status: 'COMPLETED', score: { home: 2, away: 0 }, ...over,
 });
 
-describe('lineGoals — GF/GA from the team perspective', () => {
-  test('home: GF=home, GA=away', () => assert.deepEqual(lineGoals(base({})), { gf: 2, ga: 0 }));
-  test('away: GF=away, GA=home', () => assert.deepEqual(lineGoals(base({ isHome: false, score: { home: 1, away: 3 } })), { gf: 3, ga: 1 }));
+// The backend TeamFixtureLine.score is ALREADY team-relative for BOTH venues:
+//   score.home = team goals FOR, score.away = team goals AGAINST.
+// lineGoals must read those slots directly and NEVER re-orient by isHome.
+describe('lineGoals — GF/GA read directly from the team-relative score', () => {
+  test('home win: GF=score.home, GA=score.away', () => assert.deepEqual(lineGoals(base({ isHome: true, score: { home: 1, away: 0 } })), { gf: 1, ga: 0 }));
+  test('away loss: NOT re-oriented — GF=score.home, GA=score.away', () => assert.deepEqual(lineGoals(base({ isHome: false, score: { home: 1, away: 2 } })), { gf: 1, ga: 2 }));
+  test('away win: GF=score.home, GA=score.away', () => assert.deepEqual(lineGoals(base({ isHome: false, score: { home: 2, away: 0 } })), { gf: 2, ga: 0 }));
   test('no score → both null (never zero-filled)', () => assert.deepEqual(lineGoals(base({ score: null })), { gf: null, ga: null }));
 });
 
-describe('lineResult — W/D/L from the team perspective', () => {
-  test('win', () => assert.equal(lineResult(base({})), 'W'));
+describe('lineResult — W/D/L from the team-relative GF/GA', () => {
+  test('home win', () => assert.equal(lineResult(base({ isHome: true, score: { home: 1, away: 0 } })), 'W'));
+  test('away loss (must be L, never flipped to W)', () => assert.equal(lineResult(base({ isHome: false, score: { home: 1, away: 2 } })), 'L'));
+  test('away win', () => assert.equal(lineResult(base({ isHome: false, score: { home: 2, away: 0 } })), 'W'));
   test('draw', () => assert.equal(lineResult(base({ score: { home: 1, away: 1 } })), 'D'));
-  test('loss (away)', () => assert.equal(lineResult(base({ isHome: false, score: { home: 2, away: 0 } })), 'L'));
   test('no score → null', () => assert.equal(lineResult(base({ score: null })), null));
 });
 

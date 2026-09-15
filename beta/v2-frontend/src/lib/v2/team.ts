@@ -1,8 +1,10 @@
 // TEAM PAGE — pure presentation helpers (DB-free, no calculation of new statistics).
 //
-// These ONLY re-orient values the API already returned:
-//   • lineGoals  — pick GF/GA for THIS team from a fixture line's final score + isHome
-//     (the score is supplied by the backend; nothing is computed or inferred);
+// These ONLY read values the API already returned:
+//   • lineGoals  — GF/GA for THIS team. The backend TeamFixtureLine.score is ALREADY
+//     team-relative (score.home = this team's goals FOR, score.away = opponent goals
+//     AGAINST) for BOTH home and away fixtures, so we read the slots directly and never
+//     re-orient by isHome (the score is supplied by the backend; nothing is computed);
 //   • lineResult — classify a single completed fixture as W/D/L from that score
 //     (identical semantics to the existing formResult, for TeamFixtureLine rows);
 //   • lineMatchFixture — build the shape routes.match needs (home/away names) from a
@@ -11,12 +13,13 @@
 
 import type { TeamFixtureLine } from './types';
 
-/** GF/GA for THIS team, from the line's final score and home/away orientation. Null when unplayed. */
+/** GF/GA for THIS team. The backend TeamFixtureLine.score is already team-relative —
+ *  score.home = team goals FOR, score.away = team goals AGAINST — for both home and away
+ *  fixtures (teamIntelligence.ts: goals_for/goals_against → toScore). Read the slots
+ *  directly; do NOT re-orient by isHome. Null when unplayed. */
 export function lineGoals(line: TeamFixtureLine): { gf: number | null; ga: number | null } {
   if (!line.score) return { gf: null, ga: null };
-  return line.isHome
-    ? { gf: line.score.home, ga: line.score.away }
-    : { gf: line.score.away, ga: line.score.home };
+  return { gf: line.score.home, ga: line.score.away };
 }
 
 /** W/D/L for THIS team from a completed line's score, or null when there is no score. */

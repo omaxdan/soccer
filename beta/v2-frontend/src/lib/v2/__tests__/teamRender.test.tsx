@@ -187,6 +187,39 @@ describe('Competition context, match history, upcoming, players', () => {
   });
 });
 
+// Score/result ORIENTATION lock. The backend TeamFixtureLine.score is team-relative
+// (score.home = GF, score.away = GA) for BOTH venues; away rows must NOT be inverted.
+// Regression for the away-fixture double-orientation bug (e.g. away 1–2 L wrongly shown
+// as 2–1 W). Locks the RENDERED behavior, not just the pure helper.
+describe('Team fixture score/result orientation (team-relative, both venues)', () => {
+  const HOME_WIN: TeamFixtureLine = { fixtureId: '910', kickoffAt: '2026-08-01T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '67', name: 'Fluminense', slug: 'fluminense-1961' }, isHome: true, status: 'COMPLETED', score: { home: 1, away: 0 } };
+  const AWAY_LOSS: TeamFixtureLine = { fixtureId: '911', kickoffAt: '2026-07-25T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '73', name: 'Atlético Mineiro', slug: 'atletico-mineiro-1977' }, isHome: false, status: 'COMPLETED', score: { home: 1, away: 2 } };
+  const AWAY_WIN: TeamFixtureLine = { ...AWAY_LOSS, fixtureId: '912', opponent: { id: '74', name: 'Santos', slug: 'santos-1968' }, score: { home: 3, away: 1 } };
+
+  test('TeamMatchHistory: home renders 1–0 W and away renders 1–2 L (never inverted to 2–1 W)', () => {
+    const t = text(<TeamMatchHistory recent={[HOME_WIN, AWAY_LOSS]} teamName="Flamengo" />);
+    assert.match(t, /1–0\s+W/);      // home: GF–GA then result
+    assert.match(t, /1–2\s+L/);      // away: GF–GA then result, team-relative
+    assert.doesNotMatch(t, /2–1/);   // must NOT show the inverted away score
+  });
+  test('TeamMatchHistory: away win renders 3–1 W (GF first), not 1–3', () => {
+    const t = text(<TeamMatchHistory recent={[AWAY_WIN]} teamName="Flamengo" />);
+    assert.match(t, /3–1\s+W/);
+    assert.doesNotMatch(t, /1–3/);
+  });
+  test('TeamRecentVenueForm: recent away fixture shows L then GF 1 / GA 2 (never W 2 1)', () => {
+    const t = text(<TeamRecentVenueForm home={[HOME_WIN]} away={[AWAY_LOSS]} teamName="Flamengo" />);
+    assert.match(t, /L\s+1\s+2/);    // Res, GF, GA column order
+    assert.doesNotMatch(t, /W\s+2\s+1/);
+  });
+  test('invariant: displayed score x–y agrees with the result letter (x>y→W, x<y→L)', () => {
+    const win = text(<TeamMatchHistory recent={[HOME_WIN]} teamName="Flamengo" />);
+    assert.match(win, /1–0\s+W/); assert.doesNotMatch(win, /1–0\s+[LD]/);
+    const loss = text(<TeamMatchHistory recent={[AWAY_LOSS]} teamName="Flamengo" />);
+    assert.match(loss, /1–2\s+L/); assert.doesNotMatch(loss, /1–2\s+[WD]/);
+  });
+});
+
 describe('no prediction / probability / travel / betting language across the team hub', () => {
   test('the assembled surfaces carry no forbidden lexicon', () => {
     const all = [
