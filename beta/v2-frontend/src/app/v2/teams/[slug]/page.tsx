@@ -5,8 +5,7 @@ import { routes } from '@/lib/v2/routes';
 import { findTeamStanding } from '@/lib/v2/standings';
 import { Breadcrumb } from '@/components/v2/nav';
 import {
-  TeamIdentityHeader, TeamPerformanceSnapshot, TeamCurrentForm, TeamHomeAwaySplit,
-  TeamReadinessPanel, TeamStandings, TeamCompetitionContext,
+  TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamCompetitionContext,
   TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
@@ -45,31 +44,49 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
     }),
   );
 
+  // The header surfaces the PRIMARY edition's season, standings row and home/away win
+  // rate — all read verbatim from existing reads (nothing computed here). "Primary" is
+  // simply the first competition edition; single-edition teams have exactly one.
+  const primary = competitions[0] ?? null;
+  const primarySeason = primary ? `${primary.competition.name} · ${primary.seasonLabel}` : null;
+  const primaryStanding = standingEntries[0]?.line ?? null;
+  const primaryWinRate = primary ? (performance?.byCompetition.find((c) => c.edition.id === primary.editionId) ?? null) : null;
+
   return (
     <main className="space-y-5 mx-auto w-full max-w-6xl px-4 py-4">
       <Breadcrumb items={[{ label: 'Teams', href: routes.teams() }, { label: team.name }]} />
 
-      {/* IDENTITY */}
-      <TeamIdentityHeader team={team} competitions={competitions} />
+      {/* IDENTITY + season + governed standings row + home/away win rate (top-right) */}
+      <TeamIdentityHeader
+        team={team}
+        competitions={competitions}
+        season={primarySeason}
+        standing={primaryStanding}
+        homeWinRate={primaryWinRate?.homeWinRate ?? null}
+        awayWinRate={primaryWinRate?.awayWinRate ?? null}
+      />
 
-      {/* EVIDENCE — descriptive persisted performance features */}
-      <TeamPerformanceSnapshot overall={performance?.overall ?? EMPTY_OVERALL} coverage={performance?.coverage.overall ?? 'absent'} />
+      {/* CONTEXT — participation counts per governed edition */}
+      <TeamCompetitionContext participation={intelligence.participation} />
 
-      {/* EVIDENCE — recent completed fixtures: the single canonical Current Form surface
-          (W/D/L strip + team-relative score/result + competition/opponent link) */}
-      <TeamCurrentForm recent={intelligence.fixtures.recent} teamName={team.name} />
-
-      {/* EVIDENCE — home/away descriptive features + per-edition win rates (venue metrics) */}
-      <TeamHomeAwaySplit overall={performance?.overall ?? EMPTY_OVERALL} byCompetition={performance?.byCompetition ?? []} />
+      {/* EVIDENCE — recent form: W/D/L strip + descriptive features + venue-split fixtures */}
+      <TeamCurrentForm
+        recent={intelligence.fixtures.recent}
+        home={intelligence.homeAwayContext.home}
+        away={intelligence.homeAwayContext.away}
+        teamName={team.name}
+        overall={performance?.overall ?? EMPTY_OVERALL}
+        coverage={performance?.coverage.overall ?? 'absent'}
+      />
 
       {/* GOVERNED INTELLIGENCE — kept explicitly separate from the evidence above */}
       <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
 
-      {/* CONTEXT — standings position (reused governed edition standings), participation, fixtures, squad */}
-      <TeamStandings entries={standingEntries} />
-      <TeamCompetitionContext participation={intelligence.participation} />
-      <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} />
-      <TeamPlayers squad={squad} availability={intelligence.availability} />
+      {/* SUPPORTING — upcoming fixtures (left) + squad (right) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} />
+        <TeamPlayers squad={squad} availability={intelligence.availability} />
+      </div>
     </main>
   );
 }
