@@ -228,7 +228,7 @@ export function MatchLifecyclePanel({ lifecycle }: { lifecycle: MatchLifecycle }
 
 // ═══ COVERAGE (honest present/absent/not-supported grid) ════════════════════════════
 
-export function MatchCoverage({ flags }: { flags: readonly [string, 'present' | 'absent' | 'partial' | 'not-supported'][] }) {
+export function MatchCoverage({ flags }: { flags: readonly (readonly [string, 'present' | 'absent' | 'partial' | 'not-supported'])[] }) {
   const color = (s: string) => s === 'present' ? 'var(--edge)' : s === 'not-supported' ? 'var(--faint)' : s === 'partial' ? 'var(--muted)' : 'var(--faint)';
   return (
     <section className="space-y-2">
