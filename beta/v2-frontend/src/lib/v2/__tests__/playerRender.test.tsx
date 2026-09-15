@@ -95,6 +95,23 @@ describe('Match participation', () => {
   test('empty → honest empty state', () => {
     assert.match(text(<PlayerMatchHistory recentMatches={[]} currentTeam={TEAM} />), /No stored match participation/i);
   });
+  test('per-match statistics render verbatim behind a disclosure', () => {
+    const markup = html(<PlayerMatchHistory recentMatches={MATCHES} currentTeam={TEAM} />);
+    assert.match(markup, /<details/);
+    const t = text(<PlayerMatchHistory recentMatches={MATCHES} currentTeam={TEAM} />);
+    assert.match(t, /goals/); assert.match(t, /\b1\b/); assert.match(t, /1 statistics/);
+  });
+  test('a match with empty statistics has no disclosure toggle', () => {
+    const noStats: PlayerMatchStatLine[] = [{ ...MATCHES[0], fixtureId: '345', statistics: [] }];
+    const markup = html(<PlayerMatchHistory recentMatches={noStats} currentTeam={TEAM} />);
+    assert.doesNotMatch(markup, /<details/);
+    assert.match(text(<PlayerMatchHistory recentMatches={noStats} currentTeam={TEAM} />), /Mirassol/); // fixture row still renders
+  });
+  test('nullable statistic value renders as em dash (never fabricated)', () => {
+    const nullVal: PlayerMatchStatLine[] = [{ ...MATCHES[0], statistics: [{ key: 'rating', value: null, valueType: 'number' }] }];
+    const t = text(<PlayerMatchHistory recentMatches={nullVal} currentTeam={TEAM} />);
+    assert.match(t, /rating/); assert.match(t, /—/);
+  });
 });
 
 describe('Valuation + coverage', () => {
