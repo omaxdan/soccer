@@ -1,12 +1,13 @@
 import { notFound } from 'next/navigation';
-import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness } from '@/lib/v2/api';
+import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness, fetchEditionStandings } from '@/lib/v2/api';
 import { idFromParam } from '@/lib/v2/slug';
 import { routes } from '@/lib/v2/routes';
+import { findTeamStanding } from '@/lib/v2/standings';
 import { Breadcrumb } from '@/components/v2/nav';
 import {
   TeamIdentityHeader, TeamPerformanceSnapshot, TeamCurrentForm, TeamHomeAwaySplit,
-  TeamRecentVenueForm, TeamReadinessPanel, TeamCompetitionContext,
-  TeamMatchHistory, TeamUpcomingFixtures, TeamPlayers,
+  TeamRecentVenueForm, TeamReadinessPanel, TeamStandings, TeamCompetitionContext,
+  TeamMatchHistory, TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
 
@@ -34,6 +35,16 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
   if (!detail) notFound();
   const { team, competitions, squad, recentResults, intelligence } = detail;
 
+  // Standings position — REUSE the existing governed edition-standings read for each
+  // edition the team participates in (from detail.competitions), matched by team.id.
+  // Nothing is computed here; a missing snapshot/row stays honest.
+  const standingEntries: TeamStandingEntry[] = await Promise.all(
+    competitions.map(async (c): Promise<TeamStandingEntry> => {
+      const s = await fetchEditionStandings(c.editionId);
+      return { editionId: c.editionId, seasonLabel: c.seasonLabel, competition: c.competition, line: s ? findTeamStanding(s.standings, team.id) : null };
+    }),
+  );
+
   return (
     <main className="space-y-5" style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
       <Breadcrumb items={[{ label: 'Teams', href: routes.teams() }, { label: team.name }]} />
@@ -56,7 +67,8 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
       {/* GOVERNED INTELLIGENCE — kept explicitly separate from the evidence above */}
       <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
 
-      {/* CONTEXT — competition participation, fixtures, squad */}
+      {/* CONTEXT — standings position (reused governed edition standings), participation, fixtures, squad */}
+      <TeamStandings entries={standingEntries} />
       <TeamCompetitionContext participation={intelligence.participation} />
       <TeamMatchHistory recent={intelligence.fixtures.recent} teamName={team.name} />
       <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} />
