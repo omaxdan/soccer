@@ -17,11 +17,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   TeamIdentityHeader, TeamPerformanceSnapshot, TeamCurrentForm, TeamHomeAwaySplit,
-  TeamRecentVenueForm, TeamReadinessPanel, TeamStandings, TeamCompetitionContext,
-  TeamMatchHistory, TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
+  TeamReadinessPanel, TeamStandings, TeamCompetitionContext,
+  TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type {
-  ApiPlayerSummary, ApiTeamResult, CompetitionPerformance, PerformanceMetric,
+  ApiPlayerSummary, CompetitionPerformance, PerformanceMetric,
   TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
@@ -40,10 +40,6 @@ const OVERALL_FULL: TeamPerformanceOverall = { homeForm: METRIC(1.83, 12), awayF
 const OVERALL_EMPTY: TeamPerformanceOverall = { homeForm: null, awayForm: null, momentum: null, goalMarginVolatility: null, giantKillerPpg: null };
 const BY_COMP: CompetitionPerformance[] = [
   { edition: { id: '18', seasonLabel: '2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' } }, homeWinRate: METRIC(0.67, 12), awayWinRate: METRIC(0.36, 11) },
-];
-const RESULTS: ApiTeamResult[] = [
-  { fixtureId: '900', kickoffAt: '2026-08-01T20:00:00.000Z', isHome: true, opponent: { id: '67', name: 'Fluminense', slug: 'fluminense-1961' }, goalsFor: 2, goalsAgainst: 0 },
-  { fixtureId: '901', kickoffAt: '2026-07-25T20:00:00.000Z', isHome: false, opponent: { id: '72', name: 'Palmeiras', slug: 'palmeiras-1963' }, goalsFor: null, goalsAgainst: null },
 ];
 const HOME_LINES: TeamFixtureLine[] = [
   { fixtureId: '900', kickoffAt: '2026-08-01T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '67', name: 'Fluminense', slug: 'fluminense-1961' }, isHome: true, status: 'COMPLETED', score: { home: 2, away: 0 } },
@@ -93,14 +89,18 @@ describe('Performance snapshot (descriptive evidence)', () => {
   });
 });
 
-describe('Current form (evidence)', () => {
-  const markup = html(<TeamCurrentForm recentResults={RESULTS} />);
-  test('renders a results table with GF/GA and per-match W/D/L; unplayed GF/GA as dash', () => {
-    assert.match(markup, /Fluminense/);
-    assert.match(text(<TeamCurrentForm recentResults={RESULTS} />), /—/); // null goals → dash, not 0
+describe('Current form (canonical recent completed fixtures)', () => {
+  const NULL_SCORE: TeamFixtureLine = { fixtureId: '902', kickoffAt: '2026-07-10T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '72', name: 'Palmeiras', slug: 'palmeiras-1963' }, isHome: false, status: 'COMPLETED', score: null };
+  const RECENT: TeamFixtureLine[] = [...HOME_LINES, NULL_SCORE];
+  test('renders recent fixtures with opponent + competition + canonical match link; unplayed score as dash', () => {
+    const markup = html(<TeamCurrentForm recent={RECENT} teamName="Flamengo" />);
+    assert.match(markup, /Fluminense/);                                       // opponent
+    assert.match(markup, /Brasileirão Betano/);                               // competition column (unique info folded in from Match History)
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-fluminense-900"/); // opponent → canonical match link
+    assert.match(text(<TeamCurrentForm recent={RECENT} teamName="Flamengo" />), /—/); // null score → dash, never 0
   });
   test('empty → honest empty state', () => {
-    assert.match(text(<TeamCurrentForm recentResults={[]} />), /No completed matches/i);
+    assert.match(text(<TeamCurrentForm recent={[]} teamName="Flamengo" />), /No completed matches/i);
   });
 });
 
@@ -109,16 +109,6 @@ describe('Home / away split (descriptive)', () => {
     const t = text(<TeamHomeAwaySplit overall={OVERALL_FULL} byCompetition={BY_COMP} />);
     assert.match(t, /Home form/i); assert.match(t, /Away form/i);
     assert.match(t, /0\.67/); assert.match(t, /n=12/);
-  });
-});
-
-describe('Recent venue form context (evidence, not a calculation)', () => {
-  const markup = html(<TeamRecentVenueForm home={HOME_LINES} away={AWAY_LINES} teamName="Flamengo" />);
-  test('labels it context, not a home/away calculation, and links matches canonically', () => {
-    const t = text(<TeamRecentVenueForm home={HOME_LINES} away={AWAY_LINES} teamName="Flamengo" />);
-    assert.match(t, /not a home\/away calculation/i);
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-fluminense-900"/); // home → team is home
-    assert.match(markup, /href="\/v2\/matches\/palmeiras-vs-flamengo-901"/);  // away → team is away
   });
 });
 
@@ -168,13 +158,13 @@ describe('Competition context, match history, upcoming, players', () => {
     assert.match(markup, /href="\/v2\/editions\/brasileirao-betano-325-brasileiro-serie-a-2026-18"/);
     assert.match(text(<TeamCompetitionContext participation={PARTICIPATION} />), /38/);
   });
-  test('match history + upcoming link to canonical match URLs', () => {
-    assert.match(html(<TeamMatchHistory recent={[...HOME_LINES, ...AWAY_LINES]} teamName="Flamengo" />), /href="\/v2\/matches\/flamengo-vs-fluminense-900"/);
+  test('current form + upcoming link to canonical match URLs', () => {
+    assert.match(html(<TeamCurrentForm recent={[...HOME_LINES, ...AWAY_LINES]} teamName="Flamengo" />), /href="\/v2\/matches\/flamengo-vs-fluminense-900"/);
     // Away fixture: opponent is home in the canonical match slug.
     assert.match(html(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" />), /href="\/v2\/matches\/atletico-mineiro-vs-flamengo-950"/);
   });
   test('empty fixtures/participation → honest empty states', () => {
-    assert.match(text(<TeamMatchHistory recent={[]} teamName="Flamengo" />), /No recent fixtures/i);
+    assert.match(text(<TeamCurrentForm recent={[]} teamName="Flamengo" />), /No completed matches/i);
     assert.match(text(<TeamUpcomingFixtures upcoming={[]} teamName="Flamengo" />), /No upcoming fixtures/i);
     assert.match(text(<TeamCompetitionContext participation={[]} />), /No governed participation/i);
   });
@@ -196,26 +186,21 @@ describe('Team fixture score/result orientation (team-relative, both venues)', (
   const AWAY_LOSS: TeamFixtureLine = { fixtureId: '911', kickoffAt: '2026-07-25T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '73', name: 'Atlético Mineiro', slug: 'atletico-mineiro-1977' }, isHome: false, status: 'COMPLETED', score: { home: 1, away: 2 } };
   const AWAY_WIN: TeamFixtureLine = { ...AWAY_LOSS, fixtureId: '912', opponent: { id: '74', name: 'Santos', slug: 'santos-1968' }, score: { home: 3, away: 1 } };
 
-  test('TeamMatchHistory: home renders 1–0 W and away renders 1–2 L (never inverted to 2–1 W)', () => {
-    const t = text(<TeamMatchHistory recent={[HOME_WIN, AWAY_LOSS]} teamName="Flamengo" />);
+  test('Current Form: home renders 1–0 W and away renders 1–2 L (never inverted to 2–1 W)', () => {
+    const t = text(<TeamCurrentForm recent={[HOME_WIN, AWAY_LOSS]} teamName="Flamengo" />);
     assert.match(t, /1–0\s+W/);      // home: GF–GA then result
     assert.match(t, /1–2\s+L/);      // away: GF–GA then result, team-relative
     assert.doesNotMatch(t, /2–1/);   // must NOT show the inverted away score
   });
-  test('TeamMatchHistory: away win renders 3–1 W (GF first), not 1–3', () => {
-    const t = text(<TeamMatchHistory recent={[AWAY_WIN]} teamName="Flamengo" />);
+  test('Current Form: away win renders 3–1 W (GF first), not 1–3', () => {
+    const t = text(<TeamCurrentForm recent={[AWAY_WIN]} teamName="Flamengo" />);
     assert.match(t, /3–1\s+W/);
     assert.doesNotMatch(t, /1–3/);
   });
-  test('TeamRecentVenueForm: recent away fixture shows L then GF 1 / GA 2 (never W 2 1)', () => {
-    const t = text(<TeamRecentVenueForm home={[HOME_WIN]} away={[AWAY_LOSS]} teamName="Flamengo" />);
-    assert.match(t, /L\s+1\s+2/);    // Res, GF, GA column order
-    assert.doesNotMatch(t, /W\s+2\s+1/);
-  });
   test('invariant: displayed score x–y agrees with the result letter (x>y→W, x<y→L)', () => {
-    const win = text(<TeamMatchHistory recent={[HOME_WIN]} teamName="Flamengo" />);
+    const win = text(<TeamCurrentForm recent={[HOME_WIN]} teamName="Flamengo" />);
     assert.match(win, /1–0\s+W/); assert.doesNotMatch(win, /1–0\s+[LD]/);
-    const loss = text(<TeamMatchHistory recent={[AWAY_LOSS]} teamName="Flamengo" />);
+    const loss = text(<TeamCurrentForm recent={[AWAY_LOSS]} teamName="Flamengo" />);
     assert.match(loss, /1–2\s+L/); assert.doesNotMatch(loss, /1–2\s+[WD]/);
   });
 });
@@ -225,11 +210,10 @@ describe('no prediction / probability / travel / betting language across the tea
     const all = [
       text(<TeamIdentityHeader team={TEAM} competitions={COMPETITIONS} />),
       text(<TeamPerformanceSnapshot overall={OVERALL_FULL} coverage="present" />),
-      text(<TeamCurrentForm recentResults={RESULTS} />),
+      text(<TeamCurrentForm recent={[...HOME_LINES, ...AWAY_LINES]} teamName="Flamengo" />),
       text(<TeamHomeAwaySplit overall={OVERALL_FULL} byCompetition={BY_COMP} />),
-      text(<TeamRecentVenueForm home={HOME_LINES} away={AWAY_LINES} teamName="Flamengo" />),
       text(<TeamReadinessPanel readiness={READING} coverage={{ readiness: 'present', readinessIsGoverned: true }} />),
-      text(<TeamMatchHistory recent={HOME_LINES} teamName="Flamengo" />),
+      text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" />),
     ].join(' ').toLowerCase();
     for (const term of ['predicted', 'prediction', 'probability', 'travel', 'distance', 'fatigue', 'forecast', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend']) {
       assert.equal(all.includes(term), false, `must not contain "${term}"`);
