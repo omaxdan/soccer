@@ -7,6 +7,7 @@ import type {
   MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse,
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
   CompetitionResponse, CountryResponse, VenueResponse,
+  TeamPerformanceResponse, TeamReadinessResponse,
 } from './types';
 
 export const V2_API_BASE =
@@ -68,6 +69,18 @@ export async function fetchTeams(): Promise<TeamListResponse> {
 /** One team's identity/context, or null when not exposed under a governed edition. */
 export function fetchTeam(teamId: string): Promise<TeamDetailResponse | null> {
   return getJson<TeamDetailResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}`);
+}
+
+/** A team's DESCRIPTIVE performance evidence (persisted features), or null when the
+ *  team is not exposed under a governed edition. NOT governed intelligence. */
+export function fetchTeamPerformance(teamId: string): Promise<TeamPerformanceResponse | null> {
+  return getJson<TeamPerformanceResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/performance`);
+}
+
+/** A team's GOVERNED readiness reading (readiness_tracker), or null when the team is
+ *  not exposed under a governed edition. */
+export function fetchTeamReadiness(teamId: string): Promise<TeamReadinessResponse | null> {
+  return getJson<TeamReadinessResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/readiness`);
 }
 
 /** Players in the governed authorized-active edition(s). Never 404s. */
