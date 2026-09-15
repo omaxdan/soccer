@@ -65,7 +65,7 @@ export default async function V2EditionPage({ params, searchParams }: {
   const hasMatches = fixtures.length > 0;
 
   return (
-    <main className="space-y-4" style={{ maxWidth: 1040, margin: '0 auto', padding: 16 }}>
+    <main className="space-y-4 mx-auto w-full max-w-6xl px-4 py-4">
       <Breadcrumb items={[{ label: 'Leagues', href: routes.leagues() }, { label: `${edition.competition.name} · ${edition.seasonLabel}` }]} />
 
       <CompetitionHeader
