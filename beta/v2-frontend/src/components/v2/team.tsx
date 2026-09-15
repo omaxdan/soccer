@@ -16,9 +16,8 @@ import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
 import { lineGoals, lineResult, lineMatchFixture } from '@/lib/v2/team';
-import { formResult } from '@/lib/v2/types';
 import type {
-  ApiPlayerSummary, ApiTeamResult, CompetitionPerformance, PerformanceMetric, StandingLine,
+  ApiPlayerSummary, CompetitionPerformance, PerformanceMetric, StandingLine,
   TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
@@ -200,86 +199,30 @@ export function TeamCompetitionContext({ participation }: { participation: reado
   );
 }
 
-// ═══ CURRENT FORM — recent completed results (evidence) ═════════════════════════════
+// ═══ CURRENT FORM — the CANONICAL recent completed fixtures surface (evidence) ═══════
+//
+// Single home for "how has this team performed recently?": the W/D/L sequence plus one
+// fixture table carrying the team-relative score/result AND the competition + opponent
+// link (the only genuinely unique columns the former Match History added). Recent lines
+// are all COMPLETED, so the status column is dropped here. Venue-specific PERFORMANCE
+// lives in TeamHomeAwaySplit; venue-split fixture tables are not duplicated.
 
-export function TeamCurrentForm({ recentResults }: { recentResults: readonly ApiTeamResult[] }) {
+export function TeamCurrentForm({ recent, teamName }: { recent: readonly TeamFixtureLine[]; teamName: string }) {
   return (
     <section className="space-y-2">
-      <Eyebrow label="Current form" count={recentResults.length} />
-      {recentResults.length === 0 ? (
+      <Eyebrow label="Current form" count={recent.length} />
+      {recent.length === 0 ? (
         <EmptyState message="No completed matches yet." />
       ) : (
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }} aria-label="recent result sequence">
-            {recentResults.map((r) => <FormLetter key={r.fixtureId} res={formResult(r)} />)}
+        <div className="space-y-2">
+          <div className="panel" style={{ padding: 12 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} aria-label="recent result sequence">
+              {recent.map((l) => <FormLetter key={l.fixtureId} res={lineResult(l)} />)}
+            </div>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-              <thead><tr>
-                <th style={th}>Date</th><th style={th}>Opponent</th><th style={th}>H/A</th><th style={th}>GF</th><th style={th}>GA</th><th style={th}>Res</th>
-              </tr></thead>
-              <tbody>
-                {recentResults.map((r) => (
-                  <tr key={r.fixtureId}>
-                    <td style={td}><Kickoff iso={r.kickoffAt} /></td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>{r.opponent.name}</td>
-                    <td style={td}>{r.isHome ? 'H' : 'A'}</td>
-                    <td style={td}>{orDash(r.goalsFor)}</td><td style={td}>{orDash(r.goalsAgainst)}</td>
-                    <td style={td}><FormLetter res={formResult(r)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FixtureTable lines={recent} teamName={teamName} showScore showStatus={false} />
         </div>
       )}
-    </section>
-  );
-}
-
-// ═══ RECENT VENUE FORM CONTEXT — recent home / away fixtures (evidence, NOT a calc) ══
-
-function VenueFormTable({ title, lines, teamName }: { title: string; lines: readonly TeamFixtureLine[]; teamName: string }) {
-  return (
-    <div className="space-y-1">
-      <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{title}</p>
-      {lines.length === 0 ? (
-        <EmptyState message="None recorded." />
-      ) : (
-        <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
-          <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={th}>Date</th><th style={th}>Opponent</th><th style={th}>Res</th><th style={th}>GF</th><th style={th}>GA</th></tr></thead>
-            <tbody>
-              {lines.map((l) => {
-                const { gf, ga } = lineGoals(l);
-                return (
-                  <tr key={l.fixtureId}>
-                    <td style={td}><Kickoff iso={l.kickoffAt} /></td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>
-                      <Link href={routes.match(lineMatchFixture(l, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{l.opponent.name}</Link>
-                    </td>
-                    <td style={td}><FormLetter res={lineResult(l)} /></td>
-                    <td style={td}>{orDash(gf)}</td><td style={td}>{orDash(ga)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function TeamRecentVenueForm({ home, away, teamName }: { home: readonly TeamFixtureLine[]; away: readonly TeamFixtureLine[]; teamName: string }) {
-  return (
-    <section className="space-y-2">
-      <Eyebrow label="Recent venue form context" />
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Recent home/away fixtures — supporting evidence, not a home/away calculation.</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <VenueFormTable title="Recent home matches" lines={home} teamName={teamName} />
-        <VenueFormTable title="Recent away matches" lines={away} teamName={teamName} />
-      </div>
     </section>
   );
 }
@@ -395,15 +338,19 @@ export function TeamPlayers({ squad, availability }: { squad: readonly ApiPlayer
   );
 }
 
-// ═══ MATCH HISTORY + UPCOMING — fixture lines (context/evidence) ════════════════════
+// ═══ FIXTURE TABLE — shared fixture-line table (Current Form + Upcoming) ═════════════
+//
+// showScore renders the team-relative Score (GF–GA) + Res (completed fixtures);
+// showStatus renders the lifecycle status (meaningful for upcoming SCHEDULED/POSTPONED,
+// redundant for recent COMPLETED so Current Form turns it off).
 
-function FixtureTable({ lines, teamName, showScore }: { lines: readonly TeamFixtureLine[]; teamName: string; showScore: boolean }) {
+function FixtureTable({ lines, teamName, showScore, showStatus = true }: { lines: readonly TeamFixtureLine[]; teamName: string; showScore: boolean; showStatus?: boolean }) {
   return (
     <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
       <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
         <thead><tr>
           <th style={th}>Date</th><th style={th}>Competition</th><th style={th}>Opponent</th><th style={th}>H/A</th>
-          {showScore ? <><th style={th}>Score</th><th style={th}>Res</th></> : null}<th style={th}>Status</th>
+          {showScore ? <><th style={th}>Score</th><th style={th}>Res</th></> : null}{showStatus ? <th style={th}>Status</th> : null}
         </tr></thead>
         <tbody>
           {lines.map((l) => {
@@ -417,22 +364,13 @@ function FixtureTable({ lines, teamName, showScore }: { lines: readonly TeamFixt
                 </td>
                 <td style={td}>{l.isHome ? 'H' : 'A'}</td>
                 {showScore ? <><td style={td}>{gf === null || ga === null ? '—' : `${gf}–${ga}`}</td><td style={td}><FormLetter res={lineResult(l)} /></td></> : null}
-                <td style={td}><span className="label-cap" style={{ color: 'var(--faint)' }}>{l.status}</span></td>
+                {showStatus ? <td style={td}><span className="label-cap" style={{ color: 'var(--faint)' }}>{l.status}</span></td> : null}
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
-  );
-}
-
-export function TeamMatchHistory({ recent, teamName }: { recent: readonly TeamFixtureLine[]; teamName: string }) {
-  return (
-    <section className="space-y-2">
-      <Eyebrow label="Match history" count={recent.length} />
-      {recent.length === 0 ? <EmptyState message="No recent fixtures." /> : <FixtureTable lines={recent} teamName={teamName} showScore />}
-    </section>
   );
 }
 
