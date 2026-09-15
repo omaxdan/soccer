@@ -185,6 +185,50 @@ export interface PlayerDetailResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ENTITY KEYSTONES — Competition / Country / Venue read-model responses.
+// Mirror of the backend contract (CompetitionResponse / CountryResponse /
+// VenueResponse). Layer-1 identity/context ONLY — no intelligence, no derived
+// scores. Nullable fields stay nullable (never zero-filled).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One competition, identity only, for navigation/cross-links. */
+export interface ApiCompetitionSummary {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface CompetitionResponse {
+  competition: { id: string; name: string; slug: string; countryCode: string | null };
+  editions: ApiEditionSummary[];
+  coverage: { competition: 'present'; editions: 'present' | 'absent' };
+}
+
+export interface CountryResponse {
+  country: { code: string; name: string; alpha3Code: string | null };
+  teams: ApiTeamSummary[];
+  competitions: ApiCompetitionSummary[];
+  coverage: { country: 'present'; teams: 'present' | 'absent'; competitions: 'present' | 'absent' };
+}
+
+export interface VenueResponse {
+  venue: {
+    id: string;
+    name: string;
+    city: string | null;
+    countryCode: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    elevationMetres: number | null;
+    timezoneName: string | null;
+    capacity: number | null;
+    surface: string | null;
+  };
+  homeTeams: ApiTeamSummary[];
+  coverage: { venue: 'present'; homeTeams: 'present' | 'absent' };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MATCH INTELLIGENCE — sealed-snapshot wire types (mirror of the backend
 // src/v2/snapshot/read/matchIntelligence.ts contract). This is the SEALED,
 // GOVERNED calculation output — never a live/contextual read. Numerics that are
