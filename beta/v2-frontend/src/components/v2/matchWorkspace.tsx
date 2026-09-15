@@ -3,14 +3,41 @@
 
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
-import { Kickoff, StatusChip } from '@/components/v2/ui';
+import { Kickoff, StatusChip, Score } from '@/components/v2/ui';
 import { MATCH_TABS, matchTabHref, type MatchTab } from '@/lib/v2/matchTabs';
-import type { ApiMatchHeader, MatchResult, MatchVenueInfo } from '@/lib/v2/types';
+import type { ApiMatchHeader, MatchDetailResponse, MatchResult, MatchVenueInfo } from '@/lib/v2/types';
 
 export type CoverageFlag = readonly [string, 'present' | 'absent' | 'partial' | 'not-supported'];
 
 function orDash(v: string | number | null | undefined): string {
   return v === null || v === undefined || v === '' ? '—' : String(v);
+}
+
+// ── compact match header: who / when / where + state ────────────────────────────────
+
+export function MatchHeader({ context, venue }: { context: MatchDetailResponse; venue: MatchVenueInfo | null }) {
+  const { match } = context;
+  return (
+    <header className="panel" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <p className="eyebrow">{match.competition.name} · {match.edition.seasonLabel}</p>
+        <StatusChip status={match.status} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginTop: 10 }}>
+        <div style={{ textAlign: 'right' }}>
+          <Link href={routes.team(match.homeTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.homeTeam.name}</Link>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 22 }}>{match.status === 'COMPLETED' ? <Score score={match.score} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>vs</span>}</div>
+        <div style={{ textAlign: 'left' }}>
+          <Link href={routes.team(match.awayTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.awayTeam.name}</Link>
+        </div>
+      </div>
+      <p className="label-cap tnum" style={{ textAlign: 'center', color: 'var(--muted)', marginTop: 8 }}>
+        <Kickoff iso={match.kickoffAt} />
+        {venue ? <> · <Link href={routes.venue(venue)} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{venue.name}</Link></> : null}
+      </p>
+    </header>
+  );
 }
 
 // ── left rail: compact Match Brief / Match State ────────────────────────────────────
@@ -66,7 +93,7 @@ export function MatchBrief({ match, result, venue, coverage }: {
         <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Data coverage</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
           {coverage.map(([label, state]) => (
-            <span key={label} className="label-cap" style={{ fontSize: 9, color: state === 'present' ? 'var(--edge)' : 'var(--faint)' }}>{label} {orDash(state === 'present' ? '✓' : state === 'not-supported' ? 'n/s' : '—')}</span>
+            <span key={label} className="label-cap" style={{ fontSize: 9, color: state === 'present' ? 'var(--edge)' : 'var(--faint)' }}>{label} {state === 'present' ? '✓' : state === 'not-supported' ? 'N/S' : '—'}</span>
           ))}
         </div>
       </div>

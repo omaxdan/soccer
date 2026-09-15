@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
   fetchMatchIntelligence, fetchMatch, fetchEditionFixtures,
@@ -9,41 +8,18 @@ import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { resolveMatchTab } from '@/lib/v2/matchTabs';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
-import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
+import { RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
 import {
   MatchResultPanel, MatchTeamStatisticsPanel, MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel, MatchCoverage,
 } from '@/components/v2/match';
-import { MatchBrief, MatchTabNav, Collapsible, type CoverageFlag } from '@/components/v2/matchWorkspace';
+import { MatchHeader, MatchBrief, MatchTabNav, Collapsible, type CoverageFlag } from '@/components/v2/matchWorkspace';
 import type {
   ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse, MatchLifecycleResponse, MatchVenueResponse,
 } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
-
-/** Compact match header — competition · season · status, teams and result/kickoff. */
-function MatchHeader({ context }: { context: MatchDetailResponse }) {
-  const { match } = context;
-  return (
-    <header className="panel" style={{ padding: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p className="eyebrow">{match.competition.name} · {match.edition.seasonLabel}</p>
-        <StatusChip status={match.status} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginTop: 10 }}>
-        <div style={{ textAlign: 'right' }}>
-          <Link href={routes.team(match.homeTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.homeTeam.name}</Link>
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 22 }}>{match.status === 'COMPLETED' ? <Score score={match.score} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>vs</span>}</div>
-        <div style={{ textAlign: 'left' }}>
-          <Link href={routes.team(match.awayTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.awayTeam.name}</Link>
-        </div>
-      </div>
-      <p className="label-cap tnum" style={{ textAlign: 'center', color: 'var(--muted)', marginTop: 8 }}><Kickoff iso={match.kickoffAt} /></p>
-    </header>
-  );
-}
 
 /** Live (non-sealed) module readings for one team — context, not sealed substrate. */
 function TeamLiveReadings({ name, intel }: { name: string; intel: ApiTeamIntelligence }) {
@@ -118,7 +94,7 @@ export default async function V2MatchPage({ params, searchParams }: {
   return (
     <main className="space-y-4" style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
       <Breadcrumb items={crumbs} />
-      <MatchHeader context={detail} />
+      <MatchHeader context={detail} venue={venueRes?.venue ?? null} />
 
       <div className="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] gap-4">
         <MatchBrief match={match} result={resultRes?.result ?? null} venue={venueRes?.venue ?? null} coverage={coverage} />

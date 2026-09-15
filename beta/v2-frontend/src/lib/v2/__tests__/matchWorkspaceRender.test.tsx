@@ -8,9 +8,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { MatchBrief, MatchTabNav, Collapsible } from '@/components/v2/matchWorkspace';
+import { MatchHeader, MatchBrief, MatchTabNav, Collapsible } from '@/components/v2/matchWorkspace';
 import { resolveMatchTab, matchTabHref, MATCH_TABS } from '@/lib/v2/matchTabs';
-import type { ApiMatchHeader, MatchResult, MatchVenueInfo, CoverageState } from '@/lib/v2/types';
+import type { ApiMatchHeader, MatchDetailResponse, MatchResult, MatchVenueInfo, CoverageState } from '@/lib/v2/types';
 
 function html(node: React.ReactElement): string { return renderToStaticMarkup(node); }
 function text(node: React.ReactElement): string {
@@ -28,6 +28,29 @@ const base: ApiMatchHeader = {
   score: { home: 2, away: 0 },
 };
 const COVERAGE: readonly (readonly [string, CoverageState])[] = [['match', 'present'], ['result', 'present'], ['weather', 'not-supported']];
+
+const DETAIL = (over: Partial<ApiMatchHeader> = {}): MatchDetailResponse => ({
+  match: { ...base, ...over },
+  form: { home: [], away: [] },
+  recentVenueForm: { home: { lastHome: [], lastAway: [] }, away: { lastHome: [], lastAway: [] } },
+  intelligence: { home: { readiness: null, homeAwaySplit: null }, away: { readiness: null, homeAwaySplit: null } },
+  teamFeatures: { home: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null }, away: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null } },
+});
+
+describe('MatchHeader — who/when/where', () => {
+  test('completed: 2–0, team + venue links, kickoff', () => {
+    const markup = html(<MatchHeader context={DETAIL()} venue={VENUE} />);
+    assert.match(markup, /href="\/v2\/teams\/flamengo-5981-68"/);
+    assert.match(markup, /href="\/v2\/venues\/estadio-do-maracana-25"/);
+    const t = text(<MatchHeader context={DETAIL()} venue={VENUE} />);
+    assert.match(t, /Flamengo/); assert.match(t, /Mirassol/); assert.match(t, /Estádio do Maracanã/);
+  });
+  test('scheduled: shows vs, never a fabricated 0–0', () => {
+    const t = text(<MatchHeader context={DETAIL({ status: 'SCHEDULED', score: null })} venue={VENUE} />);
+    assert.match(t, /\bvs\b/i);
+    assert.doesNotMatch(t, /\b0\b/); // no fabricated score
+  });
+});
 
 describe('MatchBrief — completed', () => {
   const markup = html(<MatchBrief match={base} result={RESULT} venue={VENUE} coverage={COVERAGE} />);
