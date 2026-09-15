@@ -653,3 +653,31 @@ export interface MatchVenueResponse {
   isNeutralVenue: boolean;
   coverage: MatchVenue['coverage'];
 }
+
+// ─── EDITION STANDINGS — governed observed snapshot (mirror of backend contract) ────
+
+export interface StandingLine {
+  position: number;
+  team: { id: string; name: string; slug: string };
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;   // read-layer derivation (GF − GA), labeled by the backend
+  points: number;
+}
+export interface StandingTable {
+  variant: string;          // 'TOTAL' | 'HOME' | 'AWAY' (as stored)
+  asOf: string;             // observed snapshot date, YYYY-MM-DD
+  rows: StandingLine[];
+}
+export interface EditionStandings {
+  tables: StandingTable[];
+  coverage: { standings: 'present' | 'absent'; variantsPresent: string[]; goalDifferenceIsDerived: true; standingsAreObservedSnapshots: true };
+}
+export interface EditionStandingsResponse {
+  edition: { id: string; seasonLabel: string; competition: { id: string; name: string; slug: string } };
+  standings: EditionStandings;
+}

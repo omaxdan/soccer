@@ -12,10 +12,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   CompetitionHeader, EditionTabNav, FixtureRow, MatchesPanel,
-  TeamsPanel, StandingsUnavailable, CompetitionIntelligenceNote,
+  TeamsPanel, StandingsTable, StandingsUnavailable, CompetitionIntelligenceNote,
 } from '@/components/v2/competition';
 import { classifyFixtures } from '@/lib/v2/competition';
-import type { ApiEditionFixture, ApiEditionSummary, ApiTeam } from '@/lib/v2/types';
+import type { ApiEditionFixture, ApiEditionSummary, ApiTeam, EditionStandings } from '@/lib/v2/types';
 
 function html(node: React.ReactElement): string { return renderToStaticMarkup(node); }
 function text(node: React.ReactElement): string {
@@ -80,6 +80,38 @@ describe('standings + competition intelligence are honest unavailable states', (
     assert.match(intel, /per match/i);
     assert.match(intel, /sealed/i);
     assert.match(intel, /no competition-wide governed score/i);
+  });
+});
+
+const STANDINGS = (over: Partial<EditionStandings> = {}): EditionStandings => ({
+  tables: [{
+    variant: 'TOTAL', asOf: '2026-09-06',
+    rows: [
+      { position: 1, team: { id: '68', name: 'Flamengo', slug: 'flamengo-5981' }, played: 25, won: 18, drawn: 4, lost: 3, goalsFor: 50, goalsAgainst: 20, goalDifference: 30, points: 58 },
+      { position: 2, team: { id: '67', name: 'Fluminense', slug: 'fluminense-1961' }, played: 25, won: 15, drawn: 5, lost: 5, goalsFor: 40, goalsAgainst: 25, goalDifference: 15, points: 50 },
+    ],
+  }],
+  coverage: { standings: 'present', variantsPresent: ['TOTAL'], goalDifferenceIsDerived: true, standingsAreObservedSnapshots: true },
+  ...over,
+});
+
+describe('StandingsTable (governed observed snapshot — not client-computed)', () => {
+  test('renders position/P/W/D/L/GF/GA/GD/Pts with team links and signed GD', () => {
+    const markup = html(<StandingsTable standings={STANDINGS()} />);
+    assert.match(markup, /href="\/v2\/teams\/flamengo-5981-68"/);
+    const t = text(<StandingsTable standings={STANDINGS()} />);
+    assert.match(t, /Flamengo/); assert.match(t, /58/); assert.match(t, /\+30/); // points + signed GD
+    assert.match(t, /as of 2026-09-06/); assert.match(t, /read-layer derivation/i);
+  });
+  test('limit renders a top-N preview', () => {
+    const t = text(<StandingsTable standings={STANDINGS()} limit={1} />);
+    assert.match(t, /Flamengo/); assert.doesNotMatch(t, /Fluminense/);
+    assert.match(t, /top 1 of 2/i);
+  });
+  test('absent coverage → honest empty (never a fabricated/computed table)', () => {
+    const empty = STANDINGS({ tables: [], coverage: { standings: 'absent', variantsPresent: [], goalDifferenceIsDerived: true, standingsAreObservedSnapshots: true } });
+    const t = text(<StandingsTable standings={empty} />);
+    assert.match(t, /No standings snapshot has been ingested/i);
   });
 });
 

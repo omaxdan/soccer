@@ -4,7 +4,7 @@
 // never expose a credential to the browser. Base URL is configurable.
 
 import type {
-  MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse,
+  MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse, EditionStandingsResponse,
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
   CompetitionResponse, CountryResponse, VenueResponse,
   TeamPerformanceResponse, TeamReadinessResponse,
@@ -45,6 +45,12 @@ export async function fetchEditions(): Promise<EditionListResponse> {
 /** One edition's fixtures, or null when the edition does not exist. */
 export function fetchEditionFixtures(editionId: string): Promise<EditionFixtureListResponse | null> {
   return getJson<EditionFixtureListResponse>(`/api/v2/editions/${encodeURIComponent(editionId)}/fixtures`);
+}
+
+/** One edition's governed standings snapshot (TOTAL/HOME/AWAY tables), or null when the
+ *  edition is not a governed-exposed edition. Observed snapshot — never client-computed. */
+export function fetchEditionStandings(editionId: string): Promise<EditionStandingsResponse | null> {
+  return getJson<EditionStandingsResponse>(`/api/v2/editions/${encodeURIComponent(editionId)}/standings`);
 }
 
 /** One match's detail, or null when the fixture does not exist. */
