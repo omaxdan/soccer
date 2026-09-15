@@ -13,7 +13,7 @@ import {
   EDITION_TABS, editionTabHref, groupFixturesByDay,
   type EditionTab, type GroupedFixtures,
 } from '@/lib/v2/competition';
-import type { ApiEditionFixture, ApiEditionSummary, ApiTeam } from '@/lib/v2/types';
+import type { ApiEditionFixture, ApiEditionSummary, ApiTeam, EditionStandings } from '@/lib/v2/types';
 import { Kickoff, StatusChip, Score, EmptyState } from '@/components/v2/ui';
 
 // ── identity + season ────────────────────────────────────────────────────────────
@@ -189,10 +189,72 @@ export function TeamsPanel({ teams }: { teams: readonly ApiTeam[] }) {
   );
 }
 
+// ── standings (governed observed snapshot) ─────────────────────────────────────────
+
+const stTh: React.CSSProperties = { textAlign: 'right', color: 'var(--faint)', fontWeight: 600, padding: '4px 6px' };
+const stTd: React.CSSProperties = { textAlign: 'right', padding: '4px 6px', color: 'var(--text)', whiteSpace: 'nowrap' };
+
+/**
+ * The edition's governed standings snapshot (position/P/W/D/L/GF/GA/GD/Pts), rendered
+ * from the backend read — never client-computed. Shows the TOTAL variant; goal
+ * difference is a labelled read-layer derivation. `limit` renders a top-N preview
+ * (Overview). An honest empty state when no standings snapshot is ingested yet.
+ */
+export function StandingsTable({ standings, limit }: { standings: EditionStandings; limit?: number }) {
+  const table = standings.tables.find((t) => t.variant === 'TOTAL') ?? standings.tables[0] ?? null;
+  if (standings.coverage.standings === 'absent' || !table || table.rows.length === 0) {
+    return (
+      <section className="panel" aria-label="standings" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <p className="eyebrow">Standings</p>
+          <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, border: '1px solid var(--faint)', borderRadius: 4, padding: '0 5px' }}>absent</span>
+        </div>
+        <p style={{ color: 'var(--text-secondary)', marginTop: 8, fontSize: 13 }}>No standings snapshot has been ingested for this edition yet.</p>
+      </section>
+    );
+  }
+  const rows = typeof limit === 'number' ? table.rows.slice(0, limit) : table.rows;
+  return (
+    <section className="space-y-2" aria-label="standings">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <p className="eyebrow">Standings</p>
+        <span className="label-cap" style={{ color: 'var(--cool)', fontSize: 9 }}>{table.variant}</span>
+        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>as of {table.asOf}</span>
+      </div>
+      <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
+        <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+          <thead><tr>
+            <th style={{ ...stTh, textAlign: 'left' }}>#</th>
+            <th style={{ ...stTh, textAlign: 'left' }}>Team</th>
+            <th style={stTh}>P</th><th style={stTh}>W</th><th style={stTh}>D</th><th style={stTh}>L</th>
+            <th style={stTh}>GF</th><th style={stTh}>GA</th><th style={stTh}>GD</th><th style={stTh}>Pts</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.team.id}>
+                <td style={{ ...stTd, textAlign: 'left', color: 'var(--faint)' }}>{r.position}</td>
+                <td style={{ ...stTd, textAlign: 'left', whiteSpace: 'normal' }}><Link href={routes.team(r.team)} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{r.team.name}</Link></td>
+                <td style={stTd}>{r.played}</td><td style={stTd}>{r.won}</td><td style={stTd}>{r.drawn}</td><td style={stTd}>{r.lost}</td>
+                <td style={stTd}>{r.goalsFor}</td><td style={stTd}>{r.goalsAgainst}</td>
+                <td style={stTd}>{r.goalDifference > 0 ? `+${r.goalDifference}` : r.goalDifference}</td>
+                <td style={{ ...stTd, fontWeight: 700 }}>{r.points}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Observed standings snapshot. GD is a read-layer derivation (GF − GA).{standings.coverage.variantsPresent.length > 1 ? ` Variants: ${standings.coverage.variantsPresent.join(' · ')}.` : ''}
+        {typeof limit === 'number' && table.rows.length > limit ? ` Showing top ${limit} of ${table.rows.length}.` : ''}
+      </p>
+    </section>
+  );
+}
+
 // ── honest unavailable states ────────────────────────────────────────────────────
 
-/** Standings are NOT served by the V2 backend. This is an honest unavailable state —
- *  never a fabricated or client-computed table. */
+/** Standings fallback when the governed read is genuinely unavailable (kept for the
+ *  edition-not-exposed / null path). Honest unavailable state — never client-computed. */
 export function StandingsUnavailable() {
   return (
     <section className="panel" aria-label="standings" style={{ padding: 20 }}>

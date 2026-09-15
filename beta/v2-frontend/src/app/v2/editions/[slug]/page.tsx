@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { fetchEditionFixtures, fetchEditions } from '@/lib/v2/api';
+import { fetchEditionFixtures, fetchEditions, fetchEditionStandings } from '@/lib/v2/api';
 import { routes, type V2EditionRef } from '@/lib/v2/routes';
 import { idFromParam } from '@/lib/v2/slug';
 import {
@@ -8,17 +8,17 @@ import {
 import { Breadcrumb } from '@/components/v2/nav';
 import {
   CompetitionHeader, EditionTabNav, MatchesPanel, TeamsPanel,
-  FixtureSection, StandingsUnavailable, CompetitionIntelligenceNote,
+  FixtureSection, StandingsTable, StandingsUnavailable, CompetitionIntelligenceNote,
 } from '@/components/v2/competition';
 import type { GroupedFixtures } from '@/lib/v2/competition';
-import type { ApiTeam } from '@/lib/v2/types';
+import type { ApiTeam, EditionStandings } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
 
 /** Overview — a condensed, two-column read of the competition: the next fixtures and
- *  the latest results, with honest standings/intelligence context beneath. The full
- *  lists live on the Matches tab. */
-function Overview({ grouped, teams, hasMatches }: { grouped: GroupedFixtures; teams: readonly ApiTeam[]; hasMatches: boolean }) {
+ *  the latest results, with a top-of-table standings preview and intelligence context.
+ *  The full lists live on the Matches / Table tabs. */
+function Overview({ grouped, teams, hasMatches, standings }: { grouped: GroupedFixtures; teams: readonly ApiTeam[]; hasMatches: boolean; standings: EditionStandings | null }) {
   return (
     <div className="space-y-4">
       {grouped.live.length > 0 && <FixtureSection title="Live" fixtures={grouped.live} emptyMessage="No live matches." />}
@@ -27,7 +27,7 @@ function Overview({ grouped, teams, hasMatches }: { grouped: GroupedFixtures; te
         <FixtureSection title="Recent results" fixtures={grouped.recent.slice(0, 6)} emptyMessage="No completed matches yet." />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <StandingsUnavailable />
+        {standings ? <StandingsTable standings={standings} limit={6} /> : <StandingsUnavailable />}
         <CompetitionIntelligenceNote hasMatches={hasMatches} />
       </div>
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>
@@ -58,9 +58,10 @@ export default async function V2EditionPage({ params, searchParams }: {
 
   const grouped = classifyFixtures(fixtures);
   const teams = deriveEditionTeams(fixtures);
-  // Sibling seasons for the selector — from the editions list (never 404s).
-  const { editions } = await fetchEditions();
+  // Sibling seasons + governed standings snapshot — both from existing reads, in parallel.
+  const [{ editions }, standingsData] = await Promise.all([fetchEditions(), fetchEditionStandings(String(editionId))]);
   const seasons = siblingSeasons(editions, edition.competition.id);
+  const standings = standingsData?.standings ?? null;
   const hasMatches = fixtures.length > 0;
 
   return (
@@ -78,9 +79,9 @@ export default async function V2EditionPage({ params, searchParams }: {
 
       <EditionTabNav edition={editionRef} active={tab} />
 
-      {tab === 'overview' && <Overview grouped={grouped} teams={teams} hasMatches={hasMatches} />}
+      {tab === 'overview' && <Overview grouped={grouped} teams={teams} hasMatches={hasMatches} standings={standings} />}
       {tab === 'matches' && <MatchesPanel grouped={grouped} />}
-      {tab === 'standings' && <StandingsUnavailable />}
+      {tab === 'standings' && (standings ? <StandingsTable standings={standings} /> : <StandingsUnavailable />)}
       {tab === 'teams' && <TeamsPanel teams={teams} />}
       {tab === 'intelligence' && <CompetitionIntelligenceNote hasMatches={hasMatches} />}
     </main>
