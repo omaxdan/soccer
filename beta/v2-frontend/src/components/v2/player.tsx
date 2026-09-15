@@ -75,6 +75,20 @@ export function PlayerIdentityHeader({ player, currentTeam, competition, registr
         <Fact label="Height" value={player.heightCm === null ? '—' : `${player.heightCm} cm`} />
         <Fact label="Preferred foot" value={player.preferredFoot ? player.preferredFoot.toLowerCase() : '—'} />
       </div>
+      {/* CONTEXT — current registration as recorded (kind + period). Verbatim; nothing derived. */}
+      {registration && (
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Registration</p>
+            <Tag />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3" style={{ marginTop: 8 }}>
+            <Fact label="Kind" value={orDash(registration.registrationKindCode)} />
+            <Fact label="Registered from" value={orDash(registration.registrationFrom)} />
+            <Fact label="Registered to" value={orDash(registration.registrationTo)} />
+          </div>
+        </div>
+      )}
     </header>
   );
 }

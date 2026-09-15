@@ -63,6 +63,19 @@ describe('Player identity', () => {
     assert.match(t, /No current team/i);
     assert.doesNotMatch(t, /\bnull\b/);
   });
+  test('registration kind + from render verbatim as context (not reinterpreted)', () => {
+    const t = text(<PlayerIdentityHeader player={PLAYER} currentTeam={TEAM} competition={COMP} registration={REG} />);
+    assert.match(t, /Registration/); assert.match(t, /PERMANENT/); assert.match(t, /2019-01-01/);
+  });
+  test('null registrationTo renders an em dash (never fabricated)', () => {
+    const t = text(<PlayerIdentityHeader player={PLAYER} currentTeam={TEAM} competition={COMP} registration={REG} />);
+    assert.match(t, /Registered to\s*—/);
+  });
+  test('no registration → no registration facts rendered', () => {
+    const t = text(<PlayerIdentityHeader player={PLAYER} currentTeam={TEAM} competition={COMP} registration={null} />);
+    assert.doesNotMatch(t, /Registration/);
+    assert.doesNotMatch(t, /Registered from/);
+  });
 });
 
 describe('Availability', () => {
