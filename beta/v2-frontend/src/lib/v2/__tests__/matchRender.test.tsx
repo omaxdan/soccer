@@ -32,7 +32,11 @@ const STATS: MatchTeamStatistics = {
   coverage: { teamStatistics: 'present', periodsPresent: ['ALL'], statisticsAreObserved: true, provider: 'SPORTSAPI', retrievedAt: '2026-09-06T21:05:00.000Z' },
 };
 const LINEUPS: MatchLineups = {
-  home: { team: { id: '68', name: 'Flamengo', slug: 'flamengo-5981' }, formation: '4-3-3', starting: [{ player: { id: '33', fullName: 'Martinelli', slug: 'martinelli-1067671' }, positionCode: 'M', positionName: 'Midfielder', positionGroup: 'MID', shirtNumber: 8 }], substitutes: [] },
+  home: {
+    team: { id: '68', name: 'Flamengo', slug: 'flamengo-5981' }, formation: '4-3-3',
+    starting: [{ player: { id: '33', fullName: 'Martinelli', slug: 'martinelli-1067671' }, positionCode: 'M', positionName: 'Midfielder', positionGroup: 'MID', shirtNumber: 8 }],
+    substitutes: [{ player: { id: '99', fullName: 'Bench Player', slug: 'bench-player-777' }, positionCode: 'F', positionName: 'Forward', positionGroup: 'FWD', shirtNumber: 19 }],
+  },
   away: null,
   coverage: { lineups: 'partial', lineupsAreObserved: true },
 };
@@ -73,11 +77,14 @@ describe('Team statistics', () => {
 });
 
 describe('Lineups', () => {
-  test('renders formation + XI with canonical player links; missing side → honest state', () => {
+  test('renders formation + XI + substitutes with canonical player links; missing side → honest state', () => {
     const markup = html(<MatchLineupsPanel lineups={LINEUPS} />);
     assert.match(markup, /4-3-3/);
     assert.match(markup, /href="\/v2\/players\/martinelli-1067671-33"/);
-    assert.match(markup, /No lineup reported/i); // away side null
+    assert.match(markup, /href="\/v2\/players\/bench-player-777-99"/); // substitute rendered + linked
+    const t = text(<MatchLineupsPanel lineups={LINEUPS} />);
+    assert.match(t, /Starting XI/i); assert.match(t, /Substitutes/i);
+    assert.match(t, /No lineup reported/i); // away side null
   });
   test('both sides null → honest empty', () => {
     const none: MatchLineups = { home: null, away: null, coverage: { lineups: 'absent', lineupsAreObserved: true } };
