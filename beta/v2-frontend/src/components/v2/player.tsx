@@ -7,6 +7,7 @@
 // intelligence (the player endpoint exposes none). Nullable fields render as an em
 // dash; absent substrate shows an honest empty state. Links use the route helpers.
 
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState } from '@/components/v2/ui';
@@ -172,17 +173,40 @@ export function PlayerMatchHistory({ recentMatches, currentTeam }: { recentMatch
                 // resolution is by trailing fixtureId regardless, but we avoid a misleading pairing.
                 const canLink = currentTeam !== null && m.teamId === currentTeam.id;
                 return (
-                  <tr key={m.fixtureId}>
-                    <td style={td}><Kickoff iso={m.kickoffAt} /></td>
-                    <td style={td}>{m.seasonLabel}</td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>
-                      {canLink
-                        ? <Link href={routes.match(playerMatchFixture(m, currentTeam!.name))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{m.opponentName}</Link>
-                        : m.opponentName}
-                    </td>
-                    <td style={td}>{m.isHome ? 'H' : 'A'}</td>
-                    <td style={td}>{m.score ? `${m.score.home}–${m.score.away}` : '—'}</td>
-                  </tr>
+                  <Fragment key={m.fixtureId}>
+                    <tr>
+                      <td style={td}><Kickoff iso={m.kickoffAt} /></td>
+                      <td style={td}>{m.seasonLabel}</td>
+                      <td style={{ ...td, whiteSpace: 'normal' }}>
+                        {canLink
+                          ? <Link href={routes.match(playerMatchFixture(m, currentTeam!.name))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{m.opponentName}</Link>
+                          : m.opponentName}
+                      </td>
+                      <td style={td}>{m.isHome ? 'H' : 'A'}</td>
+                      <td style={td}>{m.score ? `${m.score.home}–${m.score.away}` : '—'}</td>
+                    </tr>
+                    {m.statistics.length > 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: '0 6px 6px' }}>
+                          {/* Per-match provider statistics — verbatim, progressively disclosed. Nothing computed. */}
+                          <details>
+                            <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
+                              <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{m.statistics.length} statistics</span>
+                              <span className="label-cap" style={{ color: 'var(--cool)', fontSize: 9, marginLeft: 6 }}>toggle →</span>
+                            </summary>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '2px 12px', marginTop: 6 }}>
+                              {m.statistics.map((s) => (
+                                <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, borderBottom: '1px solid var(--line)', padding: '1px 0' }}>
+                                  <span className="label-cap" style={{ color: 'var(--faint)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.key}>{s.key}</span>
+                                  <span className="mono" style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>{orDash(s.value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
