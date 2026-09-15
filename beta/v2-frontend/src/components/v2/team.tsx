@@ -18,10 +18,18 @@ import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
 import { lineGoals, lineResult, lineMatchFixture } from '@/lib/v2/team';
 import { formResult } from '@/lib/v2/types';
 import type {
-  ApiPlayerSummary, ApiTeamResult, CompetitionPerformance, PerformanceMetric,
+  ApiPlayerSummary, ApiTeamResult, CompetitionPerformance, PerformanceMetric, StandingLine,
   TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
+
+/** One edition's standings context for this team: its row (or null if not in the snapshot). */
+export interface TeamStandingEntry {
+  readonly editionId: string;
+  readonly seasonLabel: string;
+  readonly competition: { readonly id: string; readonly name: string; readonly slug: string };
+  readonly line: StandingLine | null;
+}
 
 // ── shared bits ───────────────────────────────────────────────────────────────────
 
@@ -118,6 +126,42 @@ export function TeamPerformanceSnapshot({ overall, coverage }: {
         </div>
       )}
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Persisted descriptive features — not a governed reading.</p>
+    </section>
+  );
+}
+
+// ═══ STANDINGS POSITION — the team's row from the governed edition standings ════════
+
+export function TeamStandings({ entries }: { entries: readonly TeamStandingEntry[] }) {
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Standings" count={entries.length || undefined} />
+      {entries.length === 0 ? (
+        <EmptyState message="No competition standings available." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {entries.map((e) => {
+            const href = `${routes.edition({ id: e.editionId, competition: { slug: e.competition.slug }, seasonLabel: e.seasonLabel })}?tab=standings`;
+            return (
+              <Link key={e.editionId} href={href} className="panel" style={{ display: 'block', padding: 12, textDecoration: 'none', color: 'inherit' }}>
+                <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{e.competition.name} · {e.seasonLabel}</p>
+                {e.line ? (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
+                    <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 20, fontWeight: 700 }}>#{e.line.position}</span>
+                    <span className="mono tnum" style={{ color: 'var(--text)' }}>{e.line.points} pts</span>
+                    <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 10 }}>
+                      P{e.line.played} · {e.line.won}W {e.line.drawn}D {e.line.lost}L · GD {e.line.goalDifference > 0 ? `+${e.line.goalDifference}` : e.line.goalDifference}
+                    </span>
+                  </div>
+                ) : (
+                  <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 6 }}>Position — · not in the current standings snapshot</p>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Governed observed standings snapshot — read verbatim, not computed here.</p>
     </section>
   );
 }

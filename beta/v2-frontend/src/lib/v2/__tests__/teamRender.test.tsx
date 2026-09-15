@@ -17,8 +17,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   TeamIdentityHeader, TeamPerformanceSnapshot, TeamCurrentForm, TeamHomeAwaySplit,
-  TeamRecentVenueForm, TeamReadinessPanel, TeamCompetitionContext,
-  TeamMatchHistory, TeamUpcomingFixtures, TeamPlayers,
+  TeamRecentVenueForm, TeamReadinessPanel, TeamStandings, TeamCompetitionContext,
+  TeamMatchHistory, TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type {
   ApiPlayerSummary, ApiTeamResult, CompetitionPerformance, PerformanceMetric,
@@ -133,6 +133,31 @@ describe('Readiness (GOVERNED intelligence — separated)', () => {
   });
   test('absent readiness → honest empty state', () => {
     assert.match(text(<TeamReadinessPanel readiness={null} coverage={{ readiness: 'absent', readinessIsGoverned: true }} />), /No governed readiness/i);
+  });
+});
+
+describe('Team standings position (reused governed edition standings)', () => {
+  const comp = { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' };
+  const withLine: TeamStandingEntry = {
+    editionId: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: comp,
+    line: { position: 8, team: { id: '59', name: 'Mirassol', slug: 'mirassol-21982' }, played: 25, won: 7, drawn: 6, lost: 12, goalsFor: 22, goalsAgainst: 33, goalDifference: -11, points: 27 },
+  };
+  test('renders position + points + P/W/D/L + GD; links to the edition standings tab', () => {
+    const markup = html(<TeamStandings entries={[withLine]} />);
+    assert.match(markup, /href="\/v2\/editions\/brasileirao-betano-325-brasileiro-serie-a-2026-18\?tab=standings"/);
+    const t = text(<TeamStandings entries={[withLine]} />);
+    assert.match(t, /#8/); assert.match(t, /27 pts/); assert.match(t, /P25/); assert.match(t, /GD -11/);
+    assert.match(t, /not computed here/i);
+  });
+  test('team not in snapshot → honest "position —", never a fabricated number', () => {
+    const noLine: TeamStandingEntry = { ...withLine, line: null };
+    const t = text(<TeamStandings entries={[noLine]} />);
+    assert.match(t, /Position — · not in the current standings snapshot/i);
+    assert.doesNotMatch(t, /#\d/);       // no fabricated position
+    assert.doesNotMatch(t, /\b0(th)?\b/); // no 0 / 0th
+  });
+  test('no competitions → honest empty state', () => {
+    assert.match(text(<TeamStandings entries={[]} />), /No competition standings available/i);
   });
 });
 
