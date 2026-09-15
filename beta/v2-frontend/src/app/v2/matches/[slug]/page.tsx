@@ -7,208 +7,185 @@ import {
 import { idFromParam } from '@/lib/v2/slug';
 import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
+import { resolveMatchTab } from '@/lib/v2/matchTabs';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
 import { Kickoff, StatusChip, Score, RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
 import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
 import {
   MatchResultPanel, MatchTeamStatisticsPanel, MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel, MatchCoverage,
 } from '@/components/v2/match';
-import type { ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence } from '@/lib/v2/types';
+import { MatchBrief, MatchTabNav, Collapsible, type CoverageFlag } from '@/components/v2/matchWorkspace';
+import type {
+  ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence,
+  MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse, MatchLifecycleResponse, MatchVenueResponse,
+} from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
 
-function TeamIntel({ name, intel }: { name: string; intel: ApiTeamIntelligence }) {
+/** Compact match header — competition · season · status, teams and result/kickoff. */
+function MatchHeader({ context }: { context: MatchDetailResponse }) {
+  const { match } = context;
   return (
-    <section className="space-y-2" aria-label={`${name} intelligence`}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{name}</h3>
-      {/* PD-6: the user-facing concept is Form Momentum / Trajectory (module key readiness_tracker, unchanged). */}
+    <header className="panel" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <p className="eyebrow">{match.competition.name} · {match.edition.seasonLabel}</p>
+        <StatusChip status={match.status} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginTop: 10 }}>
+        <div style={{ textAlign: 'right' }}>
+          <Link href={routes.team(match.homeTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.homeTeam.name}</Link>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 22 }}>{match.status === 'COMPLETED' ? <Score score={match.score} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>vs</span>}</div>
+        <div style={{ textAlign: 'left' }}>
+          <Link href={routes.team(match.awayTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.awayTeam.name}</Link>
+        </div>
+      </div>
+      <p className="label-cap tnum" style={{ textAlign: 'center', color: 'var(--muted)', marginTop: 8 }}><Kickoff iso={match.kickoffAt} /></p>
+    </header>
+  );
+}
+
+/** Live (non-sealed) module readings for one team — context, not sealed substrate. */
+function TeamLiveReadings({ name, intel }: { name: string; intel: ApiTeamIntelligence }) {
+  return (
+    <section className="space-y-2" aria-label={`${name} live readings`}>
+      <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{name}</h3>
       <ReadingCard title="Form Momentum / Trajectory" reading={intel.readiness} />
       <ReadingCard title="Home / Away Split" reading={intel.homeAwaySplit} />
     </section>
   );
 }
 
-/**
- * MATCH CONTEXT — deliberately separate from the sealed calculation. Everything
- * here is live/descriptive information from getMatchDetail (recent venue form, live
- * module readings, feature comparison). It is NOT the substrate the sealed
- * intelligence cited and is labelled so the distinction is unmistakable.
- */
-function MatchContext({ context }: { context: MatchDetailResponse }) {
-  const { match, recentVenueForm, intelligence, teamFeatures } = context;
-  return (
-    <div className="space-y-5">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <p className="eyebrow" style={{ color: 'var(--cool)' }}>Match context</p>
-        <span className="label-cap" style={{ color: 'var(--cool)', border: '1px solid var(--cool)', borderRadius: 4, padding: '0 5px', fontSize: 9 }}>not part of calculation</span>
-      </div>
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: -8 }}>
-        Live, descriptive information for interpretation. None of this is the substrate the sealed calculation cited.
-      </p>
-
-      {/* RECENT VENUE FORM — CONTEXT (PD-11). Last 5 home / last 5 away per team. */}
-      <section className="space-y-2">
-        <p className="label-cap" style={{ color: 'var(--muted)' }}>Recent venue form</p>
-        <RecentVenueForm homeName={match.homeTeam.name} awayName={match.awayTeam.name} home={recentVenueForm.home} away={recentVenueForm.away} />
-      </section>
-
-      {/* LIVE MODULE READINGS — the current (non-sealed) readings, with their own Why? substrate. */}
-      <section className="space-y-2">
-        <p className="label-cap" style={{ color: 'var(--muted)' }}>Live module readings</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <TeamIntel name={match.homeTeam.name} intel={intelligence.home} />
-          <TeamIntel name={match.awayTeam.name} intel={intelligence.away} />
-        </div>
-      </section>
-
-      {/* FEATURE COMPARISON — persisted feature values; not any module's substrate (PD-10). */}
-      <section className="space-y-2">
-        <p className="label-cap" style={{ color: 'var(--muted)' }}>Team comparison</p>
-        <TeamIntelligencePanel home={teamFeatures.home} away={teamFeatures.away} homeName={match.homeTeam.name} awayName={match.awayTeam.name} />
-      </section>
-    </div>
-  );
-}
-
-/** Raw-facts match header. Prefers the sealed header when present (identical
- *  fixture facts), else the context header — the fixture always renders. */
-function MatchHeader({ context }: { context: MatchDetailResponse }) {
-  const { match } = context;
-  return (
-    <header className="panel" style={{ padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p className="eyebrow">{match.competition.name} · {match.edition.seasonLabel}</p>
-        <StatusChip status={match.status} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginTop: 12 }}>
-        <div style={{ textAlign: 'right' }}>
-          <Link href={routes.team(match.homeTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.homeTeam.name}</Link>
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 22 }}><Score score={match.score} /></div>
-        <div style={{ textAlign: 'left' }}>
-          <Link href={routes.team(match.awayTeam)} style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)', textDecoration: 'none' }}>{match.awayTeam.name}</Link>
-        </div>
-      </div>
-      <p className="label-cap" style={{ textAlign: 'center', color: 'var(--muted)', marginTop: 8 }}><Kickoff iso={match.kickoffAt} /></p>
-    </header>
-  );
-}
-
-/** The sealed surfaces, in evidence-first order: provenance → verdict → preparedness
- *  → cited evidence. Rendered only when a sealed snapshot exists. */
-function SealedIntelligence({ intelligence, homeName, awayName }: { intelligence: MatchIntelligence; homeName: string; awayName: string }) {
-  return (
-    <div className="space-y-5">
-      <ProvenanceBar provenance={intelligence.provenance} />
-      <VerdictBand verdict={intelligence.verdict} />
-      {/* INTELLIGENCE MODULES — sealed per-module readings (e.g. Home/Away Split),
-          each a governed component; Team Preparedness follows as another module. */}
-      <ModulesBand intelligence={intelligence} homeName={homeName} awayName={awayName} />
-      <PreparednessBand intelligence={intelligence} homeName={homeName} awayName={awayName} />
-      <CitedEvidencePanel citedEvidence={intelligence.citedEvidence} />
-    </div>
-  );
-}
-
-export default async function V2MatchPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function V2MatchPage({ params, searchParams }: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
-  // Public URL is {home}-vs-{away}-{id}; the trailing numeric fixture id is the
-  // source of truth. Resolve it with the canonical extractor and 404 on a slug
-  // that carries no valid numeric id — never guess. The backend API stays numeric.
+  const sp = await searchParams;
+  const tab = resolveMatchTab(typeof sp.tab === 'string' ? sp.tab : undefined);
+
+  // Public URL is {home}-vs-{away}-{id}; the trailing numeric fixture id resolves.
   const fixtureId = idFromParam(slug);
   if (fixtureId === null) notFound();
   const id = String(fixtureId);
 
-  // Sealed-first: the intelligence endpoint returns { intelligence, context } when a
-  // snapshot is sealed, and 404s otherwise. A 404 there does NOT mean the fixture is
-  // absent — it means "no sealed snapshot". So fall back to the plain match read to
-  // tell "unsealed fixture" (render context + honest unavailable state) apart from
-  // "no such fixture" (real 404). No backend change; two existing read endpoints.
+  // Sealed-first: /intelligence returns { intelligence, context } when sealed, else
+  // 404 (which means "no sealed snapshot", not "no fixture") — fall back to /matches/:id.
   const sealed = await fetchMatchIntelligence(id);
   const context: MatchDetailResponse | null = sealed?.context ?? (sealed ? null : await fetchMatch(id));
   if (!sealed && !context) notFound();
+  const detail = sealed?.context ?? context;
+  if (!detail) notFound();
 
-  // The five quantitative match sub-resources (observed evidence). Fetched together;
-  // each returns 200 with its own coverage flags for an existing fixture, so an
-  // empty surface is an honest 'absent', never a 404.
-  const [resultRes, lineupsRes, statsRes, lifecycleRes, venueRes] = await Promise.all([
+  // The five observed sub-resources (each 200 with its own coverage for a real fixture).
+  const [resultRes, lineupsRes, statsRes, lifecycleRes, venueRes]: [
+    MatchResultResponse | null, MatchLineupsResponse | null, MatchTeamStatisticsResponse | null,
+    MatchLifecycleResponse | null, MatchVenueResponse | null,
+  ] = await Promise.all([
     fetchMatchResult(id), fetchMatchLineups(id), fetchMatchTeamStatistics(id), fetchMatchLifecycle(id), fetchMatchVenue(id),
   ]);
 
-  // The header/context need a MatchDetailResponse; it is present in every non-404
-  // path (sealed response carries it; fallback fetched it).
-  const detail = sealed?.context ?? context;
-  const editionId = detail?.match.edition.id;
-  const seasonLabel = detail?.match.edition.seasonLabel;
-  const competitionName = detail?.match.competition.name;
-  // Readable edition link when the competition slug is available; the numeric id
-  // stays authoritative underneath.
-  const editionHref = detail
-    ? routes.edition({ id: detail.match.edition.id, competition: { slug: detail.match.competition.slug }, seasonLabel: detail.match.edition.seasonLabel })
-    : null;
-  const homeName = detail?.match.homeTeam.name ?? 'Home';
-  const awayName = detail?.match.awayTeam.name ?? 'Away';
+  const match = detail.match;
+  const homeName = match.homeTeam.name;
+  const awayName = match.awayTeam.name;
+  const editionId = match.edition.id;
+  const editionHref = routes.edition({ id: match.edition.id, competition: { slug: match.competition.slug }, seasonLabel: match.edition.seasonLabel });
 
-  // Prev/next within the same competition edition — derived from the existing
-  // fixtures read, never fabricated. Purely additive navigation around the match
-  // page; the sealed intelligence itself is unaffected.
+  // Prev/next within the same edition — from the existing fixtures read, never fabricated.
   let prev: ApiEditionFixture | null = null;
   let next: ApiEditionFixture | null = null;
-  if (editionId) {
-    const editionData = await fetchEditionFixtures(editionId);
-    if (editionData) ({ prev, next } = findAdjacentFixtures(editionData.fixtures, id));
-  }
+  const editionData = await fetchEditionFixtures(editionId);
+  if (editionData) ({ prev, next } = findAdjacentFixtures(editionData.fixtures, id));
+
+  const coverage: CoverageFlag[] = [
+    ['match', 'present'],
+    ['result', resultRes?.coverage.result ?? 'absent'],
+    ['intelligence', sealed ? 'present' : 'absent'],
+    ['statistics', statsRes?.teamStatistics.coverage.teamStatistics ?? 'absent'],
+    ['lineups', lineupsRes?.lineups.coverage.lineups ?? 'absent'],
+    ['venue', venueRes?.coverage.venue ?? 'absent'],
+    ['lifecycle', lifecycleRes?.lifecycle.coverage.transitions ?? 'absent'],
+    ['weather', 'not-supported'],
+    ['h2h', 'not-supported'],
+  ];
 
   const crumbs = [
     { label: 'Leagues', href: routes.leagues() },
-    ...(editionId && editionHref ? [{ label: `${competitionName ?? 'Competition'} · ${seasonLabel ?? ''}`.trim(), href: editionHref }] : []),
+    { label: `${match.competition.name} · ${match.edition.seasonLabel}`, href: editionHref },
     { label: `${homeName} v ${awayName}` },
   ];
 
   return (
-    <main className="space-y-6" style={{ maxWidth: 860, margin: '0 auto', padding: 16 }}>
+    <main className="space-y-4" style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
       <Breadcrumb items={crumbs} />
+      <MatchHeader context={detail} />
 
-      {detail && <MatchHeader context={detail} />}
+      <div className="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] gap-4">
+        <MatchBrief match={match} result={resultRes?.result ?? null} venue={venueRes?.venue ?? null} coverage={coverage} />
 
-      {/* RESULT — observed scoreline (FT/HT/ET/pens) */}
-      {resultRes && <MatchResultPanel result={resultRes.result} coverage={resultRes.coverage} homeName={homeName} awayName={awayName} />}
+        <div className="space-y-4" style={{ minWidth: 0 }}>
+          <MatchTabNav slug={slug} active={tab} />
 
-      {/* SEALED, GOVERNED INTELLIGENCE — evidence-first. Honest unavailable state when unsealed. */}
-      {sealed
-        ? <SealedIntelligence intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
-        : <IntelligenceUnavailable />}
+          {/* TAB 1 — INTELLIGENCE (governed, primary) */}
+          {tab === 'intelligence' && (
+            sealed
+              ? <div className="space-y-4">
+                  <ProvenanceBar provenance={sealed.intelligence.provenance} />
+                  <VerdictBand verdict={sealed.intelligence.verdict} />
+                  <ModulesBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
+                  <PreparednessBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
+                  <Collapsible summary="Cited by calculation">
+                    <CitedEvidencePanel citedEvidence={sealed.intelligence.citedEvidence} />
+                  </Collapsible>
+                </div>
+              : <IntelligenceUnavailable />
+          )}
 
-      {/* TEAM STATISTICS — observed, side-by-side per period */}
-      {statsRes && <MatchTeamStatisticsPanel teamStatistics={statsRes.teamStatistics} homeName={homeName} awayName={awayName} />}
+          {/* TAB 2 — EVIDENCE (context, not calculation substrate) */}
+          {tab === 'evidence' && (
+            <div className="space-y-4">
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <p className="eyebrow" style={{ color: 'var(--cool)' }}>Context · not part of calculation</p>
+              </div>
+              <section className="space-y-2">
+                <p className="label-cap" style={{ color: 'var(--muted)' }}>Recent venue form</p>
+                <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
+              </section>
+              <section className="space-y-2">
+                <p className="label-cap" style={{ color: 'var(--muted)' }}>Team comparison</p>
+                <TeamIntelligencePanel home={detail.teamFeatures.home} away={detail.teamFeatures.away} homeName={homeName} awayName={awayName} />
+              </section>
+              <section className="space-y-2">
+                <p className="label-cap" style={{ color: 'var(--muted)' }}>Live module readings</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <TeamLiveReadings name={homeName} intel={detail.intelligence.home} />
+                  <TeamLiveReadings name={awayName} intel={detail.intelligence.away} />
+                </div>
+              </section>
+            </div>
+          )}
 
-      {/* LINEUPS — observed XI / bench (player links) */}
-      {lineupsRes && <MatchLineupsPanel lineups={lineupsRes.lineups} />}
+          {/* TAB 3 — MATCH DATA (observed) */}
+          {tab === 'match-data' && (
+            <div className="space-y-4">
+              {resultRes && <MatchResultPanel result={resultRes.result} coverage={resultRes.coverage} homeName={homeName} awayName={awayName} />}
+              {statsRes && <MatchTeamStatisticsPanel teamStatistics={statsRes.teamStatistics} homeName={homeName} awayName={awayName} />}
+              {lineupsRes && <MatchLineupsPanel lineups={lineupsRes.lineups} />}
+            </div>
+          )}
 
-      {/* VENUE — observed context; links to the canonical Venue page (no travel/weather) */}
-      {venueRes && <MatchVenuePanel matchVenue={{ venue: venueRes.venue, isNeutralVenue: venueRes.isNeutralVenue, coverage: venueRes.coverage }} />}
+          {/* TAB 4 — CONTEXT (venue / lifecycle / coverage) */}
+          {tab === 'context' && (
+            <div className="space-y-4">
+              {venueRes && <MatchVenuePanel matchVenue={{ venue: venueRes.venue, isNeutralVenue: venueRes.isNeutralVenue, coverage: venueRes.coverage }} />}
+              {lifecycleRes && <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />}
+              <MatchCoverage flags={coverage} />
+            </div>
+          )}
+        </div>
+      </div>
 
-      {/* LIFECYCLE — observed state transitions */}
-      {lifecycleRes && <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />}
-
-      {/* MATCH CONTEXT — strictly separate from the calculation. */}
-      {detail && <MatchContext context={detail} />}
-
-      {/* COVERAGE — honest present/absent/not-supported (weather & H2H are future substrate) */}
-      <MatchCoverage flags={[
-        ['match', detail ? 'present' : 'absent'],
-        ['result', resultRes?.coverage.result ?? 'absent'],
-        ['intelligence', sealed ? 'present' : 'absent'],
-        ['team statistics', statsRes?.teamStatistics.coverage.teamStatistics ?? 'absent'],
-        ['lineups', lineupsRes?.lineups.coverage.lineups ?? 'absent'],
-        ['venue', venueRes?.coverage.venue ?? 'absent'],
-        ['lifecycle', lifecycleRes?.lifecycle.coverage.transitions ?? 'absent'],
-        ['weather', 'not-supported'],
-        ['h2h', 'not-supported'],
-      ]} />
-
-      {/* SHELL CONTINUITY — navigation around (not into) the sealed surfaces. */}
-      <MatchNav prev={prev} next={next} editionId={editionId ?? null} competitionName={competitionName ?? null} />
+      <MatchNav prev={prev} next={next} editionId={editionId} competitionName={match.competition.name} />
     </main>
   );
 }
