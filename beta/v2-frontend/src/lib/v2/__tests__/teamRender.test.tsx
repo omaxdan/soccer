@@ -185,6 +185,14 @@ describe('Competition context, upcoming, players', () => {
     assert.match(t, /available/i);
     assert.match(t, /INJURY/);
   });
+  test('non-empty squad renders each registered player; empty squad shows the honest empty state only', () => {
+    // Populated (e.g. an ingested roster) → every player row renders, no empty message.
+    const full = text(<TeamPlayers squad={SQUAD} availability={[]} />);
+    assert.match(full, /Gabriel Barbosa/);
+    assert.doesNotMatch(full, /No squad registered yet/i);
+    // Genuinely empty read model → the honest empty state, and only then.
+    assert.match(text(<TeamPlayers squad={[]} availability={[]} />), /No squad registered yet/i);
+  });
 });
 
 describe('no prediction / probability / travel / betting language across the team hub', () => {
