@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
-import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness, fetchEditionStandings } from '@/lib/v2/api';
+import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness, fetchTeamGovernedIntelligence, fetchEditionStandings } from '@/lib/v2/api';
 import { idFromParam } from '@/lib/v2/slug';
 import { routes } from '@/lib/v2/routes';
 import { findTeamStanding } from '@/lib/v2/standings';
 import { Breadcrumb } from '@/components/v2/nav';
 import {
-  TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamCompetitionContext,
+  TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
+  TeamConsistencyPanel, TeamCompetitionContext,
   TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
@@ -26,10 +27,11 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
   // Identity/context (gated), descriptive performance evidence, and the governed
   // readiness reading are three distinct existing endpoints, fetched together. Team
   // detail gates the page (null → 404); the other two degrade to honest empties.
-  const [detail, performance, readiness] = await Promise.all([
+  const [detail, performance, readiness, governed] = await Promise.all([
     fetchTeam(id),
     fetchTeamPerformance(id),
     fetchTeamReadiness(id),
+    fetchTeamGovernedIntelligence(id),
   ]);
   if (!detail) notFound();
   const { team, competitions, squad, intelligence } = detail;
@@ -81,6 +83,8 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
 
       {/* GOVERNED INTELLIGENCE — kept explicitly separate from the evidence above */}
       <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
+      <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
+      <TeamConsistencyPanel reading={governed?.consistency ?? null} />
 
       {/* SUPPORTING — upcoming fixtures (left) + squad (right) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

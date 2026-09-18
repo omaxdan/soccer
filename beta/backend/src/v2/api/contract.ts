@@ -24,6 +24,7 @@ import type { MatchLifecycle } from './read/matchLifecycle';
 import type { MatchVenue } from './read/matchVenue';
 import type { TeamPerformanceOverall, CompetitionPerformance, TeamPerformanceCoverage } from './read/teamPerformance';
 import type { TeamReadinessReading, TeamReadinessCoverage } from './read/teamReadiness';
+import type { TeamGovernedReading, TeamGovernedCoverage } from './read/teamGovernedIntelligence';
 import type { Venue } from './read/matchVenue';
 import type { VenueCoverage } from './read/venue';
 import type { CountryIdentity, CountryCoverage } from './read/country';
@@ -552,6 +553,14 @@ export interface TeamReadinessResponse {
   readonly team: ApiTeamSummary;
   readonly readiness: TeamReadinessReading | null;
   readonly coverage: TeamReadinessCoverage;
+}
+
+/** GOVERNED home_away_split (per edition) + consistency_index readings for a team. */
+export interface TeamGovernedIntelligenceResponse {
+  readonly team: ApiTeamSummary;
+  readonly homeAwaySplit: readonly TeamGovernedReading[];
+  readonly consistency: TeamGovernedReading | null;
+  readonly coverage: TeamGovernedCoverage;
 }
 
 /**

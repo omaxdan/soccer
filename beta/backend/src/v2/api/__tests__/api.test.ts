@@ -254,7 +254,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchLifecycle: async () => null,
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
-      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null,
+      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
@@ -362,6 +362,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeam: async (id) => (id === '7' ? { team: { id: '7' } } : null),
       getTeamPerformance: async (id) => (id === '7' ? { team: { id: '7' }, overall: { homeForm: null, awayForm: null, momentum: null, goalMarginVolatility: null, giantKillerPpg: null }, byCompetition: [], coverage: { overall: 'absent', performanceIsDescriptive: true } } : null),
       getTeamReadiness: async (id) => (id === '7' ? { team: { id: '7' }, readiness: { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null }, coverage: { readiness: 'present', readinessIsGoverned: true } } : null),
+      getTeamGovernedIntelligence: async (id) => (id === '7' ? { team: { id: '7' }, homeAwaySplit: [], consistency: null, coverage: { homeAwaySplit: 'absent', consistency: 'absent', isGoverned: true } } : null),
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
       getVenue: async (id) => (id === '25' ? { venue: { id: '25', name: 'Maracanã', city: 'Rio de Janeiro', countryCode: 'BR', latitude: -22.9, longitude: -43.2, elevationMetres: 9, timezoneName: 'America/Sao_Paulo', capacity: 78838, surface: 'grass' }, homeTeams: [{ id: '67', name: 'Fluminense', slug: 'fluminense', shortName: 'FLU', countryCode: 'BR' }], coverage: { venue: 'present', homeTeams: 'present' } } : null),
@@ -519,6 +520,20 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     assert.equal(body.coverage.readinessIsGoverned, true);
     assert.equal(Object.prototype.hasOwnProperty.call(body.readiness, 'score'), false); // no fabricated score
     const miss = await fetch(`${base}/api/v2/teams/8/readiness`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'team_not_found' });
+  });
+
+  it('GET team governed intelligence → 200 with homeAwaySplit + consistency + governed coverage; unauthorized → 404', async () => {
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18/intelligence'), { kind: 'teamIntelligence', id: '18' });
+    const res = await fetch(`${base}/api/v2/teams/7/intelligence`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.team.id, '7');
+    assert.equal(Array.isArray(body.homeAwaySplit), true);
+    assert.equal(Object.prototype.hasOwnProperty.call(body, 'consistency'), true);
+    assert.equal(body.coverage.isGoverned, true);
+    const miss = await fetch(`${base}/api/v2/teams/8/intelligence`);
     assert.equal(miss.status, 404);
     assert.deepEqual(await miss.json(), { error: 'team_not_found' });
   });

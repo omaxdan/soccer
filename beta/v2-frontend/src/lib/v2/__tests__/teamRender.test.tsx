@@ -16,12 +16,13 @@ import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
-  TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamCompetitionContext,
+  TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
+  TeamConsistencyPanel, TeamCompetitionContext,
   TeamUpcomingFixtures, TeamPlayers,
 } from '@/components/v2/team';
 import type {
   ApiPlayerSummary, PerformanceMetric, StandingLine,
-  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamParticipation,
+  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
 
@@ -192,6 +193,43 @@ describe('Competition context, upcoming, players', () => {
     assert.doesNotMatch(full, /No squad registered yet/i);
     // Genuinely empty read model → the honest empty state, and only then.
     assert.match(text(<TeamPlayers squad={[]} availability={[]} />), /No squad registered yet/i);
+  });
+});
+
+// GOVERNED home_away_split + consistency_index — render the module reading verbatim,
+// visually governed, never a frontend calculation. Regression against relabelling
+// descriptive home/away or goal-margin volatility as governed.
+const HAS_READING: TeamGovernedReading = { moduleKey: 'home_away_split', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 3, meetsThreshold: true }, verdictText: 'Balanced home and away', inactiveReason: null, asOf: '2026-09-13T12:30:00.000Z', scope: { kind: 'COMPETITION_SCOPED', competitionEditionId: '18' }, evidence: null };
+const CONSISTENCY_READING: TeamGovernedReading = { moduleKey: 'consistency_index', status: 'MEASURED', strength: 1.89, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: null, inactiveReason: null, asOf: '2026-09-13T12:30:00.000Z', scope: { kind: 'ALL_COMPETITIONS', competitionEditionId: null }, evidence: null };
+
+describe('Governed Home/Away Split + Consistency (governed module readings)', () => {
+  test('Home/Away Split renders governed status + verdict + sample + scope, badged governed', () => {
+    const markup = html(<TeamHomeAwaySplitPanel readings={[HAS_READING]} />);
+    assert.match(markup, /governed/i);
+    const t = text(<TeamHomeAwaySplitPanel readings={[HAS_READING]} />);
+    assert.match(t, /Home \/ Away Split/); assert.match(t, /NEUTRAL/); assert.match(t, /Balanced home and away/);
+    assert.match(t, /n=3/); assert.match(t, /Competition scoped/);
+    assert.doesNotMatch(t, /%/); // no percentage / win-rate arithmetic
+  });
+  test('Consistency renders MEASURED + magnitude 1.89 with volatility meaning (not a 0-100 score)', () => {
+    const t = text(<TeamConsistencyPanel reading={CONSISTENCY_READING} />);
+    assert.match(t, /Consistency Index/); assert.match(t, /MEASURED/); assert.match(t, /1\.89/);
+    assert.match(t, /goal-margin volatility/i); assert.match(t, /less consistent/i);
+    assert.match(t, /n=10/); assert.match(t, /All competitions/);
+    assert.doesNotMatch(t, /%/);
+  });
+  test('INACTIVE reading shows status + reason honestly, no fabricated verdict/value', () => {
+    const inactive: TeamGovernedReading = { ...HAS_READING, status: 'INACTIVE', inactiveReason: 'FEATURE_ABSENT', verdictText: null, strength: null };
+    const t = text(<TeamHomeAwaySplitPanel readings={[inactive]} />);
+    assert.match(t, /INACTIVE/); assert.match(t, /FEATURE_ABSENT/);
+  });
+  test('absent readings → honest governed empty states (not zero, not fabricated)', () => {
+    assert.match(text(<TeamHomeAwaySplitPanel readings={[]} />), /No governed home\/away split reading available/i);
+    assert.match(text(<TeamConsistencyPanel reading={null} />), /No governed consistency reading available/i);
+  });
+  test('negative control: no Giant Killer governed reading is rendered by these panels', () => {
+    const all = (text(<TeamHomeAwaySplitPanel readings={[HAS_READING]} />) + ' ' + text(<TeamConsistencyPanel reading={CONSISTENCY_READING} />)).toLowerCase();
+    assert.doesNotMatch(all, /giant.?killer/);
   });
 });
 
