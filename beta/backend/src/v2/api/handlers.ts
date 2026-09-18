@@ -45,6 +45,7 @@ import type {
   TeamDetailResponse,
   TeamPerformanceResponse,
   TeamReadinessResponse,
+  TeamGovernedIntelligenceResponse,
   VenueResponse,
   CountryResponse,
   CompetitionResponse,
@@ -65,6 +66,7 @@ import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
 import { readTeamPerformance } from './read/teamPerformance';
 import { readTeamReadiness } from './read/teamReadiness';
+import { readTeamGovernedIntelligence } from './read/teamGovernedIntelligence';
 import { readVenue } from './read/venue';
 import { mapCountry, mapCompetitionSummary, buildCountryCoverage, type CountryRow, type CountryCompetitionRow } from './read/country';
 import { mapCompetition, mapCompetitionEdition, buildCompetitionCoverage, type CompetitionRow, type CompetitionEditionRow } from './read/competition';
@@ -802,6 +804,24 @@ export async function getTeamReadiness(tx: PoolClient, teamId: string): Promise<
 
   const { readiness, coverage } = await readTeamReadiness(tx, teamId);
   return { team: toTeamSummary(idRes.rows[0]), readiness, coverage };
+}
+
+/**
+ * A team's GOVERNED home_away_split (per edition) + consistency_index readings, or null
+ * when the team is not in a governed authorized edition. Reuses the SAME exposure gate as
+ * Team Detail / Readiness (TEAM_COMPETITIONS_SQL), then delegates to the read model, which
+ * reuses the quarantine-aware current-reading reader. No calculation, no writes.
+ */
+export async function getTeamGovernedIntelligence(tx: PoolClient, teamId: string): Promise<TeamGovernedIntelligenceResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  const idRes = await tx.query<TeamIdentityRow>(TEAM_IDENTITY_SQL, [teamId]);
+  if (idRes.rows.length === 0) return null;
+
+  const { homeAwaySplit, consistency, coverage } = await readTeamGovernedIntelligence(tx, teamId);
+  return { team: toTeamSummary(idRes.rows[0]), homeAwaySplit, consistency, coverage };
 }
 
 /**

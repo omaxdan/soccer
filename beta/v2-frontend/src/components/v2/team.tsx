@@ -18,7 +18,7 @@ import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
 import { lineGoals, lineResult, lineMatchFixture } from '@/lib/v2/team';
 import type {
   ApiPlayerSummary, PerformanceMetric, StandingLine,
-  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamParticipation,
+  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
 
@@ -311,6 +311,76 @@ export function TeamReadinessPanel({ readiness, coverage }: {
             </div>
           )}
         </>
+      )}
+    </section>
+  );
+}
+
+// ═══ GOVERNED INTELLIGENCE — home_away_split + consistency_index readings ════════════
+//
+// These render the GOVERNED module reading directly (status + verdict + sample + scope +
+// as-of), exactly as persisted. Nothing is computed here: no home-minus-away win-rate,
+// no volatility, no 0–100 score. Kept visually distinct (governed tag) from the
+// descriptive home/away form and goal-margin volatility shown in Current Form.
+
+function govStatusColor(status: string): string {
+  const s = status.toUpperCase();
+  if (s === 'SUPPORTS') return 'var(--edge)';
+  if (s === 'CONTRADICTS') return 'var(--risk)';
+  if (s === 'INACTIVE') return 'var(--faint)';
+  return 'var(--muted)'; // NEUTRAL / MEASURED → engaged but quiet
+}
+function govScopeLabel(kind: string): string {
+  return kind === 'COMPETITION_SCOPED' ? 'Competition scoped' : kind === 'ALL_COMPETITIONS' ? 'All competitions' : kind;
+}
+
+function GovernedReadingCard({ reading, magnitude }: { reading: TeamGovernedReading; magnitude?: { label: string; hint: string } }) {
+  const inactive = reading.status.toUpperCase() === 'INACTIVE';
+  return (
+    <div className="panel" style={{ padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ fontWeight: 700, color: govStatusColor(reading.status) }}>{reading.status}</span>
+        {magnitude && reading.strength !== null && !inactive && (
+          <>
+            <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 18, fontWeight: 700 }}>{reading.strength}</span>
+            <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{magnitude.label}</span>
+          </>
+        )}
+      </div>
+      {inactive
+        ? (reading.inactiveReason && <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 4 }}>Inactive: {reading.inactiveReason}</p>)
+        : (reading.verdictText && <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>{reading.verdictText}</p>)}
+      {magnitude && !inactive && <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 2 }}>{magnitude.hint}</p>}
+      <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 6 }}>
+        n={reading.sample.matches}{reading.sample.meetsThreshold ? '' : ' ·below thresh'} · {govScopeLabel(reading.scope.kind)} · as of <Kickoff iso={reading.asOf} />
+      </p>
+    </div>
+  );
+}
+
+export function TeamHomeAwaySplitPanel({ readings }: { readings: readonly TeamGovernedReading[] }) {
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Home / Away Split" kind="governed" count={readings.length || undefined} />
+      {readings.length === 0 ? (
+        <EmptyState message="No governed home/away split reading available." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {readings.map((r) => <GovernedReadingCard key={r.scope.competitionEditionId ?? r.moduleKey} reading={r} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function TeamConsistencyPanel({ reading }: { reading: TeamGovernedReading | null }) {
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Consistency Index" kind="governed" />
+      {!reading ? (
+        <EmptyState message="No governed consistency reading available." />
+      ) : (
+        <GovernedReadingCard reading={reading} magnitude={{ label: 'goal-margin volatility', hint: 'Higher volatility = less consistent' }} />
       )}
     </section>
   );

@@ -293,6 +293,28 @@ export interface TeamReadinessResponse {
   coverage: { readiness: 'present' | 'absent'; readinessIsGoverned: true };
 }
 
+// ─── TEAM GOVERNED INTELLIGENCE — home_away_split + consistency_index (governed) ─────
+
+export interface TeamGovernedReading {
+  moduleKey: string;
+  status: string;                 // SUPPORTS/NEUTRAL/CONTRADICTS/INACTIVE/MEASURED
+  strength: number | null;        // governed magnitude where published; else null (never fabricated)
+  confidence: number | null;
+  sample: { matches: number; meetsThreshold: boolean };
+  verdictText: string | null;
+  inactiveReason: string | null;
+  asOf: string;
+  scope: { kind: string; competitionEditionId: string | null };
+  evidence: ApiModuleEvidence | null;
+}
+
+export interface TeamGovernedIntelligenceResponse {
+  team: ApiTeamSummary;
+  homeAwaySplit: TeamGovernedReading[];
+  consistency: TeamGovernedReading | null;
+  coverage: { homeAwaySplit: 'present' | 'absent'; consistency: 'present' | 'absent'; isGoverned: true };
+}
+
 // ─── PLAYER detail views — mirror of the backend read model (raw evidence only) ─────
 
 export interface PlayerRegistrationView {
