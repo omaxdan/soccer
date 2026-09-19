@@ -3,11 +3,14 @@ import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness, fetchTeamGovernedI
 import { idFromParam } from '@/lib/v2/slug';
 import { routes } from '@/lib/v2/routes';
 import { findTeamStanding } from '@/lib/v2/standings';
+import { resolveTeamTab } from '@/lib/v2/teamTabs';
 import { Breadcrumb } from '@/components/v2/nav';
+import { EmptyState } from '@/components/v2/ui';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
-  TeamUpcomingFixtures, TeamPlayers, TeamCoverage, type TeamStandingEntry,
+  TeamUpcomingFixtures, TeamRecentFixtures, TeamPlayers, TeamSquadSummary, TeamCoverage,
+  TeamTabNav, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
 
@@ -17,16 +20,21 @@ const EMPTY_OVERALL: TeamPerformanceOverall = {
   homeForm: null, awayForm: null, momentum: null, goalMarginVolatility: null, giantKillerPpg: null,
 };
 
-export default async function V2TeamPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function V2TeamPage({ params, searchParams }: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
+  const sp = await searchParams;
+  const tab = resolveTeamTab(typeof sp.tab === 'string' ? sp.tab : undefined);
+
   // Public URL is {team.slug}-{id}; the trailing DB id is the sole resolver.
   const teamId = idFromParam(slug);
   if (teamId === null) notFound();
   const id = String(teamId);
 
   // Identity/context (gated), descriptive performance evidence, and the governed
-  // readiness reading are three distinct existing endpoints, fetched together. Team
-  // detail gates the page (null → 404); the other two degrade to honest empties.
+  // readiness reading are three distinct existing endpoints, fetched together.
   const [detail, performance, readiness, governed] = await Promise.all([
     fetchTeam(id),
     fetchTeamPerformance(id),
@@ -36,9 +44,7 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
   if (!detail) notFound();
   const { team, competitions, intelligence } = detail;
 
-  // Standings position — REUSE the existing governed edition-standings read for each
-  // edition the team participates in (from detail.competitions), matched by team.id.
-  // Nothing is computed here; a missing snapshot/row stays honest.
+  // Standings position — REUSE the existing governed edition-standings read (nothing computed).
   const standingEntries: TeamStandingEntry[] = await Promise.all(
     competitions.map(async (c): Promise<TeamStandingEntry> => {
       const s = await fetchEditionStandings(c.editionId);
@@ -46,19 +52,24 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
     }),
   );
 
-  // The header surfaces the PRIMARY edition's season, standings row and home/away win
-  // rate — all read verbatim from existing reads (nothing computed here). "Primary" is
-  // simply the first competition edition; single-edition teams have exactly one.
   const primary = competitions[0] ?? null;
   const primarySeason = primary ? `${primary.competition.name} · ${primary.seasonLabel}` : null;
   const primaryStanding = standingEntries[0]?.line ?? null;
   const primaryWinRate = primary ? (performance?.byCompetition.find((c) => c.edition.id === primary.editionId) ?? null) : null;
 
+  const governedPanels = (
+    <>
+      <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
+      <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
+      <TeamConsistencyPanel reading={governed?.consistency ?? null} />
+    </>
+  );
+
   return (
-    <main className="space-y-5 mx-auto w-full max-w-6xl px-4 py-4">
+    <main className="space-y-4 mx-auto w-full max-w-6xl px-4 py-4">
       <Breadcrumb items={[{ label: 'Teams', href: routes.teams() }, { label: team.name }]} />
 
-      {/* IDENTITY + season + governed standings row + home/away win rate (top-right) */}
+      {/* IDENTITY (permanent across tabs) + season + standings row + home/away win rate */}
       <TeamIdentityHeader
         team={team}
         competitions={competitions}
@@ -68,42 +79,67 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
         awayWinRate={primaryWinRate?.awayWinRate ?? null}
       />
 
-      {/* CONTEXT — participation counts per governed edition */}
-      <TeamCompetitionContext participation={intelligence.participation} />
+      <TeamTabNav slug={slug} active={tab} />
 
-      {/* EVIDENCE — recent form: W/D/L strip + descriptive features + venue-split fixtures */}
-      <TeamCurrentForm
-        recent={intelligence.fixtures.recent}
-        home={intelligence.homeAwayContext.home}
-        away={intelligence.homeAwayContext.away}
-        teamName={team.name}
-        overall={performance?.overall ?? EMPTY_OVERALL}
-        coverage={performance?.coverage.overall ?? 'absent'}
-      />
+      <div className="space-y-4" style={{ minWidth: 0 }}>
+        {/* OVERVIEW — the current intelligence briefing (no deep stats, no full roster) */}
+        {tab === 'overview' && (
+          <div className="space-y-4">
+            {governedPanels}
+            <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
+            <TeamSquadSummary squad={intelligence.squad} availability={intelligence.availability} slug={slug} />
+            <TeamCoverage coverage={intelligence.coverage} />
+          </div>
+        )}
 
-      {/* GOVERNED INTELLIGENCE — kept explicitly separate from the evidence above */}
-      <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
-      <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
-      <TeamConsistencyPanel reading={governed?.consistency ?? null} />
+        {/* SQUAD — full roster + registration + availability + valuation */}
+        {tab === 'squad' && (
+          <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
+        )}
 
-      {/* PERFORMANCE — descriptive season-statistic aggregates (backend-derived, verbatim).
-          Placed AFTER governed intelligence and BEFORE upcoming; never inside the governed block. */}
-      <TeamSeasonStatistics playerStatistics={intelligence.playerStatistics} />
+        {/* FIXTURES — participation, upcoming, recent results */}
+        {tab === 'fixtures' && (
+          <div className="space-y-4">
+            <TeamCompetitionContext participation={intelligence.participation} />
+            <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
+            <TeamRecentFixtures recent={intelligence.fixtures.recent} teamName={team.name} />
+          </div>
+        )}
 
-      {/* LAST MATCH — most recent completed fixture's recorded player statistics (evidence).
-          Descriptive; distinct from Current Form (sequence) and Season Statistics (season aggregate). */}
-      <TeamLastMatch playerPerformances={intelligence.playerPerformances} squad={intelligence.squad} teamName={team.name} />
+        {/* PERFORMANCE — descriptive season evidence: form, season statistics, last match */}
+        {tab === 'performance' && (
+          <div className="space-y-4">
+            <TeamCurrentForm
+              recent={intelligence.fixtures.recent}
+              home={intelligence.homeAwayContext.home}
+              away={intelligence.homeAwayContext.away}
+              teamName={team.name}
+              overall={performance?.overall ?? EMPTY_OVERALL}
+              coverage={performance?.coverage.overall ?? 'absent'}
+            />
+            <TeamSeasonStatistics playerStatistics={intelligence.playerStatistics} />
+            <TeamLastMatch playerPerformances={intelligence.playerPerformances} squad={intelligence.squad} teamName={team.name} />
+          </div>
+        )}
 
-      {/* SUPPORTING — upcoming fixtures + next-fixture selection picture (left),
-          squad with registration + availability detail (right). The squad is the
-          registration-bearing intelligence.squad (name-only detail.squad is unused). */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
-        <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
+        {/* INTELLIGENCE — the deep governed readings (with their supporting evidence) */}
+        {tab === 'intelligence' && (
+          <div className="space-y-4">
+            <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>
+              Current readings with the evidence behind them. Each shows its sample size and when it was last updated.
+            </p>
+            {governedPanels}
+          </div>
+        )}
+
+        {/* HISTORY — long-term patterns (honest: about one season is available today) */}
+        {tab === 'history' && (
+          <section className="space-y-2">
+            <p className="eyebrow">Historical patterns</p>
+            <EmptyState message="Historical patterns are limited: about one season of data is currently available for this team." />
+          </section>
+        )}
       </div>
-
-      {/* TRUST — the single primary home for this team's data-coverage matrix (transparency). */}
-      <TeamCoverage coverage={intelligence.coverage} />
     </main>
   );
 }
