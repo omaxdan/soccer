@@ -15,6 +15,7 @@ import { MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@
 import {
   MatchHeader, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
   CompactForm, CompactVenue, AvailabilityFooter, HeadToHeadUnavailable, MatchStatisticsFull,
+  LineupsUnavailable,
 } from '@/components/v2/matchOverview';
 import type {
   ApiEditionFixture, MatchDetailResponse,
@@ -135,8 +136,9 @@ export default async function V2MatchPage({ params, searchParams }: {
           </div>
         )}
 
-        {/* LINEUPS — "who is playing / who played?" */}
-        {tab === 'lineups' && lineupsRes && <MatchLineupsPanel lineups={lineupsRes.lineups} />}
+        {/* LINEUPS — "who is playing / who played?" — honest empty state when the read
+            itself is unavailable (MatchLineupsPanel handles absent/partial coverage). */}
+        {tab === 'lineups' && (lineupsRes ? <MatchLineupsPanel lineups={lineupsRes.lineups} /> : <LineupsUnavailable />)}
 
         {/* H2H — "what has happened between these teams historically?" */}
         {tab === 'h2h' && <HeadToHeadUnavailable />}

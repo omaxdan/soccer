@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   IntelligenceBoard, KeySignals, KeyMatchEvidence, MatchProgression, MatchStatePanel,
-  MatchStatisticsFull, HeadToHeadUnavailable,
+  MatchStatisticsFull, HeadToHeadUnavailable, LineupsUnavailable,
 } from '@/components/v2/matchOverview';
 import type {
   ApiFeatureValue, ApiModuleReading, MatchDetailResponse, MatchResult, MatchTeamStatistics, TeamStatLine,
@@ -168,5 +168,14 @@ describe('State-aware match state + H2H', () => {
   });
   test('H2H is an honest empty state (never fabricated)', () => {
     assert.match(text(<HeadToHeadUnavailable />), /not available for this fixture/i);
+  });
+  test('Lineups unavailable is an honest empty state, no unavailable/fit/selection claim', () => {
+    const t = text(<LineupsUnavailable />);
+    assert.match(t, /Lineups/);
+    assert.match(t, /Lineup information is not available for this fixture yet\./);
+    const lower = t.toLowerCase();
+    for (const term of ['injur', 'unavailable player', 'not fit', 'suspend', 'will not play', 'ruled out', 'selected', 'available to play']) {
+      assert.equal(lower.includes(term), false, `must not contain "${term}"`);
+    }
   });
 });
