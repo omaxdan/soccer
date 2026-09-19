@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
 import { lineGoals, lineResult, lineMatchFixture } from '@/lib/v2/team';
+import { TEAM_TABS, teamTabHref, type TeamTab } from '@/lib/v2/teamTabs';
 import type {
   PerformanceMetric, StandingLine,
   TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamIntelligence, TeamParticipation,
@@ -882,6 +883,82 @@ export function TeamCoverage({ coverage }: { coverage: TeamIntelligence['coverag
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
         Coverage describes this team&apos;s current data feed; NOT SUPPORTED means the feed does not provide it, not that it does not exist.
       </p>
+    </section>
+  );
+}
+
+// ═══ TAB NAVIGATION — horizontal, below the identity header (no sidebar) ══════════════
+
+export function TeamTabNav({ slug, active }: { slug: string; active: TeamTab }) {
+  return (
+    <nav aria-label="team sections" style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--line)', overflowX: 'auto' }}>
+      {TEAM_TABS.map((t) => {
+        const isActive = t.key === active;
+        return (
+          <Link key={t.key} href={teamTabHref(slug, t.key)} aria-current={isActive ? 'page' : undefined}
+            className="label-cap" style={{
+              padding: '8px 12px', textDecoration: 'none', whiteSpace: 'nowrap',
+              color: isActive ? 'var(--text)' : 'var(--muted)',
+              borderBottom: `2px solid ${isActive ? 'var(--amber)' : 'transparent'}`,
+              marginBottom: -1,
+            }}>{t.label}</Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ═══ RECENT FIXTURES — completed results list (Fixtures tab) ══════════════════════════
+
+export function TeamRecentFixtures({ recent, teamName }: { recent: readonly TeamFixtureLine[]; teamName: string }) {
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Recent results" count={recent.length} />
+      {recent.length === 0 ? <EmptyState message="No completed fixtures recorded." /> : <FixtureTable lines={recent} teamName={teamName} showScore showStatus={false} />}
+    </section>
+  );
+}
+
+// ═══ SQUAD SUMMARY — compact Overview preview (counts + current unavailable + link) ═══
+//
+// Overview gets a SUMMARY, not the full roster (that lives in the Squad tab). No value
+// ranking, no squad-value total, no fabricated positions — just the registered count, the
+// current availability picture (which is genuinely useful pre-fixture context), and a link.
+
+export function TeamSquadSummary({ squad, availability, slug }: {
+  squad: TeamIntelligence['squad'];
+  availability: readonly TeamAvailabilityRecord[];
+  slug: string;
+}) {
+  const unavailable = availability.filter((a) => a.current);
+  return (
+    <section className="space-y-2">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <Eyebrow label="Squad" />
+        <Link href={teamTabHref(slug, 'squad')} className="label-cap" style={{ color: 'var(--cool)', textDecoration: 'none', fontSize: 10 }}>View full squad →</Link>
+      </div>
+      <div className="panel" style={{ padding: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700 }}>{squad.length}</span>
+          <span className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>registered players</span>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>Current unavailability ({unavailable.length})</p>
+          {unavailable.length === 0 ? (
+            <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 2 }}>No current unavailability records.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: '4px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {unavailable.map((a) => (
+                <li key={a.playerId} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--risk)', fontWeight: 600 }}>{a.unavailabilityKindCode}</span>
+                  {' · '}{a.fullName}
+                  {a.reason ? <span style={{ color: 'var(--faint)' }}> · {a.reason}</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
