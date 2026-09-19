@@ -108,6 +108,7 @@ describe('TeamIntelligenceBriefing (Overview lead)', () => {
     assert.match(t, /48\.33/); assert.match(t, /last 6 matches/);
     assert.match(t, /34/); assert.match(t, /limited sample/);       // awayForm below threshold
     assert.match(t, /Based on 10 matches/); assert.match(t, /not a prediction/i);
+    assert.match(t, /These signals span all competitions\./); // ALL_COMPETITIONS scope disclosure
   });
   test('uses user-facing labels only (no "Giant Killer", no backend terms)', () => {
     const lower = t.toLowerCase();
