@@ -917,6 +917,69 @@ export function TeamUpcomingFixtures({ upcoming, teamName, nextFixture }: {
   );
 }
 
+// ═══ NEXT FIXTURE & SELECTION — Overview consolidation (fixture + squad availability) ══
+//
+// Absorbs the separate Upcoming-fixture and Squad-summary cards on Overview into ONE
+// surface: the next scheduled fixture, the registered count, the explicitly-unavailable
+// players and the honest "no current record" count — with a link to the full Squad tab.
+// Same honesty as the standalone selection picture: no record ≠ available, no fabricated
+// return date, and no "context/governed" jargon on the label.
+
+export function TeamNextFixtureAndSelection({ nextFixture, teamName, slug }: {
+  nextFixture: TeamIntelligence['nextFixture'];
+  teamName: string;
+  slug: string;
+}) {
+  const unknown = nextFixture?.availabilityUnknown.length ?? 0;
+  return (
+    <section className="space-y-2">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <p className="eyebrow">Next fixture &amp; selection</p>
+        <Link href={teamTabHref(slug, 'squad')} className="label-cap" style={{ color: 'var(--cool)', textDecoration: 'none', fontSize: 10 }}>View full squad →</Link>
+      </div>
+      {!nextFixture ? (
+        <EmptyState message="No upcoming fixture scheduled." />
+      ) : (
+        <div className="panel space-y-2" style={{ padding: 14 }}>
+          <p className="label-cap" style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
+            <Link href={routes.match(lineMatchFixture(nextFixture.fixture, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{nextFixture.fixture.opponent.name}</Link>
+            {' · '}{nextFixture.fixture.isHome ? 'Home' : 'Away'}{' · '}{nextFixture.fixture.competition.name}{' · '}<Kickoff iso={nextFixture.fixture.kickoffAt} />
+          </p>
+          <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 22, fontWeight: 700 }}>{nextFixture.registeredCount}</span>
+            <span className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>registered players</span>
+          </p>
+          <div className="space-y-1">
+            <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>Unavailable ({nextFixture.explicitlyUnavailable.length})</p>
+            {nextFixture.explicitlyUnavailable.length === 0 ? (
+              <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>No current unavailability records for this fixture.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {nextFixture.explicitlyUnavailable.map((u) => (
+                  <li key={u.playerId} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                    <span style={{ color: 'var(--risk)', fontWeight: 600 }}>{u.unavailabilityKindCode}</span>
+                    {' · '}{u.fullName}
+                    {u.reason ? <span style={{ color: 'var(--faint)' }}> · {u.reason}</span> : null}
+                    {u.expectedReturnOn ? <span className="tnum" style={{ color: 'var(--faint)' }}> · expected return {u.expectedReturnOn}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <p className="tnum" style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
+              {unknown} registered player{unknown === 1 ? '' : 's'} {unknown === 1 ? 'has' : 'have'} no current unavailability record
+            </p>
+            <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+              Not confirmed available, fit, rested or selected — only that no unavailability is recorded.
+            </p>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ═══ DATA COVERAGE — which data domains this team's feed supports (transparency) ══════
 //
 // A single primary home for the coverage matrix (never repeated in Season Statistics,
