@@ -12,6 +12,7 @@
 // zero-fill, prediction, probability, travel/distance, or betting language. Nullable
 // fields render as an em dash. Links go through the centralized route helpers.
 
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
@@ -501,6 +502,128 @@ export function TeamSeasonStatistics({ playerStatistics }: { playerStatistics: T
               </div>
             ))}
           </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+// ═══ LAST MATCH — most recent completed match player statistics (evidence) ═══════════
+//
+// Descriptive EVIDENCE, not intelligence: the most recent completed fixture that carries
+// player statistics (intelligence.playerPerformances), with each player's recorded provider
+// values rendered VERBATIM. Nothing is computed — no per-90, accuracy, conversion, averaging,
+// ranking, impact/importance score, or "best/worst" label. Player order is the BACKEND order
+// (alphabetical, from groupPerformances) and is never re-sorted by a derived metric. No
+// starter/bench label is shown: the contract carries no lineup status and it is never inferred.
+// The fixture score is team-relative via the shared lineGoals/lineResult helpers (never
+// re-oriented by venue). Non-numeric JSON provider metadata (ratingVersions, statisticsType)
+// is excluded from both the primary columns and the raw detail — never dumped.
+
+const LAST_MATCH_PRIMARY: readonly StatSpec[] = [
+  { key: 'minutesPlayed', label: 'Min' },
+  { key: 'rating', label: 'Rating' },
+  { key: 'expectedGoals', label: 'xG' },
+  { key: 'expectedAssists', label: 'xA' },
+];
+const PERF_METADATA_KEYS: ReadonlySet<string> = new Set(['ratingVersions', 'statisticsType']);
+
+type LastMatchPerformance = TeamIntelligence['playerPerformances']['performances'][number];
+type PerfStat = LastMatchPerformance['statistics'][number];
+
+/** Provider JSON metadata is not an athlete-facing performance metric — kept out of both
+ *  the primary columns and the raw detail (same discipline as Season Statistics). */
+function isDisplayableStat(s: PerfStat): boolean {
+  return s.valueType !== 'json' && !PERF_METADATA_KEYS.has(s.key);
+}
+
+function LastMatchHeader({ fixture, teamName }: { fixture: TeamFixtureLine; teamName: string }) {
+  const { gf, ga } = lineGoals(fixture);
+  return (
+    <div className="panel" style={{ padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ color: 'var(--text)', fontWeight: 700, fontSize: 15 }}>
+          {teamName}{' '}
+          <span className="tnum">{gf === null || ga === null ? '—' : `${gf}–${ga}`}</span>{' '}
+          <Link href={routes.match(lineMatchFixture(fixture, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{fixture.opponent.name}</Link>
+        </span>
+        <FormLetter res={lineResult(fixture)} />
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 4 }}>
+        {fixture.competition.name} · {fixture.isHome ? 'Home' : 'Away'} · <Kickoff iso={fixture.kickoffAt} />
+        {fixture.status !== 'COMPLETED' ? <> · {fixture.status}</> : null}
+      </p>
+    </div>
+  );
+}
+
+export function TeamLastMatch({ playerPerformances, squad, teamName }: {
+  playerPerformances: TeamIntelligence['playerPerformances'];
+  squad: TeamIntelligence['squad'];
+  teamName: string;
+}) {
+  const { fixture, performances } = playerPerformances;
+  const slugByPlayer = new Map(squad.map((m) => [m.playerId, m.slug]));
+
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Last match" count={performances.length || undefined} />
+      {!fixture || performances.length === 0 ? (
+        <EmptyState message="No completed match with player statistics yet." />
+      ) : (
+        <>
+          <LastMatchHeader fixture={fixture} teamName={teamName} />
+          <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
+            <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+              <thead><tr>
+                <th style={th}>Player</th>
+                {LAST_MATCH_PRIMARY.map((c) => <th key={c.key} style={th}>{c.label}</th>)}
+              </tr></thead>
+              <tbody>
+                {performances.map((p) => {
+                  const byKey = new Map(p.statistics.map((s) => [s.key, s]));
+                  const raw = p.statistics.filter(isDisplayableStat);
+                  const slug = slugByPlayer.get(p.playerId);
+                  return (
+                    <Fragment key={p.playerId}>
+                      <tr>
+                        <td style={{ ...td, whiteSpace: 'normal' }}>
+                          {slug
+                            ? <Link href={routes.player({ id: p.playerId, slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link>
+                            : p.fullName}
+                        </td>
+                        {LAST_MATCH_PRIMARY.map((c) => <td key={c.key} style={td}>{orDash(byKey.get(c.key)?.value ?? null)}</td>)}
+                      </tr>
+                      {raw.length > 0 && (
+                        <tr>
+                          <td colSpan={1 + LAST_MATCH_PRIMARY.length} style={{ padding: '0 6px 6px' }}>
+                            {/* Full recorded provider statistics — verbatim, progressively disclosed. Nothing computed. */}
+                            <details>
+                              <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
+                                <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{raw.length} statistics</span>
+                                <span className="label-cap" style={{ color: 'var(--cool)', fontSize: 9, marginLeft: 6 }}>toggle →</span>
+                              </summary>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '2px 12px', marginTop: 6 }}>
+                                {raw.map((s) => (
+                                  <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, borderBottom: '1px solid var(--line)', padding: '1px 0' }}>
+                                    <span className="label-cap" style={{ color: 'var(--faint)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.key}>{s.key}</span>
+                                    <span className="mono" style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>{orDash(s.value)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+            Recorded player-match statistics for the most recent completed fixture — verbatim provider values, not a rating or ranking.
+          </p>
         </>
       )}
     </section>
