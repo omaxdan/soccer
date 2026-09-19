@@ -339,7 +339,7 @@ export function TeamIntelligenceBriefing({ teamName, overall, readiness, coverag
             {INTEL_SIGNALS.map((s) => <SignalCell key={s.label} label={s.label} metric={s.pick(overall)} signed={s.signed} />)}
           </div>
           <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 10 }}>
-            Form and momentum are descriptive indicators over the stated window — not a prediction. Each signal shows its own sample size.
+            These signals span all competitions. Form and momentum are descriptive indicators over the stated window — not a prediction. Each signal shows its own sample size.
           </p>
         </div>
       )}
