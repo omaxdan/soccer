@@ -17,7 +17,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
-  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
+  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics,
+  TeamSquadSnapshot, TeamAvailabilityBoard, TeamLastAppearance,
   TeamUpcomingFixtures, TeamPlayers, TeamCoverage,
 } from '@/components/v2/team';
 import type {
@@ -239,37 +240,85 @@ describe('Competition context, upcoming, players', () => {
     assert.match(text(<TeamUpcomingFixtures upcoming={[]} teamName="Flamengo" />), /No upcoming fixtures/i);
     assert.match(text(<TeamCompetitionContext participation={[]} />), /No governed participation/i);
   });
-  test('players link canonically; current availability shows kind + reason + from, others "no current record"', () => {
-    const markup = html(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />);
+  test('roster links players canonically and carries registration + value only (availability moved to its board)', () => {
+    const markup = html(<TeamPlayers squad={SQUAD} valuations={VALUATIONS} />);
     assert.match(markup, /href="\/v2\/players\/gabriel-barbosa-441-5001"/);
-    const t = text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />);
-    assert.match(t, /INJURY/);
-    assert.match(t, /Meniscus Injury/);      // reason surfaced verbatim
-    assert.match(t, /from 2026-09-10/);       // meaningful `from` shown
-    assert.match(t, /no current record/i);    // player without a record — NOT "available"
-    assert.doesNotMatch(t, /\bavailable\b/i);  // never claim availability from absence of a record
+    const t = text(<TeamPlayers squad={SQUAD} valuations={VALUATIONS} />);
+    // Availability is no longer a roster column — it lives in the dedicated board.
+    assert.doesNotMatch(t, /INJURY/);
+    assert.doesNotMatch(t, /no current record/i);
+    assert.doesNotMatch(t, /\bavailable\b/i);
   });
-  test('registration detail renders kind + from/to null-honestly (null `to` is never "permanent")', () => {
-    const t = text(<TeamPlayers squad={SQUAD} availability={[]} />);
-    assert.match(t, /PERMANENT/);               // kind code verbatim
+  test('registration is human-readable for known codes, verbatim (identifiable) otherwise, from/to null-honest', () => {
+    const t = text(<TeamPlayers squad={SQUAD} />);
+    assert.match(t, /Permanent/);               // PERMANENT → friendly label
+    assert.doesNotMatch(t, /PERMANENT/);        // raw code not shown once mapped
+    assert.match(t, /LOAN_IN/);                 // unknown/variant code stays identifiable — never remapped
     assert.match(t, /2026-01-15 → —/);          // open-ended registration: null `to` → dash, not "permanent"/"present"
-    assert.match(t, /LOAN_IN/);
     assert.match(t, /2026-02-01 → 2026-12-31/); // bounded loan window
     assert.doesNotMatch(t, /present/i);
   });
-  test('expected return only shows when non-null (a null return date is never an estimate)', () => {
-    const withReturn: TeamAvailabilityRecord[] = [{ ...AVAILABILITY[0], expectedReturnOn: '2026-10-01' }];
-    assert.match(text(<TeamPlayers squad={SQUAD} availability={withReturn} />), /expected return 2026-10-01/);
-    // AVAILABILITY has expectedReturnOn: null → no "expected return" line at all.
-    assert.doesNotMatch(text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />), /expected return/i);
-  });
   test('non-empty squad renders each registered player; empty squad shows the honest empty state only', () => {
     // Populated (e.g. an ingested roster) → every player row renders, no empty message.
-    const full = text(<TeamPlayers squad={SQUAD} availability={[]} />);
+    const full = text(<TeamPlayers squad={SQUAD} />);
     assert.match(full, /Gabriel Barbosa/);
     assert.doesNotMatch(full, /No squad registered yet/i);
     // Genuinely empty read model → the honest empty state, and only then.
-    assert.match(text(<TeamPlayers squad={[]} availability={[]} />), /No squad registered yet/i);
+    assert.match(text(<TeamPlayers squad={[]} />), /No squad registered yet/i);
+  });
+});
+
+// SQUAD SNAPSHOT — the tri-state headline. Locks the honesty rule: the remainder of the
+// registered squad without a current unavailability record is "Unknown", NEVER "Available".
+describe('Squad snapshot (tri-state: Registered / Unavailable / Unknown)', () => {
+  test('counts registered, current-unavailable (in squad), and the unknown remainder', () => {
+    const t = text(<TeamSquadSnapshot squad={SQUAD} availability={AVAILABILITY} />);
+    assert.match(t, /Registered/); assert.match(t, /Unavailable/); assert.match(t, /Unknown/);
+    assert.match(t, /2\s*Registered/);   // SQUAD has 2 players
+    assert.match(t, /1\s*Unavailable/);  // Injured Player (5002) has a current record
+    assert.match(t, /1\s*Unknown/);      // remainder
+  });
+  test('no availability records → every registered player is Unknown, never Available', () => {
+    const t = text(<TeamSquadSnapshot squad={SQUAD} availability={[]} />);
+    assert.match(t, /2\s*Registered/);
+    assert.match(t, /0\s*Unavailable/);
+    assert.match(t, /2\s*Unknown/);
+    assert.doesNotMatch(t, /\d+\s*Available/i); // the remainder is Unknown — never a count of "Available"
+  });
+  test('a non-current unavailability record does not reduce the Unknown remainder', () => {
+    const past: TeamAvailabilityRecord[] = [{ ...AVAILABILITY[0], current: false }];
+    const t = text(<TeamSquadSnapshot squad={SQUAD} availability={past} />);
+    assert.match(t, /0\s*Unavailable/);
+    assert.match(t, /2\s*Unknown/);
+  });
+});
+
+// AVAILABILITY & INJURIES — the prominent board. Locks: current records rendered verbatim
+// (kind/reason/from + return only when present), a non-current record is not "current", and
+// absence of records is an honest empty line, never a positive "all available" conclusion.
+describe('Availability & injuries board (prominent, honest)', () => {
+  test('renders each current record verbatim: player, kind, reason, from; return only when non-null', () => {
+    const t = text(<TeamAvailabilityBoard availability={AVAILABILITY} />);
+    assert.match(t, /Availability &amp; injuries/i);
+    assert.match(t, /Injured Player/);
+    assert.match(t, /INJURY/);
+    assert.match(t, /Meniscus Injury/);   // reason verbatim
+    assert.match(t, /from 2026-09-10/);    // meaningful `from`
+    assert.doesNotMatch(t, /expected return/i); // this record's return is null → no estimate line
+  });
+  test('expected return shows only when the record supplies it', () => {
+    const withReturn: TeamAvailabilityRecord[] = [{ ...AVAILABILITY[0], expectedReturnOn: '2026-10-01' }];
+    assert.match(text(<TeamAvailabilityBoard availability={withReturn} />), /expected return 2026-10-01/);
+  });
+  test('no current records → honest empty line, never "all available" or an availability count', () => {
+    const t = text(<TeamAvailabilityBoard availability={[]} />);
+    assert.match(t, /No current unavailability records/i);
+    assert.doesNotMatch(t, /all available/i);
+    assert.doesNotMatch(t, /\d+\s*Available/i);
+  });
+  test('a non-current record is not shown as a current unavailability', () => {
+    const past: TeamAvailabilityRecord[] = [{ ...AVAILABILITY[0], current: false }];
+    assert.match(text(<TeamAvailabilityBoard availability={past} />), /No current unavailability records/i);
   });
 });
 
@@ -347,7 +396,7 @@ describe('Next-fixture selection picture (descriptive availability summary)', ()
 // squad total / average / ranking anywhere.
 describe('Per-player valuation (descriptive, in Squad)', () => {
   test('valued player shows verbatim amount + currency + record as-of date; joined by playerId', () => {
-    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={VALUATIONS} />);
+    const t = text(<TeamPlayers squad={SQUAD} valuations={VALUATIONS} />);
     assert.match(t, /Gabriel Barbosa/);
     assert.match(t, /39000000 EUR/);   // verbatim amount + provider currency (no € / m rounding)
     assert.doesNotMatch(t, /€/);        // no invented currency symbol
@@ -355,18 +404,18 @@ describe('Per-player valuation (descriptive, in Squad)', () => {
     assert.match(t, /as of 2026-09-17/); // from the record's asOfOn, not page/fetch time
   });
   test('registered player without a valuation shows a dash, never a zero value', () => {
-    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={VALUATIONS} />);
+    const t = text(<TeamPlayers squad={SQUAD} valuations={VALUATIONS} />);
     // SQUAD[1] (Injured Player, 5002) has no valuation record → dash, not 0/€0/N/A.
     assert.match(t, /Injured Player/);
     assert.equal((t.match(/EUR/g) ?? []).length, 1); // only the one valued player carries a currency value
     assert.doesNotMatch(t, /\b0 EUR/); assert.doesNotMatch(t, /€0/); assert.doesNotMatch(t, /\bN\/A\b/);
   });
   test('sourceCode is not dumped into the row', () => {
-    assert.doesNotMatch(text(<TeamPlayers squad={SQUAD} availability={[]} valuations={VALUATIONS} />), /SPORTSAPI/i);
+    assert.doesNotMatch(text(<TeamPlayers squad={SQUAD} valuations={VALUATIONS} />), /SPORTSAPI/i);
   });
   test('non-EUR currency is preserved verbatim (never converted)', () => {
     const gbp: TeamIntelligence['valuations'] = [{ ...VALUATIONS[0], amount: '25000000', currencyCode: 'GBP', asOfOn: '2026-09-17', sourceCode: null }];
-    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={gbp} />);
+    const t = text(<TeamPlayers squad={SQUAD} valuations={gbp} />);
     assert.match(t, /25000000 GBP/);
     assert.doesNotMatch(t, /EUR/); assert.doesNotMatch(t, /€/);
   });
@@ -375,17 +424,17 @@ describe('Per-player valuation (descriptive, in Squad)', () => {
       { playerId: '5002', fullName: 'Injured Player', amount: '4400000', currencyCode: 'EUR', asOfOn: '2026-09-17', sourceCode: null },
       { playerId: '5001', fullName: 'Gabriel Barbosa', amount: '39000000', currencyCode: 'EUR', asOfOn: '2026-09-17', sourceCode: null },
     ];
-    const markup = html(<TeamPlayers squad={SQUAD} availability={[]} valuations={many} />);
+    const markup = html(<TeamPlayers squad={SQUAD} valuations={many} />);
     // SQUAD order is [Gabriel (5001), Injured (5002)] — preserved regardless of valuation size.
     assert.ok(markup.indexOf('Gabriel Barbosa') < markup.indexOf('Injured Player'));
-    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={many} />).toLowerCase();
+    const t = text(<TeamPlayers squad={SQUAD} valuations={many} />).toLowerCase();
     for (const term of ['squad value', 'total value', 'average value', 'median', 'most valuable', 'percentile', 'ranked']) {
       assert.equal(t.includes(term), false, `must not contain "${term}"`);
     }
     assert.doesNotMatch(t, /43400000/); // 39.0m + 4.4m must NOT be summed anywhere
   });
   test('no valuations passed → column shows dashes only, no fabricated values', () => {
-    const t = text(<TeamPlayers squad={SQUAD} availability={[]} />);
+    const t = text(<TeamPlayers squad={SQUAD} />);
     assert.match(t, /Gabriel Barbosa/);
     assert.doesNotMatch(t, /EUR/); assert.doesNotMatch(t, /€/);
   });
@@ -439,58 +488,40 @@ describe('Season statistics (descriptive derived aggregates)', () => {
   });
 });
 
-// LAST MATCH — most recent completed fixture's recorded player statistics (evidence).
-// Locks: team-relative score (away orientation), verbatim provider values, JSON metadata
-// excluded, honest dashes for missing primary metrics, backend order preserved, player
-// links only when resolvable, no starter/bench/inference, no derived football calculation.
-describe('Last match (player statistics evidence)', () => {
-  function lastMatch(over: Partial<React.ComponentProps<typeof TeamLastMatch>> = {}) {
-    return <TeamLastMatch playerPerformances={PERFORMANCES} squad={SQUAD} teamName="Flamengo" {...over} />;
+// LAST APPEARANCE — compact pointer to the most recent completed fixture that carries
+// player statistics. Locks: fixture identity + team-relative score (away orientation not
+// inverted) + a Match-page link ONLY. Per-player minutes/rating/xG/xA and raw match
+// statistics are the Match page's job and must NOT be duplicated here.
+describe('Last appearance (compact reference)', () => {
+  function lastAppearance(over: Partial<React.ComponentProps<typeof TeamLastAppearance>> = {}) {
+    return <TeamLastAppearance playerPerformances={PERFORMANCES} teamName="Flamengo" {...over} />;
   }
-  test('fixture header shows opponent, competition, away venue, date, team-relative score + result', () => {
-    const markup = html(lastMatch());
+  test('shows fixture identity, team-relative score, and a link to the match page', () => {
+    const markup = html(lastAppearance());
     assert.match(markup, /href="\/v2\/matches\/botafogo-vs-flamengo-480"/); // opponent home for an away fixture
-    const t = text(lastMatch());
+    assert.match(markup, /View match/);
+    const t = text(lastAppearance());
+    assert.match(t, /Last appearance/i);
     assert.match(t, /Flamengo 1–2 Botafogo/);   // team-relative: GF first
     assert.doesNotMatch(t, /2–1/);               // away score NOT inverted (orientation regression)
     assert.match(t, /Brasileirão Betano/); assert.match(t, /Away/);
   });
-  test('primary metrics render verbatim; missing values are honest dashes (never zero-filled)', () => {
-    const t = text(lastMatch());
-    assert.match(t, /Gabriel Barbosa/);
-    assert.match(t, /7\.7/);        // rating verbatim, not rounded
-    assert.match(t, /0\.2506/);      // xG verbatim
-    assert.match(t, /0\.0366572/);   // xA verbatim, full precision
-    // The sub recorded only minutes → Min shows, Rating/xG/xA are dashes (not 0).
-    assert.match(t, /Unlinked Sub\s+12\s+—/);
-  });
-  test('player links only when the slug resolves via squad; unresolved names are plain text', () => {
-    const markup = html(lastMatch());
-    assert.match(markup, /href="\/v2\/players\/gabriel-barbosa-441-5001"/); // in squad → linked
-    assert.doesNotMatch(markup, /href="[^"]*5099"/);                        // not in squad → no fabricated link
-  });
-  test('expandable raw statistics render verbatim and exclude JSON provider metadata', () => {
-    const t = text(lastMatch());
-    assert.match(t, /5 statistics/);        // 7 recorded − 2 JSON metadata = 5 displayable
-    assert.match(t, /accuratePass/);         // raw provider key surfaced verbatim
-    assert.doesNotMatch(t, /ratingVersions/); assert.doesNotMatch(t, /statisticsType/);
-    assert.doesNotMatch(t, /"original"/);    // no raw JSON dumped
-  });
-  test('preserves backend player order (no derived ranking) and shows no starter/bench/inference label', () => {
-    const markup = html(lastMatch());
-    assert.ok(markup.indexOf('Gabriel Barbosa') < markup.indexOf('Unlinked Sub')); // API order kept
-    const t = text(lastMatch()).toLowerCase();
-    for (const term of ['starter', 'starting xi', 'bench', 'inferred', 'best player', 'worst player', 'impact', 'ranked', 'per 90', 'per-90']) {
-      assert.equal(t.includes(term), false, `must not contain "${term}"`);
-    }
-    assert.doesNotMatch(t, /%/);
+  test('is a pointer, not a stat table: no per-player rows or stat values duplicated', () => {
+    const t = text(lastAppearance());
+    assert.doesNotMatch(t, /Gabriel Barbosa/);   // no per-player rows
+    assert.doesNotMatch(t, /Unlinked Sub/);
+    assert.doesNotMatch(t, /7\.7/);              // no rating value
+    assert.doesNotMatch(t, /0\.2506/);            // no xG value
+    assert.doesNotMatch(t, /0\.0366572/);         // no xA value
+    assert.doesNotMatch(t, /accuratePass/);       // no raw provider stat dump
+    assert.match(t, /detailed match statistics are on the match page/i); // points to canonical source
   });
   test('descriptive, never badged governed', () => {
-    const markup = html(lastMatch());
+    const markup = html(lastAppearance());
     assert.match(markup, /context/); assert.doesNotMatch(markup, /governed/i);
   });
-  test('no completed match with stats → honest empty state', () => {
-    assert.match(text(lastMatch({ playerPerformances: { fixture: null, performances: [] } })), /No completed match with player statistics yet/i);
+  test('no completed fixture → honest empty state', () => {
+    assert.match(text(lastAppearance({ playerPerformances: { fixture: null, performances: [] } })), /No completed match recorded yet/i);
   });
 });
 
@@ -568,8 +599,10 @@ describe('no prediction / probability / travel / betting language across the tea
       text(<TeamReadinessPanel readiness={READING} coverage={{ readiness: 'present', readinessIsGoverned: true }} />),
       text(<TeamCompetitionContext participation={PARTICIPATION} />),
       text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />),
-      text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} valuations={VALUATIONS} />),
-      text(<TeamLastMatch playerPerformances={PERFORMANCES} squad={SQUAD} teamName="Flamengo" />),
+      text(<TeamSquadSnapshot squad={SQUAD} availability={AVAILABILITY} />),
+      text(<TeamAvailabilityBoard availability={AVAILABILITY} />),
+      text(<TeamPlayers squad={SQUAD} valuations={VALUATIONS} />),
+      text(<TeamLastAppearance playerPerformances={PERFORMANCES} teamName="Flamengo" />),
       text(<TeamCoverage coverage={COVERAGE} />),
     ].join(' ').toLowerCase();
     for (const term of ['predicted', 'prediction', 'probability', 'travel', 'distance', 'fatigue', 'forecast', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend']) {
