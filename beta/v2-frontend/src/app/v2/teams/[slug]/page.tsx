@@ -7,8 +7,8 @@ import { resolveTeamTab } from '@/lib/v2/teamTabs';
 import { Breadcrumb } from '@/components/v2/nav';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
-  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
-  TeamPlayers, TeamCoverage,
+  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics,
+  TeamSquadSnapshot, TeamAvailabilityBoard, TeamPlayers, TeamLastAppearance, TeamCoverage,
   TeamTabNav, TeamIntelligenceBriefing, TeamNextFixtureAndSelection, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
@@ -89,12 +89,16 @@ export default async function V2TeamPage({ params, searchParams }: {
           </div>
         )}
 
-        {/* SQUAD — full roster + registration + availability + valuation, then the squad's
-            recorded performances in the previous match (last-match player statistics). */}
+        {/* SQUAD — player-centric: the tri-state snapshot headline, the prominent
+            availability/injuries board, the roster (player / registration / value), and a
+            compact link to the last appearance. Detailed player-match statistics live on
+            the Match page — never duplicated here. */}
         {tab === 'squad' && (
           <div className="space-y-4">
-            <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
-            <TeamLastMatch playerPerformances={intelligence.playerPerformances} squad={intelligence.squad} teamName={team.name} />
+            <TeamSquadSnapshot squad={intelligence.squad} availability={intelligence.availability} />
+            <TeamAvailabilityBoard availability={intelligence.availability} />
+            <TeamPlayers squad={intelligence.squad} valuations={intelligence.valuations} />
+            <TeamLastAppearance playerPerformances={intelligence.playerPerformances} teamName={team.name} />
           </div>
         )}
 

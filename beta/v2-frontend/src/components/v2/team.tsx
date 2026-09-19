@@ -12,7 +12,6 @@
 // zero-fill, prediction, probability, travel/distance, or betting language. Nullable
 // fields render as an em dash. Links go through the centralized route helpers.
 
-import { Fragment } from 'react';
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
@@ -582,136 +581,98 @@ export function TeamSeasonStatistics({ playerStatistics }: { playerStatistics: T
   );
 }
 
-// ═══ LAST MATCH — most recent completed match player statistics (evidence) ═══════════
+// ═══ SQUAD SNAPSHOT + AVAILABILITY — the honest tri-state headline + injuries board ══
 //
-// Descriptive EVIDENCE, not intelligence: the most recent completed fixture that carries
-// player statistics (intelligence.playerPerformances), with each player's recorded provider
-// values rendered VERBATIM. Nothing is computed — no per-90, accuracy, conversion, averaging,
-// ranking, impact/importance score, or "best/worst" label. Player order is the BACKEND order
-// (alphabetical, from groupPerformances) and is never re-sorted by a derived metric. No
-// starter/bench label is shown: the contract carries no lineup status and it is never inferred.
-// The fixture score is team-relative via the shared lineGoals/lineResult helpers (never
-// re-oriented by venue). Non-numeric JSON provider metadata (ratingVersions, statisticsType)
-// is excluded from both the primary columns and the raw detail — never dumped.
+// Snapshot is a TRI-STATE count, never a binary: Registered (roster size), Unavailable
+// (registered players with a CURRENT unavailability record) and Unknown (the remainder).
+// The remainder is NEVER labelled "available": absence of an unavailability record is not
+// confirmation a player is fit, rested or selected. The board renders each current record
+// verbatim (kind, reason, from, expected return) — no invented medical detail, importance,
+// role, replacement or impact. Registered = Unavailable + Unknown exactly.
 
-const LAST_MATCH_PRIMARY: readonly StatSpec[] = [
-  { key: 'minutesPlayed', label: 'Min' },
-  { key: 'rating', label: 'Rating' },
-  { key: 'expectedGoals', label: 'xG' },
-  { key: 'expectedAssists', label: 'xA' },
-];
-const PERF_METADATA_KEYS: ReadonlySet<string> = new Set(['ratingVersions', 'statisticsType']);
-
-type LastMatchPerformance = TeamIntelligence['playerPerformances']['performances'][number];
-type PerfStat = LastMatchPerformance['statistics'][number];
-
-/** Provider JSON metadata is not an athlete-facing performance metric — kept out of both
- *  the primary columns and the raw detail (same discipline as Season Statistics). */
-function isDisplayableStat(s: PerfStat): boolean {
-  return s.valueType !== 'json' && !PERF_METADATA_KEYS.has(s.key);
-}
-
-function LastMatchHeader({ fixture, teamName }: { fixture: TeamFixtureLine; teamName: string }) {
-  const { gf, ga } = lineGoals(fixture);
-  return (
-    <div className="panel" style={{ padding: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span className="mono" style={{ color: 'var(--text)', fontWeight: 700, fontSize: 15 }}>
-          {teamName}{' '}
-          <span className="tnum">{gf === null || ga === null ? '—' : `${gf}–${ga}`}</span>{' '}
-          <Link href={routes.match(lineMatchFixture(fixture, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{fixture.opponent.name}</Link>
-        </span>
-        <FormLetter res={lineResult(fixture)} />
-      </div>
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 4 }}>
-        {fixture.competition.name} · {fixture.isHome ? 'Home' : 'Away'} · <Kickoff iso={fixture.kickoffAt} />
-        {fixture.status !== 'COMPLETED' ? <> · {fixture.status}</> : null}
-      </p>
-    </div>
-  );
-}
-
-export function TeamLastMatch({ playerPerformances, squad, teamName }: {
-  playerPerformances: TeamIntelligence['playerPerformances'];
+export function TeamSquadSnapshot({ squad, availability }: {
   squad: TeamIntelligence['squad'];
-  teamName: string;
+  availability: readonly TeamAvailabilityRecord[];
 }) {
-  const { fixture, performances } = playerPerformances;
-  const slugByPlayer = new Map(squad.map((m) => [m.playerId, m.slug]));
-
+  const registered = squad.length;
+  const squadIds = new Set(squad.map((p) => p.playerId));
+  // Distinct registered players with a CURRENT unavailability record. Intersecting with the
+  // squad keeps the remainder ("unknown") non-negative — a plain count, no football math.
+  const unavailable = new Set(
+    availability.filter((a) => a.current && squadIds.has(a.playerId)).map((a) => a.playerId),
+  ).size;
+  const unknown = registered - unavailable;
+  const cells: readonly { readonly label: string; readonly value: number; readonly color: string }[] = [
+    { label: 'Registered', value: registered, color: 'var(--text)' },
+    { label: 'Unavailable', value: unavailable, color: unavailable > 0 ? 'var(--risk)' : 'var(--muted)' },
+    { label: 'Unknown', value: unknown, color: 'var(--muted)' },
+  ];
   return (
     <section className="space-y-2">
-      <Eyebrow label="Last match" count={performances.length || undefined} />
-      {!fixture || performances.length === 0 ? (
-        <EmptyState message="No completed match with player statistics yet." />
-      ) : (
-        <>
-          <LastMatchHeader fixture={fixture} teamName={teamName} />
-          <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
-            <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-              <thead><tr>
-                <th style={th}>Player</th>
-                {LAST_MATCH_PRIMARY.map((c) => <th key={c.key} style={th}>{c.label}</th>)}
-              </tr></thead>
-              <tbody>
-                {performances.map((p) => {
-                  const byKey = new Map(p.statistics.map((s) => [s.key, s]));
-                  const raw = p.statistics.filter(isDisplayableStat);
-                  const slug = slugByPlayer.get(p.playerId);
-                  return (
-                    <Fragment key={p.playerId}>
-                      <tr>
-                        <td style={{ ...td, whiteSpace: 'normal' }}>
-                          {slug
-                            ? <Link href={routes.player({ id: p.playerId, slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link>
-                            : p.fullName}
-                        </td>
-                        {LAST_MATCH_PRIMARY.map((c) => <td key={c.key} style={td}>{orDash(byKey.get(c.key)?.value ?? null)}</td>)}
-                      </tr>
-                      {raw.length > 0 && (
-                        <tr>
-                          <td colSpan={1 + LAST_MATCH_PRIMARY.length} style={{ padding: '0 6px 6px' }}>
-                            {/* Full recorded provider statistics — verbatim, progressively disclosed. Nothing computed. */}
-                            <details>
-                              <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
-                                <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{raw.length} statistics</span>
-                                <span className="label-cap" style={{ color: 'var(--cool)', fontSize: 9, marginLeft: 6 }}>toggle →</span>
-                              </summary>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '2px 12px', marginTop: 6 }}>
-                                {raw.map((s) => (
-                                  <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, borderBottom: '1px solid var(--line)', padding: '1px 0' }}>
-                                    <span className="label-cap" style={{ color: 'var(--faint)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.key}>{s.key}</span>
-                                    <span className="mono" style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}>{orDash(s.value)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </details>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+      <Eyebrow label="Squad snapshot" />
+      <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {cells.map((c) => (
+          <div key={c.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span className="mono tnum" style={{ color: c.color, fontSize: 22, fontWeight: 700 }}>{c.value}</span>
+            <span className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{c.label}</span>
           </div>
-          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
-            Recorded player-match statistics for the most recent completed fixture — verbatim provider values, not a rating or ranking.
-          </p>
-        </>
-      )}
+        ))}
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Unknown = registered players with no current unavailability record — not confirmed available, fit, rested or selected.
+      </p>
     </section>
   );
 }
 
-// ═══ PLAYERS — squad + registration detail + current availability (context) ═════════
+// Prominent availability / injuries board: each CURRENT unavailability record rendered
+// verbatim. No current record → an honest empty line, never a positive "all available"
+// conclusion. Player names are plain text (the availability payload carries no slug).
+export function TeamAvailabilityBoard({ availability }: {
+  availability: readonly TeamAvailabilityRecord[];
+}) {
+  const current = availability.filter((a) => a.current);
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Availability & injuries" count={current.length || undefined} />
+      {current.length === 0 ? (
+        <EmptyState message="No current unavailability records." />
+      ) : (
+        <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px 16px' }}>
+          {current.map((rec) => (
+            <div key={`${rec.playerId}-${rec.from ?? ''}`} style={{ display: 'flex', flexDirection: 'column', gap: 1, borderLeft: '2px solid var(--risk)', paddingLeft: 8 }}>
+              <span className="mono" style={{ color: 'var(--text)', fontWeight: 600 }}>{rec.fullName}</span>
+              <AvailabilityDetail rec={rec} />
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Absence of a record is not confirmation a player is available, fit, rested or selected.
+      </p>
+    </section>
+  );
+}
+
+// ═══ PLAYERS — squad roster: player + registration + valuation (context) ════════════
 //
-// The Squad table is the ONE primary home for the full per-player availability picture:
-// registration (kind + from/to, null-honest) and, for a player with a CURRENT
-// unavailability record, its kind + reason + from + expected return. Everything is
-// rendered verbatim: a null registrationTo is never "permanent" (only the kind code can
-// say that), a null expectedReturnOn is never turned into an estimate, and the absence
-// of a record is "no current record" — never a claim that the player is available/fit.
+// The roster is Player / Registration / Value. Availability now lives in the dedicated
+// board above (not duplicated here). Registration kind is shown human-readable for the
+// known codes and verbatim otherwise (unknown kinds stay identifiable); from/to are
+// null-honest — a null registrationTo is never "permanent" (only the kind code can say
+// that). Valuation is joined by playerId only, verbatim, with no squad total or ranking.
+
+// Human-readable registration kind. Only the authorized codes get a friendly label; every
+// other code is shown verbatim so unknown kinds stay identifiable (never remapped to a
+// made-up category).
+const REGISTRATION_LABEL: Readonly<Record<string, string>> = {
+  PERMANENT: 'Permanent',
+  LOAN: 'Loan',
+  TEMPORARY: 'Temporary',
+};
+function registrationLabel(code: string): string {
+  return REGISTRATION_LABEL[code] ?? code;
+}
 
 function AvailabilityDetail({ rec }: { rec: TeamAvailabilityRecord }) {
   return (
@@ -736,12 +697,10 @@ function ValuationCell({ v }: { v: TeamIntelligence['valuations'][number] }) {
   );
 }
 
-export function TeamPlayers({ squad, availability, valuations = [] }: {
+export function TeamPlayers({ squad, valuations = [] }: {
   squad: TeamIntelligence['squad'];
-  availability: readonly TeamAvailabilityRecord[];
   valuations?: TeamIntelligence['valuations'];
 }) {
-  const currentByPlayer = new Map(availability.filter((a) => a.current).map((a) => [a.playerId, a]));
   // Join valuations to squad rows by playerId ONLY (never by name). No summing, averaging,
   // ranking or squad-total — each row shows its own player's provider valuation, or a dash.
   const valuationByPlayer = new Map(valuations.map((v) => [v.playerId, v]));
@@ -754,10 +713,9 @@ export function TeamPlayers({ squad, availability, valuations = [] }: {
         <>
           <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-              <thead><tr><th style={th}>Player</th><th style={th}>Registration</th><th style={th}>Availability</th><th style={th}>Value</th></tr></thead>
+              <thead><tr><th style={th}>Player</th><th style={th}>Registration</th><th style={th}>Value</th></tr></thead>
               <tbody>
                 {squad.map((p) => {
-                  const unavailable = currentByPlayer.get(p.playerId);
                   const valuation = valuationByPlayer.get(p.playerId);
                   return (
                     <tr key={p.playerId}>
@@ -765,13 +723,10 @@ export function TeamPlayers({ squad, availability, valuations = [] }: {
                         <Link href={routes.player({ id: p.playerId, slug: p.slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link>
                       </td>
                       <td style={{ ...td, whiteSpace: 'normal' }}>
-                        <span className="mono" style={{ color: 'var(--text-secondary)' }}>{p.registrationKindCode}</span>
+                        <span className="mono" style={{ color: 'var(--text-secondary)' }}>{registrationLabel(p.registrationKindCode)}</span>
                         <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, display: 'block' }}>
                           {orDash(p.registrationFrom)} → {orDash(p.registrationTo)}
                         </span>
-                      </td>
-                      <td style={{ ...td, whiteSpace: 'normal' }}>
-                        {unavailable ? <AvailabilityDetail rec={unavailable} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>no current record</span>}
                       </td>
                       <td style={{ ...td, whiteSpace: 'normal' }}>
                         {valuation ? <ValuationCell v={valuation} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>—</span>}
@@ -787,6 +742,52 @@ export function TeamPlayers({ squad, availability, valuations = [] }: {
           </p>
         </>
       )}
+    </section>
+  );
+}
+
+// ═══ LAST APPEARANCE — compact reference to the team's most recent completed fixture ══
+//
+// A pointer, not a stat table: the most recent completed fixture that carries player
+// statistics (playerPerformances.fixture), shown as fixture identity + team-relative
+// score + a link to the Match page. Per-player minutes / rating / xG / xA and raw match
+// statistics are NOT duplicated here — the Match page is their canonical home.
+
+export function TeamLastAppearance({ playerPerformances, teamName }: {
+  playerPerformances: TeamIntelligence['playerPerformances'];
+  teamName: string;
+}) {
+  const fixture = playerPerformances.fixture;
+  if (!fixture) {
+    return (
+      <section className="space-y-2">
+        <Eyebrow label="Last appearance" />
+        <EmptyState message="No completed match recorded yet." />
+      </section>
+    );
+  }
+  const { gf, ga } = lineGoals(fixture);
+  const score = gf === null || ga === null ? '—' : `${gf}–${ga}`;
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Last appearance" />
+      <div className="panel" style={{ padding: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ color: 'var(--text)', fontWeight: 700, fontSize: 14 }}>
+              {teamName}{' '}<span className="tnum">{score}</span>{' '}{fixture.opponent.name}
+            </span>
+            <FormLetter res={lineResult(fixture)} />
+          </span>
+          <Link href={routes.match(lineMatchFixture(fixture, teamName))} className="label-cap" style={{ color: 'var(--cool)', textDecoration: 'none', fontSize: 10 }}>View match →</Link>
+        </div>
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 4 }}>
+          {fixture.competition.name} · {fixture.isHome ? 'Home' : 'Away'} · <Kickoff iso={fixture.kickoffAt} />
+        </p>
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Player minutes, ratings and detailed match statistics are on the match page.
+      </p>
     </section>
   );
 }
