@@ -386,6 +386,127 @@ export function TeamConsistencyPanel({ reading }: { reading: TeamGovernedReading
   );
 }
 
+// ═══ SEASON STATISTICS — descriptive backend-derived aggregates (context) ════════════
+//
+// Renders the backend-provided per-key season aggregates from
+// intelligence.playerStatistics.statisticKeys VERBATIM. `numericTotal` is the backend SUM
+// over every (player, match) observation this team recorded this season — a genuine season
+// team total for additive counting stats — with `fixtures`/`players` as observed coverage.
+// NOTHING is computed here: no per-90, no percentages, no accuracy/conversion, no averaging,
+// no ranking, no score. `numericMean` is intentionally NOT surfaced: its denominator (the
+// player-match observation count) is not in the wire contract, so it cannot be shown beside
+// fixtures/players without inviting a false division (documented as a deferred item).
+//
+// Non-numeric (JSON) provider keys carry a null total and are excluded (they are provider
+// metadata, not athlete-facing stats). Only a curated, grouped set of established football
+// statistics is surfaced — never a raw provider-key dump — and only keys the backend
+// actually supplied with a numeric total appear. Additive counting stats only; instantaneous
+// stats whose SUM is meaningless (e.g. top speed) are deliberately not catalogued.
+
+interface StatSpec { readonly key: string; readonly label: string }
+interface StatGroup { readonly title: string; readonly specs: readonly StatSpec[] }
+
+const SEASON_STAT_GROUPS: readonly StatGroup[] = [
+  { title: 'Attacking', specs: [
+    { key: 'goals', label: 'Goals' },
+    { key: 'expectedGoals', label: 'xG' },
+    { key: 'expectedGoalsOnTarget', label: 'xG on target' },
+    { key: 'totalShots', label: 'Shots' },
+    { key: 'onTargetScoringAttempt', label: 'Shots on target' },
+    { key: 'goalAssist', label: 'Assists' },
+    { key: 'expectedAssists', label: 'xA' },
+    { key: 'bigChanceCreated', label: 'Big chances created' },
+    { key: 'bigChanceMissed', label: 'Big chances missed' },
+    { key: 'hitWoodwork', label: 'Woodwork hits' },
+  ] },
+  { title: 'Passing & distribution', specs: [
+    { key: 'accuratePass', label: 'Accurate passes' },
+    { key: 'totalPass', label: 'Total passes' },
+    { key: 'keyPass', label: 'Key passes' },
+    { key: 'accurateLongBalls', label: 'Accurate long balls' },
+    { key: 'totalLongBalls', label: 'Total long balls' },
+    { key: 'accurateCross', label: 'Accurate crosses' },
+    { key: 'totalCross', label: 'Total crosses' },
+  ] },
+  { title: 'Progression & possession', specs: [
+    { key: 'touches', label: 'Touches' },
+    { key: 'ballCarriesCount', label: 'Ball carries' },
+    { key: 'progressiveBallCarriesCount', label: 'Progressive ball carries' },
+    { key: 'possessionLostCtrl', label: 'Possession lost' },
+  ] },
+  { title: 'Defending & duels', specs: [
+    { key: 'duelWon', label: 'Duels won' },
+    { key: 'duelLost', label: 'Duels lost' },
+    { key: 'totalTackle', label: 'Tackles' },
+    { key: 'wonTackle', label: 'Tackles won' },
+    { key: 'interceptionWon', label: 'Interceptions' },
+    { key: 'totalClearance', label: 'Clearances' },
+    { key: 'aerialWon', label: 'Aerials won' },
+    { key: 'aerialLost', label: 'Aerials lost' },
+    { key: 'outfielderBlock', label: 'Blocks' },
+  ] },
+  { title: 'Physical output', specs: [
+    { key: 'kilometersCovered', label: 'Distance covered (km)' },
+    { key: 'metersCoveredHighSpeedRunningKm', label: 'High-speed running (km)' },
+    { key: 'metersCoveredSprintingKm', label: 'Sprint distance (km)' },
+    { key: 'numberOfSprints', label: 'Sprints' },
+  ] },
+  { title: 'Goalkeeping', specs: [
+    { key: 'saves', label: 'Saves' },
+    { key: 'savedShotsFromInsideTheBox', label: 'Saves inside box' },
+    { key: 'goalsPrevented', label: 'Goals prevented' },
+    { key: 'punches', label: 'Punches' },
+  ] },
+];
+
+type StatRow = TeamIntelligence['playerStatistics']['statisticKeys'][number];
+
+export function TeamSeasonStatistics({ playerStatistics }: { playerStatistics: TeamIntelligence['playerStatistics'] }) {
+  const byKey = new Map(playerStatistics.statisticKeys.map((k) => [k.statisticKey, k]));
+  // A metric renders only when the backend supplied that curated key WITH a numeric total.
+  // Non-numeric/JSON provider keys carry a null total and drop out here (never zero-filled).
+  const groups = SEASON_STAT_GROUPS
+    .map((g) => ({
+      title: g.title,
+      metrics: g.specs
+        .map((spec) => ({ spec, row: byKey.get(spec.key) }))
+        .filter((m): m is { spec: StatSpec; row: StatRow } => !!m.row && m.row.numericTotal !== null),
+    }))
+    .filter((g) => g.metrics.length > 0);
+  const shown = groups.reduce((n, g) => n + g.metrics.length, 0);
+
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Season statistics" count={shown || undefined} />
+      {groups.length === 0 ? (
+        <EmptyState message="No season statistics recorded yet." />
+      ) : (
+        <>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+            Descriptive · derived aggregates — backend season totals summed across every recorded player-match observation; fx = fixtures observed, pl = players observed. Not an intelligence rating, ranking or score.
+          </p>
+          <div className="space-y-3">
+            {groups.map((g) => (
+              <div key={g.title} className="space-y-1">
+                <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{g.title}</p>
+                <div className="panel" style={{ padding: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                  {g.metrics.map(({ spec, row }) => (
+                    <div key={spec.key} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{spec.label}</span>
+                      <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 15, fontWeight: 700 }}>{row.numericTotal}</span>
+                      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>{row.fixtures} fx · {row.players} pl</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 // ═══ PLAYERS — squad + registration detail + current availability (context) ═════════
 //
 // The Squad table is the ONE primary home for the full per-player availability picture:

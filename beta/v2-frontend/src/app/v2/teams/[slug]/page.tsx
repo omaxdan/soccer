@@ -6,7 +6,7 @@ import { findTeamStanding } from '@/lib/v2/standings';
 import { Breadcrumb } from '@/components/v2/nav';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
-  TeamConsistencyPanel, TeamCompetitionContext,
+  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics,
   TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
@@ -85,6 +85,10 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
       <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
       <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
       <TeamConsistencyPanel reading={governed?.consistency ?? null} />
+
+      {/* PERFORMANCE — descriptive season-statistic aggregates (backend-derived, verbatim).
+          Placed AFTER governed intelligence and BEFORE upcoming; never inside the governed block. */}
+      <TeamSeasonStatistics playerStatistics={intelligence.playerStatistics} />
 
       {/* SUPPORTING — upcoming fixtures + next-fixture selection picture (left),
           squad with registration + availability detail (right). The squad is the
