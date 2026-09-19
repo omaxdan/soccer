@@ -159,6 +159,12 @@ describe('Current form (W/D/L strip + venue-split fixtures — form evidence onl
     const t = text(currentForm());
     assert.match(t, /Recent home matches/); assert.match(t, /Recent away matches/);
   });
+  test('discloses ALL_COMPETITIONS scope and shows each fixture\'s competition (verbatim, not derived)', () => {
+    const t = text(currentForm());
+    assert.match(t, /Recent form spans all competitions\./); // scope disclosure
+    assert.match(t, /Competition/);                           // venue tables carry a Competition column
+    assert.match(t, /Brasileirão Betano/);                    // competition.name surfaced verbatim per row
+  });
   test('venue tables show team-relative GF/GA per row', () => {
     const t = text(currentForm());
     assert.match(t, /W\s+2\s+0/);  // home 2-0 win: Res GF GA
@@ -456,6 +462,8 @@ describe('Season statistics (descriptive derived aggregates)', () => {
     assert.match(t, /Accurate passes\s+10478/); assert.match(t, /Saves\s+80/);
     // coverage metadata (no percentages)
     assert.match(t, /25 fx · 12 pl/);
+    // scope disclosure — the totals span all competitions
+    assert.match(t, /Season totals span all competitions\./);
   });
   test('excludes JSON provider metadata, non-catalogued keys, and null totals (no zero-fill, no key dump)', () => {
     const t = text(<TeamSeasonStatistics playerStatistics={PLAYER_STATS} />);

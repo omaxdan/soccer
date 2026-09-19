@@ -201,13 +201,16 @@ function VenueFormTable({ title, lines, teamName }: { title: string; lines: read
       ) : (
         <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
           <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={th}>Date</th><th style={th}>Opponent</th><th style={th}>Res</th><th style={th}>GF</th><th style={th}>GA</th></tr></thead>
+            <thead><tr><th style={th}>Date</th><th style={th}>Competition</th><th style={th}>Opponent</th><th style={th}>Res</th><th style={th}>GF</th><th style={th}>GA</th></tr></thead>
             <tbody>
               {lines.map((l) => {
                 const { gf, ga } = lineGoals(l);
                 return (
                   <tr key={l.fixtureId}>
                     <td style={td}><Kickoff iso={l.kickoffAt} /></td>
+                    {/* Competition surfaced verbatim from the fixture line — recent form spans all
+                        competitions, so each row states which one. Nothing derived or transformed. */}
+                    <td style={{ ...td, whiteSpace: 'normal', color: 'var(--text-secondary)' }}>{l.competition.name}</td>
                     <td style={{ ...td, whiteSpace: 'normal' }}>
                       <Link href={routes.match(lineMatchFixture(l, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{l.opponent.name}</Link>
                     </td>
@@ -249,7 +252,7 @@ export function TeamCurrentForm({ recent, home, away, teamName }: {
       )}
       {recent.length > 0 && (
         <>
-          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Recent home/away fixtures — supporting evidence, not a home/away calculation.</p>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Recent form spans all competitions. Recent home/away fixtures — supporting evidence, not a home/away calculation.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <VenueFormTable title="Recent home matches" lines={home} teamName={teamName} />
             <VenueFormTable title="Recent away matches" lines={away} teamName={teamName} />
@@ -557,7 +560,7 @@ export function TeamSeasonStatistics({ playerStatistics }: { playerStatistics: T
       ) : (
         <>
           <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
-            Descriptive · derived aggregates — backend season totals summed across every recorded player-match observation; fx = fixtures observed, pl = players observed. Not an intelligence rating, ranking or score.
+            Season totals span all competitions. Descriptive · derived aggregates — backend season totals summed across every recorded player-match observation; fx = fixtures observed, pl = players observed. Not an intelligence rating, ranking or score.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {groups.map((g) => (
