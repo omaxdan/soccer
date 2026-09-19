@@ -7,7 +7,7 @@ import { Breadcrumb } from '@/components/v2/nav';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
-  TeamUpcomingFixtures, TeamPlayers, type TeamStandingEntry,
+  TeamUpcomingFixtures, TeamPlayers, TeamCoverage, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
 
@@ -101,6 +101,9 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
         <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
         <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
       </div>
+
+      {/* TRUST — the single primary home for this team's data-coverage matrix (transparency). */}
+      <TeamCoverage coverage={intelligence.coverage} />
     </main>
   );
 }

@@ -18,7 +18,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
-  TeamUpcomingFixtures, TeamPlayers,
+  TeamUpcomingFixtures, TeamPlayers, TeamCoverage,
 } from '@/components/v2/team';
 import type {
   PerformanceMetric, StandingLine,
@@ -52,8 +52,14 @@ const UPCOMING: TeamFixtureLine[] = [
   { fixtureId: '950', kickoffAt: '2026-09-20T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '73', name: 'Atlético Mineiro', slug: 'atletico-mineiro-1977' }, isHome: false, status: 'SCHEDULED', score: null },
 ];
 const PARTICIPATION: TeamParticipation[] = [
-  { competitionEditionId: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixturesTotal: 38, completed: 20, scheduled: 18, postponed: 0, registered: true, firstKickoff: null, lastKickoff: null },
+  { competitionEditionId: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixturesTotal: 38, completed: 20, scheduled: 18, postponed: 0, registered: true, firstKickoff: '2026-04-12T20:00:00.000Z', lastKickoff: '2026-12-06T20:00:00.000Z' },
+  { competitionEditionId: '41', seasonLabel: 'Libertadores 2026', competition: { id: '55', name: 'CONMEBOL Libertadores', slug: 'conmebol-libertadores-9' }, fixturesTotal: 1, completed: 1, scheduled: 0, postponed: 0, registered: true, firstKickoff: null, lastKickoff: null },
 ];
+const COVERAGE: TeamIntelligence['coverage'] = {
+  registrations: 'present', availability: 'present', valuations: 'present', playerMatchStatistics: 'present',
+  appearances: 'not-supported', perPlayerCards: 'not-supported', standings: 'not-supported', managerReferee: 'not-supported',
+  statisticsAreDerivedAggregates: true,
+};
 const SQUAD: TeamIntelligence['squad'] = [
   { playerId: '5001', fullName: 'Gabriel Barbosa', shortName: 'Gabigol', slug: 'gabriel-barbosa-441', registrationKindCode: 'PERMANENT', registrationFrom: '2026-01-15', registrationTo: null },
   { playerId: '5002', fullName: 'Injured Player', shortName: null, slug: 'injured-player-882', registrationKindCode: 'LOAN_IN', registrationFrom: '2026-02-01', registrationTo: '2026-12-31' },
@@ -492,6 +498,72 @@ describe('Last match (player statistics evidence)', () => {
   });
 });
 
+// DATA COVERAGE + richer COMPETITION PARTICIPATION — descriptive transparency/context.
+// Locks: coverage states rendered verbatim (present / not-supported), derived-aggregate
+// disclosure, no data-quality score / percentage / universal timestamp; multi-competition
+// participation with completed/scheduled/postponed + first/last kickoff, no frontend
+// completion percentage or remaining-fixture subtraction.
+describe('Data coverage (transparency)', () => {
+  test('renders present and not-supported states verbatim with the derived-aggregate disclosure', () => {
+    const t = text(<TeamCoverage coverage={COVERAGE} />);
+    assert.match(t, /Data coverage/i);
+    assert.match(t, /Registrations\s+PRESENT/);
+    assert.match(t, /Player statistics\s+PRESENT/);
+    assert.match(t, /Appearances\s+NOT SUPPORTED/);
+    assert.match(t, /Standings\s+NOT SUPPORTED/);
+    assert.match(t, /Manager \/ Referee\s+NOT SUPPORTED/);
+    assert.match(t, /backend-derived aggregates/i);
+    assert.match(t, /not that it does not exist/i); // honest: not-supported ≠ doesn't exist
+  });
+  test('no invented data-quality score, percentage, or failure language', () => {
+    const t = text(<TeamCoverage coverage={COVERAGE} />).toLowerCase();
+    assert.doesNotMatch(t, /%/);
+    for (const term of ['quality score', 'score:', 'error', 'broken', 'failed', 'failure', 'predicted', 'probability']) {
+      assert.equal(t.includes(term), false, `must not contain "${term}"`);
+    }
+  });
+  test('a not-supported domain is never rendered as PRESENT/available', () => {
+    const t = text(<TeamCoverage coverage={COVERAGE} />);
+    // Standings is not-supported here → must not appear as PRESENT.
+    assert.doesNotMatch(t, /Standings\s+PRESENT/);
+    assert.doesNotMatch(t, /available/i);
+  });
+  test('partial/absent states render honestly (not forced to present)', () => {
+    const t = text(<TeamCoverage coverage={{ ...COVERAGE, valuations: 'absent', availability: 'partial' }} />);
+    assert.match(t, /Valuations\s+ABSENT/);
+    assert.match(t, /Availability\s+PARTIAL/);
+  });
+});
+
+describe('Competition participation (richer multi-competition context)', () => {
+  test('renders every competition with completed/scheduled/postponed and the kickoff window', () => {
+    const markup = html(<TeamCompetitionContext participation={PARTICIPATION} />);
+    assert.match(markup, /href="\/v2\/competitions\/brasileirao-betano-325-28"/);
+    assert.match(markup, /CONMEBOL Libertadores/);
+    const t = text(<TeamCompetitionContext participation={PARTICIPATION} />);
+    assert.match(t, /38/); assert.match(t, /20/); assert.match(t, /18/); // fixtures/completed/scheduled verbatim
+    assert.match(t, /first/); assert.match(t, /last/);                    // kickoff window fields surfaced
+    assert.match(t, /Apr/); assert.match(t, /Dec/);                       // first/last kickoff dates rendered
+  });
+  test('no frontend completion percentage or remaining-fixture subtraction', () => {
+    const t = text(<TeamCompetitionContext participation={PARTICIPATION} />);
+    assert.doesNotMatch(t, /%/);
+    // 38 total − 20 completed = 18 remaining is NOT computed; only backend counts appear.
+    // (18 does legitimately appear as the backend `scheduled` count, so we assert no "remaining" label.)
+    assert.doesNotMatch(t, /remaining/i);
+    assert.doesNotMatch(t, /complete\b/i); // no "X% complete" style progress label
+  });
+  test('null kickoff window renders honest — (never a fabricated date)', () => {
+    // Libertadores row: both first/last kickoff null → a single dash, no invented month/date.
+    const t = text(<TeamCompetitionContext participation={[PARTICIPATION[1]]} />);
+    assert.doesNotMatch(t, /Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/);
+    // Mixed: first present, last null → the present date shows and the missing side is honest.
+    const mixed = { ...PARTICIPATION[1], firstKickoff: '2026-04-12T20:00:00.000Z', lastKickoff: null };
+    const tm = text(<TeamCompetitionContext participation={[mixed]} />);
+    assert.match(tm, /Apr/); assert.match(tm, /last —/);
+  });
+});
+
 describe('no prediction / probability / travel / betting language across the team hub', () => {
   test('the assembled surfaces carry no forbidden lexicon', () => {
     const all = [
@@ -502,6 +574,7 @@ describe('no prediction / probability / travel / betting language across the tea
       text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />),
       text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} valuations={VALUATIONS} />),
       text(<TeamLastMatch playerPerformances={PERFORMANCES} squad={SQUAD} teamName="Flamengo" />),
+      text(<TeamCoverage coverage={COVERAGE} />),
     ].join(' ').toLowerCase();
     for (const term of ['predicted', 'prediction', 'probability', 'travel', 'distance', 'fatigue', 'forecast', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend']) {
       assert.equal(all.includes(term), false, `must not contain "${term}"`);
