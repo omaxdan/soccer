@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
-  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics,
+  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
   TeamUpcomingFixtures, TeamPlayers,
 } from '@/components/v2/team';
 import type {
@@ -71,6 +71,31 @@ const NEXT_FIXTURE: NonNullable<TeamIntelligence['nextFixture']> = {
   availabilityUnknown: Array.from({ length: 27 }, (_, i) => ({ playerId: `6${i}`, fullName: `Squad Member ${i}` })),
 };
 const READING: TeamReadinessReading = { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null };
+const LAST_MATCH_FIXTURE: TeamFixtureLine = {
+  fixtureId: '480', kickoffAt: '2026-09-07T20:00:00.000Z',
+  competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' },
+  opponent: { id: '76', name: 'Botafogo', slug: 'botafogo-1958' },
+  isHome: false, status: 'COMPLETED', score: { home: 1, away: 2 }, // team-relative: GF=1, GA=2 (an away loss)
+};
+const PERFORMANCES: TeamIntelligence['playerPerformances'] = {
+  fixture: LAST_MATCH_FIXTURE,
+  performances: [
+    // In SQUAD (slug resolvable) → linked. Order is the backend order and must be preserved.
+    { playerId: '5001', fullName: 'Gabriel Barbosa', statistics: [
+      { key: 'minutesPlayed', value: '90', valueType: 'number' },
+      { key: 'rating', value: '7.7', valueType: 'number' },
+      { key: 'expectedGoals', value: '0.2506', valueType: 'number' },
+      { key: 'expectedAssists', value: '0.0366572', valueType: 'number' },
+      { key: 'accuratePass', value: '31', valueType: 'number' },
+      { key: 'ratingVersions', value: '{"original":7.7}', valueType: 'json' }, // provider metadata → excluded
+      { key: 'statisticsType', value: 'lineups', valueType: 'json' },           // provider metadata → excluded
+    ] },
+    // NOT in SQUAD (no slug) → plain name; only minutes recorded → other primary cells honest dashes.
+    { playerId: '5099', fullName: 'Unlinked Sub', statistics: [
+      { key: 'minutesPlayed', value: '12', valueType: 'number' },
+    ] },
+  ],
+};
 const PLAYER_STATS: TeamIntelligence['playerStatistics'] = {
   playersWithStats: 30,
   statisticKeys: [
@@ -358,6 +383,61 @@ describe('Season statistics (descriptive derived aggregates)', () => {
   });
 });
 
+// LAST MATCH — most recent completed fixture's recorded player statistics (evidence).
+// Locks: team-relative score (away orientation), verbatim provider values, JSON metadata
+// excluded, honest dashes for missing primary metrics, backend order preserved, player
+// links only when resolvable, no starter/bench/inference, no derived football calculation.
+describe('Last match (player statistics evidence)', () => {
+  function lastMatch(over: Partial<React.ComponentProps<typeof TeamLastMatch>> = {}) {
+    return <TeamLastMatch playerPerformances={PERFORMANCES} squad={SQUAD} teamName="Flamengo" {...over} />;
+  }
+  test('fixture header shows opponent, competition, away venue, date, team-relative score + result', () => {
+    const markup = html(lastMatch());
+    assert.match(markup, /href="\/v2\/matches\/botafogo-vs-flamengo-480"/); // opponent home for an away fixture
+    const t = text(lastMatch());
+    assert.match(t, /Flamengo 1–2 Botafogo/);   // team-relative: GF first
+    assert.doesNotMatch(t, /2–1/);               // away score NOT inverted (orientation regression)
+    assert.match(t, /Brasileirão Betano/); assert.match(t, /Away/);
+  });
+  test('primary metrics render verbatim; missing values are honest dashes (never zero-filled)', () => {
+    const t = text(lastMatch());
+    assert.match(t, /Gabriel Barbosa/);
+    assert.match(t, /7\.7/);        // rating verbatim, not rounded
+    assert.match(t, /0\.2506/);      // xG verbatim
+    assert.match(t, /0\.0366572/);   // xA verbatim, full precision
+    // The sub recorded only minutes → Min shows, Rating/xG/xA are dashes (not 0).
+    assert.match(t, /Unlinked Sub\s+12\s+—/);
+  });
+  test('player links only when the slug resolves via squad; unresolved names are plain text', () => {
+    const markup = html(lastMatch());
+    assert.match(markup, /href="\/v2\/players\/gabriel-barbosa-441-5001"/); // in squad → linked
+    assert.doesNotMatch(markup, /href="[^"]*5099"/);                        // not in squad → no fabricated link
+  });
+  test('expandable raw statistics render verbatim and exclude JSON provider metadata', () => {
+    const t = text(lastMatch());
+    assert.match(t, /5 statistics/);        // 7 recorded − 2 JSON metadata = 5 displayable
+    assert.match(t, /accuratePass/);         // raw provider key surfaced verbatim
+    assert.doesNotMatch(t, /ratingVersions/); assert.doesNotMatch(t, /statisticsType/);
+    assert.doesNotMatch(t, /"original"/);    // no raw JSON dumped
+  });
+  test('preserves backend player order (no derived ranking) and shows no starter/bench/inference label', () => {
+    const markup = html(lastMatch());
+    assert.ok(markup.indexOf('Gabriel Barbosa') < markup.indexOf('Unlinked Sub')); // API order kept
+    const t = text(lastMatch()).toLowerCase();
+    for (const term of ['starter', 'starting xi', 'bench', 'inferred', 'best player', 'worst player', 'impact', 'ranked', 'per 90', 'per-90']) {
+      assert.equal(t.includes(term), false, `must not contain "${term}"`);
+    }
+    assert.doesNotMatch(t, /%/);
+  });
+  test('descriptive, never badged governed', () => {
+    const markup = html(lastMatch());
+    assert.match(markup, /context/); assert.doesNotMatch(markup, /governed/i);
+  });
+  test('no completed match with stats → honest empty state', () => {
+    assert.match(text(lastMatch({ playerPerformances: { fixture: null, performances: [] } })), /No completed match with player statistics yet/i);
+  });
+});
+
 describe('no prediction / probability / travel / betting language across the team hub', () => {
   test('the assembled surfaces carry no forbidden lexicon', () => {
     const all = [
@@ -367,6 +447,7 @@ describe('no prediction / probability / travel / betting language across the tea
       text(<TeamCompetitionContext participation={PARTICIPATION} />),
       text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />),
       text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />),
+      text(<TeamLastMatch playerPerformances={PERFORMANCES} squad={SQUAD} teamName="Flamengo" />),
     ].join(' ').toLowerCase();
     for (const term of ['predicted', 'prediction', 'probability', 'travel', 'distance', 'fatigue', 'forecast', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend']) {
       assert.equal(all.includes(term), false, `must not contain "${term}"`);
