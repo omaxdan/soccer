@@ -21,8 +21,8 @@ import {
   TeamUpcomingFixtures, TeamPlayers,
 } from '@/components/v2/team';
 import type {
-  ApiPlayerSummary, PerformanceMetric, StandingLine,
-  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamParticipation,
+  PerformanceMetric, StandingLine,
+  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamIntelligence, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
 
@@ -54,13 +54,22 @@ const UPCOMING: TeamFixtureLine[] = [
 const PARTICIPATION: TeamParticipation[] = [
   { competitionEditionId: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixturesTotal: 38, completed: 20, scheduled: 18, postponed: 0, registered: true, firstKickoff: null, lastKickoff: null },
 ];
-const SQUAD: ApiPlayerSummary[] = [
-  { id: '5001', fullName: 'Gabriel Barbosa', shortName: 'Gabigol', slug: 'gabriel-barbosa-441', team: null },
-  { id: '5002', fullName: 'Injured Player', shortName: null, slug: 'injured-player-882', team: null },
+const SQUAD: TeamIntelligence['squad'] = [
+  { playerId: '5001', fullName: 'Gabriel Barbosa', shortName: 'Gabigol', slug: 'gabriel-barbosa-441', registrationKindCode: 'PERMANENT', registrationFrom: '2026-01-15', registrationTo: null },
+  { playerId: '5002', fullName: 'Injured Player', shortName: null, slug: 'injured-player-882', registrationKindCode: 'LOAN_IN', registrationFrom: '2026-02-01', registrationTo: '2026-12-31' },
 ];
 const AVAILABILITY: TeamAvailabilityRecord[] = [
-  { playerId: '5002', fullName: 'Injured Player', unavailabilityKindCode: 'INJURY', from: null, to: null, expectedReturnOn: null, reason: null, severityRank: null, current: true },
+  { playerId: '5002', fullName: 'Injured Player', unavailabilityKindCode: 'INJURY', from: '2026-09-10', to: null, expectedReturnOn: null, reason: 'Meniscus Injury', severityRank: null, current: true },
 ];
+const NEXT_FIXTURE: NonNullable<TeamIntelligence['nextFixture']> = {
+  fixture: { fixtureId: '494', kickoffAt: '2026-09-20T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '75', name: 'Grêmio', slug: 'gremio-1967' }, isHome: false, status: 'SCHEDULED', score: null },
+  registeredCount: 29,
+  explicitlyUnavailable: [
+    { playerId: '5002', fullName: 'Injured Player', unavailabilityKindCode: 'INJURY', reason: 'Meniscus Injury', expectedReturnOn: null },
+    { playerId: '5003', fullName: 'Suspended Player', unavailabilityKindCode: 'SUSPENSION', reason: null, expectedReturnOn: '2026-09-27' },
+  ],
+  availabilityUnknown: Array.from({ length: 27 }, (_, i) => ({ playerId: `6${i}`, fullName: `Squad Member ${i}` })),
+};
 const READING: TeamReadinessReading = { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null };
 
 function header(over: Partial<React.ComponentProps<typeof TeamIdentityHeader>> = {}) {
@@ -175,16 +184,38 @@ describe('Competition context, upcoming, players', () => {
   test('upcoming links to the canonical match URL (opponent is home for an away fixture)', () => {
     assert.match(html(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" />), /href="\/v2\/matches\/atletico-mineiro-vs-flamengo-950"/);
   });
+  test('no nextFixture → selection picture is absent (only the fixtures table renders)', () => {
+    const t = text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" />);
+    assert.doesNotMatch(t, /selection picture/i);
+    assert.doesNotMatch(t, /registered/i);
+  });
   test('empty fixtures/participation → honest empty states', () => {
     assert.match(text(<TeamUpcomingFixtures upcoming={[]} teamName="Flamengo" />), /No upcoming fixtures/i);
     assert.match(text(<TeamCompetitionContext participation={[]} />), /No governed participation/i);
   });
-  test('players link canonically; current availability marks unavailable, others available', () => {
+  test('players link canonically; current availability shows kind + reason + from, others "no current record"', () => {
     const markup = html(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />);
     assert.match(markup, /href="\/v2\/players\/gabriel-barbosa-441-5001"/);
     const t = text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />);
-    assert.match(t, /available/i);
     assert.match(t, /INJURY/);
+    assert.match(t, /Meniscus Injury/);      // reason surfaced verbatim
+    assert.match(t, /from 2026-09-10/);       // meaningful `from` shown
+    assert.match(t, /no current record/i);    // player without a record — NOT "available"
+    assert.doesNotMatch(t, /\bavailable\b/i);  // never claim availability from absence of a record
+  });
+  test('registration detail renders kind + from/to null-honestly (null `to` is never "permanent")', () => {
+    const t = text(<TeamPlayers squad={SQUAD} availability={[]} />);
+    assert.match(t, /PERMANENT/);               // kind code verbatim
+    assert.match(t, /2026-01-15 → —/);          // open-ended registration: null `to` → dash, not "permanent"/"present"
+    assert.match(t, /LOAN_IN/);
+    assert.match(t, /2026-02-01 → 2026-12-31/); // bounded loan window
+    assert.doesNotMatch(t, /present/i);
+  });
+  test('expected return only shows when non-null (a null return date is never an estimate)', () => {
+    const withReturn: TeamAvailabilityRecord[] = [{ ...AVAILABILITY[0], expectedReturnOn: '2026-10-01' }];
+    assert.match(text(<TeamPlayers squad={SQUAD} availability={withReturn} />), /expected return 2026-10-01/);
+    // AVAILABILITY has expectedReturnOn: null → no "expected return" line at all.
+    assert.doesNotMatch(text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />), /expected return/i);
   });
   test('non-empty squad renders each registered player; empty squad shows the honest empty state only', () => {
     // Populated (e.g. an ingested roster) → every player row renders, no empty message.
@@ -233,6 +264,37 @@ describe('Governed Home/Away Split + Consistency (governed module readings)', ()
   });
 });
 
+// NEXT-FIXTURE SELECTION PICTURE — a descriptive availability SUMMARY attached to the
+// upcoming fixtures. Locks the honesty contract: no-record ≠ available, null expected
+// return is not an estimate, and the full per-player picture stays in Squad (this block
+// only summarizes count + lists the explicitly unavailable).
+describe('Next-fixture selection picture (descriptive availability summary)', () => {
+  test('shows registered count, explicitly-unavailable list (kind/reason/return), and honest unknown count', () => {
+    const markup = html(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />);
+    assert.match(markup, /href="\/v2\/matches\/gremio-vs-flamengo-494"/); // opponent home for an away fixture
+    const t = text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />);
+    assert.match(t, /selection picture/i);
+    assert.match(t, /29 registered/);
+    assert.match(t, /Explicitly unavailable \(2\)/);
+    assert.match(t, /INJURY.*Injured Player/); assert.match(t, /Meniscus Injury/);
+    assert.match(t, /SUSPENSION.*Suspended Player/);
+    assert.match(t, /expected return 2026-09-27/);           // shown only for the record that has one
+    assert.match(t, /27 registered players have no current unavailability record/); // honest wording, NOT "27 available"
+    assert.match(t, /not confirmed available, fit, rested or selected/i);
+    assert.doesNotMatch(t, /27 available/i);
+  });
+  test('no explicitly-unavailable records → honest per-fixture empty line (not "all available")', () => {
+    const clean = { ...NEXT_FIXTURE, explicitlyUnavailable: [], availabilityUnknown: NEXT_FIXTURE.availabilityUnknown };
+    const t = text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={clean} />);
+    assert.match(t, /No current unavailability records for this fixture/i);
+    assert.doesNotMatch(t, /all available/i);
+  });
+  test('singular grammar when exactly one registered player has no record', () => {
+    const one = { ...NEXT_FIXTURE, availabilityUnknown: [{ playerId: '60', fullName: 'Only One' }] };
+    assert.match(text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={one} />), /1 registered player has no current unavailability record/);
+  });
+});
+
 describe('no prediction / probability / travel / betting language across the team hub', () => {
   test('the assembled surfaces carry no forbidden lexicon', () => {
     const all = [
@@ -240,7 +302,7 @@ describe('no prediction / probability / travel / betting language across the tea
       text(currentForm()),
       text(<TeamReadinessPanel readiness={READING} coverage={{ readiness: 'present', readinessIsGoverned: true }} />),
       text(<TeamCompetitionContext participation={PARTICIPATION} />),
-      text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" />),
+      text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />),
       text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />),
     ].join(' ').toLowerCase();
     for (const term of ['predicted', 'prediction', 'probability', 'travel', 'distance', 'fatigue', 'forecast', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend']) {

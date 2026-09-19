@@ -17,8 +17,8 @@ import { routes } from '@/lib/v2/routes';
 import { Kickoff, EmptyState, EvidencePanel } from '@/components/v2/ui';
 import { lineGoals, lineResult, lineMatchFixture } from '@/lib/v2/team';
 import type {
-  ApiPlayerSummary, PerformanceMetric, StandingLine,
-  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamParticipation,
+  PerformanceMetric, StandingLine,
+  TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamIntelligence, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
 } from '@/lib/v2/types';
 
@@ -386,9 +386,27 @@ export function TeamConsistencyPanel({ reading }: { reading: TeamGovernedReading
   );
 }
 
-// ═══ PLAYERS — squad + current availability (context) ═══════════════════════════════
+// ═══ PLAYERS — squad + registration detail + current availability (context) ═════════
+//
+// The Squad table is the ONE primary home for the full per-player availability picture:
+// registration (kind + from/to, null-honest) and, for a player with a CURRENT
+// unavailability record, its kind + reason + from + expected return. Everything is
+// rendered verbatim: a null registrationTo is never "permanent" (only the kind code can
+// say that), a null expectedReturnOn is never turned into an estimate, and the absence
+// of a record is "no current record" — never a claim that the player is available/fit.
 
-export function TeamPlayers({ squad, availability }: { squad: readonly ApiPlayerSummary[]; availability: readonly TeamAvailabilityRecord[] }) {
+function AvailabilityDetail({ rec }: { rec: TeamAvailabilityRecord }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <span style={{ color: 'var(--risk)', fontWeight: 600 }}>{rec.unavailabilityKindCode}</span>
+      {rec.reason ? <span style={{ color: 'var(--text-secondary)', fontSize: 10 }}>{rec.reason}</span> : null}
+      {rec.from ? <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>from {rec.from}</span> : null}
+      {rec.expectedReturnOn ? <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>expected return {rec.expectedReturnOn}</span> : null}
+    </div>
+  );
+}
+
+export function TeamPlayers({ squad, availability }: { squad: TeamIntelligence['squad']; availability: readonly TeamAvailabilityRecord[] }) {
   const currentByPlayer = new Map(availability.filter((a) => a.current).map((a) => [a.playerId, a]));
   return (
     <section className="space-y-2">
@@ -398,14 +416,24 @@ export function TeamPlayers({ squad, availability }: { squad: readonly ApiPlayer
       ) : (
         <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={th}>Player</th><th style={th}>Status</th></tr></thead>
+            <thead><tr><th style={th}>Player</th><th style={th}>Registration</th><th style={th}>Availability</th></tr></thead>
             <tbody>
               {squad.map((p) => {
-                const unavailable = currentByPlayer.get(p.id);
+                const unavailable = currentByPlayer.get(p.playerId);
                 return (
-                  <tr key={p.id}>
-                    <td style={{ ...td, whiteSpace: 'normal' }}><Link href={routes.player(p)} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link></td>
-                    <td style={td}>{unavailable ? <span style={{ color: 'var(--risk)' }}>{unavailable.unavailabilityKindCode}</span> : <span className="label-cap" style={{ color: 'var(--faint)' }}>available</span>}</td>
+                  <tr key={p.playerId}>
+                    <td style={{ ...td, whiteSpace: 'normal' }}>
+                      <Link href={routes.player({ id: p.playerId, slug: p.slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link>
+                    </td>
+                    <td style={{ ...td, whiteSpace: 'normal' }}>
+                      <span className="mono" style={{ color: 'var(--text-secondary)' }}>{p.registrationKindCode}</span>
+                      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, display: 'block' }}>
+                        {orDash(p.registrationFrom)} → {orDash(p.registrationTo)}
+                      </span>
+                    </td>
+                    <td style={{ ...td, whiteSpace: 'normal' }}>
+                      {unavailable ? <AvailabilityDetail rec={unavailable} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>no current record</span>}
+                    </td>
                   </tr>
                 );
               })}
@@ -453,11 +481,71 @@ function FixtureTable({ lines, teamName, showScore, showStatus = true }: { lines
   );
 }
 
-export function TeamUpcomingFixtures({ upcoming, teamName }: { upcoming: readonly TeamFixtureLine[]; teamName: string }) {
+// ═══ NEXT-FIXTURE SELECTION PICTURE — descriptive availability summary (context) ═════
+//
+// A SUMMARY only (the full per-player availability picture stays in Squad above): the
+// registered count, the players with an explicit CURRENT unavailability record for the
+// next fixture, and how many registered players carry NO such record. That last figure
+// is stated honestly — "N registered players have no current unavailability record",
+// NOT "N available": no record ≠ available/fit/rested/selected.
+
+function NextFixtureSelection({ nextFixture, teamName }: { nextFixture: NonNullable<TeamIntelligence['nextFixture']>; teamName: string }) {
+  const f = nextFixture.fixture;
+  const unknownCount = nextFixture.availabilityUnknown.length;
+  return (
+    <div className="space-y-2">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>Next-fixture selection picture</p>
+        <Tag kind="context" />
+      </div>
+      <div className="panel space-y-2" style={{ padding: 12 }}>
+        <p className="label-cap" style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
+          <Link href={routes.match(lineMatchFixture(f, teamName))} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{f.opponent.name}</Link>
+          {' · '}{f.isHome ? 'Home' : 'Away'}{' · '}<Kickoff iso={f.kickoffAt} />
+        </p>
+        <p className="mono tnum" style={{ color: 'var(--text)' }}>{nextFixture.registeredCount} registered</p>
+
+        <div className="space-y-1">
+          <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>Explicitly unavailable ({nextFixture.explicitlyUnavailable.length})</p>
+          {nextFixture.explicitlyUnavailable.length === 0 ? (
+            <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>No current unavailability records for this fixture.</p>
+          ) : (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {nextFixture.explicitlyUnavailable.map((u) => (
+                <li key={u.playerId} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                  <span style={{ color: 'var(--risk)', fontWeight: 600 }}>{u.unavailabilityKindCode}</span>
+                  {' · '}{u.fullName}
+                  {u.reason ? <span style={{ color: 'var(--faint)' }}> · {u.reason}</span> : null}
+                  {u.expectedReturnOn ? <span className="tnum" style={{ color: 'var(--faint)' }}> · expected return {u.expectedReturnOn}</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          <p className="tnum" style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
+            {unknownCount} registered player{unknownCount === 1 ? '' : 's'} {unknownCount === 1 ? 'has' : 'have'} no current unavailability record
+          </p>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+            Not confirmed available, fit, rested or selected — only that no unavailability is recorded.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TeamUpcomingFixtures({ upcoming, teamName, nextFixture }: {
+  upcoming: readonly TeamFixtureLine[];
+  teamName: string;
+  nextFixture?: TeamIntelligence['nextFixture'];
+}) {
   return (
     <section className="space-y-2">
       <Eyebrow label="Upcoming fixtures" count={upcoming.length} />
       {upcoming.length === 0 ? <EmptyState message="No upcoming fixtures scheduled." /> : <FixtureTable lines={upcoming} teamName={teamName} showScore={false} />}
+      {nextFixture ? <NextFixtureSelection nextFixture={nextFixture} teamName={teamName} /> : null}
     </section>
   );
 }
