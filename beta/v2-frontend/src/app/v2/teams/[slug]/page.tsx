@@ -34,7 +34,7 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
     fetchTeamGovernedIntelligence(id),
   ]);
   if (!detail) notFound();
-  const { team, competitions, squad, intelligence } = detail;
+  const { team, competitions, intelligence } = detail;
 
   // Standings position — REUSE the existing governed edition-standings read for each
   // edition the team participates in (from detail.competitions), matched by team.id.
@@ -86,10 +86,12 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
       <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
       <TeamConsistencyPanel reading={governed?.consistency ?? null} />
 
-      {/* SUPPORTING — upcoming fixtures (left) + squad (right) */}
+      {/* SUPPORTING — upcoming fixtures + next-fixture selection picture (left),
+          squad with registration + availability detail (right). The squad is the
+          registration-bearing intelligence.squad (name-only detail.squad is unused). */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} />
-        <TeamPlayers squad={squad} availability={intelligence.availability} />
+        <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
+        <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} />
       </div>
     </main>
   );
