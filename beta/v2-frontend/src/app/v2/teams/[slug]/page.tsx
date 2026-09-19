@@ -99,7 +99,7 @@ export default async function V2TeamPage({ params }: { params: Promise<{ slug: s
           registration-bearing intelligence.squad (name-only detail.squad is unused). */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
-        <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} />
+        <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
       </div>
     </main>
   );

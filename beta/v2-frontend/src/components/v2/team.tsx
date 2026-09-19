@@ -650,40 +650,68 @@ function AvailabilityDetail({ rec }: { rec: TeamAvailabilityRecord }) {
   );
 }
 
-export function TeamPlayers({ squad, availability }: { squad: TeamIntelligence['squad']; availability: readonly TeamAvailabilityRecord[] }) {
+// Per-player valuation, joined by playerId. Rendered VERBATIM in the established Player-page
+// grammar: raw amount + provider currency code (no invented € symbol, no m/k rounding, no
+// currency conversion) plus the record's own asOfOn date. sourceCode is NOT dumped per row.
+function ValuationCell({ v }: { v: TeamIntelligence['valuations'][number] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <span className="mono tnum" style={{ color: 'var(--text)' }}>{v.amount}{v.currencyCode ? ` ${v.currencyCode}` : ''}</span>
+      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>as of {v.asOfOn}</span>
+    </div>
+  );
+}
+
+export function TeamPlayers({ squad, availability, valuations = [] }: {
+  squad: TeamIntelligence['squad'];
+  availability: readonly TeamAvailabilityRecord[];
+  valuations?: TeamIntelligence['valuations'];
+}) {
   const currentByPlayer = new Map(availability.filter((a) => a.current).map((a) => [a.playerId, a]));
+  // Join valuations to squad rows by playerId ONLY (never by name). No summing, averaging,
+  // ranking or squad-total — each row shows its own player's provider valuation, or a dash.
+  const valuationByPlayer = new Map(valuations.map((v) => [v.playerId, v]));
   return (
     <section className="space-y-2">
       <Eyebrow label="Squad" count={squad.length} />
       {squad.length === 0 ? (
         <EmptyState message="No squad registered yet." />
       ) : (
-        <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={th}>Player</th><th style={th}>Registration</th><th style={th}>Availability</th></tr></thead>
-            <tbody>
-              {squad.map((p) => {
-                const unavailable = currentByPlayer.get(p.playerId);
-                return (
-                  <tr key={p.playerId}>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>
-                      <Link href={routes.player({ id: p.playerId, slug: p.slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link>
-                    </td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>
-                      <span className="mono" style={{ color: 'var(--text-secondary)' }}>{p.registrationKindCode}</span>
-                      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, display: 'block' }}>
-                        {orDash(p.registrationFrom)} → {orDash(p.registrationTo)}
-                      </span>
-                    </td>
-                    <td style={{ ...td, whiteSpace: 'normal' }}>
-                      {unavailable ? <AvailabilityDetail rec={unavailable} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>no current record</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+              <thead><tr><th style={th}>Player</th><th style={th}>Registration</th><th style={th}>Availability</th><th style={th}>Value</th></tr></thead>
+              <tbody>
+                {squad.map((p) => {
+                  const unavailable = currentByPlayer.get(p.playerId);
+                  const valuation = valuationByPlayer.get(p.playerId);
+                  return (
+                    <tr key={p.playerId}>
+                      <td style={{ ...td, whiteSpace: 'normal' }}>
+                        <Link href={routes.player({ id: p.playerId, slug: p.slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{p.fullName}</Link>
+                      </td>
+                      <td style={{ ...td, whiteSpace: 'normal' }}>
+                        <span className="mono" style={{ color: 'var(--text-secondary)' }}>{p.registrationKindCode}</span>
+                        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, display: 'block' }}>
+                          {orDash(p.registrationFrom)} → {orDash(p.registrationTo)}
+                        </span>
+                      </td>
+                      <td style={{ ...td, whiteSpace: 'normal' }}>
+                        {unavailable ? <AvailabilityDetail rec={unavailable} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>no current record</span>}
+                      </td>
+                      <td style={{ ...td, whiteSpace: 'normal' }}>
+                        {valuation ? <ValuationCell v={valuation} /> : <span className="label-cap" style={{ color: 'var(--faint)' }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+            Value = source-provided player valuation (descriptive), shown as of each record&apos;s date. Unvalued players show —, never a zero value. No squad total or ranking.
+          </p>
+        </>
       )}
     </section>
   );
