@@ -36,8 +36,6 @@ const COMPETITIONS: TeamDetailResponse['competitions'] = [
   { editionId: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' } },
 ];
 const METRIC = (value: number, matches: number, meets = true): PerformanceMetric => ({ value, unit: 'index', direction: 'HIGHER_IS_STRONGER', sample: { matches, meetsThreshold: meets }, asOf: '2026-07-17T23:00:00.000Z' });
-const OVERALL_FULL: TeamPerformanceOverall = { homeForm: METRIC(1.83, 12), awayForm: METRIC(1.36, 11), momentum: METRIC(2.3, 10), goalMarginVolatility: METRIC(1.1, 20), giantKillerPpg: METRIC(0.9, 6) };
-const OVERALL_EMPTY: TeamPerformanceOverall = { homeForm: null, awayForm: null, momentum: null, goalMarginVolatility: null, giantKillerPpg: null };
 const HOME_WR = METRIC(50, 4);
 const AWAY_WR = METRIC(0, 4);
 const STANDING: StandingLine = { position: 8, team: { id: '68', name: 'Flamengo', slug: 'flamengo-5981' }, played: 25, won: 7, drawn: 6, lost: 12, goalsFor: 22, goalsAgainst: 33, goalDifference: -11, points: 27 };
@@ -126,7 +124,7 @@ function header(over: Partial<React.ComponentProps<typeof TeamIdentityHeader>> =
   return <TeamIdentityHeader team={TEAM} competitions={COMPETITIONS} season="Brasileirão Betano · Brasileiro Serie A 2026" standing={STANDING} homeWinRate={HOME_WR} awayWinRate={AWAY_WR} {...over} />;
 }
 function currentForm(over: Partial<React.ComponentProps<typeof TeamCurrentForm>> = {}) {
-  return <TeamCurrentForm recent={RECENT} home={HOME_LINES} away={AWAY_LINES} teamName="Flamengo" overall={OVERALL_FULL} coverage="present" {...over} />;
+  return <TeamCurrentForm recent={RECENT} home={HOME_LINES} away={AWAY_LINES} teamName="Flamengo" {...over} />;
 }
 
 describe('Team identity header (identity + season + standings + win rate)', () => {
@@ -150,8 +148,8 @@ describe('Team identity header (identity + season + standings + win rate)', () =
   });
 });
 
-describe('Current form (W/D/L strip + descriptive features + venue-split fixtures)', () => {
-  test('renders strip, descriptive metrics, and recent home/away tables with links', () => {
+describe('Current form (W/D/L strip + venue-split fixtures — form evidence only)', () => {
+  test('renders strip and recent home/away tables with links', () => {
     const markup = html(currentForm());
     assert.match(markup, /Fluminense/);                                        // home opponent
     assert.match(markup, /Palmeiras/);                                         // away opponent
@@ -159,25 +157,23 @@ describe('Current form (W/D/L strip + descriptive features + venue-split fixture
     assert.match(markup, /href="\/v2\/matches\/palmeiras-vs-flamengo-901"/);   // away → team is away
     const t = text(currentForm());
     assert.match(t, /Recent home matches/); assert.match(t, /Recent away matches/);
-    assert.match(t, /1\.83/);                         // descriptive home-form feature
-    assert.match(t, /not a governed reading/i);
   });
   test('venue tables show team-relative GF/GA per row', () => {
     const t = text(currentForm());
     assert.match(t, /W\s+2\s+0/);  // home 2-0 win: Res GF GA
     assert.match(t, /D\s+1\s+1/);  // away 1-1 draw
   });
-  test('coverage absent → no descriptive metric grid, but venue tables still render', () => {
-    const t = text(currentForm({ overall: OVERALL_EMPTY, coverage: 'absent' }));
-    assert.doesNotMatch(t, /Home form/);        // metric labels gone
+  test('does NOT re-show the descriptive signal metrics (those live in the Overview briefing)', () => {
+    const t = text(currentForm());
+    assert.doesNotMatch(t, /Home form/); assert.doesNotMatch(t, /Momentum/); assert.doesNotMatch(t, /Vs stronger opponents/);
     assert.match(t, /Recent home matches/);     // venue evidence remains
   });
   test('empty recent → honest empty state', () => {
-    assert.match(text(currentForm({ recent: [], home: [], away: [], overall: OVERALL_EMPTY, coverage: 'absent' })), /No completed matches/i);
+    assert.match(text(currentForm({ recent: [], home: [], away: [] })), /No completed matches/i);
   });
   test('null score → em dash (never zero-filled)', () => {
     const NULL_LINE: TeamFixtureLine = { ...HOME_LINES[0], fixtureId: '905', score: null };
-    const t = text(currentForm({ recent: [NULL_LINE], home: [NULL_LINE], away: [], overall: OVERALL_EMPTY, coverage: 'absent' }));
+    const t = text(currentForm({ recent: [NULL_LINE], home: [NULL_LINE], away: [] }));
     assert.match(t, /—/);
   });
 });
@@ -192,20 +188,20 @@ describe('Team fixture score/result orientation (team-relative, both venues)', (
   const AWAY_WIN: TeamFixtureLine = { ...AWAY_LOSS, fixtureId: '912', opponent: { id: '74', name: 'Santos', slug: 'santos-1968' }, score: { home: 3, away: 1 } };
 
   test('home renders W 1 0 and away renders L 1 2 (never inverted to 2 1)', () => {
-    const t = text(currentForm({ recent: [HOME_WIN, AWAY_LOSS], home: [HOME_WIN], away: [AWAY_LOSS], overall: OVERALL_EMPTY, coverage: 'absent' }));
+    const t = text(currentForm({ recent: [HOME_WIN, AWAY_LOSS], home: [HOME_WIN], away: [AWAY_LOSS] }));
     assert.match(t, /W\s+1\s+0/);      // home: Res GF GA
     assert.match(t, /L\s+1\s+2/);      // away: Res GF GA, team-relative
     assert.doesNotMatch(t, /L\s+2\s+1/); // must NOT invert the away row
   });
   test('away win renders W 3 1 (GF first), not W 1 3', () => {
-    const t = text(currentForm({ recent: [AWAY_WIN], home: [], away: [AWAY_WIN], overall: OVERALL_EMPTY, coverage: 'absent' }));
+    const t = text(currentForm({ recent: [AWAY_WIN], home: [], away: [AWAY_WIN] }));
     assert.match(t, /W\s+3\s+1/);
     assert.doesNotMatch(t, /W\s+1\s+3/);
   });
   test('invariant: venue result letter agrees with GF/GA (GF>GA→W, GF<GA→L)', () => {
-    const win = text(currentForm({ recent: [HOME_WIN], home: [HOME_WIN], away: [], overall: OVERALL_EMPTY, coverage: 'absent' }));
+    const win = text(currentForm({ recent: [HOME_WIN], home: [HOME_WIN], away: [] }));
     assert.match(win, /W\s+1\s+0/); assert.doesNotMatch(win, /[LD]\s+1\s+0/);
-    const loss = text(currentForm({ recent: [AWAY_LOSS], home: [], away: [AWAY_LOSS], overall: OVERALL_EMPTY, coverage: 'absent' }));
+    const loss = text(currentForm({ recent: [AWAY_LOSS], home: [], away: [AWAY_LOSS] }));
     assert.match(loss, /L\s+1\s+2/); assert.doesNotMatch(loss, /[WD]\s+1\s+2/);
   });
 });
