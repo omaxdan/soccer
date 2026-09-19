@@ -61,6 +61,10 @@ const SQUAD: TeamIntelligence['squad'] = [
 const AVAILABILITY: TeamAvailabilityRecord[] = [
   { playerId: '5002', fullName: 'Injured Player', unavailabilityKindCode: 'INJURY', from: '2026-09-10', to: null, expectedReturnOn: null, reason: 'Meniscus Injury', severityRank: null, current: true },
 ];
+const VALUATIONS: TeamIntelligence['valuations'] = [
+  // playerId 5001 is in SQUAD (linked); 5002 is in SQUAD but here left UNVALUED (must show dash, not 0).
+  { playerId: '5001', fullName: 'Gabriel Barbosa', amount: '39000000', currencyCode: 'EUR', asOfOn: '2026-09-17', sourceCode: 'SPORTSAPI_API' },
+];
 const NEXT_FIXTURE: NonNullable<TeamIntelligence['nextFixture']> = {
   fixture: { fixtureId: '494', kickoffAt: '2026-09-20T20:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '75', name: 'Grêmio', slug: 'gremio-1967' }, isHome: false, status: 'SCHEDULED', score: null },
   registeredCount: 29,
@@ -335,6 +339,56 @@ describe('Next-fixture selection picture (descriptive availability summary)', ()
   });
 });
 
+// PER-PLAYER VALUATION — descriptive, provider-derived, joined into the Squad by playerId.
+// Locks: verbatim amount + currency (no invented symbol/rounding), as-of from the record,
+// no sourceCode dump per row, unvalued → dash (never €0), squad order preserved, and NO
+// squad total / average / ranking anywhere.
+describe('Per-player valuation (descriptive, in Squad)', () => {
+  test('valued player shows verbatim amount + currency + record as-of date; joined by playerId', () => {
+    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={VALUATIONS} />);
+    assert.match(t, /Gabriel Barbosa/);
+    assert.match(t, /39000000 EUR/);   // verbatim amount + provider currency (no € / m rounding)
+    assert.doesNotMatch(t, /€/);        // no invented currency symbol
+    assert.doesNotMatch(t, /39m/i);     // no invented magnitude rounding
+    assert.match(t, /as of 2026-09-17/); // from the record's asOfOn, not page/fetch time
+  });
+  test('registered player without a valuation shows a dash, never a zero value', () => {
+    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={VALUATIONS} />);
+    // SQUAD[1] (Injured Player, 5002) has no valuation record → dash, not 0/€0/N/A.
+    assert.match(t, /Injured Player/);
+    assert.equal((t.match(/EUR/g) ?? []).length, 1); // only the one valued player carries a currency value
+    assert.doesNotMatch(t, /\b0 EUR/); assert.doesNotMatch(t, /€0/); assert.doesNotMatch(t, /\bN\/A\b/);
+  });
+  test('sourceCode is not dumped into the row', () => {
+    assert.doesNotMatch(text(<TeamPlayers squad={SQUAD} availability={[]} valuations={VALUATIONS} />), /SPORTSAPI/i);
+  });
+  test('non-EUR currency is preserved verbatim (never converted)', () => {
+    const gbp: TeamIntelligence['valuations'] = [{ ...VALUATIONS[0], amount: '25000000', currencyCode: 'GBP', asOfOn: '2026-09-17', sourceCode: null }];
+    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={gbp} />);
+    assert.match(t, /25000000 GBP/);
+    assert.doesNotMatch(t, /EUR/); assert.doesNotMatch(t, /€/);
+  });
+  test('valuations preserve squad order (no ranking) and add no squad total/average', () => {
+    const many: TeamIntelligence['valuations'] = [
+      { playerId: '5002', fullName: 'Injured Player', amount: '4400000', currencyCode: 'EUR', asOfOn: '2026-09-17', sourceCode: null },
+      { playerId: '5001', fullName: 'Gabriel Barbosa', amount: '39000000', currencyCode: 'EUR', asOfOn: '2026-09-17', sourceCode: null },
+    ];
+    const markup = html(<TeamPlayers squad={SQUAD} availability={[]} valuations={many} />);
+    // SQUAD order is [Gabriel (5001), Injured (5002)] — preserved regardless of valuation size.
+    assert.ok(markup.indexOf('Gabriel Barbosa') < markup.indexOf('Injured Player'));
+    const t = text(<TeamPlayers squad={SQUAD} availability={[]} valuations={many} />).toLowerCase();
+    for (const term of ['squad value', 'total value', 'average value', 'median', 'most valuable', 'percentile', 'ranked']) {
+      assert.equal(t.includes(term), false, `must not contain "${term}"`);
+    }
+    assert.doesNotMatch(t, /43400000/); // 39.0m + 4.4m must NOT be summed anywhere
+  });
+  test('no valuations passed → column shows dashes only, no fabricated values', () => {
+    const t = text(<TeamPlayers squad={SQUAD} availability={[]} />);
+    assert.match(t, /Gabriel Barbosa/);
+    assert.doesNotMatch(t, /EUR/); assert.doesNotMatch(t, /€/);
+  });
+});
+
 // SEASON STATISTICS — descriptive backend-derived season aggregates. Renders numericTotal
 // verbatim + fixtures/players coverage, grouped and curated. Locks: only catalogued numeric
 // keys appear, JSON provider metadata and null totals are excluded, no numericMean/percentage/
@@ -446,7 +500,7 @@ describe('no prediction / probability / travel / betting language across the tea
       text(<TeamReadinessPanel readiness={READING} coverage={{ readiness: 'present', readinessIsGoverned: true }} />),
       text(<TeamCompetitionContext participation={PARTICIPATION} />),
       text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={NEXT_FIXTURE} />),
-      text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} />),
+      text(<TeamPlayers squad={SQUAD} availability={AVAILABILITY} valuations={VALUATIONS} />),
       text(<TeamLastMatch playerPerformances={PERFORMANCES} squad={SQUAD} teamName="Flamengo" />),
     ].join(' ').toLowerCase();
     for (const term of ['predicted', 'prediction', 'probability', 'travel', 'distance', 'fatigue', 'forecast', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend']) {
