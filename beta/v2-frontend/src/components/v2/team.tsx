@@ -167,7 +167,7 @@ export function TeamCompetitionContext({ participation }: { participation: reado
           <table className="tnum" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
             <thead><tr>
               <th style={th}>Competition</th><th style={th}>Season</th>
-              <th style={th}>P</th><th style={th}>Completed</th><th style={th}>Scheduled</th><th style={th}>Postp.</th><th style={th}>Reg.</th>
+              <th style={th}>P</th><th style={th}>Completed</th><th style={th}>Scheduled</th><th style={th}>Postp.</th><th style={th}>Reg.</th><th style={th}>Window</th>
             </tr></thead>
             <tbody>
               {participation.map((p) => (
@@ -178,6 +178,16 @@ export function TeamCompetitionContext({ participation }: { participation: reado
                   </td>
                   <td style={td}>{p.fixturesTotal}</td><td style={td}>{p.completed}</td><td style={td}>{p.scheduled}</td><td style={td}>{p.postponed}</td>
                   <td style={td}>{p.registered ? '✓' : '—'}</td>
+                  <td style={{ ...td, whiteSpace: 'normal' }}>
+                    {/* First/last kickoff of THIS team's fixtures in the edition — verbatim API dates,
+                        never a computed span or "remaining fixtures" subtraction. */}
+                    {p.firstKickoff || p.lastKickoff ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{p.firstKickoff ? <>first <Kickoff iso={p.firstKickoff} /></> : 'first —'}</span>
+                        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{p.lastKickoff ? <>last <Kickoff iso={p.lastKickoff} /></> : 'last —'}</span>
+                      </div>
+                    ) : '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -818,6 +828,60 @@ export function TeamUpcomingFixtures({ upcoming, teamName, nextFixture }: {
       <Eyebrow label="Upcoming fixtures" count={upcoming.length} />
       {upcoming.length === 0 ? <EmptyState message="No upcoming fixtures scheduled." /> : <FixtureTable lines={upcoming} teamName={teamName} showScore={false} />}
       {nextFixture ? <NextFixtureSelection nextFixture={nextFixture} teamName={teamName} /> : null}
+    </section>
+  );
+}
+
+// ═══ DATA COVERAGE — which data domains this team's feed supports (transparency) ══════
+//
+// A single primary home for the coverage matrix (never repeated in Season Statistics,
+// Squad, Last Match or Upcoming). Renders intelligence.coverage VERBATIM: each domain's
+// state as the backend supplies it (present / absent / partial / not-supported), plus the
+// derived-aggregate disclosure. NOTHING is computed — no data-quality score, no percentage,
+// no universal freshness timestamp. "not supported" describes THIS feed, never the world.
+
+type CoverageDomainKey = Exclude<keyof TeamIntelligence['coverage'], 'statisticsAreDerivedAggregates'>;
+
+const COVERAGE_ROWS: readonly { readonly key: CoverageDomainKey; readonly label: string }[] = [
+  { key: 'registrations', label: 'Registrations' },
+  { key: 'availability', label: 'Availability' },
+  { key: 'valuations', label: 'Valuations' },
+  { key: 'playerMatchStatistics', label: 'Player statistics' },
+  { key: 'appearances', label: 'Appearances' },
+  { key: 'perPlayerCards', label: 'Player cards' },
+  { key: 'standings', label: 'Standings' },
+  { key: 'managerReferee', label: 'Manager / Referee' },
+];
+
+function CoverageLabel({ state }: { state: string }) {
+  const map: Record<string, { text: string; color: string }> = {
+    'present': { text: 'PRESENT', color: 'var(--edge)' },
+    'partial': { text: 'PARTIAL', color: 'var(--warn)' },
+    'absent': { text: 'ABSENT', color: 'var(--muted)' },
+    'not-supported': { text: 'NOT SUPPORTED', color: 'var(--faint)' },
+  };
+  const m = map[state] ?? { text: state.toUpperCase(), color: 'var(--muted)' };
+  return <span className="mono" style={{ color: m.color, fontSize: 10, fontWeight: 700 }}>{m.text}</span>;
+}
+
+export function TeamCoverage({ coverage }: { coverage: TeamIntelligence['coverage'] }) {
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Data coverage" />
+      <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '4px 16px' }}>
+        {COVERAGE_ROWS.map((r) => (
+          <div key={r.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, borderBottom: '1px solid var(--line)', padding: '2px 0' }}>
+            <span className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{r.label}</span>
+            <CoverageLabel state={coverage[r.key]} />
+          </div>
+        ))}
+      </div>
+      {coverage.statisticsAreDerivedAggregates ? (
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Player statistics shown here are backend-derived aggregates.</p>
+      ) : null}
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Coverage describes this team&apos;s current data feed; NOT SUPPORTED means the feed does not provide it, not that it does not exist.
+      </p>
     </section>
   );
 }
