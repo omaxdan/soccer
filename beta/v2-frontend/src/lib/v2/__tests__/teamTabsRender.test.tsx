@@ -29,11 +29,14 @@ const RECENT: TeamFixtureLine[] = [
 ];
 
 describe('team tab helpers (pure)', () => {
-  test('resolveTeamTab defaults to overview; accepts known tabs', () => {
+  test('resolveTeamTab defaults to overview; removed tabs degrade to overview', () => {
     assert.equal(resolveTeamTab(undefined), 'overview');
     assert.equal(resolveTeamTab('nope'), 'overview');
     assert.equal(resolveTeamTab('performance'), 'performance');
-    assert.equal(resolveTeamTab('intelligence'), 'intelligence');
+    assert.equal(resolveTeamTab('squad'), 'squad');
+    assert.equal(resolveTeamTab('intelligence'), 'overview'); // removed → graceful fallback
+    assert.equal(resolveTeamTab('fixtures'), 'overview');
+    assert.equal(resolveTeamTab('history'), 'overview');
   });
   test('teamTabHref: default tab clean, others carry ?tab=', () => {
     assert.equal(teamTabHref('palmeiras-1963-72', 'overview'), '/v2/teams/palmeiras-1963-72');
@@ -43,13 +46,15 @@ describe('team tab helpers (pure)', () => {
 
 describe('TeamTabNav', () => {
   const markup = html(<TeamTabNav slug="palmeiras-1963-72" active="performance" />);
-  test('renders six tabs; default (overview) is the clean URL; active marked', () => {
-    assert.equal(TEAM_TABS.length, 6);
-    assert.equal(TEAM_TABS[0].key, 'overview');
+  test('renders three tabs; default (overview) is the clean URL; active marked', () => {
+    assert.equal(TEAM_TABS.length, 3);
+    assert.deepEqual(TEAM_TABS.map((t) => t.key), ['overview', 'squad', 'performance']);
     assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72"/);
     assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=squad"/);
-    assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=intelligence"/);
-    assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=history"/);
+    assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=performance"/);
+    assert.doesNotMatch(markup, /tab=intelligence/);
+    assert.doesNotMatch(markup, /tab=history/);
+    assert.doesNotMatch(markup, /tab=fixtures/);
     assert.match(markup, /aria-current="page"/);
   });
 });

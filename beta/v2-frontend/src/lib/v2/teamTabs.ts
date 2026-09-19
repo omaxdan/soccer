@@ -1,20 +1,22 @@
-// TEAM HUB tabs — server-rendered via ?tab=, mirroring the match/edition tab pattern.
-// Each tab answers a different question: Overview = the current intelligence briefing,
-// Squad = the roster + availability, Fixtures = schedule/results, Performance = season
-// evidence, Intelligence = the deep analytical readings, History = long-term patterns.
-// Default is Overview.
+// TEAM HUB tabs — server-rendered via ?tab=. Three destinations, each a distinct job:
+// Overview = the current intelligence briefing (summaries + links), Squad = the roster
+// and availability, Performance = the single canonical deep-evidence home (form, governed
+// readings, fixture history, season statistics, last match).
+//
+// Intelligence, Fixtures and History were removed after an IA audit: Intelligence only
+// re-showed the evidence behind Overview's briefing (→ folded into Performance), Fixtures
+// duplicated Overview's next fixture + Performance's recent results, and History was a
+// dead-end until a multi-season substrate exists. Unknown ?tab= values resolve to Overview,
+// so any old Intelligence/Fixtures/History links degrade gracefully.
 
 import { routes } from './routes';
 
-export type TeamTab = 'overview' | 'squad' | 'fixtures' | 'performance' | 'intelligence' | 'history';
+export type TeamTab = 'overview' | 'squad' | 'performance';
 
 export const TEAM_TABS: readonly { readonly key: TeamTab; readonly label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'squad', label: 'Squad' },
-  { key: 'fixtures', label: 'Fixtures' },
   { key: 'performance', label: 'Performance' },
-  { key: 'intelligence', label: 'Intelligence' },
-  { key: 'history', label: 'History' },
 ];
 
 const TAB_KEYS = new Set<string>(TEAM_TABS.map((t) => t.key));
