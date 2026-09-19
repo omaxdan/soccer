@@ -117,3 +117,34 @@ describe('TeamIntelligenceBriefing (Overview lead)', () => {
     assert.match(t2, /48\.33/);
   });
 });
+
+// ── Next fixture & selection (Overview consolidation of Upcoming + Squad) ─────────────
+import { TeamNextFixtureAndSelection } from '@/components/v2/team';
+
+const NEXT: TeamIntelligence['nextFixture'] = {
+  fixture: { fixtureId: '494', kickoffAt: '2026-09-20T14:00:00.000Z', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, opponent: { id: '66', name: 'Grêmio', slug: 'gremio-5926' }, isHome: false, status: 'SCHEDULED', score: null },
+  registeredCount: 29,
+  explicitlyUnavailable: [
+    { playerId: '733', fullName: 'Jefté', unavailabilityKindCode: 'INJURY', reason: 'Meniscus Injury', expectedReturnOn: null },
+    { playerId: '1222', fullName: 'Paulinho', unavailabilityKindCode: 'INJURY', reason: 'Muscle Injury', expectedReturnOn: null },
+  ],
+  availabilityUnknown: Array.from({ length: 27 }, (_, i) => ({ playerId: `9${i}`, fullName: `U ${i}` })),
+};
+
+describe('TeamNextFixtureAndSelection (Overview consolidation)', () => {
+  const markup = html(<TeamNextFixtureAndSelection nextFixture={NEXT} teamName="Palmeiras" slug="palmeiras-1963-72" />);
+  const t = text(<TeamNextFixtureAndSelection nextFixture={NEXT} teamName="Palmeiras" slug="palmeiras-1963-72" />);
+  test('folds fixture + registered count + unavailable + honest unknown, links to full squad', () => {
+    assert.match(t, /Next fixture .* selection/i);
+    assert.match(markup, /href="\/v2\/matches\/gremio-vs-palmeiras-494"/); // opponent home for an away fixture
+    assert.match(t, /Grêmio · Away · Brasileirão Betano/);
+    assert.match(t, /29 registered players/);
+    assert.match(t, /Unavailable \(2\)/); assert.match(t, /INJURY · Jefté · Meniscus Injury/);
+    assert.match(t, /27 registered players have no current unavailability record/);
+    assert.match(t, /not confirmed available, fit, rested or selected/i);
+    assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=squad"/);
+  });
+  test('no next fixture → honest empty state', () => {
+    assert.match(text(<TeamNextFixtureAndSelection nextFixture={null} teamName="X" slug="x-1" />), /No upcoming fixture scheduled/i);
+  });
+});

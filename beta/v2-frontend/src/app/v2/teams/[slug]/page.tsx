@@ -9,8 +9,8 @@ import { EmptyState } from '@/components/v2/ui';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
-  TeamUpcomingFixtures, TeamRecentFixtures, TeamPlayers, TeamSquadSummary, TeamCoverage,
-  TeamTabNav, TeamIntelligenceBriefing, type TeamStandingEntry,
+  TeamUpcomingFixtures, TeamRecentFixtures, TeamPlayers, TeamCoverage,
+  TeamTabNav, TeamIntelligenceBriefing, TeamNextFixtureAndSelection, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
 
@@ -82,7 +82,9 @@ export default async function V2TeamPage({ params, searchParams }: {
       <TeamTabNav slug={slug} active={tab} />
 
       <div className="space-y-4" style={{ minWidth: 0 }}>
-        {/* OVERVIEW — the current intelligence briefing (no deep stats, no full roster) */}
+        {/* OVERVIEW — the current intelligence briefing + next fixture/selection + coverage.
+            The deep governed readings (Readiness / Home-Away / Consistency) live on the
+            Intelligence tab, so Overview never repeats the verdict or the volatility value. */}
         {tab === 'overview' && (
           <div className="space-y-4">
             <TeamIntelligenceBriefing
@@ -91,9 +93,7 @@ export default async function V2TeamPage({ params, searchParams }: {
               readiness={readiness?.readiness ?? null}
               coverage={performance?.coverage.overall ?? 'absent'}
             />
-            {governedPanels}
-            <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
-            <TeamSquadSummary squad={intelligence.squad} availability={intelligence.availability} slug={slug} />
+            <TeamNextFixtureAndSelection nextFixture={intelligence.nextFixture} teamName={team.name} slug={slug} />
             <TeamCoverage coverage={intelligence.coverage} />
           </div>
         )}
