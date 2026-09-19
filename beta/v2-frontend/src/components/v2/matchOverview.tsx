@@ -439,6 +439,21 @@ export function HeadToHeadUnavailable() {
   );
 }
 
+// ═══ LINEUPS — honest empty state when the lineups read is unavailable ════════════════
+//
+// Page-level fallback for when the lineups sub-resource returns nothing at all (vs
+// MatchLineupsPanel's own absent/partial coverage states). "Not available yet" — it does
+// NOT claim players are unavailable, nor that lineups permanently do not exist.
+
+export function LineupsUnavailable() {
+  return (
+    <section className="space-y-2">
+      <SectionTitle>Lineups</SectionTitle>
+      <EmptyState message="Lineup information is not available for this fixture yet." />
+    </section>
+  );
+}
+
 // ═══ STATISTICS (canonical) — period + grouped, neutral comparison bars ═══════════════
 
 const GROUP_ORDER = ['Match overview', 'Shots', 'Attack', 'Passes', 'Defending', 'Duels', 'Goalkeeping'];
