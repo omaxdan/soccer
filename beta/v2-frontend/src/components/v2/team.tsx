@@ -581,7 +581,7 @@ export function TeamSeasonStatistics({ playerStatistics }: { playerStatistics: T
           <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
             Descriptive · derived aggregates — backend season totals summed across every recorded player-match observation; fx = fixtures observed, pl = players observed. Not an intelligence rating, ranking or score.
           </p>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {groups.map((g) => (
               <div key={g.title} className="space-y-1">
                 <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{g.title}</p>
