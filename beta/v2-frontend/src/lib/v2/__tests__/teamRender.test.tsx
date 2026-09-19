@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
-  TeamConsistencyPanel, TeamCompetitionContext,
+  TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics,
   TeamUpcomingFixtures, TeamPlayers,
 } from '@/components/v2/team';
 import type {
@@ -71,6 +71,21 @@ const NEXT_FIXTURE: NonNullable<TeamIntelligence['nextFixture']> = {
   availabilityUnknown: Array.from({ length: 27 }, (_, i) => ({ playerId: `6${i}`, fullName: `Squad Member ${i}` })),
 };
 const READING: TeamReadinessReading = { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null };
+const PLAYER_STATS: TeamIntelligence['playerStatistics'] = {
+  playersWithStats: 30,
+  statisticKeys: [
+    { statisticKey: 'goals', valueType: 'number', fixtures: 25, players: 12, numericTotal: '48', numericMean: '1.0667' },
+    { statisticKey: 'expectedGoals', valueType: 'number', fixtures: 28, players: 20, numericTotal: '31.9995', numericMean: '0.5' },
+    { statisticKey: 'accuratePass', valueType: 'number', fixtures: 28, players: 30, numericTotal: '10478', numericMean: '24.0874' },
+    { statisticKey: 'saves', valueType: 'number', fixtures: 20, players: 2, numericTotal: '80', numericMean: '4' },
+    // non-numeric provider metadata → null total → must be excluded (not an athlete-facing stat)
+    { statisticKey: 'ratingVersions', valueType: 'json', fixtures: 28, players: 30, numericTotal: null, numericMean: null },
+    // a numeric key NOT in the curated catalogue → must not appear (no raw-key dump)
+    { statisticKey: 'passValueNormalized', valueType: 'number', fixtures: 28, players: 30, numericTotal: '123.45', numericMean: '0.3' },
+    // a catalogued key present but with a null total → must be excluded (never zero-filled)
+    { statisticKey: 'totalTackle', valueType: 'number', fixtures: 0, players: 0, numericTotal: null, numericMean: null },
+  ],
+};
 
 function header(over: Partial<React.ComponentProps<typeof TeamIdentityHeader>> = {}) {
   return <TeamIdentityHeader team={TEAM} competitions={COMPETITIONS} season="Brasileirão Betano · Brasileiro Serie A 2026" standing={STANDING} homeWinRate={HOME_WR} awayWinRate={AWAY_WR} {...over} />;
@@ -292,6 +307,54 @@ describe('Next-fixture selection picture (descriptive availability summary)', ()
   test('singular grammar when exactly one registered player has no record', () => {
     const one = { ...NEXT_FIXTURE, availabilityUnknown: [{ playerId: '60', fullName: 'Only One' }] };
     assert.match(text(<TeamUpcomingFixtures upcoming={UPCOMING} teamName="Flamengo" nextFixture={one} />), /1 registered player has no current unavailability record/);
+  });
+});
+
+// SEASON STATISTICS — descriptive backend-derived season aggregates. Renders numericTotal
+// verbatim + fixtures/players coverage, grouped and curated. Locks: only catalogued numeric
+// keys appear, JSON provider metadata and null totals are excluded, no numericMean/percentage/
+// per-90, and it is NOT badged governed.
+describe('Season statistics (descriptive derived aggregates)', () => {
+  test('renders curated numeric totals by group with fixtures/players coverage', () => {
+    const t = text(<TeamSeasonStatistics playerStatistics={PLAYER_STATS} />);
+    assert.match(t, /Season statistics/i);
+    assert.match(t, /derived aggregates/i);
+    // groups with ≥1 present metric
+    assert.match(t, /Attacking/); assert.match(t, /Passing &amp; distribution/); assert.match(t, /Goalkeeping/);
+    // curated labels + backend totals verbatim
+    assert.match(t, /Goals\s+48/); assert.match(t, /xG\s+31\.9995/);
+    assert.match(t, /Accurate passes\s+10478/); assert.match(t, /Saves\s+80/);
+    // coverage metadata (no percentages)
+    assert.match(t, /25 fx · 12 pl/);
+  });
+  test('excludes JSON provider metadata, non-catalogued keys, and null totals (no zero-fill, no key dump)', () => {
+    const t = text(<TeamSeasonStatistics playerStatistics={PLAYER_STATS} />);
+    assert.doesNotMatch(t, /ratingVersions/i);      // JSON provider metadata excluded
+    assert.doesNotMatch(t, /passValueNormalized/i); // numeric but not catalogued → not dumped
+    assert.doesNotMatch(t, /normalized/i);
+    assert.doesNotMatch(t, /Tackles/);              // catalogued but null total → excluded
+    assert.doesNotMatch(t, /Defending/);            // whole group has no present metric → absent
+    // Saves is the only present goalkeeping metric; a null-total goalkeeping key never shows a 0.
+    assert.doesNotMatch(t, /Goals prevented/);
+  });
+  test('numericMean is NOT surfaced (hidden denominator) and there is no per-90/percentage/rating-score language', () => {
+    const t = text(<TeamSeasonStatistics playerStatistics={PLAYER_STATS} />).toLowerCase();
+    assert.equal(t.includes('1.0667'), false);   // mean per player-match not rendered
+    assert.equal(t.includes('24.0874'), false);
+    for (const term of ['predicted', 'prediction', 'probability', 'forecast', 'per 90', 'per-90', 'per match', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'recommend', 'percentile', 'conversion', 'out of 100']) {
+      assert.equal(t.includes(term), false, `must not contain "${term}"`);
+    }
+    assert.doesNotMatch(t, /\bbet\b/);
+    assert.doesNotMatch(t, /\btravel\b/);   // physical "distance covered" is legitimate; travel distance is not
+    assert.doesNotMatch(t, /%/);
+  });
+  test('descriptive, never badged governed', () => {
+    const markup = html(<TeamSeasonStatistics playerStatistics={PLAYER_STATS} />);
+    assert.match(markup, /context/);          // descriptive context eyebrow badge
+    assert.doesNotMatch(markup, /governed/i);  // never governed, no module status badge
+  });
+  test('empty statistics → honest empty state (not a fabricated table of zeros)', () => {
+    assert.match(text(<TeamSeasonStatistics playerStatistics={{ playersWithStats: 0, statisticKeys: [] }} />), /No season statistics recorded yet/i);
   });
 });
 
