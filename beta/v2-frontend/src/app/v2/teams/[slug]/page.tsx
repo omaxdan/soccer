@@ -8,7 +8,7 @@ import { Breadcrumb } from '@/components/v2/nav';
 import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
-  TeamRecentFixtures, TeamPlayers, TeamCoverage,
+  TeamPlayers, TeamCoverage,
   TeamTabNav, TeamIntelligenceBriefing, TeamNextFixtureAndSelection, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
@@ -89,14 +89,19 @@ export default async function V2TeamPage({ params, searchParams }: {
           </div>
         )}
 
-        {/* SQUAD — full roster + registration + availability + valuation */}
+        {/* SQUAD — full roster + registration + availability + valuation, then the squad's
+            recorded performances in the previous match (last-match player statistics). */}
         {tab === 'squad' && (
-          <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
+          <div className="space-y-4">
+            <TeamPlayers squad={intelligence.squad} availability={intelligence.availability} valuations={intelligence.valuations} />
+            <TeamLastMatch playerPerformances={intelligence.playerPerformances} squad={intelligence.squad} teamName={team.name} />
+          </div>
         )}
 
-        {/* PERFORMANCE — the single canonical deep-evidence home: recent form + venue split,
-            the governed readings (with evidence), competition participation, recent results,
-            season statistics and the last match. No fixture rows repeated in full elsewhere. */}
+        {/* PERFORMANCE — the single canonical deep-evidence home: recent form + venue split
+            (the one place recent fixtures live in full), the governed readings, competition
+            participation and season statistics. The descriptive signal metrics are not
+            repeated here — they are the Overview briefing's summary. */}
         {tab === 'performance' && (
           <div className="space-y-4">
             <TeamCurrentForm
@@ -104,16 +109,12 @@ export default async function V2TeamPage({ params, searchParams }: {
               home={intelligence.homeAwayContext.home}
               away={intelligence.homeAwayContext.away}
               teamName={team.name}
-              overall={performance?.overall ?? EMPTY_OVERALL}
-              coverage={performance?.coverage.overall ?? 'absent'}
             />
             <TeamReadinessPanel readiness={readiness?.readiness ?? null} coverage={readiness?.coverage ?? { readiness: 'absent', readinessIsGoverned: true }} />
             <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
             <TeamConsistencyPanel reading={governed?.consistency ?? null} />
             <TeamCompetitionContext participation={intelligence.participation} />
-            <TeamRecentFixtures recent={intelligence.fixtures.recent} teamName={team.name} />
             <TeamSeasonStatistics playerStatistics={intelligence.playerStatistics} />
-            <TeamLastMatch playerPerformances={intelligence.playerPerformances} squad={intelligence.squad} teamName={team.name} />
           </div>
         )}
       </div>

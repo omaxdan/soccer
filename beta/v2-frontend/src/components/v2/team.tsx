@@ -141,19 +141,6 @@ export function TeamIdentityHeader({ team, competitions, season, standing, homeW
   );
 }
 
-// ═══ PERFORMANCE SNAPSHOT — descriptive persisted features (context) ═════════════════
-
-function MetricCell({ label, metric }: { label: string; metric: PerformanceMetric | null }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{label}</span>
-      <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 15, fontWeight: 700 }}>{metric ? orDash(metric.value) : '—'}</span>
-      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
-        {metric ? `${metric.unit} · n=${metric.sample.matches}${metric.sample.meetsThreshold ? '' : ' ·below thresh'}` : 'no sample'}
-      </span>
-    </div>
-  );
-}
 
 // ═══ COMPETITION CONTEXT — participation counts per governed edition ═════════════════
 
@@ -238,13 +225,16 @@ function VenueFormTable({ title, lines, teamName }: { title: string; lines: read
   );
 }
 
-export function TeamCurrentForm({ recent, home, away, teamName, overall, coverage }: {
+// Current form = FORM EVIDENCE only (the W/D/L sequence + the recent home/away match
+// tables). The descriptive signal metrics (home/away form, momentum, goal-margin
+// volatility, vs-stronger-opponents) are NOT repeated here: they are the Overview
+// briefing's canonical summary, and goal-margin volatility is the Consistency reading
+// shown below on this same tab. Keeping them here too was triple-counting the same values.
+export function TeamCurrentForm({ recent, home, away, teamName }: {
   recent: readonly TeamFixtureLine[];
   home: readonly TeamFixtureLine[];
   away: readonly TeamFixtureLine[];
   teamName: string;
-  overall: TeamPerformanceOverall;
-  coverage: 'present' | 'partial' | 'absent';
 }) {
   return (
     <section className="space-y-2">
@@ -258,16 +248,6 @@ export function TeamCurrentForm({ recent, home, away, teamName, overall, coverag
           </div>
         </div>
       )}
-      {/* Descriptive persisted performance features (context — not a governed reading) */}
-      {coverage !== 'absent' && (
-        <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 12 }}>
-          <MetricCell label="Home form" metric={overall.homeForm} />
-          <MetricCell label="Away form" metric={overall.awayForm} />
-          <MetricCell label="Momentum" metric={overall.momentum} />
-          <MetricCell label="Goal-margin vol." metric={overall.goalMarginVolatility} />
-          <MetricCell label="Vs stronger opponents" metric={overall.giantKillerPpg} />
-        </div>
-      )}
       {recent.length > 0 && (
         <>
           <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Recent home/away fixtures — supporting evidence, not a home/away calculation.</p>
@@ -277,7 +257,6 @@ export function TeamCurrentForm({ recent, home, away, teamName, overall, coverag
           </div>
         </>
       )}
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Persisted descriptive features — not a governed reading.</p>
     </section>
   );
 }
