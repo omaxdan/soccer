@@ -10,7 +10,7 @@ import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics, TeamLastMatch,
   TeamUpcomingFixtures, TeamRecentFixtures, TeamPlayers, TeamSquadSummary, TeamCoverage,
-  TeamTabNav, type TeamStandingEntry,
+  TeamTabNav, TeamIntelligenceBriefing, type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
 
@@ -85,6 +85,12 @@ export default async function V2TeamPage({ params, searchParams }: {
         {/* OVERVIEW — the current intelligence briefing (no deep stats, no full roster) */}
         {tab === 'overview' && (
           <div className="space-y-4">
+            <TeamIntelligenceBriefing
+              teamName={team.name}
+              overall={performance?.overall ?? EMPTY_OVERALL}
+              readiness={readiness?.readiness ?? null}
+              coverage={performance?.coverage.overall ?? 'absent'}
+            />
             {governedPanels}
             <TeamUpcomingFixtures upcoming={intelligence.fixtures.upcoming} teamName={team.name} nextFixture={intelligence.nextFixture} />
             <TeamSquadSummary squad={intelligence.squad} availability={intelligence.availability} slug={slug} />

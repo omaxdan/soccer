@@ -265,7 +265,7 @@ export function TeamCurrentForm({ recent, home, away, teamName, overall, coverag
           <MetricCell label="Away form" metric={overall.awayForm} />
           <MetricCell label="Momentum" metric={overall.momentum} />
           <MetricCell label="Goal-margin vol." metric={overall.goalMarginVolatility} />
-          <MetricCell label="Giant-killer PPG" metric={overall.giantKillerPpg} />
+          <MetricCell label="Vs stronger opponents" metric={overall.giantKillerPpg} />
         </div>
       )}
       {recent.length > 0 && (
@@ -278,6 +278,90 @@ export function TeamCurrentForm({ recent, home, away, teamName, overall, coverag
         </>
       )}
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Persisted descriptive features — not a governed reading.</p>
+    </section>
+  );
+}
+
+// ═══ TEAM INTELLIGENCE BRIEFING — the Overview lead card (current picture + signals) ══
+//
+// The intelligence-first headline: a plain-language current-picture line taken from the
+// backend's OWN interpretation (the readiness verdict text — never AI prose), then the key
+// signals as value + unit + window + reliability. Labels are user-facing (no "Giant Killer",
+// no backend terms). NOTHING is computed here: values, units, samples and the narrative are
+// rendered exactly as the API returned them. A below-threshold sample is flagged "limited
+// sample"; a momentum sign shows a direction cue (it is inherently a signed trend), but no
+// arrow/trend is invented for the unsigned index metrics.
+
+interface SignalSpec { readonly label: string; readonly pick: (o: TeamPerformanceOverall) => PerformanceMetric | null; readonly signed?: boolean }
+const INTEL_SIGNALS: readonly SignalSpec[] = [
+  { label: 'Home form', pick: (o) => o.homeForm },
+  { label: 'Away form', pick: (o) => o.awayForm },
+  { label: 'Momentum', pick: (o) => o.momentum, signed: true },
+  { label: 'Goal-margin volatility', pick: (o) => o.goalMarginVolatility },
+  { label: 'Vs stronger opponents', pick: (o) => o.giantKillerPpg },
+];
+
+function SignalCell({ label, metric, signed }: { label: string; metric: PerformanceMetric | null; signed?: boolean }) {
+  if (!metric) {
+    return (
+      <div className="panel-raised" style={{ padding: 10, borderRadius: 6 }}>
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{label}</p>
+        <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 4 }}>Not enough data</p>
+      </div>
+    );
+  }
+  const dir = signed ? (metric.value > 0 ? { s: '▲', c: 'var(--edge)' } : metric.value < 0 ? { s: '▼', c: 'var(--risk)' } : { s: '·', c: 'var(--muted)' }) : null;
+  return (
+    <div className="panel-raised" style={{ padding: 10, borderRadius: 6 }}>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{label}</p>
+      <p style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+        <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 20, fontWeight: 700 }}>{orDash(metric.value)}</span>
+        {dir ? <span className="mono" style={{ color: dir.c, fontSize: 13 }} aria-hidden>{dir.s}</span> : null}
+      </p>
+      <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        {metric.unit} · last {metric.sample.matches} matches
+      </p>
+      {!metric.sample.meetsThreshold ? <p className="label-cap" style={{ color: 'var(--warn)', fontSize: 9 }}>limited sample</p> : null}
+    </div>
+  );
+}
+
+export function TeamIntelligenceBriefing({ teamName, overall, readiness, coverage }: {
+  teamName: string;
+  overall: TeamPerformanceOverall;
+  readiness: TeamReadinessReading | null;
+  coverage: 'present' | 'partial' | 'absent';
+}) {
+  const asOf = INTEL_SIGNALS.map((s) => s.pick(overall)).find((m) => m)?.asOf ?? null;
+  return (
+    <section className="space-y-2">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <p className="eyebrow">Team intelligence</p>
+        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Key signals for {teamName}</span>
+        {asOf ? <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, marginLeft: 'auto' }}>as of <Kickoff iso={asOf} /></span> : null}
+      </div>
+      {coverage === 'absent' && !readiness ? (
+        <EmptyState message="Current-form signals are not available for this team yet." />
+      ) : (
+        <div className="panel" style={{ padding: 14 }}>
+          {/* Current picture — the backend's own interpretation, verbatim (never invented) */}
+          {readiness?.verdictText ? (
+            <div style={{ marginBottom: 12 }}>
+              <p className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>Current picture</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 3 }}>{readiness.verdictText}</p>
+              <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 3 }}>
+                Based on {readiness.sample.matches} matches{readiness.sample.meetsThreshold ? '' : ' · limited sample'} · updated <Kickoff iso={readiness.asOf} />
+              </p>
+            </div>
+          ) : null}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            {INTEL_SIGNALS.map((s) => <SignalCell key={s.label} label={s.label} metric={s.pick(overall)} signed={s.signed} />)}
+          </div>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 10 }}>
+            Form and momentum are descriptive indicators over the stated window — not a prediction. Each signal shows its own sample size.
+          </p>
+        </div>
+      )}
     </section>
   );
 }

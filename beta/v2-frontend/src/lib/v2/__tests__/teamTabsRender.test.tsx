@@ -81,3 +81,39 @@ describe('TeamRecentFixtures', () => {
     assert.match(text(<TeamRecentFixtures recent={[]} teamName="Palmeiras" />), /No completed fixtures recorded/i);
   });
 });
+
+// ── Team Intelligence briefing (Overview lead card) ──────────────────────────────────
+import { TeamIntelligenceBriefing } from '@/components/v2/team';
+import type { TeamPerformanceOverall, TeamReadinessReading } from '@/lib/v2/types';
+
+const PM = (value: number, matches: number, meets: boolean, unit: string, direction: 'HIGHER_IS_STRONGER' | 'UNSIGNED' = 'HIGHER_IS_STRONGER') =>
+  ({ value, unit, direction, sample: { matches, meetsThreshold: meets }, asOf: '2026-09-06T21:30:00.000Z' });
+const OVERALL: TeamPerformanceOverall = {
+  homeForm: PM(48.33, 6, true, 'index'), awayForm: PM(34, 4, false, 'index'),
+  momentum: PM(-7, 10, true, 'points'), goalMarginVolatility: PM(1.89, 10, true, 'goals', 'UNSIGNED'),
+  giantKillerPpg: PM(1.33, 9, true, 'ppg'),
+};
+const READY: TeamReadinessReading = { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form: last-five points minus prior-five is -7.', inactiveReason: null, asOf: '2026-09-06T21:30:00.000Z', evidence: null };
+
+describe('TeamIntelligenceBriefing (Overview lead)', () => {
+  const t = text(<TeamIntelligenceBriefing teamName="Palmeiras" overall={OVERALL} readiness={READY} coverage="present" />);
+  test('shows current-picture narrative verbatim + signals with window/reliability', () => {
+    assert.match(t, /Team intelligence/i); assert.match(t, /Key signals for Palmeiras/);
+    assert.match(t, /Current picture/); assert.match(t, /Steady form: last-five points minus prior-five is -7\./);
+    assert.match(t, /48\.33/); assert.match(t, /last 6 matches/);
+    assert.match(t, /34/); assert.match(t, /limited sample/);       // awayForm below threshold
+    assert.match(t, /Based on 10 matches/); assert.match(t, /not a prediction/i);
+  });
+  test('uses user-facing labels only (no "Giant Killer", no backend terms)', () => {
+    const lower = t.toLowerCase();
+    assert.match(t, /Vs stronger opponents/);
+    for (const term of ['giant killer', 'giant-killer', 'governed', 'feature', 'module', 'substrate', 'pipeline']) {
+      assert.equal(lower.includes(term), false, `must not contain "${term}"`);
+    }
+  });
+  test('no narrative when readiness absent; signals still render honestly', () => {
+    const t2 = text(<TeamIntelligenceBriefing teamName="X" overall={OVERALL} readiness={null} coverage="present" />);
+    assert.doesNotMatch(t2, /Current picture/);
+    assert.match(t2, /48\.33/);
+  });
+});
