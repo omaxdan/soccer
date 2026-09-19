@@ -8,7 +8,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { MatchHeader, MatchBrief, MatchTabNav, Collapsible, MATCH_MAIN_CLASS } from '@/components/v2/matchWorkspace';
+import { MatchBrief, MatchTabNav, Collapsible, MATCH_MAIN_CLASS } from '@/components/v2/matchWorkspace';
+import { MatchHeader } from '@/components/v2/matchOverview';
 import { resolveMatchTab, matchTabHref, MATCH_TABS } from '@/lib/v2/matchTabs';
 import type { ApiMatchHeader, MatchDetailResponse, MatchResult, MatchVenueInfo, CoverageState } from '@/lib/v2/types';
 
@@ -85,14 +86,16 @@ describe('MatchBrief — scheduled (no fabricated score)', () => {
 });
 
 describe('MatchTabNav', () => {
-  const markup = html(<MatchTabNav slug="flamengo-vs-mirassol-344" active="match-data" />);
-  test('renders four tabs; default (intelligence) is the clean URL; active marked', () => {
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344"/);           // intelligence = clean
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=evidence"/);
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=match-data"/);
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=context"/);
+  const markup = html(<MatchTabNav slug="flamengo-vs-mirassol-344" active="statistics" />);
+  test('renders eight tabs; default (overview) is the clean URL; active marked', () => {
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344"/);           // overview = clean
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=comparison"/);
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=form"/);
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=statistics"/);
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=intelligence"/);
     assert.match(markup, /aria-current="page"/);
-    assert.equal(MATCH_TABS.length, 4);
+    assert.equal(MATCH_TABS.length, 8);
+    assert.equal(MATCH_TABS[0].key, 'overview');
   });
 });
 
@@ -104,15 +107,15 @@ describe('Collapsible', () => {
 });
 
 describe('match tab helpers (pure)', () => {
-  test('resolveMatchTab defaults to intelligence; accepts known tabs', () => {
-    assert.equal(resolveMatchTab(undefined), 'intelligence');
-    assert.equal(resolveMatchTab('nope'), 'intelligence');
-    assert.equal(resolveMatchTab('evidence'), 'evidence');
-    assert.equal(resolveMatchTab('match-data'), 'match-data');
-    assert.equal(resolveMatchTab('context'), 'context');
+  test('resolveMatchTab defaults to overview; accepts known tabs', () => {
+    assert.equal(resolveMatchTab(undefined), 'overview');
+    assert.equal(resolveMatchTab('nope'), 'overview');
+    assert.equal(resolveMatchTab('comparison'), 'comparison');
+    assert.equal(resolveMatchTab('statistics'), 'statistics');
+    assert.equal(resolveMatchTab('intelligence'), 'intelligence');
   });
   test('matchTabHref: default tab clean, others carry ?tab=', () => {
-    assert.equal(matchTabHref('x-1', 'intelligence'), '/v2/matches/x-1');
-    assert.equal(matchTabHref('x-1', 'context'), '/v2/matches/x-1?tab=context');
+    assert.equal(matchTabHref('x-1', 'overview'), '/v2/matches/x-1');
+    assert.equal(matchTabHref('x-1', 'statistics'), '/v2/matches/x-1?tab=statistics');
   });
 });

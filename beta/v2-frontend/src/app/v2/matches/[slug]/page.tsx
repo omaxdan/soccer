@@ -8,29 +8,20 @@ import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { resolveMatchTab } from '@/lib/v2/matchTabs';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
-import { RecentVenueForm, ReadingCard, TeamIntelligencePanel } from '@/components/v2/ui';
+import { RecentVenueForm, TeamIntelligencePanel, ReadingCard, FormStrip } from '@/components/v2/ui';
 import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
+import { MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel } from '@/components/v2/match';
+import { MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
 import {
-  MatchResultPanel, MatchTeamStatisticsPanel, MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel, MatchCoverage,
-} from '@/components/v2/match';
-import { MatchHeader, MatchBrief, MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
+  MatchHeader, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
+  CompactForm, CompactVenue, AvailabilityFooter, HeadToHeadUnavailable, MatchStatisticsFull,
+} from '@/components/v2/matchOverview';
 import type {
-  ApiTeamIntelligence, ApiEditionFixture, MatchDetailResponse, MatchIntelligence,
+  ApiEditionFixture, MatchDetailResponse,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse, MatchLifecycleResponse, MatchVenueResponse,
 } from '@/lib/v2/types';
 
 export const dynamic = 'force-dynamic';
-
-/** Live (non-sealed) module readings for one team — context, not sealed substrate. */
-function TeamLiveReadings({ name, intel }: { name: string; intel: ApiTeamIntelligence }) {
-  return (
-    <section className="space-y-2" aria-label={`${name} live readings`}>
-      <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{name}</h3>
-      <ReadingCard title="Form Momentum / Trajectory" reading={intel.readiness} />
-      <ReadingCard title="Home / Away Split" reading={intel.homeAwaySplit} />
-    </section>
-  );
-}
 
 export default async function V2MatchPage({ params, searchParams }: {
   params: Promise<{ slug: string }>;
@@ -66,6 +57,10 @@ export default async function V2MatchPage({ params, searchParams }: {
   const awayName = match.awayTeam.name;
   const editionId = match.edition.id;
   const editionHref = routes.edition({ id: match.edition.id, competition: { slug: match.competition.slug }, seasonLabel: match.edition.seasonLabel });
+  const stats = statsRes?.teamStatistics ?? null;
+  const result = resultRes?.result ?? null;
+  const venue = venueRes?.venue ?? null;
+  const completed = match.status === 'COMPLETED';
 
   // Prev/next within the same edition — from the existing fixtures read, never fabricated.
   let prev: ApiEditionFixture | null = null;
@@ -74,91 +69,129 @@ export default async function V2MatchPage({ params, searchParams }: {
   if (editionData) ({ prev, next } = findAdjacentFixtures(editionData.fixtures, id));
 
   const coverage: CoverageFlag[] = [
-    ['match', 'present'],
-    ['result', resultRes?.coverage.result ?? 'absent'],
-    ['intelligence', sealed ? 'present' : 'absent'],
-    ['statistics', statsRes?.teamStatistics.coverage.teamStatistics ?? 'absent'],
-    ['lineups', lineupsRes?.lineups.coverage.lineups ?? 'absent'],
-    ['venue', venueRes?.coverage.venue ?? 'absent'],
-    ['lifecycle', lifecycleRes?.lifecycle.coverage.transitions ?? 'absent'],
-    ['weather', 'not-supported'],
-    ['h2h', 'not-supported'],
+    ['Result', resultRes?.coverage.result ?? 'absent'],
+    ['Statistics', statsRes?.teamStatistics.coverage.teamStatistics ?? 'absent'],
+    ['Lineups', lineupsRes?.lineups.coverage.lineups ?? 'absent'],
+    ['Venue', venueRes?.coverage.venue ?? 'absent'],
+    ['Recent form', 'present'],
+    ['Intelligence', sealed ? 'present' : 'absent'],
   ];
 
   const crumbs = [
-    { label: 'Leagues', href: routes.leagues() },
+    { label: 'Matches', href: routes.leagues() },
     { label: `${match.competition.name} · ${match.edition.seasonLabel}`, href: editionHref },
-    { label: `${homeName} v ${awayName}` },
+    { label: `${homeName} vs ${awayName}` },
   ];
 
   return (
     <main className={MATCH_MAIN_CLASS}>
       <Breadcrumb items={crumbs} />
-      <MatchHeader context={detail} venue={venueRes?.venue ?? null} />
+      <MatchHeader context={detail} venue={venue} />
+      <MatchTabNav slug={slug} active={tab} />
 
-      <div className="grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] gap-4">
-        <MatchBrief match={match} result={resultRes?.result ?? null} venue={venueRes?.venue ?? null} coverage={coverage} />
-
-        <div className="space-y-4" style={{ minWidth: 0 }}>
-          <MatchTabNav slug={slug} active={tab} />
-
-          {/* TAB 1 — INTELLIGENCE (governed, primary) */}
-          {tab === 'intelligence' && (
-            sealed
-              ? <div className="space-y-4">
-                  <ProvenanceBar provenance={sealed.intelligence.provenance} />
-                  <VerdictBand verdict={sealed.intelligence.verdict} />
-                  <ModulesBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
-                  <PreparednessBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
-                  <Collapsible summary="Cited by calculation">
-                    <CitedEvidencePanel citedEvidence={sealed.intelligence.citedEvidence} />
-                  </Collapsible>
-                </div>
-              : <IntelligenceUnavailable />
-          )}
-
-          {/* TAB 2 — EVIDENCE (context, not calculation substrate) */}
-          {tab === 'evidence' && (
-            <div className="space-y-4">
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <p className="eyebrow" style={{ color: 'var(--cool)' }}>Context · not part of calculation</p>
+      <div className="space-y-4" style={{ minWidth: 0 }}>
+        {/* OVERVIEW — "what matters about this match?" */}
+        {tab === 'overview' && (
+          <div className="space-y-4">
+            <IntelligenceBoard detail={detail} />
+            <KeySignals detail={detail} stats={stats} />
+            <MatchStatePanel detail={detail} result={result} />
+            {completed && stats && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <KeyMatchEvidence stats={stats} slug={slug} />
+                <MatchProgression stats={stats} result={result} />
               </div>
-              <section className="space-y-2">
-                <p className="label-cap" style={{ color: 'var(--muted)' }}>Recent venue form</p>
-                <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
-              </section>
-              <section className="space-y-2">
-                <p className="label-cap" style={{ color: 'var(--muted)' }}>Team comparison</p>
-                <TeamIntelligencePanel home={detail.teamFeatures.home} away={detail.teamFeatures.away} homeName={homeName} awayName={awayName} />
-              </section>
-              <section className="space-y-2">
-                <p className="label-cap" style={{ color: 'var(--muted)' }}>Live module readings</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <TeamLiveReadings name={homeName} intel={detail.intelligence.home} />
-                  <TeamLiveReadings name={awayName} intel={detail.intelligence.away} />
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CompactForm detail={detail} slug={slug} />
+              <CompactVenue venue={venue} slug={slug} />
+            </div>
+            <AvailabilityFooter flags={coverage} />
+          </div>
+        )}
+
+        {/* COMPARISON — "how do the two teams compare?" */}
+        {tab === 'comparison' && (
+          <section className="space-y-2">
+            <p className="eyebrow">Team comparison</p>
+            <TeamIntelligencePanel home={detail.teamFeatures.home} away={detail.teamFeatures.away} homeName={homeName} awayName={awayName} />
+          </section>
+        )}
+
+        {/* FORM — "what has each team done recently?" */}
+        {tab === 'form' && (
+          <div className="space-y-4">
+            <section className="space-y-2">
+              <p className="eyebrow">Recent results</p>
+              <div className="panel" style={{ padding: 12, display: 'grid', gap: 10 }}>
+                <div><p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>{homeName}</p><FormStrip fixtures={detail.form.home} /></div>
+                <div><p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>{awayName}</p><FormStrip fixtures={detail.form.away} /></div>
+              </div>
+            </section>
+            <section className="space-y-2">
+              <p className="eyebrow">Recent venue form</p>
+              <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
+            </section>
+          </div>
+        )}
+
+        {/* LINEUPS — "who is playing / who played?" */}
+        {tab === 'lineups' && lineupsRes && <MatchLineupsPanel lineups={lineupsRes.lineups} />}
+
+        {/* H2H — "what has happened between these teams historically?" */}
+        {tab === 'h2h' && <HeadToHeadUnavailable />}
+
+        {/* STATISTICS — "what actually happened on the pitch?" */}
+        {tab === 'statistics' && (
+          stats
+            ? <MatchStatisticsFull stats={stats} homeName={homeName} awayName={awayName} />
+            : <MatchStatePanel detail={detail} result={result} />
+        )}
+
+        {/* VENUE — "what venue / location context surrounds this fixture?" */}
+        {tab === 'venue' && (
+          <div className="space-y-4">
+            {venueRes && <MatchVenuePanel matchVenue={{ venue: venueRes.venue, isNeutralVenue: venueRes.isNeutralVenue, coverage: venueRes.coverage }} />}
+            {lifecycleRes && <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />}
+          </div>
+        )}
+
+        {/* INTELLIGENCE — "why does PitchTerminal see it that way?" */}
+        {tab === 'intelligence' && (
+          <div className="space-y-4">
+            {sealed && (
+              <>
+                <ProvenanceBar provenance={sealed.intelligence.provenance} />
+                <VerdictBand verdict={sealed.intelligence.verdict} />
+                <ModulesBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
+                <PreparednessBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
+                <Collapsible summary="Supporting data">
+                  <CitedEvidencePanel citedEvidence={sealed.intelligence.citedEvidence} />
+                </Collapsible>
+              </>
+            )}
+            <section className="space-y-2">
+              <p className="eyebrow">Current signals</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <p className="label-cap" style={{ color: 'var(--muted)' }}>{homeName}</p>
+                  <ReadingCard title="Form momentum / trajectory" reading={detail.intelligence.home.readiness} />
+                  <ReadingCard title="Home / away split" reading={detail.intelligence.home.homeAwaySplit} />
                 </div>
-              </section>
-            </div>
-          )}
-
-          {/* TAB 3 — MATCH DATA (observed) */}
-          {tab === 'match-data' && (
-            <div className="space-y-4">
-              {resultRes && <MatchResultPanel result={resultRes.result} coverage={resultRes.coverage} homeName={homeName} awayName={awayName} />}
-              {statsRes && <MatchTeamStatisticsPanel teamStatistics={statsRes.teamStatistics} homeName={homeName} awayName={awayName} />}
-              {lineupsRes && <MatchLineupsPanel lineups={lineupsRes.lineups} />}
-            </div>
-          )}
-
-          {/* TAB 4 — CONTEXT (venue / lifecycle / coverage) */}
-          {tab === 'context' && (
-            <div className="space-y-4">
-              {venueRes && <MatchVenuePanel matchVenue={{ venue: venueRes.venue, isNeutralVenue: venueRes.isNeutralVenue, coverage: venueRes.coverage }} />}
-              {lifecycleRes && <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />}
-              <MatchCoverage flags={coverage} />
-            </div>
-          )}
-        </div>
+                <div className="space-y-2">
+                  <p className="label-cap" style={{ color: 'var(--muted)' }}>{awayName}</p>
+                  <ReadingCard title="Form momentum / trajectory" reading={detail.intelligence.away.readiness} />
+                  <ReadingCard title="Home / away split" reading={detail.intelligence.away.homeAwaySplit} />
+                </div>
+              </div>
+            </section>
+            <section className="space-y-2">
+              <p className="eyebrow">Supporting data</p>
+              <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
+            </section>
+            {!sealed && <IntelligenceUnavailable />}
+          </div>
+        )}
       </div>
 
       <MatchNav prev={prev} next={next} editionId={editionId} competitionName={match.competition.name} />
