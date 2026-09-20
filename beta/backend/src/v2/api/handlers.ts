@@ -64,6 +64,7 @@ import { readMatchLineups } from './read/matchLineups';
 import { readMatchTeamStatistics } from './read/matchTeamStatistics';
 import { readTeamObservations, type TeamObservationOptions, type TeamObservationsResponse } from './read/teamObservations';
 import { readPlayerObservations, type PlayerObservationOptions, type PlayerObservationsResponse } from './read/playerObservations';
+import { readEditionObservations, type EditionObservationOptions, type EditionObservationsResponse } from './read/editionObservations';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -404,6 +405,19 @@ export async function getPlayerObservations(
   tx: PoolClient, playerId: string, options: PlayerObservationOptions = {},
 ): Promise<PlayerObservationsResponse | null> {
   return readPlayerObservations(tx, playerId, options);
+}
+
+/**
+ * EDITION MATCH-PERFORMANCE OBSERVATIONS. League-wide cumulative descriptive
+ * evidence per completed fixture (result tier full-edition; stat tier enriched-
+ * cohort). Distinct from standings (current table) and Season Position Trajectory
+ * (per-team path). Null → 404 when the edition is unknown; a valid edition with no
+ * eligible fixtures returns an empty series.
+ */
+export async function getEditionObservations(
+  tx: PoolClient, editionId: string, options: EditionObservationOptions = {},
+): Promise<EditionObservationsResponse | null> {
+  return readEditionObservations(tx, editionId, options);
 }
 
 export async function getMatchTeamStatistics(tx: PoolClient, fixtureId: string): Promise<MatchTeamStatisticsResponse | null> {
