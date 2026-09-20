@@ -57,6 +57,10 @@ export type {
   TableContextResponse, TableContextTeam, TableContextRow, TableContextAdjacent,
   TableContextMethod, TableContextMode, TableContextOptions,
 } from './read/tableContext';
+export type {
+  TeamPlayerObservationsResponse, TeamPlayerObservationEntry, TeamPlayerSummaryMetric,
+  TeamPlayerParticipationCounts, TeamPlayerLatestObservation, TeamPlayerObservationsOptions,
+} from './read/teamPlayerObservations';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';

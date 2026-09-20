@@ -93,6 +93,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18/readiness'), { kind: 'teamReadiness', id: '18' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc/readiness'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/teams/18/readiness'), { kind: 'methodNotAllowed' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/18/player-observations'), { kind: 'teamPlayerObservations', id: '18' }); // sub-route wins over bare team
+    assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc/player-observations'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/teams/18/player-observations'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players'), { kind: 'playerList' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players/9'), { kind: 'player', id: '9' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/venues/25'), { kind: 'venue', id: '25' });
@@ -286,7 +289,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchLifecycle: async () => null,
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditionObservations: async () => null, getEditionTemporalPerformance: async () => null, getSeasonPositionTrajectory: async () => null, getTableContext: async () => null, getEditions: async () => ({ editions: [] }),
-      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null, getTeamTemporalPerformance: async () => null,
+      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null, getTeamPlayerObservations: async () => null, getTeamTemporalPerformance: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getPlayerTemporalPerformance: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
@@ -400,6 +403,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeamReadiness: async (id) => (id === '7' ? { team: { id: '7' }, readiness: { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null }, coverage: { readiness: 'present', readinessIsGoverned: true } } : null),
       getTeamGovernedIntelligence: async (id) => (id === '7' ? { team: { id: '7' }, homeAwaySplit: [], consistency: null, coverage: { homeAwaySplit: 'absent', consistency: 'absent', isGoverned: true } } : null),
       getTeamObservations: async () => null,
+      getTeamPlayerObservations: async (id) => (id === '7' ? { team: { id: '7', name: 'T', slug: 't' }, scope: { competition: 'all', editionId: null, label: 'all competitions' }, asOf: '2026-09-20T00:00:00.000Z', playerCount: 1, players: [{ player: { id: '9', fullName: 'P', slug: 'p' }, observationCount: 3, latestObservation: { fixtureId: '18', fixturePartitionOn: '2026-01-01', kickoffAt: '2026-02-01T00:00:00.000Z', edition: { id: '42', seasonLabel: 'S' }, competition: { id: '1', name: 'L', slug: 'l' }, opponent: { id: '8', name: 'O', slug: 'o' }, venueSide: 'home', participation: 'STARTED', result: 'W', goalsFor: 2, goalsAgainst: 0, goalMargin: 2, points: 3, cleanSheet: true, xg: 0.4 }, participation: { started: 3, bench: 0, unknown: 0 }, summary: [{ key: 'minutesPlayed', total: 270, present: 3, totalObservations: 3 }] }], provenance: { source: 'player_match_statistic', readModel: 'team-player-observation-index-1', asOf: '2026-09-20T00:00:00.000Z', teamId: '7', scope: 'all', editionId: null } } : null),
       getTeamTemporalPerformance: async (id) => (id === '7' ? { team: { id: '7', name: 'T', slug: 't' }, scope: { competition: 'all', editionId: null, label: 'all competitions' }, asOf: '2026-09-20T00:00:00.000Z', aggregation: { version: 'temporal-1' }, comparisonStatus: 'insufficient_sample', sample: { eligibleObservations: 0, requiredForComparison: 10 }, windows: { last5: { status: 'insufficient', observationCount: 0, windowSize: 5, from: null, to: null, fixtureIds: [] }, previous5: null }, results: { last5: null, previous5: null, change: null }, comparisons: [], season: { observationCount: 0, scopeLabel: 'all competitions', results: { wins: 0, draws: 0, losses: 0, points: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0 }, metrics: [] }, provenance: { source: 'teamObservations', aggregationVersion: 'temporal-1', asOf: '2026-09-20T00:00:00.000Z', last5FixtureIds: [], previous5FixtureIds: [] } } : null),
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
@@ -574,6 +578,21 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     assert.equal(body.coverage.readinessIsGoverned, true);
     assert.equal(Object.prototype.hasOwnProperty.call(body.readiness, 'score'), false); // no fabricated score
     const miss = await fetch(`${base}/api/v2/teams/8/readiness`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'team_not_found' });
+  });
+
+  it('GET team player-observations → 200 observed-player index; unexposed team → 404', async () => {
+    const res = await fetch(`${base}/api/v2/teams/7/player-observations`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.team.id, '7');
+    assert.equal(body.scope.competition, 'all');
+    assert.equal(body.playerCount, 1);
+    assert.equal(body.players[0].player.id, '9');
+    assert.equal(body.players[0].observationCount, 3);
+    assert.equal(body.provenance.readModel, 'team-player-observation-index-1');
+    const miss = await fetch(`${base}/api/v2/teams/8/player-observations`);
     assert.equal(miss.status, 404);
     assert.deepEqual(await miss.json(), { error: 'team_not_found' });
   });
