@@ -17,8 +17,9 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getVenue, getCountry, getCompetition, getEditionDetail, isValidId, isValidCountryCode } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, isValidId, isValidCountryCode } from './handlers';
 import type { TeamObservationOptions } from './read/teamObservations';
+import type { PlayerObservationOptions } from './read/playerObservations';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -46,6 +47,7 @@ export interface ApiDeps {
   readonly getTeamObservations: (id: string, opts: TeamObservationOptions) => Promise<unknown | null>;
   readonly getPlayers: () => Promise<unknown>;
   readonly getPlayer: (id: string) => Promise<unknown | null>;
+  readonly getPlayerObservations: (id: string, opts: PlayerObservationOptions) => Promise<unknown | null>;
   readonly getVenue: (id: string) => Promise<unknown | null>;
   readonly getCountry: (code: string) => Promise<unknown | null>;
   readonly getCompetition: (id: string) => Promise<unknown | null>;
@@ -71,6 +73,7 @@ const productionDeps: ApiDeps = {
   getTeamObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamObservations(tx, id, opts)),
   getPlayers: () => withConnection(API_ROLE, (tx: PoolClient) => getPlayers(tx)),
   getPlayer: (id) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerDetail(tx, id)),
+  getPlayerObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerObservations(tx, id, opts)),
   getVenue: (id) => withConnection(API_ROLE, (tx: PoolClient) => getVenue(tx, id)),
   getCountry: (code) => withConnection(API_ROLE, (tx: PoolClient) => getCountry(tx, code)),
   getCompetition: (id) => withConnection(API_ROLE, (tx: PoolClient) => getCompetition(tx, id)),
@@ -97,6 +100,7 @@ export type Route =
   | { kind: 'teamObservations'; id: string }
   | { kind: 'playerList' }
   | { kind: 'player'; id: string }
+  | { kind: 'playerObservations'; id: string }
   | { kind: 'venue'; id: string }
   | { kind: 'country'; code: string }
   | { kind: 'competition'; id: string }
@@ -124,11 +128,12 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const teamIntelligence = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/intelligence$/);
   const teamObservations = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/observations$/);
   const team = pathname.match(/^\/api\/v2\/teams\/([^/]+)$/);
+  const playerObservations = pathname.match(/^\/api\/v2\/players\/([^/]+)\/observations$/);
   const player = pathname.match(/^\/api\/v2\/players\/([^/]+)$/);
   const venue = pathname.match(/^\/api\/v2\/venues\/([^/]+)$/);
   const country = pathname.match(/^\/api\/v2\/countries\/([^/]+)$/);
   const competition = pathname.match(/^\/api\/v2\/competitions\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !team && !player && !venue && !country && !competition) {
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !team && !playerObservations && !player && !venue && !country && !competition) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
@@ -195,6 +200,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
     const id = decodeURIComponent(team[1]);
     return isValidId(id) ? { kind: 'team', id } : { kind: 'badRequest' };
   }
+  if (playerObservations) {
+    const id = decodeURIComponent(playerObservations[1]);
+    return isValidId(id) ? { kind: 'playerObservations', id } : { kind: 'badRequest' };
+  }
   if (player) {
     const id = decodeURIComponent(player[1]);
     return isValidId(id) ? { kind: 'player', id } : { kind: 'badRequest' };
@@ -229,6 +238,20 @@ function parsePositiveInt(v: string | null): number | null {
  *  invalid values fall back to defaults (venue/edition → none, order → asc, asOf →
  *  current time, limit/offset → none). Whitelisted, never interpolated into SQL. */
 export function parseTeamObservationOptions(searchParams: URLSearchParams): TeamObservationOptions {
+  const venueRaw = searchParams.get('venue');
+  const venue: 'home' | 'away' | null = venueRaw === 'home' || venueRaw === 'away' ? venueRaw : null;
+  const order: 'asc' | 'desc' = searchParams.get('order') === 'desc' ? 'desc' : 'asc';
+  const editionRaw = searchParams.get('edition');
+  const editionId = editionRaw && isValidId(editionRaw) ? editionRaw : null;
+  const asOfRaw = searchParams.get('asOf');
+  let asOf: Date | undefined;
+  if (asOfRaw) { const d = new Date(asOfRaw); if (!Number.isNaN(d.getTime())) asOf = d; }
+  return { asOf, editionId, venue, order, limit: parsePositiveInt(searchParams.get('limit')), offset: parsePositiveInt(searchParams.get('offset')) };
+}
+
+/** Parse the Player Observations query filters from the URL. Same lenient, whitelisted
+ *  conventions as the Team Observations parser (never interpolated into SQL). */
+export function parsePlayerObservationOptions(searchParams: URLSearchParams): PlayerObservationOptions {
   const venueRaw = searchParams.get('venue');
   const venue: 'home' | 'away' | null = venueRaw === 'home' || venueRaw === 'away' ? venueRaw : null;
   const order: 'asc' | 'desc' = searchParams.get('order') === 'desc' ? 'desc' : 'asc';
@@ -314,6 +337,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
       }
       case 'playerList':
         return sendJson(res, 200, await deps.getPlayers());
+      case 'playerObservations': {
+        const body = await deps.getPlayerObservations(route.id, parsePlayerObservationOptions(url.searchParams));
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'player_not_found' });
+      }
       case 'player': {
         const body = await deps.getPlayer(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'player_not_found' });
@@ -355,7 +382,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
   });
 }
 

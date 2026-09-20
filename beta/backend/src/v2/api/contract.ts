@@ -23,6 +23,11 @@ export type {
   TeamObservationsResponse, TeamObservation, ObservationMetric, ObservationProvenance,
   TeamObservationMetricCoverage, MetricCoverageState, ObservationCoverageState,
 } from './read/teamObservations';
+export type {
+  PlayerObservationsResponse, PlayerObservation, PlayerObservationMetric, PlayerObservationProvenance,
+  PlayerObservationMetricCoverage, PlayerMetricCoverageState, PlayerObservationCoverageState,
+  PlayerParticipation,
+} from './read/playerObservations';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';

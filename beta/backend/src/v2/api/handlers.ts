@@ -63,6 +63,7 @@ import { readEditionStandings } from './read/editionStandings';
 import { readMatchLineups } from './read/matchLineups';
 import { readMatchTeamStatistics } from './read/matchTeamStatistics';
 import { readTeamObservations, type TeamObservationOptions, type TeamObservationsResponse } from './read/teamObservations';
+import { readPlayerObservations, type PlayerObservationOptions, type PlayerObservationsResponse } from './read/playerObservations';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -390,6 +391,19 @@ export async function getTeamObservations(
   tx: PoolClient, teamId: string, options: TeamObservationOptions = {},
 ): Promise<TeamObservationsResponse | null> {
   return readTeamObservations(tx, teamId, options);
+}
+
+/**
+ * PLAYER MATCH-PERFORMANCE OBSERVATIONS. Descriptive, chronological per-completed-match
+ * player evidence over existing substrate (player_match_statistic + lineup). Distinct
+ * from Player Season Statistics (aggregate). Null → 404 when the player is unknown or
+ * not exposed; a valid, exposed player with no eligible fixtures returns an empty
+ * series with coverage 'absent'.
+ */
+export async function getPlayerObservations(
+  tx: PoolClient, playerId: string, options: PlayerObservationOptions = {},
+): Promise<PlayerObservationsResponse | null> {
+  return readPlayerObservations(tx, playerId, options);
 }
 
 export async function getMatchTeamStatistics(tx: PoolClient, fixtureId: string): Promise<MatchTeamStatisticsResponse | null> {
