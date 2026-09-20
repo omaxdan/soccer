@@ -53,6 +53,10 @@ export type {
   EditionResultWindow, EditionResultChange, EditionWindowMeta, EditionCurrentState,
   EditionTemporalPerformanceOptions, EditionComparisonStatus,
 } from './read/editionTemporalPerformance';
+export type {
+  TableContextResponse, TableContextTeam, TableContextRow, TableContextAdjacent,
+  TableContextMethod, TableContextMode, TableContextOptions,
+} from './read/tableContext';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
