@@ -66,6 +66,7 @@ import { readTeamObservations, type TeamObservationOptions, type TeamObservation
 import { readPlayerObservations, type PlayerObservationOptions, type PlayerObservationsResponse } from './read/playerObservations';
 import { readEditionObservations, type EditionObservationOptions, type EditionObservationsResponse } from './read/editionObservations';
 import { readSeasonPositionTrajectory, type SeasonPositionTrajectoryOptions, type SeasonPositionTrajectoryResponse } from './read/seasonPositionTrajectory';
+import { readTeamTemporalPerformance, type TeamTemporalPerformanceOptions, type TeamTemporalPerformanceResponse } from './read/teamTemporalPerformance';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -431,6 +432,18 @@ export async function getSeasonPositionTrajectory(
   tx: PoolClient, editionId: string, options: SeasonPositionTrajectoryOptions = {},
 ): Promise<SeasonPositionTrajectoryResponse | null> {
   return readSeasonPositionTrajectory(tx, editionId, options);
+}
+
+/**
+ * TEAM TEMPORAL PERFORMANCE. Descriptive Last-5 vs Previous-5 (+ season-to-date)
+ * comparison derived from the chronological Team Observation series. Never prediction/
+ * recommendation/causal. Null → 404 when the team is unknown (inherited from the
+ * Team Observation reader).
+ */
+export async function getTeamTemporalPerformance(
+  tx: PoolClient, teamId: string, options: TeamTemporalPerformanceOptions = {},
+): Promise<TeamTemporalPerformanceResponse | null> {
+  return readTeamTemporalPerformance(tx, teamId, options);
 }
 
 export async function getMatchTeamStatistics(tx: PoolClient, fixtureId: string): Promise<MatchTeamStatisticsResponse | null> {
