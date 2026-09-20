@@ -17,11 +17,12 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, isValidId, isValidCountryCode } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, getTeamTemporalPerformance, isValidId, isValidCountryCode } from './handlers';
 import type { TeamObservationOptions } from './read/teamObservations';
 import type { PlayerObservationOptions } from './read/playerObservations';
 import type { EditionObservationOptions } from './read/editionObservations';
 import type { SeasonPositionTrajectoryOptions } from './read/seasonPositionTrajectory';
+import type { TeamTemporalPerformanceOptions } from './read/teamTemporalPerformance';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -49,6 +50,7 @@ export interface ApiDeps {
   readonly getTeamReadiness: (id: string) => Promise<unknown | null>;
   readonly getTeamGovernedIntelligence: (id: string) => Promise<unknown | null>;
   readonly getTeamObservations: (id: string, opts: TeamObservationOptions) => Promise<unknown | null>;
+  readonly getTeamTemporalPerformance: (id: string, opts: TeamTemporalPerformanceOptions) => Promise<unknown | null>;
   readonly getPlayers: () => Promise<unknown>;
   readonly getPlayer: (id: string) => Promise<unknown | null>;
   readonly getPlayerObservations: (id: string, opts: PlayerObservationOptions) => Promise<unknown | null>;
@@ -77,6 +79,7 @@ const productionDeps: ApiDeps = {
   getTeamReadiness: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamReadiness(tx, id)),
   getTeamGovernedIntelligence: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamGovernedIntelligence(tx, id)),
   getTeamObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamObservations(tx, id, opts)),
+  getTeamTemporalPerformance: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamTemporalPerformance(tx, id, opts)),
   getPlayers: () => withConnection(API_ROLE, (tx: PoolClient) => getPlayers(tx)),
   getPlayer: (id) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerDetail(tx, id)),
   getPlayerObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerObservations(tx, id, opts)),
@@ -106,6 +109,7 @@ export type Route =
   | { kind: 'teamReadiness'; id: string }
   | { kind: 'teamIntelligence'; id: string }
   | { kind: 'teamObservations'; id: string }
+  | { kind: 'teamTemporalPerformance'; id: string }
   | { kind: 'playerList' }
   | { kind: 'player'; id: string }
   | { kind: 'playerObservations'; id: string }
@@ -137,13 +141,14 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const teamReadiness = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/readiness$/);
   const teamIntelligence = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/intelligence$/);
   const teamObservations = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/observations$/);
+  const teamTemporalPerformance = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/temporal-performance$/);
   const team = pathname.match(/^\/api\/v2\/teams\/([^/]+)$/);
   const playerObservations = pathname.match(/^\/api\/v2\/players\/([^/]+)\/observations$/);
   const player = pathname.match(/^\/api\/v2\/players\/([^/]+)$/);
   const venue = pathname.match(/^\/api\/v2\/venues\/([^/]+)$/);
   const country = pathname.match(/^\/api\/v2\/countries\/([^/]+)$/);
   const competition = pathname.match(/^\/api\/v2\/competitions\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionObservations && !seasonPositionTrajectory && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !team && !playerObservations && !player && !venue && !country && !competition) {
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionObservations && !seasonPositionTrajectory && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !teamTemporalPerformance && !team && !playerObservations && !player && !venue && !country && !competition) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
@@ -214,6 +219,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
     const id = decodeURIComponent(teamObservations[1]);
     return isValidId(id) ? { kind: 'teamObservations', id } : { kind: 'badRequest' };
   }
+  if (teamTemporalPerformance) {
+    const id = decodeURIComponent(teamTemporalPerformance[1]);
+    return isValidId(id) ? { kind: 'teamTemporalPerformance', id } : { kind: 'badRequest' };
+  }
   if (team) {
     const id = decodeURIComponent(team[1]);
     return isValidId(id) ? { kind: 'team', id } : { kind: 'badRequest' };
@@ -275,6 +284,17 @@ export function parseEditionObservationOptions(searchParams: URLSearchParams): E
   let asOf: Date | undefined;
   if (asOfRaw) { const d = new Date(asOfRaw); if (!Number.isNaN(d.getTime())) asOf = d; }
   return { asOf, order, limit: parsePositiveInt(searchParams.get('limit')), offset: parsePositiveInt(searchParams.get('offset')) };
+}
+
+/** Parse the Team Temporal Performance query filters. Whitelisted: asOf (default now,
+ *  strict `<`) and optional edition scope. No free-form window builder (governed v1). */
+export function parseTeamTemporalPerformanceOptions(searchParams: URLSearchParams): TeamTemporalPerformanceOptions {
+  const editionRaw = searchParams.get('edition');
+  const editionId = editionRaw && isValidId(editionRaw) ? editionRaw : null;
+  const asOfRaw = searchParams.get('asOf');
+  let asOf: Date | undefined;
+  if (asOfRaw) { const d = new Date(asOfRaw); if (!Number.isNaN(d.getTime())) asOf = d; }
+  return { asOf, editionId };
 }
 
 /** Parse the Season Position Trajectory query filters. Whitelisted, lenient: asOf
@@ -376,6 +396,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getTeamObservations(route.id, parseTeamObservationOptions(url.searchParams));
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
       }
+      case 'teamTemporalPerformance': {
+        const body = await deps.getTeamTemporalPerformance(route.id, parseTeamTemporalPerformanceOptions(url.searchParams));
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
+      }
       case 'teamIntelligence': {
         const body = await deps.getTeamGovernedIntelligence(route.id);
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
@@ -431,7 +455,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/editions/:editionId/observations\n  GET /api/v2/editions/:editionId/position-trajectory\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/editions/:editionId/observations\n  GET /api/v2/editions/:editionId/position-trajectory\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/teams/:teamId/temporal-performance\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
   });
 }
 

@@ -283,7 +283,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchLifecycle: async () => null,
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditionObservations: async () => null, getSeasonPositionTrajectory: async () => null, getEditions: async () => ({ editions: [] }),
-      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null,
+      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null, getTeamTemporalPerformance: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
@@ -395,6 +395,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeamReadiness: async (id) => (id === '7' ? { team: { id: '7' }, readiness: { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null }, coverage: { readiness: 'present', readinessIsGoverned: true } } : null),
       getTeamGovernedIntelligence: async (id) => (id === '7' ? { team: { id: '7' }, homeAwaySplit: [], consistency: null, coverage: { homeAwaySplit: 'absent', consistency: 'absent', isGoverned: true } } : null),
       getTeamObservations: async () => null,
+      getTeamTemporalPerformance: async (id) => (id === '7' ? { team: { id: '7', name: 'T', slug: 't' }, scope: { competition: 'all', editionId: null, label: 'all competitions' }, asOf: '2026-09-20T00:00:00.000Z', aggregation: { version: 'temporal-1' }, comparisonStatus: 'insufficient_sample', sample: { eligibleObservations: 0, requiredForComparison: 10 }, windows: { last5: { status: 'insufficient', observationCount: 0, windowSize: 5, from: null, to: null, fixtureIds: [] }, previous5: null }, results: { last5: null, previous5: null, change: null }, comparisons: [], season: { observationCount: 0, scopeLabel: 'all competitions', results: { wins: 0, draws: 0, losses: 0, points: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0 }, metrics: [] }, provenance: { source: 'teamObservations', aggregationVersion: 'temporal-1', asOf: '2026-09-20T00:00:00.000Z', last5FixtureIds: [], previous5FixtureIds: [] } } : null),
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
       getPlayerObservations: async (id) => (id === '9' ? { player: { id: '9', fullName: 'P', slug: 'p' }, scope: { competition: 'all', editionId: null, venue: 'all', order: 'asc' }, asOf: '2026-09-20T00:00:00.000Z', observationCount: 0, coverage: { observations: 'absent', metrics: [] }, observations: [] } : null),

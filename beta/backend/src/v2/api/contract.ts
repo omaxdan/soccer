@@ -38,6 +38,11 @@ export type {
   SeasonPositionTrajectoryResponse, TeamTrajectory, TrajectoryPoint, TrajectoryTableState,
   TrajectorySummary, SeasonPositionTrajectoryOptions,
 } from './read/seasonPositionTrajectory';
+export type {
+  TeamTemporalPerformanceResponse, MetricComparison, MetricWindowValue, ResultBlock,
+  ResultChange, WindowMeta, SeasonMetric, TeamTemporalPerformanceOptions,
+  MetricClass, ComparisonStatus, Direction, ChangeType,
+} from './read/teamTemporalPerformance';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
