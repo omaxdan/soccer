@@ -74,6 +74,7 @@ import {
   type TableContextOptions, type TableContextResponse,
 } from './read/tableContext';
 import { readTeamPlayerObservations, type TeamPlayerObservationsOptions, type TeamPlayerObservationsResponse } from './read/teamPlayerObservations';
+import { readPlayerAvailability, type PlayerAvailabilityOptions, type PlayerStatusResponse } from './read/playerAvailability';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -414,6 +415,20 @@ export async function getPlayerObservations(
   tx: PoolClient, playerId: string, options: PlayerObservationOptions = {},
 ): Promise<PlayerObservationsResponse | null> {
   return readPlayerObservations(tx, playerId, options);
+}
+
+/**
+ * PLAYER STATUS / ABSENCE. The player's recorded availability spells (INJURY /
+ * SUSPENSION / OTHER) and the as-of status derived from them — ACTIVE_ABSENCE or
+ * NO_EXPLICIT_ABSENCE_RECORDED, NEVER AVAILABLE (the feed is not complete, so no
+ * covering spell is not proof of availability). Player-scoped context evidence only;
+ * no team ownership, no prediction, no injury/suspension inference, no impact score.
+ * Null → 404 when the player is unknown/unexposed (governed player gate in the reader).
+ */
+export async function getPlayerStatus(
+  tx: PoolClient, playerId: string, options: PlayerAvailabilityOptions = {},
+): Promise<PlayerStatusResponse | null> {
+  return readPlayerAvailability(tx, playerId, options);
 }
 
 /**

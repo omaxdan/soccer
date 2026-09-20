@@ -97,6 +97,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('GET', '/api/v2/teams/abc/player-observations'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/teams/18/player-observations'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players'), { kind: 'playerList' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/players/9/status'), { kind: 'playerStatus', id: '9' }); // sub-route wins over bare player
+    assert.deepEqual(resolveRoute('GET', '/api/v2/players/abc/status'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/players/9/status'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/players/9'), { kind: 'player', id: '9' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/venues/25'), { kind: 'venue', id: '25' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/venues/abc'), { kind: 'badRequest' });
@@ -290,7 +293,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditionObservations: async () => null, getEditionTemporalPerformance: async () => null, getSeasonPositionTrajectory: async () => null, getTableContext: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null, getTeamPlayerObservations: async () => null, getTeamTemporalPerformance: async () => null,
-      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getPlayerTemporalPerformance: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
+      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getPlayerStatus: async () => null, getPlayerTemporalPerformance: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -409,6 +412,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
       getPlayerTemporalPerformance: async (id) => (id === '9' ? { player: { id: '9', fullName: 'P', slug: 'p' }, scope: { competition: 'all', editionId: null, label: 'all competitions' }, asOf: '2026-09-20T00:00:00.000Z', aggregation: { version: 'player-temporal-1' }, comparisonStatus: 'insufficient_sample', sample: { eligibleObservations: 0, requiredForComparison: 10 }, windows: { last5: { status: 'insufficient', observationCount: 0, windowSize: 5, from: null, to: null, fixtureIds: [] }, previous5: null }, participation: { last5: null, previous5: null, change: null }, comparisons: [], season: { observationCount: 0, scopeLabel: 'all competitions', participation: { started: 0, bench: 0, unknown: 0 }, metrics: [] }, provenance: { source: 'playerObservations', aggregationVersion: 'player-temporal-1', asOf: '2026-09-20T00:00:00.000Z', last5FixtureIds: [], previous5FixtureIds: [] } } : null),
       getPlayerObservations: async (id) => (id === '9' ? { player: { id: '9', fullName: 'P', slug: 'p' }, scope: { competition: 'all', editionId: null, venue: 'all', order: 'asc' }, asOf: '2026-09-20T00:00:00.000Z', observationCount: 0, coverage: { observations: 'absent', metrics: [] }, observations: [] } : null),
+      getPlayerStatus: async (id) => (id === '9' ? { player: { id: '9', fullName: 'P', slug: 'p' }, asOf: '2026-09-20T00:00:00.000Z', status: { code: 'NO_EXPLICIT_ABSENCE_RECORDED', kinds: [] }, spells: [], coverage: { type: 'RECORDED_ABSENCE', complete: false, note: 'x' }, provenance: { source: 'football.player_availability', recordedVia: 'squad_ingestion', spellsAreMutable: true, hasProviderAudit: false, asOf: '2026-09-20T00:00:00.000Z', note: 'y' } } : null),
       getVenue: async (id) => (id === '25' ? { venue: { id: '25', name: 'Maracanã', city: 'Rio de Janeiro', countryCode: 'BR', latitude: -22.9, longitude: -43.2, elevationMetres: 9, timezoneName: 'America/Sao_Paulo', capacity: 78838, surface: 'grass' }, homeTeams: [{ id: '67', name: 'Fluminense', slug: 'fluminense', shortName: 'FLU', countryCode: 'BR' }], coverage: { venue: 'present', homeTeams: 'present' } } : null),
       getCountry: async (code) => (code === 'BR' ? { country: { code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }, teams: [{ id: '68', name: 'Flamengo', slug: 'flamengo-5981', shortName: 'Flamengo', countryCode: 'BR' }], competitions: [{ id: '1', name: 'Brasileirão Série A', slug: 'brasileirao-serie-a' }], coverage: { country: 'present', teams: 'present', competitions: 'present' } } : null),
       getCompetition: async (id) => (id === '28' ? { competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325', countryCode: 'BR' }, editions: [{ id: '42', seasonLabel: '2025', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixtureCount: 380 }], coverage: { competition: 'present', editions: 'present' } } : null),
@@ -674,6 +678,19 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     assert.equal((await (await fetch(`${base}/api/v2/players`)).json() as any).players[0].id, '9');
     assert.equal((await fetch(`${base}/api/v2/players/9`)).status, 200);
     const miss = await fetch(`${base}/api/v2/players/8`);
+    assert.equal(miss.status, 404);
+    assert.deepEqual(await miss.json(), { error: 'player_not_found' });
+  });
+
+  it('GET player status → 200 with NO_EXPLICIT_ABSENCE_RECORDED (never AVAILABLE); unknown → 404', async () => {
+    const res = await fetch(`${base}/api/v2/players/9/status`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.player.id, '9');
+    assert.equal(body.status.code, 'NO_EXPLICIT_ABSENCE_RECORDED');
+    assert.equal(body.coverage.complete, false);
+    assert.doesNotMatch(JSON.stringify(body), /AVAILABLE/); // v1 never asserts availability
+    const miss = await fetch(`${base}/api/v2/players/8/status`);
     assert.equal(miss.status, 404);
     assert.deepEqual(await miss.json(), { error: 'player_not_found' });
   });
