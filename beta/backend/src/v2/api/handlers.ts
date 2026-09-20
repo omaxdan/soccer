@@ -68,6 +68,7 @@ import { readEditionObservations, type EditionObservationOptions, type EditionOb
 import { readSeasonPositionTrajectory, type SeasonPositionTrajectoryOptions, type SeasonPositionTrajectoryResponse } from './read/seasonPositionTrajectory';
 import { readTeamTemporalPerformance, type TeamTemporalPerformanceOptions, type TeamTemporalPerformanceResponse } from './read/teamTemporalPerformance';
 import { readPlayerTemporalPerformance, type PlayerTemporalPerformanceOptions, type PlayerTemporalPerformanceResponse } from './read/playerTemporalPerformance';
+import { readEditionTemporalPerformance, type EditionTemporalPerformanceOptions, type EditionTemporalPerformanceResponse } from './read/editionTemporalPerformance';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -457,6 +458,18 @@ export async function getPlayerTemporalPerformance(
   tx: PoolClient, playerId: string, options: PlayerTemporalPerformanceOptions = {},
 ): Promise<PlayerTemporalPerformanceResponse | null> {
   return readPlayerTemporalPerformance(tx, playerId, options);
+}
+
+/**
+ * EDITION TEMPORAL PERFORMANCE. Descriptive Last-5 vs Previous-5 for one edition:
+ * result tier by cumulative-state differencing of the Edition Observation series;
+ * stat tier by a bounded reconstruction of the ≤10 window fixtures. Never prediction/
+ * ranking/causal. Null → 404 when the edition is unknown.
+ */
+export async function getEditionTemporalPerformance(
+  tx: PoolClient, editionId: string, options: EditionTemporalPerformanceOptions = {},
+): Promise<EditionTemporalPerformanceResponse | null> {
+  return readEditionTemporalPerformance(tx, editionId, options);
 }
 
 export async function getMatchTeamStatistics(tx: PoolClient, fixtureId: string): Promise<MatchTeamStatisticsResponse | null> {
