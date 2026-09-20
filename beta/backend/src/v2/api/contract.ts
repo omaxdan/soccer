@@ -48,6 +48,11 @@ export type {
   PlayerWindowMeta, PlayerParticipationCounts, PlayerSeasonMetric,
   PlayerTemporalPerformanceOptions, PlayerComparisonStatus,
 } from './read/playerTemporalPerformance';
+export type {
+  EditionTemporalPerformanceResponse, EditionStatComparison, EditionStatWindowValue,
+  EditionResultWindow, EditionResultChange, EditionWindowMeta, EditionCurrentState,
+  EditionTemporalPerformanceOptions, EditionComparisonStatus,
+} from './read/editionTemporalPerformance';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
