@@ -43,6 +43,11 @@ export type {
   ResultChange, WindowMeta, SeasonMetric, TeamTemporalPerformanceOptions,
   MetricClass, ComparisonStatus, Direction, ChangeType,
 } from './read/teamTemporalPerformance';
+export type {
+  PlayerTemporalPerformanceResponse, PlayerMetricComparison, PlayerMetricWindowValue,
+  PlayerWindowMeta, PlayerParticipationCounts, PlayerSeasonMetric,
+  PlayerTemporalPerformanceOptions, PlayerComparisonStatus,
+} from './read/playerTemporalPerformance';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
