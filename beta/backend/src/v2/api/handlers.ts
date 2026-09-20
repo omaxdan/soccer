@@ -120,7 +120,7 @@ function toReadingDto(r: TeamModuleReading, evidence: ReadingEvidence | undefine
 }
 
 function toFeatureDto(v: TeamFeatureValue): ApiFeatureValue {
-  return { value: v.value, sampleObservationCount: v.sampleObservationCount, sampleMeetsThreshold: v.sampleMeetsThreshold, asOf: iso(v.asOf) };
+  return { value: v.value, sampleObservationCount: v.sampleObservationCount, sampleMeetsThreshold: v.sampleMeetsThreshold, asOf: iso(v.asOf), direction: v.direction, unit: v.unit };
 }
 
 /**

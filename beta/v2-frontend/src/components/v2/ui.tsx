@@ -185,26 +185,27 @@ export function EmptyState({ message }: { message: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TEAM INTELLIGENCE COMPARISON PANEL
 // Surfaces persisted feature values (already computed by the V2 feature pipeline)
-// as a home-vs-away comparison. It performs NO calculation — it displays values,
-// applies the feature's ESTABLISHED direction only to highlight the leading side,
-// and shows an honest state for missing / low-sample data. Never fabricates a
-// value and never invents a composite score.
+// as a home-vs-away comparison. It performs NO calculation and NO longer owns
+// direction truth: the "stronger side" highlight is driven by the GOVERNED
+// `direction` the backend supplies on each ApiFeatureValue (from the feature
+// registry). It only displays values, highlights the leading side per governed
+// direction, and shows an honest state for missing / low-sample data. Never
+// fabricates a value and never invents a composite score.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** direction 'up' = higher is better; 'down' = higher is worse (established semantics). */
-type Direction = 'up' | 'down';
 interface MetricSpec {
   label: string;
   unit: string;
   pick: (f: ApiTeamFeatures) => ApiFeatureValue | null;
-  direction: Direction;
 }
+// `unit` here is only the compact display label; the authoritative unit and
+// direction live on ApiFeatureValue (governed). No direction is declared here.
 const METRICS: MetricSpec[] = [
-  { label: 'Home form', unit: '/100', pick: (f) => f.homeForm, direction: 'up' },
-  { label: 'Away form', unit: '/100', pick: (f) => f.awayForm, direction: 'up' },
-  { label: 'Momentum', unit: 'pts', pick: (f) => f.momentum, direction: 'up' },
-  { label: 'Rest', unit: 'days', pick: (f) => f.rest, direction: 'up' },
-  { label: 'Congestion', unit: '/100', pick: (f) => f.congestion, direction: 'down' },
+  { label: 'Home form', unit: '/100', pick: (f) => f.homeForm },
+  { label: 'Away form', unit: '/100', pick: (f) => f.awayForm },
+  { label: 'Momentum', unit: 'pts', pick: (f) => f.momentum },
+  { label: 'Rest', unit: 'days', pick: (f) => f.rest },
+  { label: 'Congestion', unit: '/100', pick: (f) => f.congestion },
 ];
 
 /** Rounds for display without inventing precision the value doesn't carry. */
@@ -213,11 +214,15 @@ function show(v: ApiFeatureValue): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-/** Which side leads on a metric per its established direction; null when not comparable. */
-function leader(home: ApiFeatureValue | null, away: ApiFeatureValue | null, dir: Direction): 'home' | 'away' | null {
+/** Which side leads on a metric, per the GOVERNED direction the backend supplied
+ *  on the values themselves. Null when not comparable, tied, or UNSIGNED (no
+ *  "better" side). Presentation only — the direction truth is the backend's. */
+function leader(home: ApiFeatureValue | null, away: ApiFeatureValue | null): 'home' | 'away' | null {
   if (!home || !away) return null;
   if (home.value === away.value) return null;
-  const homeBetter = dir === 'up' ? home.value > away.value : home.value < away.value;
+  const dir = home.direction; // home and away are the same feature → same governed direction
+  if (dir !== 'HIGHER_IS_STRONGER' && dir !== 'LOWER_IS_STRONGER') return null; // UNSIGNED → no leader
+  const homeBetter = dir === 'HIGHER_IS_STRONGER' ? home.value > away.value : home.value < away.value;
   return homeBetter ? 'home' : 'away';
 }
 
@@ -248,13 +253,15 @@ export function TeamIntelligencePanel({ home, away, homeName, awayName }: { home
         {METRICS.map((m) => {
           const h = m.pick(home);
           const a = m.pick(away);
-          const lead = leader(h, a, m.direction);
+          const lead = leader(h, a);
+          // "lower better" annotation is driven by the governed direction, not a frontend constant.
+          const dir = h?.direction ?? a?.direction ?? null;
           return (
             <div role="row" key={m.label} className="hairline" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 8, alignItems: 'center', padding: '6px 0' }}>
               <div style={{ textAlign: 'right' }}><Cell v={h} lead={lead === 'home'} /></div>
               <div style={{ textAlign: 'center', minWidth: 96 }}>
                 <span className="label-cap" style={{ color: 'var(--muted)' }}>{m.label}</span>
-                <span className="label-cap" style={{ display: 'block', color: 'var(--faint)', fontSize: 9 }}>{m.unit}{m.direction === 'down' ? ' · lower better' : ''}</span>
+                <span className="label-cap" style={{ display: 'block', color: 'var(--faint)', fontSize: 9 }}>{m.unit}{dir === 'LOWER_IS_STRONGER' ? ' · lower better' : ''}</span>
               </div>
               <div style={{ textAlign: 'left' }}><Cell v={a} lead={lead === 'away'} /></div>
             </div>

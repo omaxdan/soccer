@@ -176,6 +176,8 @@ describe('v2 api · team-feature mapping (missing values → null, never fabrica
   const fv = (teamId: string, featureKey: string, value: number): TeamFeatureValue => ({
     featureKey, teamId, contextKindCode: 'ALL_COMPETITIONS', contextCompetitionEditionId: null,
     value, sampleObservationCount: 8, sampleMeetsThreshold: true, asOf: new Date('2027-06-01T00:00:00Z'),
+    direction: featureKey === 'team.congestion_index' ? 'LOWER_IS_STRONGER' : 'HIGHER_IS_STRONGER',
+    unit: featureKey === 'team.rest_advantage' ? 'days' : 'index',
   });
 
   test('present features map to the named slots; absent ones are null', () => {
@@ -194,6 +196,17 @@ describe('v2 api · team-feature mapping (missing values → null, never fabrica
     const out = mapTeamFeatures([fv('10', 'team.momentum', 0)], '10', '11');
     assert.equal(out.home.momentum?.value, 0);
     assert.notEqual(out.home.momentum, null);
+  });
+
+  test('governed direction + unit are carried through to the DTO verbatim (not re-derived)', () => {
+    const out = mapTeamFeatures(
+      [fv('10', 'team.home_form', 73), fv('10', 'team.congestion_index', 40), fv('10', 'team.rest_advantage', 4)],
+      '10', '11',
+    );
+    assert.equal(out.home.homeForm?.direction, 'HIGHER_IS_STRONGER');
+    assert.equal(out.home.homeForm?.unit, 'index');
+    assert.equal(out.home.congestion?.direction, 'LOWER_IS_STRONGER'); // governed, not a frontend constant
+    assert.equal(out.home.rest?.unit, 'days');
   });
 
   test('no values at all → every slot null', () => {

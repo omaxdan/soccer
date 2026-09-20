@@ -28,7 +28,7 @@ function text(node: React.ReactElement): string {
 }
 function html(node: React.ReactElement): string { return renderToStaticMarkup(node); }
 
-const fv = (value: number, sample: number, meets: boolean): ApiFeatureValue => ({ value, sampleObservationCount: sample, sampleMeetsThreshold: meets, asOf: '2026-08-23T19:00:00.000Z' });
+const fv = (value: number, sample: number, meets: boolean): ApiFeatureValue => ({ value, sampleObservationCount: sample, sampleMeetsThreshold: meets, asOf: '2026-08-23T19:00:00.000Z', direction: 'HIGHER_IS_STRONGER', unit: 'index' });
 const INACTIVE_READINESS: ApiModuleReading = { moduleKey: 'readiness_tracker', status: 'INACTIVE', strength: null, confidence: null, sampleObservationCount: 0, sampleMeetsThreshold: false, asOf: '2026-08-23T19:00:00.000Z', verdictText: null, inactiveReason: 'FEATURE_ABSENT', evidence: null };
 const NEUTRAL_SPLIT: ApiModuleReading = { moduleKey: 'home_away_split', status: 'NEUTRAL', strength: null, confidence: null, sampleObservationCount: 3, sampleMeetsThreshold: true, asOf: '2026-08-23T19:00:00.000Z', verdictText: 'Balanced home and away record.', inactiveReason: null, evidence: null };
 
