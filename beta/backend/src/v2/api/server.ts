@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, getTeamTemporalPerformance, getPlayerTemporalPerformance, getEditionTemporalPerformance, getTableContext, getTeamPlayerObservations, getPlayerStatus, isValidId, isValidCountryCode } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, getTeamTemporalPerformance, getPlayerTemporalPerformance, getEditionTemporalPerformance, getTableContext, getTeamPlayerObservations, getPlayerStatus, getTeamPerformanceSignals, isValidId, isValidCountryCode } from './handlers';
 import type { TeamObservationOptions } from './read/teamObservations';
 import type { PlayerObservationOptions } from './read/playerObservations';
 import type { EditionObservationOptions } from './read/editionObservations';
@@ -28,6 +28,7 @@ import type { EditionTemporalPerformanceOptions } from './read/editionTemporalPe
 import type { TableContextOptions } from './read/tableContext';
 import type { TeamPlayerObservationsOptions } from './read/teamPlayerObservations';
 import type { PlayerAvailabilityOptions } from './read/playerAvailability';
+import type { TeamPerformanceSignalsOptions } from './read/teamPerformanceSignals';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -58,6 +59,7 @@ export interface ApiDeps {
   readonly getTeamGovernedIntelligence: (id: string) => Promise<unknown | null>;
   readonly getTeamObservations: (id: string, opts: TeamObservationOptions) => Promise<unknown | null>;
   readonly getTeamPlayerObservations: (id: string, opts: TeamPlayerObservationsOptions) => Promise<unknown | null>;
+  readonly getTeamPerformanceSignals: (id: string, opts: TeamPerformanceSignalsOptions) => Promise<unknown | null>;
   readonly getTeamTemporalPerformance: (id: string, opts: TeamTemporalPerformanceOptions) => Promise<unknown | null>;
   readonly getPlayers: () => Promise<unknown>;
   readonly getPlayer: (id: string) => Promise<unknown | null>;
@@ -92,6 +94,7 @@ const productionDeps: ApiDeps = {
   getTeamGovernedIntelligence: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamGovernedIntelligence(tx, id)),
   getTeamObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamObservations(tx, id, opts)),
   getTeamPlayerObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamPlayerObservations(tx, id, opts)),
+  getTeamPerformanceSignals: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamPerformanceSignals(tx, id, opts)),
   getTeamTemporalPerformance: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTeamTemporalPerformance(tx, id, opts)),
   getPlayers: () => withConnection(API_ROLE, (tx: PoolClient) => getPlayers(tx)),
   getPlayer: (id) => withConnection(API_ROLE, (tx: PoolClient) => getPlayerDetail(tx, id)),
@@ -127,6 +130,7 @@ export type Route =
   | { kind: 'teamIntelligence'; id: string }
   | { kind: 'teamObservations'; id: string }
   | { kind: 'teamPlayerObservations'; id: string }
+  | { kind: 'teamPerformanceSignals'; id: string }
   | { kind: 'teamTemporalPerformance'; id: string }
   | { kind: 'playerList' }
   | { kind: 'player'; id: string }
@@ -164,6 +168,7 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const teamIntelligence = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/intelligence$/);
   const teamObservations = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/observations$/);
   const teamPlayerObservations = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/player-observations$/);
+  const teamPerformanceSignals = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/performance-signals$/);
   const teamTemporalPerformance = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/temporal-performance$/);
   const team = pathname.match(/^\/api\/v2\/teams\/([^/]+)$/);
   const playerObservations = pathname.match(/^\/api\/v2\/players\/([^/]+)\/observations$/);
@@ -173,7 +178,7 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const venue = pathname.match(/^\/api\/v2\/venues\/([^/]+)$/);
   const country = pathname.match(/^\/api\/v2\/countries\/([^/]+)$/);
   const competition = pathname.match(/^\/api\/v2\/competitions\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionObservations && !editionTemporalPerformance && !seasonPositionTrajectory && !tableContext && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !teamPlayerObservations && !teamTemporalPerformance && !team && !playerObservations && !playerStatus && !playerTemporalPerformance && !player && !venue && !country && !competition) {
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionObservations && !editionTemporalPerformance && !seasonPositionTrajectory && !tableContext && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !teamPlayerObservations && !teamPerformanceSignals && !teamTemporalPerformance && !team && !playerObservations && !playerStatus && !playerTemporalPerformance && !player && !venue && !country && !competition) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
@@ -256,6 +261,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
     const id = decodeURIComponent(teamPlayerObservations[1]);
     return isValidId(id) ? { kind: 'teamPlayerObservations', id } : { kind: 'badRequest' };
   }
+  if (teamPerformanceSignals) {
+    const id = decodeURIComponent(teamPerformanceSignals[1]);
+    return isValidId(id) ? { kind: 'teamPerformanceSignals', id } : { kind: 'badRequest' };
+  }
   if (teamTemporalPerformance) {
     const id = decodeURIComponent(teamTemporalPerformance[1]);
     return isValidId(id) ? { kind: 'teamTemporalPerformance', id } : { kind: 'badRequest' };
@@ -326,6 +335,18 @@ export function parseTeamObservationOptions(searchParams: URLSearchParams): Team
  *  temporal competition scope — the two are never conflated. No venue/order/pagination
  *  (the index is a bounded per-team list). */
 export function parseTeamPlayerObservationsOptions(searchParams: URLSearchParams): TeamPlayerObservationsOptions {
+  const editionRaw = searchParams.get('edition');
+  const editionId = editionRaw && isValidId(editionRaw) ? editionRaw : null;
+  const asOfRaw = searchParams.get('asOf');
+  let asOf: Date | undefined;
+  if (asOfRaw) { const d = new Date(asOfRaw); if (!Number.isNaN(d.getTime())) asOf = d; }
+  return { asOf, editionId };
+}
+
+/** Parse the Team Performance Signals query filters. Whitelisted: optional edition scope
+ *  and asOf (default now, strict `<`). Venue splits are computed internally (Season Home/
+ *  Away), not a query param; windows are the fixed Last5/Previous5/Season contract. */
+export function parseTeamPerformanceSignalsOptions(searchParams: URLSearchParams): TeamPerformanceSignalsOptions {
   const editionRaw = searchParams.get('edition');
   const editionId = editionRaw && isValidId(editionRaw) ? editionRaw : null;
   const asOfRaw = searchParams.get('asOf');
@@ -509,6 +530,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getTeamPlayerObservations(route.id, parseTeamPlayerObservationsOptions(url.searchParams));
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
       }
+      case 'teamPerformanceSignals': {
+        const body = await deps.getTeamPerformanceSignals(route.id, parseTeamPerformanceSignalsOptions(url.searchParams));
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
+      }
       case 'teamTemporalPerformance': {
         const body = await deps.getTeamTemporalPerformance(route.id, parseTeamTemporalPerformanceOptions(url.searchParams));
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'team_not_found' });
@@ -576,7 +601,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/editions/:editionId/observations\n  GET /api/v2/editions/:editionId/position-trajectory\n  GET /api/v2/editions/:editionId/temporal-performance\n  GET /api/v2/editions/:editionId/table-context\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/teams/:teamId/player-observations\n  GET /api/v2/teams/:teamId/temporal-performance\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/players/:playerId/status\n  GET /api/v2/players/:playerId/temporal-performance\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/editions/:editionId/observations\n  GET /api/v2/editions/:editionId/position-trajectory\n  GET /api/v2/editions/:editionId/temporal-performance\n  GET /api/v2/editions/:editionId/table-context\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/teams/:teamId/player-observations\n  GET /api/v2/teams/:teamId/performance-signals\n  GET /api/v2/teams/:teamId/temporal-performance\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/players/:playerId/status\n  GET /api/v2/players/:playerId/temporal-performance\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
   });
 }
 

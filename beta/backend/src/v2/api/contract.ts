@@ -65,6 +65,10 @@ export type {
   PlayerStatusResponse, PlayerStatusSpell, PlayerStatusSummary, PlayerStatusCode,
   PlayerAvailabilityOptions,
 } from './read/playerAvailability';
+export type {
+  PerformanceSignalsResponse, PerformanceSignal, StreakSignal, WindowSignals,
+  TrajectorySignal, SignalCoverage, SignalEvidence, TeamPerformanceSignalsOptions,
+} from './read/teamPerformanceSignals';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
