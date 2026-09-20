@@ -14,7 +14,7 @@
 
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
-import { Kickoff, StatusChip, FormStrip, EmptyState } from '@/components/v2/ui';
+import { Kickoff, StatusChip, FormStrip, EmptyState, ReadingCard } from '@/components/v2/ui';
 import { matchTabHref } from '@/lib/v2/matchTabs';
 import type {
   MatchDetailResponse, MatchTeamStatistics, MatchResult, MatchVenueInfo,
@@ -189,12 +189,11 @@ function buildSignals(detail: MatchDetailResponse, stats: MatchTeamStatistics | 
   const away = detail.match.awayTeam.name;
   const h = detail.teamFeatures.home; const a = detail.teamFeatures.away;
 
-  // Venue-relevant recent form comparison (home form vs away form), factual, not a forecast.
-  if (h.homeForm && a.awayForm) {
-    const diff = h.homeForm.value - a.awayForm.value;
-    if (Math.abs(diff) >= 5) out.push(`${diff > 0 ? home : away} carry stronger recent ${diff > 0 ? 'home' : 'away'} form (${fmtNum(h.homeForm.value)} vs ${fmtNum(a.awayForm.value)}).`);
-    else out.push(`Recent venue form is closely matched (${fmtNum(h.homeForm.value)} vs ${fmtNum(a.awayForm.value)}).`);
-  }
+  // NOTE: the venue-relevant recent-form comparison ("stronger recent home form",
+  // ±5 threshold) was REMOVED here — that governed interpretation is now the
+  // form_gap_accuracy module, surfaced by MatchGovernedSignals from detail.matchModules.
+  // The frontend no longer computes a form-gap threshold.
+
   // Momentum tone.
   if (h.momentum && a.momentum) {
     if (h.momentum.value < 0 && a.momentum.value < 0) out.push('Both teams enter on negative recent momentum.');
@@ -238,6 +237,40 @@ export function KeySignals({ detail, stats }: { detail: MatchDetailResponse; sta
               </li>
             ))}
           </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ═══ GOVERNED MATCH SIGNALS — fixture-subject module verdicts (form gap / rest / travel) ══
+//
+// Renders the GOVERNED fixture-subject module readings (form_gap_accuracy,
+// rest_advantage, travel_impact) exactly as the backend supplied them — status +
+// verdictText + sample + as-of, via the shared ReadingCard. NOTHING is computed here:
+// the "stronger side" / "fresher side" comparison is the module's, not the frontend's
+// (the old ±5 form-gap heuristic was removed). When the fixture has no readings yet the
+// section is an honest unavailable state — never a fabricated or raw-feature fallback.
+
+const MATCH_MODULE_LABEL: Record<string, string> = {
+  form_gap_accuracy: 'Recent form edge',
+  rest_advantage: 'Rest',
+  travel_impact: 'Travel',
+};
+const MATCH_MODULE_ORDER = ['form_gap_accuracy', 'rest_advantage', 'travel_impact'] as const;
+
+export function MatchGovernedSignals({ modules }: { modules: readonly ApiModuleReading[] }) {
+  const byKey = new Map(modules.map((m) => [m.moduleKey, m]));
+  return (
+    <section className="space-y-2">
+      <SectionTitle tag="Governed">Match signals</SectionTitle>
+      {modules.length === 0 ? (
+        <EmptyState message="Governed match signals are not available for this fixture yet." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {MATCH_MODULE_ORDER.map((k) => (
+            <ReadingCard key={k} title={MATCH_MODULE_LABEL[k]} reading={byKey.get(k) ?? null} />
+          ))}
         </div>
       )}
     </section>

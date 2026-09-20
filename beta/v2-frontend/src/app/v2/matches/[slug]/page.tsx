@@ -15,7 +15,7 @@ import { MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@
 import {
   MatchHeader, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
   CompactForm, CompactVenue, AvailabilityFooter, HeadToHeadUnavailable, MatchStatisticsFull,
-  LineupsUnavailable,
+  LineupsUnavailable, MatchGovernedSignals,
 } from '@/components/v2/matchOverview';
 import type {
   ApiEditionFixture, MatchDetailResponse,
@@ -96,6 +96,7 @@ export default async function V2MatchPage({ params, searchParams }: {
           <div className="space-y-4">
             <IntelligenceBoard detail={detail} />
             <KeySignals detail={detail} stats={stats} />
+            <MatchGovernedSignals modules={detail.matchModules} />
             <MatchStatePanel detail={detail} result={result} />
             {completed && stats && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

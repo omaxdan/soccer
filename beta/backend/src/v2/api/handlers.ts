@@ -17,6 +17,7 @@ import { readCompletedFixtures } from '../feature/read/fixtures';
 import { readRecentVenueFormRows, selectRecentVenueForm, type RecentVenueFormRow, type TeamRecentVenueForm } from '../feature/read/recentVenueForm';
 import { readCurrentTeamFeatures, TEAM_PANEL_FEATURE_KEYS, type TeamFeatureValue } from '../feature/read/currentValues';
 import { readActiveMatchReadings, ACTIVE_MODULE_KEYS, type TeamModuleReading } from '../module/read/readings';
+import { readFixtureModuleReadings, FIXTURE_MATCH_MODULE_KEYS, type FixtureModuleReading } from '../module/read/fixtureReadings';
 import { readCurrentReadingEvidence, type ReadingEvidence } from '../module/read/evidence';
 import { readMatchIntelligence } from '../snapshot/read/matchIntelligence';
 import type {
@@ -119,6 +120,28 @@ function toReadingDto(r: TeamModuleReading, evidence: ReadingEvidence | undefine
   };
 }
 
+/**
+ * Maps a FIXTURE-subject module reading to the shared ApiModuleReading wire shape.
+ * `evidence` is null here: this exposure adds a single bounded readings read; the
+ * cited per-input evidence for fixture modules remains available on the sealed
+ * Intelligence surface. Nothing is stripped from persistence — it is simply not
+ * attached to the live matchModules array.
+ */
+export function toFixtureReadingDto(r: FixtureModuleReading): ApiModuleReading {
+  return {
+    moduleKey: r.moduleKey,
+    status: r.moduleStatusCode,
+    strength: r.strength,
+    confidence: r.confidence,
+    sampleObservationCount: r.sampleObservationCount,
+    sampleMeetsThreshold: r.sampleMeetsThreshold,
+    asOf: iso(r.asOf),
+    verdictText: r.verdictText,
+    inactiveReason: r.inactiveReason,
+    evidence: null,
+  };
+}
+
 function toFeatureDto(v: TeamFeatureValue): ApiFeatureValue {
   return { value: v.value, sampleObservationCount: v.sampleObservationCount, sampleMeetsThreshold: v.sampleMeetsThreshold, asOf: iso(v.asOf), direction: v.direction, unit: v.unit };
 }
@@ -173,6 +196,7 @@ export function mapIntelligence(
 
 interface HeaderRow {
   fixture_id: string;
+  fixture_partition_on: string;
   scheduled_kickoff_at: Date;
   lifecycle_state_code: string;
   edition_id: string;
@@ -188,6 +212,7 @@ interface HeaderRow {
 
 const FIXTURE_HEADER_SQL = `
   SELECT f.id::text                       AS fixture_id,
+         f.fixture_partition_on::text     AS fixture_partition_on,
          f.scheduled_kickoff_at           AS scheduled_kickoff_at,
          f.lifecycle_state_code           AS lifecycle_state_code,
          e.id::text                       AS edition_id,
@@ -282,6 +307,16 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     asOf,
     featureKeys: [...TEAM_PANEL_FEATURE_KEYS],
   });
+  // Governed FIXTURE-subject comparison readings for THIS fixture — the live
+  // form_gap_accuracy / rest_advantage / travel_impact readings, bounded to
+  // as_of ≤ kickoff so a future-dated row can never surface as pre-match intelligence.
+  // One bounded read; empty when the pipeline has not yet produced them.
+  const fixtureModules = await readFixtureModuleReadings(tx, {
+    fixtureId: h.fixture_id,
+    fixturePartitionOn: h.fixture_partition_on,
+    asOf,
+    moduleKeys: [...FIXTURE_MATCH_MODULE_KEYS],
+  });
 
   return {
     match: {
@@ -304,6 +339,7 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     },
     intelligence: mapIntelligence(readings, h.home_id, h.away_id, evidence),
     teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),
+    matchModules: fixtureModules.map(toFixtureReadingDto),
   };
 }
 

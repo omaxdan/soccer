@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   IntelligenceBoard, KeySignals, KeyMatchEvidence, MatchProgression, MatchStatePanel,
-  MatchStatisticsFull, HeadToHeadUnavailable, LineupsUnavailable,
+  MatchStatisticsFull, HeadToHeadUnavailable, LineupsUnavailable, MatchGovernedSignals,
 } from '@/components/v2/matchOverview';
 import type {
   ApiFeatureValue, ApiModuleReading, MatchDetailResponse, MatchResult, MatchTeamStatistics, TeamStatLine,
@@ -54,6 +54,7 @@ const DETAIL: MatchDetailResponse = {
     home: { homeForm: fv(45.33, 5, true), awayForm: fv(34, 4, false), momentum: fv(-7, 10, true), rest: fv(8, 1, true), congestion: fv(40, 7, true) },
     away: { homeForm: fv(5.67, 3, false), awayForm: fv(5.67, 2, false), momentum: fv(-2, 10, true), rest: fv(7, 1, true), congestion: fv(0, 2, false) },
   },
+  matchModules: [],
 };
 
 const RESULT: MatchResult = { final: { home: 4, away: 1 }, halfTime: { home: 0, away: 0 }, extraTime: null, penalties: null, confirmedAt: '2026-08-30T02:23:01.670Z' };
@@ -107,7 +108,10 @@ describe('Intelligence board (Overview centrepiece)', () => {
 describe('Key signals (derived, non-predictive)', () => {
   const t = text(<KeySignals detail={DETAIL} stats={STATS} />);
   test('summarises available signals in plain language', () => {
-    assert.match(t, /stronger recent home form/i);          // 45.33 vs 5.67
+    // The ±5 frontend form-gap heuristic was REMOVED — form-gap is now the governed
+    // form_gap_accuracy module (MatchGovernedSignals), not a frontend comparison.
+    assert.doesNotMatch(t, /stronger recent home form/i);
+    assert.doesNotMatch(t, /closely matched/i);
     assert.match(t, /negative recent momentum/i);            // both negative
     assert.match(t, /no clear separation/i);                 // both NEUTRAL
     assert.match(t, /Readiness data is not available/i);
@@ -121,6 +125,44 @@ describe('Key signals (derived, non-predictive)', () => {
     for (const term of ['will win', 'likely', 'probability', 'predicted', 'prediction', 'odds', 'bet', 'favourite', 'favorite', 'tip']) {
       assert.equal(lower.includes(term), false, `must not contain "${term}"`);
     }
+  });
+});
+
+// GOVERNED MATCH SIGNALS — the fixture-subject module verdicts (B1 exposure).
+// Locks: verdictText rendered verbatim, governed-badged, honest empty state when no
+// readings, no ±5 frontend heuristic, absent module → "not enough data" (never faked).
+const mr = (moduleKey: string, status: string, verdictText: string | null): ApiModuleReading => ({
+  moduleKey, status, strength: null, confidence: null, sampleObservationCount: 6,
+  sampleMeetsThreshold: true, asOf: '2026-08-23T17:30:00.000Z', verdictText, inactiveReason: null, evidence: null,
+});
+
+describe('Governed match signals (fixture-subject modules)', () => {
+  test('empty → honest unavailable state, no fabricated comparison', () => {
+    const t = text(<MatchGovernedSignals modules={[]} />);
+    assert.match(t, /Match signals/);
+    assert.match(t, /not available for this fixture yet/i);
+    assert.doesNotMatch(t, /stronger/i);   // no fabricated verdict
+  });
+  test('renders governed verdicts verbatim, badged governed', () => {
+    const markup = html(<MatchGovernedSignals modules={[
+      mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
+      mr('rest_advantage', 'NEUTRAL', 'Even rest: both sides on 4 days.'),
+    ]} />);
+    assert.match(markup, /governed/i);      // SectionTitle governed tag
+    const t = text(<MatchGovernedSignals modules={[
+      mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
+      mr('rest_advantage', 'NEUTRAL', 'Even rest: both sides on 4 days.'),
+    ]} />);
+    assert.match(t, /Recent form edge/); assert.match(t, /Home venue form stronger by 12\.50\./);
+    assert.match(t, /Rest/); assert.match(t, /Even rest: both sides on 4 days\./);
+  });
+  test('a module absent from a populated set shows "not enough data", never fabricated', () => {
+    // form_gap + rest present, travel absent → travel slot is honest, not invented.
+    const t = text(<MatchGovernedSignals modules={[
+      mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
+      mr('rest_advantage', 'NEUTRAL', 'Even rest.'),
+    ]} />);
+    assert.match(t, /Travel/); assert.match(t, /Not enough data yet/i);
   });
 });
 

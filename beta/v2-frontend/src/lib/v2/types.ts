@@ -104,6 +104,10 @@ export interface MatchDetailResponse {
   recentVenueForm: { home: ApiTeamRecentVenueForm; away: ApiTeamRecentVenueForm };
   intelligence: { home: ApiTeamIntelligence; away: ApiTeamIntelligence };
   teamFeatures: { home: ApiTeamFeatures; away: ApiTeamFeatures };
+  // Governed FIXTURE-subject comparison readings for this fixture (form_gap_accuracy,
+  // rest_advantage, travel_impact) — read at or before kickoff. Empty when none exist
+  // yet; the UI renders an honest unavailable state, never a fabricated comparison.
+  matchModules: ApiModuleReading[];
 }
 
 export interface ApiEditionFixture {

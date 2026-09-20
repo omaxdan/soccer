@@ -36,6 +36,7 @@ const DETAIL = (over: Partial<ApiMatchHeader> = {}): MatchDetailResponse => ({
   recentVenueForm: { home: { lastHome: [], lastAway: [] }, away: { lastHome: [], lastAway: [] } },
   intelligence: { home: { readiness: null, homeAwaySplit: null }, away: { readiness: null, homeAwaySplit: null } },
   teamFeatures: { home: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null }, away: { homeForm: null, awayForm: null, momentum: null, rest: null, congestion: null } },
+  matchModules: [],
 });
 
 describe('Match Hub width boundary', () => {

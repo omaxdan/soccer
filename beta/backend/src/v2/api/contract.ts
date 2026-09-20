@@ -244,6 +244,14 @@ export interface MatchDetailResponse {
   readonly recentVenueForm: { readonly home: ApiTeamRecentVenueForm; readonly away: ApiTeamRecentVenueForm };
   readonly intelligence: { readonly home: ApiTeamIntelligence; readonly away: ApiTeamIntelligence };
   readonly teamFeatures: { readonly home: ApiTeamFeatures; readonly away: ApiTeamFeatures };
+  /**
+   * Governed FIXTURE-subject module readings for THIS fixture (form_gap_accuracy,
+   * rest_advantage, travel_impact) — the live comparative readings, distinct from the
+   * per-team `intelligence` (TEAM subject) and from the sealed intelligence endpoint.
+   * Read at or before kickoff (never a future-dated reading). Empty when none exist
+   * yet for this fixture — an honest unavailable state, never fabricated.
+   */
+  readonly matchModules: readonly ApiModuleReading[];
 }
 
 /**
