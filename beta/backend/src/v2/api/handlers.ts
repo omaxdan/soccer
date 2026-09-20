@@ -76,6 +76,7 @@ import {
 import { readTeamPlayerObservations, type TeamPlayerObservationsOptions, type TeamPlayerObservationsResponse } from './read/teamPlayerObservations';
 import { readPlayerAvailability, type PlayerAvailabilityOptions, type PlayerStatusResponse } from './read/playerAvailability';
 import { readTeamPerformanceSignals, type TeamPerformanceSignalsOptions, type PerformanceSignalsResponse } from './read/teamPerformanceSignals';
+import { readTeamAttributes, type TeamAttributesOptions, type TeamAttributesResponse } from './read/teamAttributes';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -1056,6 +1057,23 @@ export async function getTeamPerformanceSignals(
   const t = idRes.rows[0];
 
   return readTeamPerformanceSignals(tx, teamId, { id: t.id, name: t.name, slug: t.slug }, options);
+}
+
+/**
+ * TEAM ATTRIBUTES (result-tier v1). Governed classification of edition-scoped result-tier
+ * signals into strengths / weaknesses / tendencies via quartile membership against the
+ * edition benchmark (never invented thresholds, never opaque levels, never prediction).
+ * Reuses the SAME governed exposure gate as Team Detail; consumes the internal benchmark
+ * reader only. Null → 404 when the team is not governed-exposed.
+ */
+export async function getTeamAttributes(
+  tx: PoolClient, teamId: string, options: TeamAttributesOptions = {},
+): Promise<TeamAttributesResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  return readTeamAttributes(tx, teamId, options);
 }
 
 /**

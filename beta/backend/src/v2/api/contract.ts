@@ -69,6 +69,10 @@ export type {
   PerformanceSignalsResponse, PerformanceSignal, StreakSignal, WindowSignals,
   TrajectorySignal, SignalCoverage, SignalEvidence, TeamPerformanceSignalsOptions,
 } from './read/teamPerformanceSignals';
+export type {
+  TeamAttributesResponse, TeamAttribute, AttributeEvidence, AttributeType,
+  QuartileLevel, QualityOrientation, TeamAttributesOptions,
+} from './read/teamAttributes';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
