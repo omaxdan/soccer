@@ -73,6 +73,7 @@ import {
   buildCurrentTableContext, buildHistoricalTableContext,
   type TableContextOptions, type TableContextResponse,
 } from './read/tableContext';
+import { readTeamPlayerObservations, type TeamPlayerObservationsOptions, type TeamPlayerObservationsResponse } from './read/teamPlayerObservations';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -989,6 +990,34 @@ export async function getTeamGovernedIntelligence(tx: PoolClient, teamId: string
 
   const { homeAwaySplit, consistency, coverage } = await readTeamGovernedIntelligence(tx, teamId);
   return { team: toTeamSummary(idRes.rows[0]), homeAwaySplit, consistency, coverage };
+}
+
+/**
+ * TEAM PLAYER OBSERVATION INDEX — the OBSERVED players for a team (players with
+ * historical Player Observation evidence whose underlying player_match_statistic row
+ * belongs to THIS team), with a lightweight per-player headline summary for the Team
+ * page. NOT the current squad (that is Team Detail's `squad`), and NOT the full
+ * per-player history (that is GET /players/:id/observations, the drill-down).
+ *
+ * Governance-locked: reuses the SAME governed exposure gate as Team Detail /
+ * Performance (TEAM_COMPETITIONS_SQL — registered in a governed authorized-active
+ * edition under a TRACKED competition), deliberately NOT the weaker bare gate the Team
+ * Observations endpoint uses. Historical team ownership comes from
+ * player_match_statistic.team_id, never current registration. Null → 404 when the team
+ * is not governed-exposed. No writes, no schema change, no N+1.
+ */
+export async function getTeamPlayerObservations(
+  tx: PoolClient, teamId: string, options: TeamPlayerObservationsOptions = {},
+): Promise<TeamPlayerObservationsResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  const idRes = await tx.query<TeamIdentityRow>(TEAM_IDENTITY_SQL, [teamId]);
+  if (idRes.rows.length === 0) return null;
+  const t = idRes.rows[0];
+
+  return readTeamPlayerObservations(tx, { id: t.id, name: t.name, slug: t.slug }, options);
 }
 
 /**
