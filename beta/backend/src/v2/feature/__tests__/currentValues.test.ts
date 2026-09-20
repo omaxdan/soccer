@@ -43,6 +43,7 @@ const sampleRow = {
   feature_key: 'team.home_form', team_id: '18', context_kind_code: 'ALL_COMPETITIONS',
   context_competition_edition_id: null, value: '73.33', sample_observation_count: 6,
   sample_meets_threshold: true, as_of: new Date('2027-06-01T00:00:00Z'),
+  direction: 'HIGHER_IS_STRONGER', unit: 'index',
 };
 
 describe('current feature values · SQL shape', () => {
@@ -55,6 +56,9 @@ describe('current feature values · SQL shape', () => {
     assert.match(CURRENT_TEAM_FEATURES_SQL, /fv\.subject_team_id = ANY\(\$1::bigint\[\]\)/);
     assert.match(CURRENT_TEAM_FEATURES_SQL, /fv\.as_of <= \$2::timestamptz/);
     assert.match(CURRENT_TEAM_FEATURES_SQL, /\$3::text\[\] IS NULL OR d\.feature_key = ANY\(\$3::text\[\]\)/);
+    // Governed direction/unit are selected verbatim from the definition (registry), not re-derived.
+    assert.match(CURRENT_TEAM_FEATURES_SQL, /d\.direction\s+AS direction/);
+    assert.match(CURRENT_TEAM_FEATURES_SQL, /d\.unit\s+AS unit/);
     assert.ok(!/\b(INSERT|UPDATE|DELETE)\b/i.test(CURRENT_TEAM_FEATURES_SQL));
   });
 
@@ -68,6 +72,7 @@ describe('current feature values · SQL shape', () => {
       featureKey: 'team.home_form', teamId: '18', contextKindCode: 'ALL_COMPETITIONS',
       contextCompetitionEditionId: null, value: 73.33, sampleObservationCount: 6,
       sampleMeetsThreshold: true, asOf: sampleRow.as_of,
+      direction: 'HIGHER_IS_STRONGER', unit: 'index',
     });
   });
 

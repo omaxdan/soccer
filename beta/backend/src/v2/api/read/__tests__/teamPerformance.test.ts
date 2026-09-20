@@ -26,6 +26,8 @@ function fv(over: Partial<TeamFeatureValue> & { featureKey: string; contextKindC
     sampleObservationCount: 8,
     sampleMeetsThreshold: true,
     asOf: new Date('2026-07-17T23:00:00.000Z'),
+    direction: 'HIGHER_IS_STRONGER',
+    unit: 'index',
     ...over,
   };
 }

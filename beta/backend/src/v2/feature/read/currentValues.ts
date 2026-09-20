@@ -39,6 +39,10 @@ export interface TeamFeatureValue {
   readonly sampleObservationCount: number;
   readonly sampleMeetsThreshold: boolean;
   readonly asOf: Date;
+  // Governed semantics carried through from feature.feature_definition (the
+  // registry is authoritative). Read-only pass-through — nothing is computed here.
+  readonly direction: 'HIGHER_IS_STRONGER' | 'LOWER_IS_STRONGER' | 'UNSIGNED';
+  readonly unit: string;
 }
 
 export interface ReadTeamFeaturesParams {
@@ -69,7 +73,9 @@ export const CURRENT_TEAM_FEATURES_SQL = `
          fv.value                                 AS value,
          fv.sample_observation_count              AS sample_observation_count,
          fv.sample_meets_threshold                AS sample_meets_threshold,
-         fv.as_of                                 AS as_of
+         fv.as_of                                 AS as_of,
+         d.direction                              AS direction,
+         d.unit                                   AS unit
     FROM feature.feature_value fv
     JOIN feature.feature_definition d ON d.id = fv.feature_definition_id
    WHERE fv.subject_kind_code = 'TEAM'
@@ -92,6 +98,8 @@ interface FeatureRow {
   readonly sample_observation_count: number | string;
   readonly sample_meets_threshold: boolean;
   readonly as_of: Date;
+  readonly direction: string;
+  readonly unit: string;
 }
 
 /** Maps a raw row to the typed value. numeric/bigint columns arrive as strings. */
@@ -105,6 +113,8 @@ export function mapFeatureRow(row: FeatureRow): TeamFeatureValue {
     sampleObservationCount: Number(row.sample_observation_count),
     sampleMeetsThreshold: row.sample_meets_threshold,
     asOf: row.as_of,
+    direction: row.direction as TeamFeatureValue['direction'],
+    unit: row.unit,
   };
 }
 

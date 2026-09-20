@@ -214,6 +214,12 @@ export interface ApiFeatureValue {
   readonly sampleObservationCount: number;
   readonly sampleMeetsThreshold: boolean;
   readonly asOf: string;                    // ISO-8601
+  // Governed feature semantics, sourced VERBATIM from the feature registry
+  // (feature.feature_definition) — not re-derived. `direction` lets a consumer
+  // highlight the stronger side without owning direction truth; UNSIGNED means
+  // neither side is "better". `unit` is the feature's established unit.
+  readonly direction: 'HIGHER_IS_STRONGER' | 'LOWER_IS_STRONGER' | 'UNSIGNED';
+  readonly unit: string;
 }
 
 /**

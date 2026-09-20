@@ -83,6 +83,11 @@ export interface ApiFeatureValue {
   sampleObservationCount: number;
   sampleMeetsThreshold: boolean;
   asOf: string;
+  // Governed feature semantics from the backend registry (authoritative). The
+  // frontend consumes `direction` to highlight the stronger side — it no longer
+  // owns direction truth. UNSIGNED = neither side is "better".
+  direction: MetricDirection;
+  unit: string;
 }
 
 export interface ApiTeamFeatures {
