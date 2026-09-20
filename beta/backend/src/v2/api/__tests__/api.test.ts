@@ -283,7 +283,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchLifecycle: async () => null,
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
-      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null,
+      getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
@@ -392,6 +392,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeamPerformance: async (id) => (id === '7' ? { team: { id: '7' }, overall: { homeForm: null, awayForm: null, momentum: null, goalMarginVolatility: null, giantKillerPpg: null }, byCompetition: [], coverage: { overall: 'absent', performanceIsDescriptive: true } } : null),
       getTeamReadiness: async (id) => (id === '7' ? { team: { id: '7' }, readiness: { moduleKey: 'readiness_tracker', status: 'NEUTRAL', strength: null, confidence: null, sample: { matches: 10, meetsThreshold: true }, verdictText: 'Steady form.', inactiveReason: null, asOf: '2026-07-17T23:00:00.000Z', evidence: null }, coverage: { readiness: 'present', readinessIsGoverned: true } } : null),
       getTeamGovernedIntelligence: async (id) => (id === '7' ? { team: { id: '7' }, homeAwaySplit: [], consistency: null, coverage: { homeAwaySplit: 'absent', consistency: 'absent', isGoverned: true } } : null),
+      getTeamObservations: async () => null,
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
       getVenue: async (id) => (id === '25' ? { venue: { id: '25', name: 'Maracanã', city: 'Rio de Janeiro', countryCode: 'BR', latitude: -22.9, longitude: -43.2, elevationMetres: 9, timezoneName: 'America/Sao_Paulo', capacity: 78838, surface: 'grass' }, homeTeams: [{ id: '67', name: 'Fluminense', slug: 'fluminense', shortName: 'FLU', countryCode: 'BR' }], coverage: { venue: 'present', homeTeams: 'present' } } : null),
