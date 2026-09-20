@@ -76,6 +76,9 @@ describe('v2 api · id validation and routing', () => {
     assert.deepEqual(resolveRoute('POST', '/api/v2/matches/18/intelligence'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/fixtures'), { kind: 'editionFixtures', id: '42' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/standings'), { kind: 'editionStandings', id: '42' });
+    assert.deepEqual(resolveRoute('GET', '/api/v2/editions/42/table-context'), { kind: 'tableContext', id: '42' }); // sub-route wins over bare edition
+    assert.deepEqual(resolveRoute('GET', '/api/v2/editions/abc/table-context'), { kind: 'badRequest' });
+    assert.deepEqual(resolveRoute('POST', '/api/v2/editions/42/table-context'), { kind: 'methodNotAllowed' });
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/18'), { kind: 'edition', id: '18' });          // bare edition entity
     assert.deepEqual(resolveRoute('GET', '/api/v2/editions/abc'), { kind: 'badRequest' });
     assert.deepEqual(resolveRoute('POST', '/api/v2/editions/18'), { kind: 'methodNotAllowed' });
@@ -282,7 +285,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchResult: async () => null,
       getMatchLifecycle: async () => null,
       getMatchVenue: async () => null,
-      getEdition: async () => null, getEditionStandings: async () => null, getEditionObservations: async () => null, getEditionTemporalPerformance: async () => null, getSeasonPositionTrajectory: async () => null, getEditions: async () => ({ editions: [] }),
+      getEdition: async () => null, getEditionStandings: async () => null, getEditionObservations: async () => null, getEditionTemporalPerformance: async () => null, getSeasonPositionTrajectory: async () => null, getTableContext: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null, getTeamTemporalPerformance: async () => null,
       getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getPlayerTemporalPerformance: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
@@ -389,6 +392,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getEditionObservations: async (id) => (id === '42' ? { edition: { id: '42', seasonLabel: 'S' }, competition: { id: '1', name: 'L', slug: 'l' }, scope: { asOf: '2026-09-20T00:00:00.000Z', order: 'asc' }, asOf: '2026-09-20T00:00:00.000Z', observationCount: 0, series: [], current: null, coverage: { resultMetrics: { class: 'full-edition', matchesCompleted: 0, matchesScheduled: 0 }, statMetrics: [] }, provenance: { statTier: null } } : null),
       getSeasonPositionTrajectory: async (id) => (id === '42' ? { edition: { id: '42', seasonLabel: 'S' }, competition: { id: '1', name: 'L', slug: 'l' }, scope: { asOf: '2026-09-20T00:00:00.000Z', order: 'asc', teamId: null }, asOf: '2026-09-20T00:00:00.000Z', mode: 'RAW_DETERMINISTIC', positionMethod: { comparator: ['points DESC'], version: 'raw-det-1', note: 'x' }, teamCount: 0, teams: [] } : null),
       getEditionTemporalPerformance: async (id) => (id === '42' ? { edition: { id: '42', seasonLabel: 'S' }, competition: { id: '1', name: 'L', slug: 'l' }, scope: { editionId: '42', label: 'L S' }, asOf: '2026-09-20T00:00:00.000Z', aggregation: { version: 'edition-temporal-1' }, comparisonStatus: 'insufficient_sample', sample: { eligibleObservations: 0, requiredForComparison: 10 }, windows: { last5: { status: 'insufficient', observationCount: 0, windowSize: 5, from: null, to: null, fixtureIds: [] }, previous5: null }, results: { last5: null, previous5: null, change: null }, comparisons: [], current: null, provenance: { source: 'editionObservations', statSource: 'team_match_statistic (bounded window reconstruction)', aggregationVersion: 'edition-temporal-1', asOf: '2026-09-20T00:00:00.000Z', last5FixtureIds: [], previous5FixtureIds: [], boundaries: { previousBoundarySequence: null, previousEndSequence: 0, lastEndSequence: 0 } } } : null),
+      getTableContext: async (id) => (id === '42' ? { edition: { id: '42', seasonLabel: 'S' }, competition: { id: '1', name: 'L', slug: 'l' }, scope: { editionId: '42', asOf: null, mode: 'CURRENT_PROVIDER' }, team: null, teams: [], method: { mode: 'CURRENT_PROVIDER', note: 'x' }, provenance: { source: 'editionStandings', mode: 'CURRENT_PROVIDER', asOf: null, standingsAsOf: null } } : null),
       getEditions: async () => ({ editions: [{ id: '42', seasonLabel: 'S', competition: { id: '1', name: 'L', slug: 'l' }, fixtureCount: 3 }] }),
       getTeams: async () => ({ teams: [{ id: '7', name: 'T', slug: 't', shortName: null, countryCode: null }] }),
       getTeam: async (id) => (id === '7' ? { team: { id: '7' } } : null),
@@ -517,6 +521,20 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
 
   it('GET standings for a non-exposed edition → 404 edition_not_found', async () => {
     const res = await fetch(`${base}/api/v2/editions/43/standings`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: 'edition_not_found' });
+  });
+
+  it('GET a known edition table-context → 200 with a table-context projection', async () => {
+    const res = await fetch(`${base}/api/v2/editions/42/table-context`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as any;
+    assert.equal(body.edition.id, '42');
+    assert.equal(body.scope.mode, 'CURRENT_PROVIDER');
+  });
+
+  it('GET table-context for a non-exposed edition → 404 edition_not_found', async () => {
+    const res = await fetch(`${base}/api/v2/editions/43/table-context`);
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: 'edition_not_found' });
   });

@@ -17,7 +17,7 @@ import type { PoolClient } from 'pg';
 import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
-import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, getTeamTemporalPerformance, getPlayerTemporalPerformance, getEditionTemporalPerformance, isValidId, isValidCountryCode } from './handlers';
+import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, getTeamTemporalPerformance, getPlayerTemporalPerformance, getEditionTemporalPerformance, getTableContext, isValidId, isValidCountryCode } from './handlers';
 import type { TeamObservationOptions } from './read/teamObservations';
 import type { PlayerObservationOptions } from './read/playerObservations';
 import type { EditionObservationOptions } from './read/editionObservations';
@@ -25,6 +25,7 @@ import type { SeasonPositionTrajectoryOptions } from './read/seasonPositionTraje
 import type { TeamTemporalPerformanceOptions } from './read/teamTemporalPerformance';
 import type { PlayerTemporalPerformanceOptions } from './read/playerTemporalPerformance';
 import type { EditionTemporalPerformanceOptions } from './read/editionTemporalPerformance';
+import type { TableContextOptions } from './read/tableContext';
 
 /** Read/administrative connection label. One credential backs every V2 pool. */
 export const API_ROLE = 'pt_platform_admin' as const;
@@ -46,6 +47,7 @@ export interface ApiDeps {
   readonly getEditionObservations: (id: string, opts: EditionObservationOptions) => Promise<unknown | null>;
   readonly getEditionTemporalPerformance: (id: string, opts: EditionTemporalPerformanceOptions) => Promise<unknown | null>;
   readonly getSeasonPositionTrajectory: (id: string, opts: SeasonPositionTrajectoryOptions) => Promise<unknown | null>;
+  readonly getTableContext: (id: string, opts: TableContextOptions) => Promise<unknown | null>;
   readonly getEditions: () => Promise<unknown>;
   readonly getTeams: () => Promise<unknown>;
   readonly getTeam: (id: string) => Promise<unknown | null>;
@@ -77,6 +79,7 @@ const productionDeps: ApiDeps = {
   getEditionObservations: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getEditionObservations(tx, id, opts)),
   getEditionTemporalPerformance: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getEditionTemporalPerformance(tx, id, opts)),
   getSeasonPositionTrajectory: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getSeasonPositionTrajectory(tx, id, opts)),
+  getTableContext: (id, opts) => withConnection(API_ROLE, (tx: PoolClient) => getTableContext(tx, id, opts)),
   getEditions: () => withConnection(API_ROLE, (tx: PoolClient) => getEditions(tx)),
   getTeams: () => withConnection(API_ROLE, (tx: PoolClient) => getTeams(tx)),
   getTeam: (id) => withConnection(API_ROLE, (tx: PoolClient) => getTeamDetail(tx, id)),
@@ -109,6 +112,7 @@ export type Route =
   | { kind: 'editionObservations'; id: string }
   | { kind: 'editionTemporalPerformance'; id: string }
   | { kind: 'seasonPositionTrajectory'; id: string }
+  | { kind: 'tableContext'; id: string }
   | { kind: 'edition'; id: string }
   | { kind: 'teamList' }
   | { kind: 'team'; id: string }
@@ -145,6 +149,7 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const editionObservations = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/observations$/);
   const seasonPositionTrajectory = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/position-trajectory$/);
   const editionTemporalPerformance = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/temporal-performance$/);
+  const tableContext = pathname.match(/^\/api\/v2\/editions\/([^/]+)\/table-context$/);
   const editionDetail = pathname.match(/^\/api\/v2\/editions\/([^/]+)$/);
   const teamPerformance = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/performance$/);
   const teamReadiness = pathname.match(/^\/api\/v2\/teams\/([^/]+)\/readiness$/);
@@ -158,7 +163,7 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   const venue = pathname.match(/^\/api\/v2\/venues\/([^/]+)$/);
   const country = pathname.match(/^\/api\/v2\/countries\/([^/]+)$/);
   const competition = pathname.match(/^\/api\/v2\/competitions\/([^/]+)$/);
-  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionObservations && !editionTemporalPerformance && !seasonPositionTrajectory && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !teamTemporalPerformance && !team && !playerObservations && !playerTemporalPerformance && !player && !venue && !country && !competition) {
+  if (!isEditionList && !isTeamList && !isPlayerList && !matchIntelligence && !matchLineups && !matchTeamStatistics && !matchResult && !matchLifecycle && !matchVenue && !match && !editionFixtures && !editionStandings && !editionObservations && !editionTemporalPerformance && !seasonPositionTrajectory && !tableContext && !editionDetail && !teamPerformance && !teamReadiness && !teamIntelligence && !teamObservations && !teamTemporalPerformance && !team && !playerObservations && !playerTemporalPerformance && !player && !venue && !country && !competition) {
     return { kind: 'notFound' };
   }
   if (method !== 'GET') return { kind: 'methodNotAllowed' };
@@ -212,6 +217,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
   if (seasonPositionTrajectory) {
     const id = decodeURIComponent(seasonPositionTrajectory[1]);
     return isValidId(id) ? { kind: 'seasonPositionTrajectory', id } : { kind: 'badRequest' };
+  }
+  if (tableContext) {
+    const id = decodeURIComponent(tableContext[1]);
+    return isValidId(id) ? { kind: 'tableContext', id } : { kind: 'badRequest' };
   }
   if (editionDetail) {
     const id = decodeURIComponent(editionDetail[1]);
@@ -337,6 +346,20 @@ export function parseSeasonPositionTrajectoryOptions(searchParams: URLSearchPara
   return { asOf, teamId, order, limit: parsePositiveInt(searchParams.get('limit')), offset: parsePositiveInt(searchParams.get('offset')) };
 }
 
+/** Parse the Table Context query filters. Whitelisted, lenient: team (optional teamId
+ *  filter), asOf (optional). The PRESENCE of a valid asOf selects RAW_DETERMINISTIC
+ *  (historical reconstruction); its absence selects CURRENT_PROVIDER (live snapshot).
+ *  An unparseable asOf is dropped → current mode, never a 500. Strict `<` is enforced
+ *  downstream by the trajectory reader. */
+export function parseTableContextOptions(searchParams: URLSearchParams): TableContextOptions {
+  const teamRaw = searchParams.get('team');
+  const teamId = teamRaw && isValidId(teamRaw) ? teamRaw : null;
+  const asOfRaw = searchParams.get('asOf');
+  let asOf: Date | undefined;
+  if (asOfRaw) { const d = new Date(asOfRaw); if (!Number.isNaN(d.getTime())) asOf = d; }
+  return { teamId, asOf };
+}
+
 /** Parse the Player Temporal Performance query filters. Whitelisted: asOf (default now,
  *  strict `<`) and optional edition scope. No free-form window builder (governed v1). */
 export function parsePlayerTemporalPerformanceOptions(searchParams: URLSearchParams): PlayerTemporalPerformanceOptions {
@@ -424,6 +447,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, d
         const body = await deps.getSeasonPositionTrajectory(route.id, parseSeasonPositionTrajectoryOptions(url.searchParams));
         return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'edition_not_found' });
       }
+      case 'tableContext': {
+        const body = await deps.getTableContext(route.id, parseTableContextOptions(url.searchParams));
+        return body ? sendJson(res, 200, body) : sendJson(res, 404, { error: 'edition_not_found' });
+      }
       case 'teamList':
         return sendJson(res, 200, await deps.getTeams());
       case 'teamPerformance': {
@@ -501,7 +528,7 @@ export async function main(): Promise<void> {
   server.on('close', () => { void closeAllPools(); });
   server.listen(port, () => {
     // eslint-disable-next-line no-console
-    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/editions/:editionId/observations\n  GET /api/v2/editions/:editionId/position-trajectory\n  GET /api/v2/editions/:editionId/temporal-performance\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/teams/:teamId/temporal-performance\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/players/:playerId/temporal-performance\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
+    console.log(`\nv2 read API listening on http://127.0.0.1:${port}\n  GET /api/v2/editions\n  GET /api/v2/editions/:editionId\n  GET /api/v2/editions/:editionId/fixtures\n  GET /api/v2/editions/:editionId/standings\n  GET /api/v2/editions/:editionId/observations\n  GET /api/v2/editions/:editionId/position-trajectory\n  GET /api/v2/editions/:editionId/temporal-performance\n  GET /api/v2/editions/:editionId/table-context\n  GET /api/v2/matches/:matchId\n  GET /api/v2/matches/:matchId/intelligence\n  GET /api/v2/matches/:matchId/lineups\n  GET /api/v2/matches/:matchId/team-statistics\n  GET /api/v2/matches/:matchId/result\n  GET /api/v2/matches/:matchId/lifecycle\n  GET /api/v2/matches/:matchId/venue\n  GET /api/v2/teams\n  GET /api/v2/teams/:teamId\n  GET /api/v2/teams/:teamId/performance\n  GET /api/v2/teams/:teamId/readiness\n  GET /api/v2/teams/:teamId/intelligence\n  GET /api/v2/teams/:teamId/observations\n  GET /api/v2/teams/:teamId/temporal-performance\n  GET /api/v2/players\n  GET /api/v2/players/:playerId\n  GET /api/v2/players/:playerId/observations\n  GET /api/v2/players/:playerId/temporal-performance\n  GET /api/v2/venues/:venueId\n  GET /api/v2/countries/:countryCode\n  GET /api/v2/competitions/:competitionId\n`);
   });
 }
 

@@ -69,6 +69,10 @@ import { readSeasonPositionTrajectory, type SeasonPositionTrajectoryOptions, typ
 import { readTeamTemporalPerformance, type TeamTemporalPerformanceOptions, type TeamTemporalPerformanceResponse } from './read/teamTemporalPerformance';
 import { readPlayerTemporalPerformance, type PlayerTemporalPerformanceOptions, type PlayerTemporalPerformanceResponse } from './read/playerTemporalPerformance';
 import { readEditionTemporalPerformance, type EditionTemporalPerformanceOptions, type EditionTemporalPerformanceResponse } from './read/editionTemporalPerformance';
+import {
+  buildCurrentTableContext, buildHistoricalTableContext,
+  type TableContextOptions, type TableContextResponse,
+} from './read/tableContext';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -719,6 +723,39 @@ export async function getEditionStandings(tx: PoolClient, editionId: string): Pr
     },
     standings,
   };
+}
+
+/**
+ * TABLE CONTEXT for one edition — "where is this team in the table, and what surrounds
+ * it?" — as descriptive context, never prediction/forecast/ranking-score. Two distinct,
+ * never-merged modes selected by the presence of `asOf`:
+ *
+ *   • asOf absent → CURRENT_PROVIDER: the current provider standings snapshot (reuses
+ *     getEditionStandings, so the SAME Day-1 governed exposure gate applies). A single
+ *     coherent ranked TOTAL table → position, played, points, W/D/L, GF/GA/GD, plus
+ *     adjacent above/below and point gaps. positionChange is null (a snapshot has no
+ *     prior state).
+ *   • asOf present → RAW_DETERMINISTIC: historical reconstruction via Season Position
+ *     Trajectory (its own edition gate). The team's position/totals after its latest
+ *     completed fixture strictly before asOf, plus trajectory positionChange. Adjacency
+ *     and gaps are NOT exposed historically (per-fixture positions are not a
+ *     synchronized as-of table); deterministic comparator, never "official".
+ *
+ * Null → 404 when the edition is not exposed (CURRENT) or unknown (RAW). No writes, no
+ * calculation here — pure orchestration of two existing readers + pure builders.
+ */
+export async function getTableContext(
+  tx: PoolClient, editionId: string, options: TableContextOptions = {},
+): Promise<TableContextResponse | null> {
+  const teamId = options.teamId ?? null;
+  if (options.asOf) {
+    const traj = await readSeasonPositionTrajectory(tx, editionId, { asOf: options.asOf, teamId, order: 'asc' });
+    if (traj === null) return null;
+    return buildHistoricalTableContext(traj, teamId, options.asOf.toISOString());
+  }
+  const std = await getEditionStandings(tx, editionId);
+  if (std === null) return null;
+  return buildCurrentTableContext(std, teamId);
 }
 
 /** Lists an edition's fixtures for a league page, or null when the edition does not exist. */
