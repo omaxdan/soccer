@@ -28,6 +28,12 @@ export type {
   PlayerObservationMetricCoverage, PlayerMetricCoverageState, PlayerObservationCoverageState,
   PlayerParticipation,
 } from './read/playerObservations';
+export type {
+  EditionObservationsResponse, EditionObservationPoint, EditionObservationResults,
+  EditionObservationGoals, EditionObservationCleanSheets, EditionObservationStatTier,
+  EditionResultCoverage, EditionStatCoverage, EditionObservationProvenance,
+  EditionResultCoverageClass, EditionStatCoverageClass,
+} from './read/editionObservations';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
