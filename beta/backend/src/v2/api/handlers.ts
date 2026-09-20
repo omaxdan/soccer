@@ -62,6 +62,7 @@ import { readTeamIntelligence } from './read/teamIntelligence';
 import { readEditionStandings } from './read/editionStandings';
 import { readMatchLineups } from './read/matchLineups';
 import { readMatchTeamStatistics } from './read/matchTeamStatistics';
+import { readTeamObservations, type TeamObservationOptions, type TeamObservationsResponse } from './read/teamObservations';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -378,6 +379,19 @@ export async function getMatchLineups(tx: PoolClient, fixtureId: string): Promis
  * read model. Observed provider evidence only — raw strings, no arithmetic, no
  * intelligence. No writes.
  */
+/**
+ * A team's descriptive chronological Team Match-Performance Observations — thin
+ * delegation to the read model. Descriptive evidence only (no trend/prediction);
+ * separate from Team Season Statistics (aggregate) and governed performance/readiness.
+ * Null → 404 when the team does not exist; a valid team with no eligible fixtures
+ * returns an empty series with coverage 'absent'.
+ */
+export async function getTeamObservations(
+  tx: PoolClient, teamId: string, options: TeamObservationOptions = {},
+): Promise<TeamObservationsResponse | null> {
+  return readTeamObservations(tx, teamId, options);
+}
+
 export async function getMatchTeamStatistics(tx: PoolClient, fixtureId: string): Promise<MatchTeamStatisticsResponse | null> {
   const header = await tx.query<HeaderRow>(FIXTURE_HEADER_SQL, [fixtureId]);
   if (header.rows.length === 0) return null;

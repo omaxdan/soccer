@@ -16,6 +16,13 @@ import type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
 } from './read/playerStatistics';
 import type { TeamIntelligence } from './read/teamIntelligence';
+// Team Match-Performance Observations — descriptive chronological contract (frozen).
+// Defined in the read model and surfaced here as the wire contract, mirroring how
+// other read-model DTOs (e.g. TeamIntelligence) are re-exported through this boundary.
+export type {
+  TeamObservationsResponse, TeamObservation, ObservationMetric, ObservationProvenance,
+  TeamObservationMetricCoverage, MetricCoverageState, ObservationCoverageState,
+} from './read/teamObservations';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
