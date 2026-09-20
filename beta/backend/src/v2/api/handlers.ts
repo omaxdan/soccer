@@ -75,6 +75,7 @@ import {
 } from './read/tableContext';
 import { readTeamPlayerObservations, type TeamPlayerObservationsOptions, type TeamPlayerObservationsResponse } from './read/teamPlayerObservations';
 import { readPlayerAvailability, type PlayerAvailabilityOptions, type PlayerStatusResponse } from './read/playerAvailability';
+import { readTeamPerformanceSignals, type TeamPerformanceSignalsOptions, type PerformanceSignalsResponse } from './read/teamPerformanceSignals';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -1033,6 +1034,28 @@ export async function getTeamPlayerObservations(
   const t = idRes.rows[0];
 
   return readTeamPlayerObservations(tx, { id: t.id, name: t.name, slug: t.slug }, options);
+}
+
+/**
+ * TEAM PERFORMANCE SIGNALS. Transparent, formula-based, coverage-aware descriptive
+ * signals (scoring/conceding/total-goals/BTTS/result/margin/attack-xG/defensive-xG/
+ * creation/streaks) over the canonical Team Observation series — never an opaque score,
+ * prediction, or causal label. Reuses the SAME governed exposure gate as Team Detail;
+ * signals are reconstructed only through readTeamObservations (no raw team_match_statistic).
+ * Null → 404 when the team is not governed-exposed.
+ */
+export async function getTeamPerformanceSignals(
+  tx: PoolClient, teamId: string, options: TeamPerformanceSignalsOptions = {},
+): Promise<PerformanceSignalsResponse | null> {
+  // Exposure gate: the team must be registered in a governed authorized edition.
+  const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
+  if (comps.rows.length === 0) return null;
+
+  const idRes = await tx.query<TeamIdentityRow>(TEAM_IDENTITY_SQL, [teamId]);
+  if (idRes.rows.length === 0) return null;
+  const t = idRes.rows[0];
+
+  return readTeamPerformanceSignals(tx, teamId, { id: t.id, name: t.name, slug: t.slug }, options);
 }
 
 /**
