@@ -61,6 +61,10 @@ export type {
   TeamPlayerObservationsResponse, TeamPlayerObservationEntry, TeamPlayerSummaryMetric,
   TeamPlayerParticipationCounts, TeamPlayerLatestObservation, TeamPlayerObservationsOptions,
 } from './read/teamPlayerObservations';
+export type {
+  PlayerStatusResponse, PlayerStatusSpell, PlayerStatusSummary, PlayerStatusCode,
+  PlayerAvailabilityOptions,
+} from './read/playerAvailability';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
