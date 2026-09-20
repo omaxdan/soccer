@@ -34,6 +34,10 @@ export type {
   EditionResultCoverage, EditionStatCoverage, EditionObservationProvenance,
   EditionResultCoverageClass, EditionStatCoverageClass,
 } from './read/editionObservations';
+export type {
+  SeasonPositionTrajectoryResponse, TeamTrajectory, TrajectoryPoint, TrajectoryTableState,
+  TrajectorySummary, SeasonPositionTrajectoryOptions,
+} from './read/seasonPositionTrajectory';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';
