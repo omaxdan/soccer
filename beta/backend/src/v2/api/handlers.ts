@@ -65,6 +65,7 @@ import { readMatchTeamStatistics } from './read/matchTeamStatistics';
 import { readTeamObservations, type TeamObservationOptions, type TeamObservationsResponse } from './read/teamObservations';
 import { readPlayerObservations, type PlayerObservationOptions, type PlayerObservationsResponse } from './read/playerObservations';
 import { readEditionObservations, type EditionObservationOptions, type EditionObservationsResponse } from './read/editionObservations';
+import { readSeasonPositionTrajectory, type SeasonPositionTrajectoryOptions, type SeasonPositionTrajectoryResponse } from './read/seasonPositionTrajectory';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -418,6 +419,18 @@ export async function getEditionObservations(
   tx: PoolClient, editionId: string, options: EditionObservationOptions = {},
 ): Promise<EditionObservationsResponse | null> {
   return readEditionObservations(tx, editionId, options);
+}
+
+/**
+ * SEASON POSITION TRAJECTORY. RAW deterministic reconstruction of each team's league
+ * table position through an edition's completed fixtures (points → GD → GF → teamId;
+ * NOT official ranking). Descriptive historical evidence, never prediction. Null → 404
+ * when the edition is unknown.
+ */
+export async function getSeasonPositionTrajectory(
+  tx: PoolClient, editionId: string, options: SeasonPositionTrajectoryOptions = {},
+): Promise<SeasonPositionTrajectoryResponse | null> {
+  return readSeasonPositionTrajectory(tx, editionId, options);
 }
 
 export async function getMatchTeamStatistics(tx: PoolClient, fixtureId: string): Promise<MatchTeamStatisticsResponse | null> {
