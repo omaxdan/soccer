@@ -17,7 +17,8 @@ import type { Server } from 'node:http';
 import type { PoolClient } from 'pg';
 
 import { resolveRoute, createServer, type ApiDeps } from '../server';
-import { isValidId, mapIntelligence, mapTeamFeatures } from '../handlers';
+import { isValidId, mapIntelligence, mapTeamFeatures, toFixtureReadingDto } from '../handlers';
+import type { FixtureModuleReading } from '../../module/read/fixtureReadings';
 import type { TeamFeatureValue } from '../../feature/read/currentValues';
 import type { TeamModuleReading } from '../../module/read/readings';
 import type { ReadingEvidence } from '../../module/read/evidence';
@@ -207,6 +208,21 @@ describe('v2 api · team-feature mapping (missing values → null, never fabrica
     assert.equal(out.home.homeForm?.unit, 'index');
     assert.equal(out.home.congestion?.direction, 'LOWER_IS_STRONGER'); // governed, not a frontend constant
     assert.equal(out.home.rest?.unit, 'days');
+  });
+
+  test('governed FIXTURE readings map to ApiModuleReading verbatim (status/verdict/sample), evidence null', () => {
+    const r: FixtureModuleReading = {
+      moduleKey: 'form_gap_accuracy', fixtureId: '292',
+      asOf: new Date('2026-08-23T17:30:00Z'), calculatedAt: new Date('2026-08-23T18:00:00Z'),
+      moduleStatusCode: 'SUPPORTS', strength: null, confidence: null,
+      sampleObservationCount: 6, sampleMeetsThreshold: true,
+      verdictText: 'Home venue form stronger by 12.50.', inactiveReason: null,
+    };
+    assert.deepEqual(toFixtureReadingDto(r), {
+      moduleKey: 'form_gap_accuracy', status: 'SUPPORTS', strength: null, confidence: null,
+      sampleObservationCount: 6, sampleMeetsThreshold: true, asOf: '2026-08-23T17:30:00.000Z',
+      verdictText: 'Home venue form stronger by 12.50.', inactiveReason: null, evidence: null,
+    });
   });
 
   test('no values at all → every slot null', () => {
