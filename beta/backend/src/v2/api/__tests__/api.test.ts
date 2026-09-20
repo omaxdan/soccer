@@ -284,7 +284,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null,
-      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
+      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -395,6 +395,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getTeamObservations: async () => null,
       getPlayers: async () => ({ players: [{ id: '9', fullName: 'P', shortName: null, slug: 'p', team: null }] }),
       getPlayer: async (id) => (id === '9' ? { player: { id: '9' } } : null),
+      getPlayerObservations: async (id) => (id === '9' ? { player: { id: '9', fullName: 'P', slug: 'p' }, scope: { competition: 'all', editionId: null, venue: 'all', order: 'asc' }, asOf: '2026-09-20T00:00:00.000Z', observationCount: 0, coverage: { observations: 'absent', metrics: [] }, observations: [] } : null),
       getVenue: async (id) => (id === '25' ? { venue: { id: '25', name: 'Maracanã', city: 'Rio de Janeiro', countryCode: 'BR', latitude: -22.9, longitude: -43.2, elevationMetres: 9, timezoneName: 'America/Sao_Paulo', capacity: 78838, surface: 'grass' }, homeTeams: [{ id: '67', name: 'Fluminense', slug: 'fluminense', shortName: 'FLU', countryCode: 'BR' }], coverage: { venue: 'present', homeTeams: 'present' } } : null),
       getCountry: async (code) => (code === 'BR' ? { country: { code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }, teams: [{ id: '68', name: 'Flamengo', slug: 'flamengo-5981', shortName: 'Flamengo', countryCode: 'BR' }], competitions: [{ id: '1', name: 'Brasileirão Série A', slug: 'brasileirao-serie-a' }], coverage: { country: 'present', teams: 'present', competitions: 'present' } } : null),
       getCompetition: async (id) => (id === '28' ? { competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325', countryCode: 'BR' }, editions: [{ id: '42', seasonLabel: '2025', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixtureCount: 380 }], coverage: { competition: 'present', editions: 'present' } } : null),
