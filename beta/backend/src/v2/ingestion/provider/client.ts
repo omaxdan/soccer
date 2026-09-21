@@ -30,7 +30,7 @@
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { ApiUsageWindowBuilder } from '../../operations/apiUsage';
-import { PROVIDER_CODE, loadProviderConfig, type ProviderConfig } from './config';
+import { PROVIDER_CODE, loadProviderConfig, dailyQuota, isHeterogeneous, keyPriorityOrder, type ProviderConfig } from './config';
 import { ENDPOINTS, resolvePath, type EndpointKey } from './endpoints';
 import { logger } from '../../../utils/logger';
 
@@ -92,6 +92,10 @@ export class ProviderClient {
   private readonly transports: AxiosInstance[];
   private roundRobin = 0;
   private lastRequestAt = 0;
+  /** Capacity-descending key preference (largest daily ceiling first). */
+  private readonly priority: number[];
+  /** True when keys differ in capacity — routing is primary-first, not round-robin. */
+  private readonly heterogeneous: boolean;
 
   /** One usage accumulator per endpoint. Windows are per endpoint by schema. */
   private readonly usage = new Map<EndpointKey, ApiUsageWindowBuilder>();
@@ -105,10 +109,28 @@ export class ProviderClient {
         headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
       })
     );
+    this.priority = keyPriorityOrder(config);
+    this.heterogeneous = isHeterogeneous(config);
     logger.info(
-      { keys: config.keys.length, dailyBudget: config.keys.length * config.dailyQuotaPerKey },
+      {
+        keys: config.keys.length,
+        dailyBudget: dailyQuota(config), // aggregate, correct for heterogeneous keys
+        routing: this.heterogeneous ? 'PRIMARY_FIRST' : 'ROUND_ROBIN',
+      },
       'v2 ingestion: provider client ready'
     );
+  }
+
+  /** Routing description — the aggregate budget and key preference the client will
+   *  use. Observability + test seam; no I/O, spends nothing. For heterogeneous keys
+   *  the mode is PRIMARY_FIRST (largest ceiling first, small key is spillover), so
+   *  the small key never receives half the traffic and 429-storms. */
+  get routing(): { mode: 'PRIMARY_FIRST' | 'ROUND_ROBIN'; priority: readonly number[]; aggregateDailyQuota: number } {
+    return {
+      mode: this.heterogeneous ? 'PRIMARY_FIRST' : 'ROUND_ROBIN',
+      priority: this.priority,
+      aggregateDailyQuota: dailyQuota(this.config),
+    };
   }
 
   private sleep(ms: number): Promise<void> {
@@ -192,7 +214,11 @@ export class ProviderClient {
   ): Promise<ProviderObservation<T>> {
     const path = resolvePath(key, params);
     const builder = this.accumulator(key);
-    let transportIndex = this.roundRobin++ % this.transports.length;
+    // HETEROGENEOUS keys: always start on the largest-capacity key (priority[0]);
+    // the smaller key is a 429 spillover reserve, never half the traffic. HOMOGENEOUS
+    // keys: round-robin balances two equal budgets, which is safe.
+    let transportIndex = this.heterogeneous ? this.priority[0] : this.roundRobin++ % this.transports.length;
+    let failoverStep = 0;
     let lastStatus: number | undefined;
     let lastError: unknown;
     let attemptsMade = 0;
@@ -242,7 +268,12 @@ export class ProviderClient {
         if (!retryable || attempt === MAX_ATTEMPTS - 1) break;
 
         if (rateLimited && this.transports.length > 1) {
-          const other = (transportIndex + 1) % this.transports.length;
+          // Heterogeneous: fail over DOWN the capacity order (priority[next]); the
+          // largest key was tried first, so the next-largest is the natural spillover.
+          // Homogeneous: the "other key" as before.
+          const other = this.heterogeneous
+            ? this.priority[(++failoverStep) % this.priority.length]
+            : (transportIndex + 1) % this.transports.length;
           // Failing over is only useful the FIRST time. If the other key has
           // already answered 429 this request, the per-minute window is fully
           // consumed and switching back just spends the same exhausted budget.
