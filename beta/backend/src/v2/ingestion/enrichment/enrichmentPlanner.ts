@@ -307,3 +307,182 @@ export async function readLayer2UnlockStatus(
     attributeFloor, keys: evaluated, anyUnlocked: evaluated.some((k) => k.unlocked),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOOTSTRAP ENRICHMENT DEMAND — lineup-aware + team-stat-aware (2×/1× call cost)
+//
+// The Layer-2 demand functions above detect gaps by ONE stats-coverage key, which is
+// correct for the statistical-attribute question but WRONG for a raw-corpus bootstrap:
+// the executor (enrichMatchFixture) calls BOTH match_lineups AND match_statistics, so a
+// completed fixture can be missing lineups, stats, or both. This reader detects BOTH
+// coverage dimensions independently and costs each fixture by the endpoints it actually
+// needs — never "selected fixtures × 1".
+//
+//   !lineup && !stats → 2 calls   |   exactly one missing → 1 call   |   both present → 0
+//
+// Coverage here is an INGESTION-completeness question (does a lineup / an ALL-period
+// team statistic row EXIST for the fixture), NOT a Team-Observation reading — so it uses
+// plain EXISTS probes and never the canonical stat-metric machinery. Eligibility mirrors
+// the governed contract: COMPLETED + strict `scheduled_kickoff_at < asOf`. Read-only;
+// spends nothing; selection is deterministic (edition, kickoff, fixtureId).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BootstrapFixture {
+  readonly fixtureId: string;
+  readonly fixturePartitionOn: string;
+  readonly editionId: string;
+  readonly kickoffAt: string;
+  readonly homeTeamId: string;
+  readonly awayTeamId: string;
+  readonly hasLineup: boolean;
+  readonly hasStats: boolean;
+  readonly requiredCalls: number; // 0 / 1 / 2 — the endpoints this fixture still needs
+}
+
+export interface BootstrapEditionDemand {
+  readonly editionId: string;
+  readonly completed: number;          // ALL completed fixtures < asOf (covered or not)
+  readonly missingBoth: number;
+  readonly missingLineupOnly: number;
+  readonly missingStatsOnly: number;
+  readonly enrichmentCalls: number;    // 2*missingBoth + missingLineupOnly + missingStatsOnly
+}
+
+export interface BootstrapBatch {
+  readonly batchIndex: number;
+  readonly fixtureIds: readonly string[];
+  readonly fixtureCount: number;
+  readonly lineupCalls: number;        // fixtures in the batch needing match_lineups
+  readonly statCalls: number;          // fixtures in the batch needing match_statistics
+  readonly estimatedCalls: number;     // lineupCalls + statCalls (a fixture is atomic; may cost 1 or 2)
+}
+
+export interface BootstrapEnrichmentDemand {
+  readonly asOf: string;
+  readonly editionIds: readonly string[];
+  readonly fixtures: readonly BootstrapFixture[]; // SELECTED (requiredCalls > 0), deterministically ordered
+  readonly selectedFixtureIds: readonly string[];
+  readonly missingBoth: number;
+  readonly missingLineupOnly: number;
+  readonly missingStatsOnly: number;
+  readonly estimatedCalls: number;     // the number the executor will actually spend; feed to the governor verbatim
+  readonly perEdition: readonly BootstrapEditionDemand[];
+  readonly batches?: readonly BootstrapBatch[]; // present only when a batchSize is supplied
+}
+
+/** Provider calls a fixture still needs: one per missing endpoint. Pure. */
+export function fixtureRequiredCalls(hasLineup: boolean, hasStats: boolean): number {
+  return (hasLineup ? 0 : 1) + (hasStats ? 0 : 1);
+}
+
+interface BootstrapCoverageRow {
+  fixture_id: string; fixture_partition_on: string; edition_id: string;
+  kickoff_at: Date | string; home_team_id: string; away_team_id: string;
+  has_lineup: boolean; has_stats: boolean;
+}
+
+/** Every completed fixture < asOf for the given editions, each carrying INDEPENDENT lineup
+ *  and ALL-period team-stat existence. $1 edition ids[] · $2 asOf (strict <). Read-only. */
+export const BOOTSTRAP_COVERAGE_SQL = `
+  SELECT f.id::text AS fixture_id, f.fixture_partition_on::text AS fixture_partition_on,
+         f.competition_edition_id::text AS edition_id,
+         f.scheduled_kickoff_at AS kickoff_at,
+         f.home_team_id::text AS home_team_id, f.away_team_id::text AS away_team_id,
+         EXISTS (SELECT 1 FROM football.lineup l
+                  WHERE l.fixture_id = f.id AND l.fixture_partition_on = f.fixture_partition_on) AS has_lineup,
+         EXISTS (SELECT 1 FROM football.team_match_statistic s
+                  WHERE s.fixture_id = f.id AND s.fixture_partition_on = f.fixture_partition_on
+                    AND s.period = 'ALL') AS has_stats
+    FROM football.fixture f
+   WHERE f.competition_edition_id = ANY($1::bigint[])
+     AND f.lifecycle_state_code = 'COMPLETED'
+     AND f.scheduled_kickoff_at < $2::timestamptz
+   ORDER BY f.competition_edition_id, f.scheduled_kickoff_at, f.id
+`;
+
+/** Classify raw coverage rows into typed fixtures with their required-call cost. Pure. */
+export function classifyBootstrapFixtures(rows: readonly BootstrapCoverageRow[]): BootstrapFixture[] {
+  return rows.map((r) => ({
+    fixtureId: r.fixture_id, fixturePartitionOn: r.fixture_partition_on, editionId: r.edition_id,
+    kickoffAt: iso(r.kickoff_at), homeTeamId: r.home_team_id, awayTeamId: r.away_team_id,
+    hasLineup: r.has_lineup, hasStats: r.has_stats,
+    requiredCalls: fixtureRequiredCalls(r.has_lineup, r.has_stats),
+  }));
+}
+
+const byEditionKickoffId = (a: BootstrapFixture, b: BootstrapFixture): number =>
+  Number(a.editionId) - Number(b.editionId)
+  || (a.kickoffAt < b.kickoffAt ? -1 : a.kickoffAt > b.kickoffAt ? 1 : 0)
+  || Number(a.fixtureId) - Number(b.fixtureId);
+
+/** The union of lineup-gap and stat-gap fixtures (requiredCalls > 0), deterministically
+ *  ordered (edition, kickoff, fixtureId). No coverage-gain optimisation — correctness first. Pure. */
+export function selectBootstrapFixtures(fixtures: readonly BootstrapFixture[]): BootstrapFixture[] {
+  return fixtures.filter((f) => f.requiredCalls > 0).slice().sort(byEditionKickoffId);
+}
+
+/** Per-edition demand over the FULL completed set (so `completed` counts covered fixtures too). Pure. */
+export function perEditionBootstrapDemand(allCompleted: readonly BootstrapFixture[]): BootstrapEditionDemand[] {
+  const byEdition = new Map<string, BootstrapFixture[]>();
+  for (const f of allCompleted) {
+    const list = byEdition.get(f.editionId) ?? [];
+    list.push(f); byEdition.set(f.editionId, list);
+  }
+  return [...byEdition.entries()]
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([editionId, fx]) => {
+      const missingBoth = fx.filter((f) => !f.hasLineup && !f.hasStats).length;
+      const missingLineupOnly = fx.filter((f) => !f.hasLineup && f.hasStats).length;
+      const missingStatsOnly = fx.filter((f) => f.hasLineup && !f.hasStats).length;
+      return {
+        editionId, completed: fx.length, missingBoth, missingLineupOnly, missingStatsOnly,
+        enrichmentCalls: 2 * missingBoth + missingLineupOnly + missingStatsOnly,
+      };
+    });
+}
+
+/** Split selected fixtures into deterministic batches of `batchSize` fixtures. A fixture is
+ *  ATOMIC (never split across endpoints); batch cost is the sum of its fixtures' required calls. Pure. */
+export function planBootstrapBatches(selected: readonly BootstrapFixture[], batchSize: number): BootstrapBatch[] {
+  if (batchSize <= 0) throw new Error('planBootstrapBatches: batchSize must be positive.');
+  const batches: BootstrapBatch[] = [];
+  for (let i = 0; i < selected.length; i += batchSize) {
+    const slice = selected.slice(i, i + batchSize);
+    const lineupCalls = slice.filter((f) => !f.hasLineup).length;
+    const statCalls = slice.filter((f) => !f.hasStats).length;
+    batches.push({
+      batchIndex: batches.length, fixtureIds: slice.map((f) => f.fixtureId), fixtureCount: slice.length,
+      lineupCalls, statCalls, estimatedCalls: lineupCalls + statCalls,
+    });
+  }
+  return batches;
+}
+
+/** Bootstrap enrichment demand across the AUTHORIZED editions (caller supplies the ids from the
+ *  Gate-3 selector — this reader never widens scope). Read-only; makes no provider call and no
+ *  write. `estimatedCalls` is the exact number the executor will spend → feed it to the governor. */
+export async function readBootstrapEnrichmentDemand(
+  tx: PoolClient, editionIds: readonly string[],
+  options: { asOf?: Date; batchSize?: number } = {},
+): Promise<BootstrapEnrichmentDemand> {
+  const asOf = options.asOf ?? new Date();
+  if (editionIds.length === 0) {
+    return { asOf: asOf.toISOString(), editionIds: [], fixtures: [], selectedFixtureIds: [],
+      missingBoth: 0, missingLineupOnly: 0, missingStatsOnly: 0, estimatedCalls: 0, perEdition: [] };
+  }
+  const res = await tx.query<BootstrapCoverageRow>(BOOTSTRAP_COVERAGE_SQL, [[...editionIds], asOf]);
+  const all = classifyBootstrapFixtures(res.rows);
+  const selected = selectBootstrapFixtures(all);
+  const perEdition = perEditionBootstrapDemand(all);
+  const missingBoth = selected.filter((f) => !f.hasLineup && !f.hasStats).length;
+  const missingLineupOnly = selected.filter((f) => !f.hasLineup && f.hasStats).length;
+  const missingStatsOnly = selected.filter((f) => f.hasLineup && !f.hasStats).length;
+  const estimatedCalls = selected.reduce((sum, f) => sum + f.requiredCalls, 0);
+  const batches = options.batchSize ? planBootstrapBatches(selected, options.batchSize) : undefined;
+  return {
+    asOf: asOf.toISOString(), editionIds: [...editionIds], fixtures: selected,
+    selectedFixtureIds: selected.map((f) => f.fixtureId),
+    missingBoth, missingLineupOnly, missingStatsOnly, estimatedCalls, perEdition,
+    ...(batches ? { batches } : {}),
+  };
+}
