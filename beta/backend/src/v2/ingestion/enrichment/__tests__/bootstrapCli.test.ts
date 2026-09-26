@@ -54,6 +54,14 @@ describe('bootstrap · args & batching', () => {
     // there is no --from/--to: the scope is the authorized editions, never a historical window
     assert.ok(!('from' in a) && !('to' in a));
   });
+  test('--fixture-provider-id (and --fixture alias) select governed single-fixture mode', () => {
+    assert.equal(parseBootstrapArgs([]).fixtureProviderId, undefined);
+    assert.equal(parseBootstrapArgs(['--fixture-provider-id', '15237975']).fixtureProviderId, '15237975');
+    assert.equal(parseBootstrapArgs(['--fixture', '15237975', '--confirm']).fixtureProviderId, '15237975');
+    // single-fixture mode is orthogonal to the dry-run default
+    assert.equal(parseBootstrapArgs(['--fixture', '15237975']).dryRun, true);
+    assert.equal(parseBootstrapArgs(['--fixture', '15237975', '--confirm']).confirm, true);
+  });
   test('CALLS_PER_FIXTURE = 2; batches respect batchSize and the max-calls cap', () => {
     assert.equal(CALLS_PER_FIXTURE, 2);
     const batches = splitIntoBatches(fixtures(10), 4, 1000);

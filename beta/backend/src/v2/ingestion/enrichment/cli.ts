@@ -50,6 +50,14 @@ export interface BootstrapArgs {
   readonly maxCalls: number;
   readonly batchSize: number;
   readonly asOf: Date;
+  /**
+   * Governed SINGLE-FIXTURE mode (verification only). When set, the run enriches
+   * exactly this provider match id through the SAME governed path — admit →
+   * enrich → reconcile — and skips ONLY the demand filter, so an already-covered
+   * fixture can be re-run (the idempotency pass). It never bypasses the governor,
+   * the reservation, the ingestion role, or the idempotent writer.
+   */
+  readonly fixtureProviderId?: string;
 }
 
 export function parseBootstrapArgs(argv: readonly string[], now: Date = new Date()): BootstrapArgs {
@@ -65,11 +73,13 @@ export function parseBootstrapArgs(argv: readonly string[], now: Date = new Date
   };
   const confirm = argv.includes('--confirm');
   const dryRun = argv.includes('--dry-run') || !confirm; // default is dry-run; --confirm opts into spend
+  const fixtureProviderId = get('--fixture-provider-id') ?? get('--fixture');
   return {
     dryRun, confirm,
     maxCalls: int(get('--max-calls'), DEFAULT_MAX_CALLS, '--max-calls'),
     batchSize: int(get('--batch-size'), DEFAULT_BATCH_SIZE, '--batch-size'),
     asOf: now,
+    ...(fixtureProviderId ? { fixtureProviderId } : {}),
   };
 }
 
@@ -152,6 +162,30 @@ export async function loadBootstrapSelection(asOf: Date, batchSize: number): Pro
   });
 }
 
+/** Resolve ONE fixture by its provider match id (read-only). Returns a single-element
+ *  selection for the governed single-fixture verification mode, or an empty selection when
+ *  the provider id addresses no fixture in this database. Makes no provider call. */
+export async function loadSingleFixtureSelection(fixtureProviderId: string): Promise<PlannedFixture[]> {
+  return withConnection(INGESTION_ROLE, async (tx: PoolClient) => {
+    const res = await tx.query<{
+      fixture_id: string; fixture_partition_on: string; provider_id: string;
+      kickoff_at: Date | string; home_team_id: string; away_team_id: string;
+    }>(
+      `SELECT id::text AS fixture_id, fixture_partition_on::text AS fixture_partition_on,
+              provider_external_id::text AS provider_id, scheduled_kickoff_at AS kickoff_at,
+              home_team_id::text AS home_team_id, away_team_id::text AS away_team_id
+         FROM football.fixture
+        WHERE provider_code = $1::text AND provider_external_id = $2::text`,
+      [PROVIDER_CODE, fixtureProviderId],
+    );
+    return res.rows.map((r) => ({
+      fixtureId: r.fixture_id, fixturePartitionOn: r.fixture_partition_on, fixtureProviderId: r.provider_id,
+      kickoffAt: r.kickoff_at instanceof Date ? r.kickoff_at.toISOString() : String(r.kickoff_at),
+      homeTeamId: r.home_team_id, awayTeamId: r.away_team_id,
+    }));
+  });
+}
+
 /** Real deps: durable admission + real enrichment + reconcile-to-actual. Provider work only. */
 function productionDeps(): EnrichmentExecutionDeps {
   return {
@@ -169,6 +203,26 @@ function productionDeps(): EnrichmentExecutionDeps {
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
   const args = parseBootstrapArgs(argv);
   const runId = new Date().toISOString();
+
+  // ── Governed SINGLE-FIXTURE mode (verification only) ──────────────────────────
+  // Same admit → enrich → reconcile path; skips ONLY the demand filter so a covered
+  // fixture can be re-run for the idempotency pass. batch-size is forced to 1.
+  if (args.fixtureProviderId) {
+    const selected = await loadSingleFixtureSelection(args.fixtureProviderId);
+    logger.info({ fixtureProviderId: args.fixtureProviderId, resolved: selected.length, dryRun: args.dryRun },
+      'v2 bootstrap: SINGLE-FIXTURE mode (governed; demand filter skipped)');
+    if (selected.length === 0) {
+      logger.error({ fixtureProviderId: args.fixtureProviderId }, 'v2 bootstrap: no fixture addresses that provider id');
+      return 1;
+    }
+    const report = await executeBootstrap(selected, productionDeps(), {
+      confirm: args.confirm, batchSize: 1, maxCalls: CALLS_PER_FIXTURE, runId,
+      log: (r) => logger.info({ jobId: r.jobId, admitted: r.admitted, actualCalls: r.actualCalls, succeeded: r.succeeded, hardStopped: r.hardStopped, overrun: r.overrun }, 'v2 bootstrap: single-fixture batch'),
+    });
+    logger.info({ report }, args.confirm ? 'v2 bootstrap: single-fixture run finished' : 'v2 bootstrap: single-fixture DRY RUN (no provider call) — pass --confirm to spend');
+    return report.stoppedEarly ? 1 : 0;
+  }
+
   const { editionIds, totalMissing, selected } = await loadBootstrapSelection(args.asOf, args.batchSize);
   logger.info({ editionIds, totalMissing, resolved: selected.length, dryRun: args.dryRun, maxCalls: args.maxCalls, batchSize: args.batchSize },
     'v2 bootstrap: governed demand loaded');
