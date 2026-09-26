@@ -380,6 +380,95 @@ const TEAM_IDENTITY_SQL = `SELECT id::text AS id, name AS name, slug AS slug FRO
 
 // ── DB read (assembles the pure pieces) ─────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EDITION METRIC POPULATION — set-based, for the statistical benchmark
+//
+// The smallest capability the statistical benchmark needs that this layer did not
+// already offer: every team's usable numeric metric values across an edition's
+// completed fixtures, in ONE bounded pass (no per-team query, no N+1). It reuses
+// the EXACT canonicalization the per-team reader uses — collapseFixtureStats (group
+// dedup + oriented-agreement integrity), orientStat (target orientation) and
+// numericOrNull (missing ≠ zero) — so there is no second interpretation of
+// football.team_match_statistic. Eligibility mirrors the observation contract:
+// COMPLETED, strict `scheduled_kickoff_at < asOf`, ALL period.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface EditionTeamMetricValues {
+  readonly editionId: string;
+  readonly asOf: string;
+  readonly keys: readonly string[];
+  /** teamId → (metricKey → usable numeric values across the team's completed fixtures). */
+  readonly byTeam: ReadonlyMap<string, ReadonlyMap<string, number[]>>;
+  /** teamId → completed-fixture count (the participation-floor denominator). */
+  readonly fixtureCountByTeam: ReadonlyMap<string, number>;
+}
+
+interface EditionFixtureRow { fixture_id: string; home_team_id: string; away_team_id: string }
+
+/** Completed, result-bearing edition fixtures before asOf, with both sides. $1 edition · $2 asOf (strict <). */
+export const EDITION_OBSERVATION_FIXTURES_SQL = `
+  SELECT f.id::text AS fixture_id, f.home_team_id::text AS home_team_id, f.away_team_id::text AS away_team_id
+    FROM football.fixture f
+    JOIN football.result r ON r.fixture_id = f.id AND r.fixture_partition_on = f.fixture_partition_on
+   WHERE f.competition_edition_id = $1::bigint AND f.lifecycle_state_code = 'COMPLETED'
+     AND f.scheduled_kickoff_at < $2::timestamptz
+`;
+
+/** Assemble the per-team usable metric values from edition fixtures + their ALL-period stat
+ *  rows. Pure — reuses collapseFixtureStats/orientStat/numericOrNull verbatim. Each fixture
+ *  contributes to BOTH its teams, oriented to each; a non-numeric or absent value is skipped
+ *  (missing ≠ zero), never counted or zero-filled. */
+export function assembleEditionTeamMetricValues(
+  editionId: string, asOf: Date, keys: readonly string[],
+  fixtures: readonly EditionFixtureRow[], statsByFixture: ReadonlyMap<string, ObsStatRow[]>,
+): EditionTeamMetricValues {
+  const wanted = new Set(keys);
+  const byTeam = new Map<string, Map<string, number[]>>();
+  const fixtureCountByTeam = new Map<string, number>();
+  const ensure = (teamId: string): Map<string, number[]> => {
+    let m = byTeam.get(teamId);
+    if (!m) { m = new Map(); byTeam.set(teamId, m); }
+    return m;
+  };
+  for (const f of fixtures) {
+    const rows = statsByFixture.get(f.fixture_id) ?? [];
+    for (const [teamId, isHome] of [[f.home_team_id, true], [f.away_team_id, false]] as const) {
+      fixtureCountByTeam.set(teamId, (fixtureCountByTeam.get(teamId) ?? 0) + 1);
+      const perKey = ensure(teamId);
+      const collapsed = collapseFixtureStats(rows, isHome);
+      for (const key of wanted) {
+        const row = collapsed.byKey.get(key);
+        if (!row) continue;                                   // absent → omitted, never zero
+        const v = numericOrNull(orientStat(row, isHome).value);
+        if (v === null) continue;                             // present-but-non-numeric → not usable
+        const arr = perKey.get(key) ?? [];
+        arr.push(v); perKey.set(key, arr);
+      }
+    }
+  }
+  return { editionId, asOf: asOf.toISOString(), keys: [...keys], byTeam, fixtureCountByTeam };
+}
+
+/** Read every team's usable numeric metric values across one edition's completed fixtures
+ *  before asOf. Two bounded queries (fixtures + their ALL-period stats), then in-memory
+ *  canonicalization — no N+1. */
+export async function readEditionTeamMetricValues(
+  tx: PoolClient, editionId: string, keys: readonly string[], options: { asOf?: Date } = {},
+): Promise<EditionTeamMetricValues> {
+  const asOf = options.asOf ?? new Date();
+  const fx = await tx.query<EditionFixtureRow>(EDITION_OBSERVATION_FIXTURES_SQL, [editionId, asOf]);
+  const statsByFixture = new Map<string, ObsStatRow[]>();
+  if (fx.rows.length > 0) {
+    const ids = fx.rows.map((f) => f.fixture_id);
+    const statsRes = await tx.query<ObsStatRow>(TEAM_OBSERVATIONS_STATS_SQL, [ids]);
+    for (const row of statsRes.rows) {
+      const bucket = statsByFixture.get(row.fixture_id) ?? [];
+      bucket.push(row); statsByFixture.set(row.fixture_id, bucket);
+    }
+  }
+  return assembleEditionTeamMetricValues(editionId, asOf, keys, fx.rows, statsByFixture);
+}
+
 /** Returns the team's descriptive match observations, or null when the team does
  *  not exist (→ 404). A valid team with no eligible fixtures yields an empty series. */
 export async function readTeamObservations(

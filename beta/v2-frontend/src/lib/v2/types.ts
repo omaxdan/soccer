@@ -712,3 +712,37 @@ export interface EditionStandingsResponse {
   edition: { id: string; seasonLabel: string; competition: { id: string; name: string; slug: string } };
   standings: EditionStandings;
 }
+
+// ── Team Attributes (v1) — the stat-tier `statistical` block is what the UI renders ──
+export type StatAttributeLevel = 'TOP_QUARTILE' | 'MIDDLE' | 'BOTTOM_QUARTILE';
+export type StatAttributeType = 'strength' | 'weakness' | 'tendency';
+export type StatQualityOrientation = 'HIGHER_IS_BETTER' | 'LOWER_IS_BETTER' | 'NEUTRAL';
+
+export interface StatisticalAttribute {
+  key: string;
+  label: string;
+  type: StatAttributeType;
+  level: StatAttributeLevel;
+  qualityOrientation: StatQualityOrientation;
+  evidence: {
+    signalValue: number;
+    benchmark: { rank: number; teams: number; percentile: number; median: number; q1: number; q3: number };
+    usableSample: number;
+  };
+}
+
+export interface StatisticalAttributesBlock {
+  scope: { type: 'edition'; editionId: string; label: string };
+  asOf: string;
+  insufficientSample: boolean;
+  sample: { completedFixtures: number; classificationFloor: number };
+  strengths: StatisticalAttribute[];
+  weaknesses: StatisticalAttribute[];
+  tendencies: StatisticalAttribute[];
+}
+
+export interface TeamAttributesResponse {
+  team: { id: string; name: string; slug: string };
+  // Result-tier arrays exist on the wire too; the V2 UI renders only the stat-tier block.
+  statistical?: StatisticalAttributesBlock | null;
+}

@@ -29,6 +29,10 @@
 
 import type { PoolClient } from 'pg';
 import { readTeamBenchmark, type BenchmarkDirection, type TeamBenchmarkResponse } from './teamBenchmark';
+// Type-only import → elided at runtime, so no import cycle with statisticalAttributes
+// (which imports the classification VALUES from this module). The stat-tier block is an
+// ADDITIVE, optional field; result-tier assembly below never reads or produces it.
+import type { StatisticalAttributesBlock } from './statisticalAttributes';
 
 export const TEAM_ATTRIBUTES_VERSION = 'team-attributes-result-tier-v1';
 export const ATTRIBUTE_CLASSIFICATION_FLOOR = 8;
@@ -98,6 +102,10 @@ export interface TeamAttributesResponse {
     readonly reconstructed: true;
     readonly immutable: false;
   };
+  /** ADDITIVE stat-tier block (statisticalAttributes v1), attached by the handler.
+   *  Optional so existing result-tier consumers and this module's own assembly are
+   *  unaffected; null when the stat benchmark cannot be built for the team. */
+  readonly statistical?: StatisticalAttributesBlock | null;
 }
 
 export interface TeamAttributesOptions {

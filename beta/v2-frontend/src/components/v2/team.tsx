@@ -21,6 +21,7 @@ import type {
   PerformanceMetric, StandingLine,
   TeamAvailabilityRecord, TeamDetailResponse, TeamFixtureLine, TeamGovernedReading, TeamIntelligence, TeamParticipation,
   TeamPerformanceOverall, TeamReadinessReading,
+  StatisticalAttributesBlock, StatisticalAttribute,
 } from '@/lib/v2/types';
 
 /** One edition's standings context for this team: its row (or null if not in the snapshot). */
@@ -458,6 +459,72 @@ export function TeamConsistencyPanel({ reading }: { reading: TeamGovernedReading
         <EmptyState message="No governed consistency reading available." />
       ) : (
         <GovernedReadingCard reading={reading} magnitude={{ label: 'goal-margin volatility', hint: 'Higher volatility = less consistent' }} />
+      )}
+    </section>
+  );
+}
+
+// ═══ STATISTICAL PROFILE — stat-tier Team Attributes (descriptive, edition-scoped) ═══
+//
+// Renders the backend `statistical` block VERBATIM: where the team sits within its
+// edition on a small curated set of match statistics, classified into strengths,
+// weaknesses and neutral style tendencies. Nothing is computed, ranked or predicted
+// here; product-facing language only (no "benchmark"/"quartile"/"orientation" jargon,
+// no probability/verdict). Below the sample floor → an honest empty state, never zero-fill.
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
+function StatAttributeRow({ attr }: { attr: StatisticalAttribute }) {
+  // Product-facing position word — TOP/BOTTOM read as high/low for neutral tendencies.
+  const position = attr.type === 'strength' ? 'Top quarter'
+    : attr.type === 'weakness' ? 'Bottom quarter'
+    : attr.level === 'TOP_QUARTILE' ? 'High' : 'Low';
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '4px 0' }}>
+      <span style={{ color: 'var(--text)', fontSize: 13 }}>{attr.label}</span>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, whiteSpace: 'nowrap' }}>
+        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>{position}</span>
+        <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 13, fontWeight: 700 }}>{orDash(attr.evidence.signalValue)}</span>
+        <span className="mono tnum" style={{ color: 'var(--faint)', fontSize: 10 }}>{ordinal(attr.evidence.benchmark.rank)} of {attr.evidence.benchmark.teams}</span>
+      </span>
+    </div>
+  );
+}
+
+export function TeamStatisticalAttributes({ block }: { block: StatisticalAttributesBlock | null }) {
+  return (
+    <section className="space-y-2">
+      <Eyebrow label="Statistical profile" />
+      {block === null ? (
+        <EmptyState message="No statistical profile available for this team yet." />
+      ) : block.insufficientSample ? (
+        <EmptyState message={`Not enough completed matches yet for a statistical profile (needs ${block.sample.classificationFloor}, has ${block.sample.completedFixtures}).`} />
+      ) : (block.strengths.length + block.weaknesses.length + block.tendencies.length === 0) ? (
+        <EmptyState message="This team sits mid-table on every profiled statistic — no standout strengths or weaknesses." />
+      ) : (
+        <div className="space-y-3">
+          {block.strengths.length > 0 && (
+            <div>
+              <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginBottom: 2 }}>Strengths</p>
+              {block.strengths.map((a) => <StatAttributeRow key={a.key} attr={a} />)}
+            </div>
+          )}
+          {block.weaknesses.length > 0 && (
+            <div>
+              <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginBottom: 2 }}>Weaknesses</p>
+              {block.weaknesses.map((a) => <StatAttributeRow key={a.key} attr={a} />)}
+            </div>
+          )}
+          {block.tendencies.length > 0 && (
+            <div>
+              <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginBottom: 2 }}>Style tendencies</p>
+              {block.tendencies.map((a) => <StatAttributeRow key={a.key} attr={a} />)}
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
