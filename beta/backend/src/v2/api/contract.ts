@@ -78,6 +78,10 @@ export type {
 export type {
   StatisticalAttributesBlock, StatisticalAttribute, StatisticalAttributeEvidence,
 } from './read/statisticalAttributes';
+// Fixture calendar (date-addressed). Reuses ApiTeam/ApiScore and the canonical MatchResult.
+export type {
+  FixturesByDateResponse, CalendarCountryGroup, CalendarCompetitionGroup, CalendarFixture,
+} from './read/fixturesByDate';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';

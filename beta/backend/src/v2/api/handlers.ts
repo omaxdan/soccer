@@ -79,6 +79,7 @@ import { readPlayerAvailability, type PlayerAvailabilityOptions, type PlayerStat
 import { readTeamPerformanceSignals, type TeamPerformanceSignalsOptions, type PerformanceSignalsResponse } from './read/teamPerformanceSignals';
 import { readTeamAttributes, type TeamAttributesOptions, type TeamAttributesResponse } from './read/teamAttributes';
 import { readStatisticalAttributes } from './read/statisticalAttributes';
+import { readFixturesByDate, type FixturesByDateResponse } from './read/fixturesByDate';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -1088,6 +1089,17 @@ export async function getTeamAttributes(
   // is surfaced honestly rather than fabricated.
   const statistical = await readStatisticalAttributes(tx, teamId, { asOf: options.asOf, editionId: options.editionId ?? null });
   return { ...resultTier, statistical };
+}
+
+/**
+ * FIXTURE CALENDAR by UTC date (canonical, read-only, provider-free). Groups every fixture
+ * whose current scheduled kickoff falls on the queried UTC date into country → competition →
+ * edition → fixtures, each fixture carrying the canonical match-result object. No governance
+ * gate (public fixture data), no snapshot/MI/enrichment. Null → 400 for a malformed date;
+ * a valid date with no fixtures is a 200 with an empty countries[].
+ */
+export async function getFixturesByDate(tx: PoolClient, date: string): Promise<FixturesByDateResponse | null> {
+  return readFixturesByDate(tx, date);
 }
 
 /**

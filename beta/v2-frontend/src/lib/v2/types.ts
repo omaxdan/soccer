@@ -746,3 +746,38 @@ export interface TeamAttributesResponse {
   // Result-tier arrays exist on the wire too; the V2 UI renders only the stat-tier block.
   statistical?: StatisticalAttributesBlock | null;
 }
+
+// ── Fixture calendar (GET /api/v2/fixtures/{date}) ──────────────────────────────
+export interface CalendarResultScore { home: number; away: number }
+export interface CalendarMatchResult {
+  final: CalendarResultScore;
+  halfTime: CalendarResultScore | null;
+  extraTime: CalendarResultScore | null;
+  penalties: CalendarResultScore | null;
+  confirmedAt: string | null;
+}
+export interface CalendarFixture {
+  fixtureId: string;
+  kickoffAt: string;
+  status: string;                          // governed lifecycle_state_code
+  homeTeam: ApiTeam;
+  awayTeam: ApiTeam;
+  score: CalendarResultScore | null;       // legacy final-only
+  result: CalendarMatchResult | null;      // canonical breakdown; null when no confirmed result
+}
+export interface CalendarCompetitionGroup {
+  competitionId: string;
+  name: string;
+  slug: string;
+  edition: { editionId: string; seasonLabel: string };
+  fixtures: CalendarFixture[];
+}
+export interface CalendarCountryGroup {
+  country: { code: string; name: string } | null;
+  competitions: CalendarCompetitionGroup[];
+}
+export interface FixturesByDateResponse {
+  date: string;
+  fixtureCount: number;
+  countries: CalendarCountryGroup[];
+}

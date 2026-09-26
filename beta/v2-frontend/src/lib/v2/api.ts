@@ -7,7 +7,7 @@ import type {
   MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse, EditionStandingsResponse,
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
   CompetitionResponse, CountryResponse, VenueResponse,
-  TeamPerformanceResponse, TeamReadinessResponse, TeamGovernedIntelligenceResponse, TeamAttributesResponse,
+  TeamPerformanceResponse, TeamReadinessResponse, TeamGovernedIntelligenceResponse, TeamAttributesResponse, FixturesByDateResponse,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse,
   MatchLifecycleResponse, MatchVenueResponse,
 } from './types';
@@ -94,6 +94,12 @@ export function fetchMatchVenue(matchId: string): Promise<MatchVenueResponse | n
 }
 
 /** Teams in the governed authorized-active edition(s). Never 404s. */
+/** Fixture calendar for a UTC date (YYYY-MM-DD). Returns a 200 body even when empty;
+ *  null only on a network/HTTP failure per getJson's convention. */
+export function fetchFixturesByDate(date: string): Promise<FixturesByDateResponse | null> {
+  return getJson<FixturesByDateResponse>(`/api/v2/fixtures/${encodeURIComponent(date)}`);
+}
+
 export async function fetchTeams(): Promise<TeamListResponse> {
   const body = await getJson<TeamListResponse>('/api/v2/teams');
   return body ?? { teams: [] };

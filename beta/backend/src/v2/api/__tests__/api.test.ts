@@ -299,7 +299,7 @@ describe('v2 api · match intelligence wire contract (Slice 2, injected seams)',
       getMatchVenue: async () => null,
       getEdition: async () => null, getEditionStandings: async () => null, getEditionObservations: async () => null, getEditionTemporalPerformance: async () => null, getSeasonPositionTrajectory: async () => null, getTableContext: async () => null, getEditions: async () => ({ editions: [] }),
       getTeams: async () => ({ teams: [] }), getTeam: async () => null, getTeamPerformance: async () => null, getTeamReadiness: async () => null, getTeamGovernedIntelligence: async () => null, getTeamObservations: async () => null, getTeamPlayerObservations: async () => null, getTeamPerformanceSignals: async () => null, getTeamAttributes: async () => null, getTeamTemporalPerformance: async () => null,
-      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getPlayerStatus: async () => null, getPlayerTemporalPerformance: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null,
+      getPlayers: async () => ({ players: [] }), getPlayer: async () => null, getPlayerObservations: async () => null, getPlayerStatus: async () => null, getPlayerTemporalPerformance: async () => null, getVenue: async () => null, getCountry: async () => null, getCompetition: async () => null, getEditionDetail: async () => null, getFixturesByDate: async () => null,
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -425,6 +425,7 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getCountry: async (code) => (code === 'BR' ? { country: { code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }, teams: [{ id: '68', name: 'Flamengo', slug: 'flamengo-5981', shortName: 'Flamengo', countryCode: 'BR' }], competitions: [{ id: '1', name: 'Brasileirão Série A', slug: 'brasileirao-serie-a' }], coverage: { country: 'present', teams: 'present', competitions: 'present' } } : null),
       getCompetition: async (id) => (id === '28' ? { competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325', countryCode: 'BR' }, editions: [{ id: '42', seasonLabel: '2025', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixtureCount: 380 }], coverage: { competition: 'present', editions: 'present' } } : null),
       getEditionDetail: async (id) => (id === '18' ? { edition: { id: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' } }, coverage: { edition: 'present', competition: 'present' } } : null),
+      getFixturesByDate: async (date) => ({ date, fixtureCount: 0, countries: [] }),
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
