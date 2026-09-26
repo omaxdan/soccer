@@ -7,7 +7,7 @@ import type {
   MatchDetailResponse, MatchIntelligenceResponse, EditionFixtureListResponse, EditionListResponse, EditionStandingsResponse,
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
   CompetitionResponse, CountryResponse, VenueResponse,
-  TeamPerformanceResponse, TeamReadinessResponse, TeamGovernedIntelligenceResponse,
+  TeamPerformanceResponse, TeamReadinessResponse, TeamGovernedIntelligenceResponse, TeamAttributesResponse,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse,
   MatchLifecycleResponse, MatchVenueResponse,
 } from './types';
@@ -120,6 +120,10 @@ export function fetchTeamReadiness(teamId: string): Promise<TeamReadinessRespons
  *  when the team is not exposed under a governed edition. Governed module readings only. */
 export function fetchTeamGovernedIntelligence(teamId: string): Promise<TeamGovernedIntelligenceResponse | null> {
   return getJson<TeamGovernedIntelligenceResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/intelligence`);
+}
+
+export function fetchTeamAttributes(teamId: string): Promise<TeamAttributesResponse | null> {
+  return getJson<TeamAttributesResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/attributes`);
 }
 
 /** Players in the governed authorized-active edition(s). Never 404s. */

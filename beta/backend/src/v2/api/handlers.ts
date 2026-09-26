@@ -78,6 +78,7 @@ import { readTeamPlayerObservations, type TeamPlayerObservationsOptions, type Te
 import { readPlayerAvailability, type PlayerAvailabilityOptions, type PlayerStatusResponse } from './read/playerAvailability';
 import { readTeamPerformanceSignals, type TeamPerformanceSignalsOptions, type PerformanceSignalsResponse } from './read/teamPerformanceSignals';
 import { readTeamAttributes, type TeamAttributesOptions, type TeamAttributesResponse } from './read/teamAttributes';
+import { readStatisticalAttributes } from './read/statisticalAttributes';
 import { readMatchResult } from './read/matchResult';
 import { readMatchLifecycle } from './read/matchLifecycle';
 import { readMatchVenue } from './read/matchVenue';
@@ -1080,7 +1081,13 @@ export async function getTeamAttributes(
   const comps = await tx.query<TeamCompetitionRow>(TEAM_COMPETITIONS_SQL, [teamId]);
   if (comps.rows.length === 0) return null;
 
-  return readTeamAttributes(tx, teamId, options);
+  const resultTier = await readTeamAttributes(tx, teamId, options);
+  if (resultTier === null) return null;
+  // ADDITIVE stat-tier block — same team, same asOf/edition scope, same governed floors.
+  // Never merged into the result-tier arrays; a null block (below the stat benchmark floor)
+  // is surfaced honestly rather than fabricated.
+  const statistical = await readStatisticalAttributes(tx, teamId, { asOf: options.asOf, editionId: options.editionId ?? null });
+  return { ...resultTier, statistical };
 }
 
 /**

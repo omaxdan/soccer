@@ -74,6 +74,10 @@ export type {
   TeamAttributesResponse, TeamAttribute, AttributeEvidence, AttributeType,
   QuartileLevel, QualityOrientation, TeamAttributesOptions,
 } from './read/teamAttributes';
+// Stat-tier v1 — the ADDITIVE `statistical` block carried on TeamAttributesResponse.
+export type {
+  StatisticalAttributesBlock, StatisticalAttribute, StatisticalAttributeEvidence,
+} from './read/statisticalAttributes';
 import type { EditionStandings } from './read/editionStandings';
 import type { MatchLineups } from './read/matchLineups';
 import type { MatchTeamStatistics } from './read/matchTeamStatistics';

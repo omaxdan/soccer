@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness, fetchTeamGovernedIntelligence, fetchEditionStandings } from '@/lib/v2/api';
+import { fetchTeam, fetchTeamPerformance, fetchTeamReadiness, fetchTeamGovernedIntelligence, fetchTeamAttributes, fetchEditionStandings } from '@/lib/v2/api';
 import { idFromParam } from '@/lib/v2/slug';
 import { routes } from '@/lib/v2/routes';
 import { findTeamStanding } from '@/lib/v2/standings';
@@ -9,7 +9,8 @@ import {
   TeamIdentityHeader, TeamCurrentForm, TeamReadinessPanel, TeamHomeAwaySplitPanel,
   TeamConsistencyPanel, TeamCompetitionContext, TeamSeasonStatistics,
   TeamSquadSnapshot, TeamAvailabilityBoard, TeamPlayers, TeamLastAppearance, TeamCoverage,
-  TeamTabNav, TeamIntelligenceBriefing, TeamNextFixtureAndSelection, type TeamStandingEntry,
+  TeamTabNav, TeamIntelligenceBriefing, TeamNextFixtureAndSelection, TeamStatisticalAttributes,
+  type TeamStandingEntry,
 } from '@/components/v2/team';
 import type { TeamPerformanceOverall } from '@/lib/v2/types';
 
@@ -34,11 +35,12 @@ export default async function V2TeamPage({ params, searchParams }: {
 
   // Identity/context (gated), descriptive performance evidence, and the governed
   // readiness reading are three distinct existing endpoints, fetched together.
-  const [detail, performance, readiness, governed] = await Promise.all([
+  const [detail, performance, readiness, governed, attributes] = await Promise.all([
     fetchTeam(id),
     fetchTeamPerformance(id),
     fetchTeamReadiness(id),
     fetchTeamGovernedIntelligence(id),
+    fetchTeamAttributes(id),
   ]);
   if (!detail) notFound();
   const { team, competitions, intelligence } = detail;
@@ -118,6 +120,7 @@ export default async function V2TeamPage({ params, searchParams }: {
             <TeamHomeAwaySplitPanel readings={governed?.homeAwaySplit ?? []} />
             <TeamConsistencyPanel reading={governed?.consistency ?? null} />
             <TeamCompetitionContext participation={intelligence.participation} />
+            <TeamStatisticalAttributes block={attributes?.statistical ?? null} />
             <TeamSeasonStatistics playerStatistics={intelligence.playerStatistics} />
           </div>
         )}
