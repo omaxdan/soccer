@@ -53,7 +53,7 @@
 import type { PoolClient } from 'pg';
 import type { ProviderClient } from '../provider/client';
 import { PROVIDER_CODE } from '../provider/config';
-import { IngestionCounts, upsertMutable } from '../write/index';
+import { IngestionCounts, upsertMutable, upsertMutableBatch } from '../write/index';
 import { resolvePlayer } from '../entities/participants';
 import { findFixtureByProviderIdentity, type StoredFixtureIdentity } from '../entities/fixtures';
 import { mapPosition } from '../mapping/index';
@@ -296,6 +296,7 @@ export async function persistMatchEnrichment(
   const existingSelections = await existingSelectionKeys(tx, fixture, [
     ...lineupIdBySide.values(),
   ]);
+  const selectionRows: { values: unknown[]; existedBeforeWrite: boolean }[] = [];
   for (const s of selections) {
     const lineupId = lineupIdBySide.get(s.side);
     if (!lineupId) {
@@ -306,7 +307,21 @@ export async function persistMatchEnrichment(
     }
     const playerId = playerByProvider.get(s.playerProviderId)!;
     const position = mapPosition(s.positionCode);
-    const row = await upsertMutable(tx, {
+    selectionRows.push({
+      values: [
+        lineupId,
+        fixture.partitionOn,
+        playerId,
+        position.kind === 'MAPPED' ? position.code : null,
+        s.shirtNumber,
+        s.isStarting,
+        s.isCaptain,
+      ],
+      existedBeforeWrite: existingSelections.has(`${lineupId}:${playerId}`),
+    });
+  }
+  stage.for('football.lineup_selection').add(
+    await upsertMutableBatch(tx, {
       relation: 'football.lineup_selection',
       columns: [
         'lineup_id',
@@ -317,28 +332,18 @@ export async function persistMatchEnrichment(
         'is_starting',
         'is_captain',
       ],
-      values: [
-        lineupId,
-        fixture.partitionOn,
-        playerId,
-        position.kind === 'MAPPED' ? position.code : null,
-        s.shirtNumber,
-        s.isStarting,
-        s.isCaptain,
-      ],
+      rows: selectionRows,
       conflictTarget: ['fixture_partition_on', 'lineup_id', 'player_id'],
       immutableColumns: ['fixture_partition_on', 'lineup_id', 'player_id'],
       // lineup_selection carries no updated_at (migration 005), so the primitive
       // must not try to advance one.
       hasUpdatedAt: false,
-      returning: ['id'],
-      existedBeforeWrite: existingSelections.has(`${lineupId}:${playerId}`),
-    });
-    stage.for('football.lineup_selection').countUpsert(row);
-  }
+    })
+  );
 
   // ── football.player_match_statistic ────────────────────────────────────────
   const existingPlayerStats = await existingPlayerStatKeys(tx, fixture);
+  const playerStatRows: { values: unknown[]; existedBeforeWrite: boolean }[] = [];
   for (const p of playerStats) {
     const playerId = playerByProvider.get(p.playerProviderId);
     const teamId = teamBySide[p.side];
@@ -346,7 +351,23 @@ export async function persistMatchEnrichment(
       stage.for('football.player_match_statistic').reject('player-statistic identity unresolved');
       continue;
     }
-    const row = await upsertMutable(tx, {
+    playerStatRows.push({
+      values: [
+        fixture.id,
+        fixture.partitionOn,
+        playerId,
+        teamId,
+        p.statisticKey,
+        p.statisticValue,
+        p.valueType,
+        PROVIDER_CODE,
+        input.retrievedAt,
+      ],
+      existedBeforeWrite: existingPlayerStats.has(`${playerId}:${p.statisticKey}`),
+    });
+  }
+  stage.for('football.player_match_statistic').add(
+    await upsertMutableBatch(tx, {
       relation: 'football.player_match_statistic',
       columns: [
         'fixture_id',
@@ -359,29 +380,40 @@ export async function persistMatchEnrichment(
         'provider_code',
         'retrieved_at',
       ],
-      values: [
-        fixture.id,
-        fixture.partitionOn,
-        playerId,
-        teamId,
-        p.statisticKey,
-        p.statisticValue,
-        p.valueType,
-        PROVIDER_CODE,
-        input.retrievedAt,
-      ],
+      rows: playerStatRows,
       conflictTarget: ['fixture_partition_on', 'fixture_id', 'player_id', 'statistic_key'],
       immutableColumns: ['fixture_partition_on', 'fixture_id', 'player_id', 'statistic_key'],
-      returning: ['id'],
-      existedBeforeWrite: existingPlayerStats.has(`${playerId}:${p.statisticKey}`),
-    });
-    stage.for('football.player_match_statistic').countUpsert(row);
-  }
+    })
+  );
 
   // ── football.team_match_statistic ──────────────────────────────────────────
   const existingTeamStats = await existingTeamStatKeys(tx, fixture);
+  const teamStatRows: { values: unknown[]; existedBeforeWrite: boolean }[] = [];
   for (const t of teamStats) {
-    const row = await upsertMutable(tx, {
+    teamStatRows.push({
+      values: [
+        fixture.id,
+        fixture.partitionOn,
+        t.period,
+        t.groupName,
+        t.statisticKey,
+        t.statisticName,
+        t.homeValue,
+        t.awayValue,
+        t.homeDisplay,
+        t.awayDisplay,
+        t.valueType,
+        t.compareCode,
+        t.statisticsType,
+        t.renderType,
+        PROVIDER_CODE,
+        input.retrievedAt,
+      ],
+      existedBeforeWrite: existingTeamStats.has(`${t.period}:${t.groupName}:${t.statisticKey}`),
+    });
+  }
+  stage.for('football.team_match_statistic').add(
+    await upsertMutableBatch(tx, {
       relation: 'football.team_match_statistic',
       columns: [
         'fixture_id',
@@ -401,24 +433,7 @@ export async function persistMatchEnrichment(
         'provider_code',
         'retrieved_at',
       ],
-      values: [
-        fixture.id,
-        fixture.partitionOn,
-        t.period,
-        t.groupName,
-        t.statisticKey,
-        t.statisticName,
-        t.homeValue,
-        t.awayValue,
-        t.homeDisplay,
-        t.awayDisplay,
-        t.valueType,
-        t.compareCode,
-        t.statisticsType,
-        t.renderType,
-        PROVIDER_CODE,
-        input.retrievedAt,
-      ],
+      rows: teamStatRows,
       conflictTarget: [
         'fixture_partition_on',
         'fixture_id',
@@ -433,11 +448,8 @@ export async function persistMatchEnrichment(
         'group_name',
         'statistic_key',
       ],
-      returning: ['id'],
-      existedBeforeWrite: existingTeamStats.has(`${t.period}:${t.groupName}:${t.statisticKey}`),
-    });
-    stage.for('football.team_match_statistic').countUpsert(row);
-  }
+    })
+  );
 
   logger.info(
     {

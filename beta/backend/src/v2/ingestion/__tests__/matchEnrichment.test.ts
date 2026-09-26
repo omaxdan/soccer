@@ -232,16 +232,30 @@ function makeFake(options: FakeOptions = {}): FakeConnection {
       const relation = relationOfInsert(sql);
       const columns = listBetween(sql, /INSERT INTO football\.\w+ \(([^)]*)\)/);
       const conflictTarget = listBetween(sql, /ON CONFLICT \(([^)]*)\)/);
-      const value: Record<string, unknown> = {};
-      columns.forEach((c, i) => (value[c] = params[i]));
-      inserts.push({ relation, columns, conflictTarget, value, sql });
-
-      if (relation === 'football.player') {
-        // player is NOT partitioned → RETURNING id, (xmax = 0) AS inserted.
-        return { rows: [{ id: `player-${params[1]}`, inserted: true }], rowCount: 1 };
+      // upsertMutable emits ONE tuple; upsertMutableBatch emits N tuples in one
+      // multi-row VALUES. Each tuple is exactly `columns.length` params, so the
+      // tuple count is params.length / columns.length. Record one RecordedInsert
+      // per tuple so per-row assertions read a batched statement unchanged.
+      const nCols = columns.length;
+      const nTuples = nCols > 0 ? Math.round(params.length / nCols) : 1;
+      for (let t = 0; t < nTuples; t++) {
+        const value: Record<string, unknown> = {};
+        columns.forEach((c, i) => (value[c] = params[t * nCols + i]));
+        inserts.push({ relation, columns, conflictTarget, value, sql });
       }
-      const id = relation === 'football.lineup' ? `lineup-${value['team_id']}` : `${relation}-row`;
-      return { rows: [{ id }], rowCount: 1 };
+
+      // Only the single-row upserts (upsertMutable) ask for RETURNING and consume
+      // an id; the batched writer omits RETURNING and reads only the affected count.
+      if (/RETURNING/.test(sql)) {
+        if (relation === 'football.player') {
+          // player is NOT partitioned → RETURNING id, (xmax = 0) AS inserted.
+          return { rows: [{ id: `player-${params[1]}`, inserted: true }], rowCount: 1 };
+        }
+        const teamId = params[columns.indexOf('team_id')];
+        const id = relation === 'football.lineup' ? `lineup-${teamId}` : `${relation}-row`;
+        return { rows: [{ id }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: nTuples };
     }
 
     throw new Error(`fake tx: unrouted statement: ${trimmed.slice(0, 80)}`);
