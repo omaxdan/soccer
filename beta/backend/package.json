@@ -20,6 +20,7 @@
     "snapshot:v2": "tsx src/v2/snapshot/cli.ts",
     "calibration:v2": "tsx src/v2/calibration/cli.ts",
     "orchestrate:v2": "tsx src/v2/orchestration/cli.ts",
+    "bootstrap:v2": "tsx src/v2/ingestion/enrichment/cli.ts",
     "api:v2": "tsx src/v2/api/server.ts",
     "doctor:v2": "tsx src/v2/db/doctor.ts",
     "discover:v2": "tsx src/v2/ingestion/discover.ts",
