@@ -22,6 +22,7 @@ import '../config/env';
 import { runProductionPipeline, type StageRunner, type OrchestratorEvent } from './productionOrchestrator';
 import { acquireOrchestratorLock } from './overlapLock';
 import { runGovernedEditions } from '../ingestion/orchestration/governedEditions';
+import { runRecurringEnrichment } from '../ingestion/enrichment/recurring';
 import { runFeaturePipeline } from '../feature/pipeline';
 import { runModulePipeline } from '../module/pipeline';
 import { runSnapshotSealing } from '../snapshot/driver';
@@ -81,6 +82,16 @@ export function buildStageRunners(args: OrchestratorArgs): StageRunner[] {
         ok: r.aggregate !== 'FAILED',
         blocked: r.outcomes.some((o) => o.status === 'SKIPPED_BUDGET'),
         detail: { aggregate: r.aggregate, selected: r.selected, totalCallsSpent: r.totalCallsSpent },
+      };
+    } },
+    { name: 'ENRICHMENT', run: async () => {
+      // Dry-run performs no provider work (matches the other stages' dry-run posture).
+      if (args.dryRun) return { ok: true, detail: { dryRun: true, selected: 0, callsSpent: 0 } };
+      const r = await runRecurringEnrichment({ maxCalls: args.maxCalls });
+      return {
+        ok: true, // per-fixture HARD_STOPs are isolated detail; only a thrown error hard-fails
+        blocked: r.budgetBlocked,
+        detail: { selected: r.selected, callsSpent: r.callsSpent, succeeded: r.succeeded, failed: r.failed },
       };
     } },
     { name: 'FEATURES', run: async () => {
