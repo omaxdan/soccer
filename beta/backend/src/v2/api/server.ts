@@ -18,7 +18,6 @@ import { withConnection } from '../db/tx';
 import { closeAllPools, installShutdownHandlers } from '../db/pool';
 import { logger } from '../../utils/logger';
 import { getMatchDetail, getMatchIntelligence, getMatchLineups, getMatchTeamStatistics, getMatchResult, getMatchLifecycle, getMatchVenue, getEditionFixtures, getEditionStandings, getEditions, getTeams, getTeamDetail, getTeamPerformance, getTeamReadiness, getTeamGovernedIntelligence, getTeamObservations, getPlayers, getPlayerDetail, getPlayerObservations, getVenue, getCountry, getCompetition, getEditionDetail, getEditionObservations, getSeasonPositionTrajectory, getTeamTemporalPerformance, getPlayerTemporalPerformance, getEditionTemporalPerformance, getTableContext, getTeamPlayerObservations, getPlayerStatus, getTeamPerformanceSignals, getTeamAttributes, getFixturesByDate, isValidId, isValidCountryCode } from './handlers';
-import { isValidCalendarDate } from './read/fixturesByDate';
 import type { TeamObservationOptions } from './read/teamObservations';
 import type { PlayerObservationOptions } from './read/playerObservations';
 import type { EditionObservationOptions } from './read/editionObservations';
@@ -224,8 +223,10 @@ export function resolveRoute(method: string | undefined, pathname: string): Rout
     return isValidId(id) ? { kind: 'match', id } : { kind: 'badRequest' };
   }
   if (fixturesByDate) {
-    const date = decodeURIComponent(fixturesByDate[1]);
-    return isValidCalendarDate(date) ? { kind: 'fixturesByDate', date } : { kind: 'badRequest' };
+    // Always dispatch to the fixture-date case; a malformed/non-existent date is answered
+    // there as 400 {error:'invalid_date'} (readFixturesByDate returns null without querying),
+    // rather than the generic badRequest {error:'invalid_id'}.
+    return { kind: 'fixturesByDate', date: decodeURIComponent(fixturesByDate[1]) };
   }
   if (editionFixtures) {
     const id = decodeURIComponent(editionFixtures[1]);
