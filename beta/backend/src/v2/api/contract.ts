@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { MatchIntelligence } from '../snapshot/read/matchIntelligence';
+import type { TeamHistoricalResponse } from './read/teamHistoricalResponse';
 import type {
   PlayerRegistrationView, PlayerAvailabilityView, PlayerValuationView, PlayerStatistics,
 } from './read/playerStatistics';
@@ -309,7 +310,19 @@ export interface MatchDetailResponse {
    * yet for this fixture — an honest unavailable state, never fabricated.
    */
   readonly matchModules: readonly ApiModuleReading[];
+  /**
+   * DISPLAYED CONTEXT — each team's Historical Response (historical-response-v1),
+   * as of kickoff (strict `kickoff < asOf`, so the fixture itself and any later
+   * fixture are excluded). Descriptive post-result evidence (POST_WIN / POST_LOSS
+   * → W/D/L counts, engaged only at n>=10); NOT prediction, NOT a probability, and
+   * NOT calculation substrate. It is displayed context only — never cited evidence,
+   * never a verdict/edge/preparedness input — until a separate governance decision
+   * promotes it into the sealed snapshot.
+   */
+  readonly historicalResponse: { readonly home: TeamHistoricalResponse; readonly away: TeamHistoricalResponse };
 }
+
+export type { TeamHistoricalResponse } from './read/teamHistoricalResponse';
 
 /**
  * The Match Intelligence wire contract (Slice 2). Two strictly separate top-level
