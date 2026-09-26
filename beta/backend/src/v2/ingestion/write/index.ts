@@ -103,6 +103,25 @@ export class IngestionCounts {
     else this.updated += 1;
   }
 
+  /**
+   * Records one mutable upsert whose insert/update branch is ALREADY KNOWN from a
+   * prior existence read — the partitioned-relation path, where `(xmax = 0)` is
+   * unavailable and the caller supplies `existedBeforeWrite` instead.
+   *
+   * This is the batched counterpart of `countUpsert`: `upsertMutableBatch` folds
+   * many rows into one statement and so cannot return a per-row `inserted` flag,
+   * but every row it writes carries the same existence knowledge the row-by-row
+   * path passed to `upsertMutable`. The accounting is identical — one examined,
+   * one written, split by the branch — so `inserted + updated === written` holds
+   * exactly as before.
+   */
+  countUpsertKnown(existedBeforeWrite: boolean): void {
+    this.examined += 1;
+    this.written += 1;
+    if (existedBeforeWrite) this.updated += 1;
+    else this.inserted += 1;
+  }
+
   add(other: IngestionCounts): void {
     this.examined += other.examined;
     this.written += other.written;
@@ -250,6 +269,145 @@ export async function upsertMutable(
   );
   const row = rows[0] as Record<string, unknown>;
   return askDatabase ? row : { ...row, [INSERTED_FLAG]: !options.existedBeforeWrite };
+}
+
+/**
+ * The set-based form of `upsertMutable`: many rows of ONE relation, ONE statement.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THIS EXISTS
+ *
+ * `persistMatchEnrichment` writes ~1,345 `player_match_statistic`, ~133
+ * `team_match_statistic` and ~46 `lineup_selection` rows per fixture. Calling
+ * `upsertMutable` once per row is ~1,500 awaited round trips inside a single
+ * transaction — measured at ~6–7 minutes per fixture. Folding each relation's
+ * rows into one multi-row `INSERT ... ON CONFLICT DO UPDATE` collapses that to a
+ * handful of statements (one per parameter-limit chunk) with no change to what
+ * lands in the table.
+ *
+ * IT IS `upsertMutable`, BATCHED — NOT A NEW SEMANTIC. The conflict target, the
+ * COALESCE(EXCLUDED.col, target.col) update branch, the immutable-column
+ * exclusion and the `updated_at = now()` advance are byte-for-byte the same
+ * clause the row-by-row primitive builds. A re-run over stored keys updates in
+ * place; it never duplicates and never blind-inserts.
+ *
+ * PARTITIONED TARGETS ONLY REACH THIS PATH VIA `existedBeforeWrite`. Every caller
+ * here writes a relation partitioned on `fixture_partition_on`, so — exactly as
+ * `upsertMutable` documents — `(xmax = 0)` cannot be projected. The caller has
+ * already read which keys exist (one set-returning SELECT it makes anyway), so
+ * the insert/update split is known per row without any RETURNING, and the
+ * statement omits RETURNING entirely.
+ *
+ * THE ONE HAZARD BATCHING ADDS, AND HOW IT IS CLOSED. A multi-row
+ * `ON CONFLICT DO UPDATE` may not touch the same conflict key twice in one
+ * statement — PostgreSQL raises "ON CONFLICT DO UPDATE command cannot affect row
+ * a second time". Row-by-row tolerated a repeated key by upserting it twice, last
+ * write winning. We preserve that FINAL STATE by de-duplicating within the batch,
+ * last occurrence winning, before building tuples. In a well-formed enrichment
+ * payload the natural keys are already unique and de-duplication is a no-op; the
+ * guard exists so a malformed payload degrades to "last wins" rather than to a
+ * hard statement error the row-by-row path would never have raised.
+ *
+ * ATOMICITY AND ERROR ISOLATION ARE UNCHANGED. Every chunk runs on the caller's
+ * transaction, so the unit of atomicity is still the whole fixture: any failure
+ * rolls the fixture back exactly as the row-by-row path did. RLS INSERT/UPDATE
+ * policies are evaluated per row within a multi-row statement, so the posture is
+ * enforced identically.
+ */
+export async function upsertMutableBatch(
+  tx: PoolClient,
+  options: {
+    readonly relation: string;
+    readonly columns: readonly string[];
+    /** One entry per row: its values (aligned to `columns`) and whether the row
+     *  already existed — REQUIRED, because these targets are partitioned and the
+     *  branch cannot be read from `xmax`. */
+    readonly rows: readonly { readonly values: readonly unknown[]; readonly existedBeforeWrite: boolean }[];
+    readonly conflictTarget: readonly string[];
+    readonly immutableColumns?: readonly string[];
+    /** False for a relation without `updated_at` (e.g. `lineup_selection`, per
+     *  migration 005) — matches `upsertMutable`'s option of the same name. */
+    readonly hasUpdatedAt?: boolean;
+    /**
+     * Maximum bind parameters per statement. PostgreSQL's hard ceiling is 65535
+     * (a 16-bit wire field); rows are chunked at `floor(maxParams / columns)` so
+     * a fixture's ~1,345 × 9-column player stats stay one or two statements while
+     * never risking the limit. The default leaves generous headroom.
+     */
+    readonly maxParams?: number;
+  }
+): Promise<IngestionCounts> {
+  const counts = new IngestionCounts();
+  const { relation, columns, conflictTarget } = options;
+  if (options.rows.length === 0) return counts;
+
+  // De-duplicate by conflict key (last wins) — see the header note on the
+  // "cannot affect row a second time" hazard.
+  const keyIndices = conflictTarget.map((c) => columns.indexOf(c));
+  if (keyIndices.some((i) => i < 0)) {
+    throw new Error(
+      `upsertMutableBatch: a conflictTarget column is absent from columns for ${relation}; ` +
+        'the batch key cannot be formed.'
+    );
+  }
+  const deduped = new Map<string, { values: readonly unknown[]; existedBeforeWrite: boolean }>();
+  for (const row of options.rows) {
+    deduped.set(keyIndices.map((i) => String(row.values[i])).join('\u0000'), row);
+  }
+  const rows = [...deduped.values()];
+
+  // Build the shared ON CONFLICT DO UPDATE clause — identical to upsertMutable.
+  const immutable = new Set([
+    ...conflictTarget,
+    ...(options.immutableColumns ?? []),
+    'created_at',
+    'updated_at',
+  ]);
+  const target = relation.split('.').pop()!;
+  const updatable = columns.filter((c) => !immutable.has(c));
+  const assignments =
+    updatable.length > 0
+      ? updatable.map((c) => `${c} = COALESCE(EXCLUDED.${c}, ${target}.${c})`)
+      : [`${conflictTarget[0]} = EXCLUDED.${conflictTarget[0]}`];
+  if (updatable.length > 0 && options.hasUpdatedAt !== false) {
+    assignments.push('updated_at = now()');
+  }
+
+  const nCols = columns.length;
+  const maxParams = options.maxParams ?? 60_000; // < 65535 hard ceiling, generous headroom
+  const maxRowsPerChunk = Math.max(1, Math.floor(maxParams / Math.max(1, nCols)));
+
+  for (let start = 0; start < rows.length; start += maxRowsPerChunk) {
+    const chunk = rows.slice(start, start + maxRowsPerChunk);
+    const params: unknown[] = [];
+    const tuples = chunk.map((row) => {
+      const placeholders = row.values.map((value) => {
+        params.push(value);
+        return `$${params.length}`;
+      });
+      return `(${placeholders.join(', ')})`;
+    });
+
+    const { rowCount } = await tx.query(
+      `INSERT INTO ${relation} (${columns.join(', ')})
+       VALUES ${tuples.join(', ')}
+       ON CONFLICT (${conflictTarget.join(', ')}) DO UPDATE SET ${assignments.join(', ')}`,
+      params
+    );
+
+    // DO UPDATE yields a row for every conflicting tuple and a non-conflicting
+    // tuple inserts, so a correct statement affects EVERY chunk row. A shortfall
+    // is a wiring fault (e.g. a tuple silently dropped) and must be loud, not
+    // folded into an under-count.
+    if ((rowCount ?? 0) !== chunk.length) {
+      throw new Error(
+        `upsertMutableBatch: ${relation} affected ${rowCount ?? 0} of ${chunk.length} rows in a ` +
+          'chunk; a mutable upsert must touch every row it was given.'
+      );
+    }
+    for (const row of chunk) counts.countUpsertKnown(row.existedBeforeWrite);
+  }
+  return counts;
 }
 
 /**
