@@ -39,6 +39,8 @@ const SRC = join(PACKAGE_ROOT, 'src');
 const ENTRY_POINTS = [
   join(SRC, 'v2', 'seed', 'runAll.ts'),
   join(SRC, 'v2', 'ingestion', 'cli.ts'),
+  join(SRC, 'v2', 'ingestion', 'fixtureReadiness.ts'),
+  join(SRC, 'v2', 'orchestration', 'cli.ts'),
   join(SRC, 'v2', 'feature', 'cli.ts'),
   join(SRC, 'v2', 'db', 'doctor.ts'),
   join(SRC, 'v2', 'ingestion', 'discover.ts'),
