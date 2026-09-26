@@ -14,6 +14,7 @@
 
 import type { PoolClient } from 'pg';
 import { readCompletedFixtures } from '../feature/read/fixtures';
+import { readTeamHistoricalResponse } from './read/teamHistoricalResponse';
 import { readRecentVenueFormRows, selectRecentVenueForm, type RecentVenueFormRow, type TeamRecentVenueForm } from '../feature/read/recentVenueForm';
 import { readCurrentTeamFeatures, TEAM_PANEL_FEATURE_KEYS, type TeamFeatureValue } from '../feature/read/currentValues';
 import { readActiveMatchReadings, ACTIVE_MODULE_KEYS, type TeamModuleReading } from '../module/read/readings';
@@ -332,6 +333,11 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     asOf,
     moduleKeys: [...FIXTURE_MATCH_MODULE_KEYS],
   });
+  // DISPLAYED CONTEXT — each team's Historical Response as of the SAME kickoff boundary
+  // (reader enforces strict `kickoff < asOf`, so the subject fixture and any later fixture
+  // are excluded). Reuses the governed reader verbatim; no calculation is duplicated here.
+  const historicalHome = await readTeamHistoricalResponse(tx, h.home_id, { asOf });
+  const historicalAway = await readTeamHistoricalResponse(tx, h.away_id, { asOf });
 
   return {
     match: {
@@ -355,6 +361,7 @@ export async function getMatchDetail(tx: PoolClient, fixtureId: string): Promise
     intelligence: mapIntelligence(readings, h.home_id, h.away_id, evidence),
     teamFeatures: mapTeamFeatures(features, h.home_id, h.away_id),
     matchModules: fixtureModules.map(toFixtureReadingDto),
+    historicalResponse: { home: historicalHome, away: historicalAway },
   };
 }
 
