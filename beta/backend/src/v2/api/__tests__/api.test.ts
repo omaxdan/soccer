@@ -17,6 +17,7 @@ import type { Server } from 'node:http';
 import type { PoolClient } from 'pg';
 
 import { resolveRoute, createServer, type ApiDeps } from '../server';
+import { parseUtcCalendarDate } from '../read/fixturesByDate';
 import { isValidId, mapIntelligence, mapTeamFeatures, toFixtureReadingDto } from '../handlers';
 import type { FixtureModuleReading } from '../../module/read/fixtureReadings';
 import type { TeamFeatureValue } from '../../feature/read/currentValues';
@@ -425,7 +426,8 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
       getCountry: async (code) => (code === 'BR' ? { country: { code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }, teams: [{ id: '68', name: 'Flamengo', slug: 'flamengo-5981', shortName: 'Flamengo', countryCode: 'BR' }], competitions: [{ id: '1', name: 'Brasileirão Série A', slug: 'brasileirao-serie-a' }], coverage: { country: 'present', teams: 'present', competitions: 'present' } } : null),
       getCompetition: async (id) => (id === '28' ? { competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325', countryCode: 'BR' }, editions: [{ id: '42', seasonLabel: '2025', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' }, fixtureCount: 380 }], coverage: { competition: 'present', editions: 'present' } } : null),
       getEditionDetail: async (id) => (id === '18' ? { edition: { id: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' } }, coverage: { edition: 'present', competition: 'present' } } : null),
-      getFixturesByDate: async (date) => ({ date, fixtureCount: 0, countries: [] }),
+      // Mirror the real read: a malformed/non-existent date yields null (→ 400 invalid_date).
+      getFixturesByDate: async (date) => (parseUtcCalendarDate(date) ? { date, fixtureCount: 0, countries: [] } : null),
     };
     server = createServer(deps);
     base = `http://127.0.0.1:${await listen(server)}`;
@@ -455,6 +457,18 @@ describe('v2 api · HTTP layer over injected seams (no database)', () => {
     const res = await fetch(`${base}/api/v2/editions/43/fixtures`);
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: 'edition_not_found' });
+  });
+
+  it('GET /api/v2/fixtures/:date with a valid date → 200 calendar body', async () => {
+    const res = await fetch(`${base}/api/v2/fixtures/2026-08-15`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { date: '2026-08-15', fixtureCount: 0, countries: [] });
+  });
+
+  it('GET /api/v2/fixtures/:date with a malformed date → 400 invalid_date (not invalid_id)', async () => {
+    const res = await fetch(`${base}/api/v2/fixtures/2026-13-40`);
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), { error: 'invalid_date' });
   });
 
   it('GET a known fixture lineups → 200 with a lineups projection', async () => {
