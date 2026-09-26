@@ -195,13 +195,24 @@ export async function planEnrichmentJob(
 
 // ── phase 2: admitted execution (INJECTED deps; spends only on explicit confirmation) ──
 
+/** The minimum an admitted job needs to execute: an idempotency key, the exact number of
+ *  provider calls to reserve, and the fixtures (by provider id) to enrich. A full
+ *  EnrichmentJobPlan satisfies this, and so does a leaner job assembled from a different
+ *  demand reader (e.g. the lineup-aware bootstrap demand) — so the executor is reused
+ *  without coupling to one planner's shape. */
+export interface ExecutableEnrichmentJob {
+  readonly jobId: string;
+  readonly estimatedCalls: number;
+  readonly selected: readonly PlannedFixture[];
+}
+
 /** Execute an admitted enrichment plan. Refuses to spend unless confirmRealEnrichment is true.
  *  Admission is durable + all-or-nothing (deps.admit); a rejection performs ZERO provider calls.
  *  On admission, each selected fixture is enriched via the injected enricher (which owns its own
  *  transaction and provider calls), actual attempts are tallied, and the reservation is reconciled
  *  to that MEASURED total — the estimate is never treated as the spend. */
 export async function executeEnrichmentJob(
-  plan: EnrichmentJobPlan, deps: EnrichmentExecutionDeps, options: ExecuteOptions = {},
+  plan: ExecutableEnrichmentJob, deps: EnrichmentExecutionDeps, options: ExecuteOptions = {},
 ): Promise<EnrichmentExecutionResult> {
   if (options.confirmRealEnrichment !== true) {
     throw new Error(
