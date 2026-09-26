@@ -10,27 +10,38 @@
 //
 // STAGE DEPENDENCY ORDER (the real repository graph; Team Preparedness is composed
 // INSIDE snapshot sealing, so it is not a separate stage):
-//   INGESTION → FEATURES → MODULES → SNAPSHOT(+preparedness) → ACCRUAL
+//   INGESTION → ENRICHMENT → FEATURES → MODULES → SNAPSHOT(+preparedness) → ACCRUAL
+//
+// ENRICHMENT is bounded recurring match enrichment (lineups + team/player statistics)
+// for NEWLY completed fixtures. It sits after the feed (which marks fixtures COMPLETED)
+// and before FEATURES, so the same run's Team Observation → features → modules chain
+// consumes the freshly enriched history. It reuses the historical bootstrap's governed
+// pieces verbatim (demand reader, budget governor, durable reservation, enrichMatchFixture)
+// and is incremental by construction — never the historical corpus, which remains the
+// separate operator-controlled bootstrap.
 //
 // GOVERNANCE:
 //   • A hard stage FAILURE (the stage threw / aborted) blocks every downstream stage,
 //     which is recorded SKIPPED. The run status is FAILED.
-//   • A stage's own PER-ITEM failures (feature/module `failures`, snapshot `failed`)
-//     are NOT a hard failure — the stage was designed to isolate them and continue,
-//     so downstream still runs. The orchestrator uses the stage's declared outcome,
-//     never a re-interpretation of item counts.
-//   • BUDGET_BLOCKED (only INGESTION spends provider quota) is recorded and NON-fatal:
-//     the downstream stages make no provider calls and cannot fabricate (missing ≠ zero),
-//     so they still run over whatever data exists. The run is flagged budgetBlocked.
+//   • A stage's own PER-ITEM failures (feature/module `failures`, snapshot `failed`,
+//     a single fixture's enrichment HARD_STOP) are NOT a hard failure — the stage was
+//     designed to isolate them and continue, so downstream still runs. The orchestrator
+//     uses the stage's declared outcome, never a re-interpretation of item counts.
+//   • BUDGET_BLOCKED (INGESTION and ENRICHMENT are the provider-spending stages) is
+//     recorded and NON-fatal: the downstream stages make no provider calls and cannot
+//     fabricate (missing ≠ zero), so they still run over whatever data exists. The run
+//     is flagged budgetBlocked.
 //   • Overlap is impossible: the run holds an injected mutual-exclusion lock for its
 //     whole duration; a second concurrent invocation observes ALREADY_RUNNING and does
 //     nothing (no second pipeline, no double provider spend).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type StageName = 'INGESTION' | 'FEATURES' | 'MODULES' | 'SNAPSHOT' | 'ACCRUAL';
+export type StageName = 'INGESTION' | 'ENRICHMENT' | 'FEATURES' | 'MODULES' | 'SNAPSHOT' | 'ACCRUAL';
 
-/** The canonical dependency order. SNAPSHOT composes Team Preparedness at seal. */
-export const STAGE_ORDER: readonly StageName[] = ['INGESTION', 'FEATURES', 'MODULES', 'SNAPSHOT', 'ACCRUAL'];
+/** The canonical dependency order. ENRICHMENT (bounded recurring match enrichment) runs
+ *  after the feed and before FEATURES so features consume the freshly enriched history.
+ *  SNAPSHOT composes Team Preparedness at seal. */
+export const STAGE_ORDER: readonly StageName[] = ['INGESTION', 'ENRICHMENT', 'FEATURES', 'MODULES', 'SNAPSHOT', 'ACCRUAL'];
 
 export type StageOutcomeCode = 'OK' | 'FAILED' | 'BUDGET_BLOCKED';
 

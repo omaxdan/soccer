@@ -73,16 +73,16 @@ describe('orchestrator · failure propagation', () => {
     assert.equal(res.status, 'FAILED');
     assert.equal(res.failureStage, 'INGESTION');
     assert.deepEqual(s.ran, ['INGESTION']);                          // downstream never invoked
-    assert.deepEqual(res.stages.map((x) => x.status), ['FAILED', 'SKIPPED', 'SKIPPED', 'SKIPPED', 'SKIPPED']);
+    assert.deepEqual(res.stages.map((x) => x.status), ['FAILED', 'SKIPPED', 'SKIPPED', 'SKIPPED', 'SKIPPED', 'SKIPPED']);
     assert.equal(lock.calls.released, 1);                            // released after failure
   });
 
   test('mid-pipeline fail (MODULES) → SNAPSHOT/ACCRUAL skipped, upstream OK', async () => {
     const s = stages({ MODULES: async () => ({ ok: false }) });
     const res = await runProductionPipeline({ stages: s.runners, acquireLock: fakeLock().acquireLock });
-    assert.deepEqual(s.ran, ['INGESTION', 'FEATURES', 'MODULES']);
+    assert.deepEqual(s.ran, ['INGESTION', 'ENRICHMENT', 'FEATURES', 'MODULES']);
     assert.equal(res.failureStage, 'MODULES');
-    assert.deepEqual(res.stages.map((x) => x.status), ['OK', 'OK', 'FAILED', 'SKIPPED', 'SKIPPED']);
+    assert.deepEqual(res.stages.map((x) => x.status), ['OK', 'OK', 'OK', 'FAILED', 'SKIPPED', 'SKIPPED']);
   });
 
   test('a thrown stage becomes a hard failure and releases the lock', async () => {
@@ -109,7 +109,7 @@ describe('orchestrator · budget & partial-failure semantics', () => {
     const s = stages({ FEATURES: async () => ({ ok: true, detail: { failures: 3 } }) });
     const res = await runProductionPipeline({ stages: s.runners, acquireLock: fakeLock().acquireLock });
     assert.equal(res.status, 'COMPLETED');
-    assert.equal(res.stages[1].status, 'OK');    // stage isolated its own item failures
+    assert.equal(res.stages[2].status, 'OK');    // FEATURES (index 2 after INGESTION, ENRICHMENT) isolated its item failures
     assert.deepEqual(s.ran, [...STAGE_ORDER]);
   });
 
