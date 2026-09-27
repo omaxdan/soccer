@@ -42,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh">
         <header className="sticky top-0 z-30 border-b border-line bg-ink">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-            <Link href={routes.leagues()} className="flex items-baseline gap-1.5">
+            <Link href={routes.home()} className="flex items-baseline gap-1.5">
               <span className="mono text-base font-bold tracking-tight text-text">
                 Pitch<span className="text-amber">Terminal</span>
               </span>

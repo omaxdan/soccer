@@ -24,7 +24,9 @@ import type { ApiEditionFixture } from '@/lib/v2/types';
  *  a route that 404s). "Competitions" is the leagues/editions index. The active
  *  section is marked with the design's amber underline. Rendered in the shell header. */
 const PRIMARY_NAV: readonly { label: string; href: string; isActive: (p: string) => boolean }[] = [
-  { label: 'Competitions', href: routes.leagues(), isActive: (p) => p === '/v2' || p === '/' || p.startsWith('/v2/editions') || p.startsWith('/v2/competitions') || p.startsWith('/v2/countries') },
+  // '/' is the public landing (home), NOT the Competitions section, so it is not
+  // matched here — no nav item is marked active on the landing.
+  { label: 'Competitions', href: routes.leagues(), isActive: (p) => p === '/v2' || p.startsWith('/v2/editions') || p.startsWith('/v2/competitions') || p.startsWith('/v2/countries') },
   { label: 'Teams', href: routes.teams(), isActive: (p) => p.startsWith('/v2/teams') },
   { label: 'Players', href: routes.players(), isActive: (p) => p.startsWith('/v2/players') },
 ];

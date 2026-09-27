@@ -76,4 +76,13 @@ export const routes = {
   /** One country's page, addressed by its canonical ISO alpha-2 `code`.
    *  (Helper only — the country page is a separate slice.) */
   country: (country: { code: string }): string => v2Path(V2_BASE, `/countries/${encodeURIComponent(country.code)}`),
+
+  // ── public marketing routes (root-level, NOT under V2_BASE) ─────────────────────
+  // These are the public pages of the roadmap's Phase B. They live at the domain
+  // root and are unaffected by the /v2 → '' app cutover, so they do not use v2Path.
+  /** The public marketing home — the B1 Landing at the domain root. The shell brand/
+   *  logo points here (home), while the app's leagues index stays at leagues(). */
+  home: (): string => '/',
+  /** The public Features / Intelligence page (B2). */
+  features: (): string => '/features',
 } as const;

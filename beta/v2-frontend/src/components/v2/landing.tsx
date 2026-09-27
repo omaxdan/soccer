@@ -20,48 +20,9 @@
 
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
+import { EYEBROW, MONO_CAP, CTA_AMBER, CTA_GHOST, FormBadgeRow, MarketingFooter } from '@/components/v2/marketing';
 
-// ── shared tokens for this page (design grammar) ─────────────────────────────────
-const EYEBROW: React.CSSProperties = { font: "400 10px 'JetBrains Mono',monospace", letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' };
-const MONO_CAP: React.CSSProperties = { font: "500 10px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase' };
 const SECTION_PAD = 'clamp(40px,6vw,88px) 16px';
-
-// Recent-form result → colour + full word (design's RC map).
-const RESULT: Record<string, readonly [string, string]> = {
-  W: ['var(--edge)', 'Win'], D: ['var(--muted)', 'Draw'], L: ['var(--risk)', 'Loss'],
-};
-function FormRow({ seq }: { seq: string }) {
-  return (
-    <div style={{ display: 'flex', gap: 4 }} role="list" aria-label="recent form, most recent first">
-      {seq.split('').map((r, i) => {
-        const [c, word] = RESULT[r] ?? ['var(--faint)', 'No result'];
-        return (
-          <span key={i} role="listitem" title={word} aria-label={word}
-            style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', font: "700 11px 'JetBrains Mono',monospace", color: c, background: `color-mix(in srgb, ${c} 15%, transparent)`, border: `1px solid color-mix(in srgb, ${c} 40%, transparent)`, borderRadius: 4 }}>
-            {r}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-/** A footer/marketing label whose destination is a later roadmap phase — rendered as
- *  non-interactive muted text (not a link) so the public page never 404s. */
-function SoonText({ children }: { children: React.ReactNode }) {
-  return <span style={{ font: '400 13px Inter,sans-serif', color: 'var(--faint)', cursor: 'default' }}>{children}</span>;
-}
-
-const CTA_AMBER: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '0 20px',
-  background: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 4,
-  font: "600 11px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink)', textDecoration: 'none',
-};
-const CTA_GHOST: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '0 20px',
-  background: 'var(--raised)', border: '1px solid var(--line)', borderRadius: 4,
-  font: "500 11px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text)', textDecoration: 'none',
-};
 
 // The reconciled Match workspace tabs (Overview active) — the preview reflects the
 // SHIPPED product (5 tabs), not the wireframe's older 8-tab mock.
@@ -175,9 +136,9 @@ export function LandingPage() {
               ))}
             </div>
             <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', gap: 12, alignItems: 'center', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><FormRow seq="WDLLD" /></div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><FormBadgeRow seq="WDLLD" /></div>
               <span style={{ ...MONO_CAP, fontWeight: 400, color: 'var(--muted)', textAlign: 'center' }}>Last 5</span>
-              <div style={{ display: 'flex' }}><FormRow seq="WDLWD" /></div>
+              <div style={{ display: 'flex' }}><FormBadgeRow seq="WDLWD" /></div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 14px', background: 'var(--raised)', borderBottom: '1px solid var(--line)', font: "400 9.6px 'JetBrains Mono',monospace", letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--muted)' }}>
               <span>Brasileirão Betano · Sun 6 Sep</span><span style={{ color: 'var(--faint)' }}>6</span>
@@ -222,7 +183,7 @@ export function LandingPage() {
                 {c.n === '02' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ font: '500 13px Inter,sans-serif', color: 'var(--text)' }}>Palmeiras</span>
-                    <FormRow seq="WDLWD" />
+                    <FormBadgeRow seq="WDLWD" />
                   </div>
                 )}
                 {c.n === '03' && (
@@ -349,44 +310,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────────────────────── */}
-      <footer style={{ maxWidth: 1152, margin: '0 auto', padding: '40px 16px 32px', display: 'flex', flexDirection: 'column', gap: 28 }}>
-        <div className="grid grid-cols-2 md:grid-cols-[2fr_1fr_1fr_1fr_1fr]" style={{ gap: '28px 24px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} className="col-span-2 md:col-span-1">
-            <span style={{ font: '700 15px Inter,sans-serif', color: 'var(--text)' }}>Pitch<span style={{ color: 'var(--amber)' }}>Terminal</span></span>
-            <span style={EYEBROW}>Football Intelligence</span>
-          </div>
-          {/* Product (Features/Pricing) → B2/B3, not built: non-interactive. */}
-          <nav aria-label="Product" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span style={{ font: "400 10px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Product</span>
-            <SoonText>Features</SoonText>
-            <SoonText>Pricing</SoonText>
-          </nav>
-          {/* Explore → live app surfaces (real links). */}
-          <nav aria-label="Explore" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span style={{ font: "400 10px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Explore</span>
-            <Link href={appHref} style={{ font: '400 13px Inter,sans-serif', color: 'var(--text-secondary)', textDecoration: 'none' }}>Fixtures</Link>
-            <Link href={appHref} style={{ font: '400 13px Inter,sans-serif', color: 'var(--text-secondary)', textDecoration: 'none' }}>Competitions</Link>
-            <Link href={routes.teams()} style={{ font: '400 13px Inter,sans-serif', color: 'var(--text-secondary)', textDecoration: 'none' }}>Teams</Link>
-            <Link href={routes.players()} style={{ font: '400 13px Inter,sans-serif', color: 'var(--text-secondary)', textDecoration: 'none' }}>Players</Link>
-          </nav>
-          {/* Account (Log in/Sign up) → B4/B5, not built: non-interactive. */}
-          <nav aria-label="Account" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span style={{ font: "400 10px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Account</span>
-            <SoonText>Log in</SoonText>
-            <SoonText>Sign up</SoonText>
-          </nav>
-          {/* Legal (Terms/Privacy) → B8, not built: non-interactive. */}
-          <nav aria-label="Legal" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <span style={{ font: "400 10px 'JetBrains Mono',monospace", letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>Legal</span>
-            <SoonText>Terms</SoonText>
-            <SoonText>Privacy</SoonText>
-          </nav>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, paddingTop: 16, borderTop: '1px solid var(--line)', font: "400 11px 'JetBrains Mono',monospace", color: 'var(--faint)' }}>
-          <span>© PitchTerminal</span><span>Football intelligence. Not betting advice.</span>
-        </div>
-      </footer>
+      {/* ── FOOTER (shared across public pages) ──────────────────────────────── */}
+      <MarketingFooter />
     </main>
   );
 }
