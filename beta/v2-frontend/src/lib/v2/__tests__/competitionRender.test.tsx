@@ -1,130 +1,194 @@
-// COMPETITION WORKSPACE RENDER TESTS (DB-free; react-dom/server, no DOM/network).
+// COMPETITION / EDITION WORKSPACE RENDER TESTS (DB-free; react-dom/server, no DOM/network).
 //
-// Verifies the competition page surfaces render honest, namespace-neutral content:
-// identity + season + counts, tab nav with the active tab and non-/pitch hrefs,
-// fixture rows linking to the canonical match slug, and — critically — that
-// standings and competition intelligence are HONEST unavailable states (no fabricated
-// table, no fabricated competition score), with no betting language anywhere.
+// Verifies the reconciled Edition workspace renders honest, namespace-neutral content:
+// identity header (breadcrumb Country › Competition › Edition, meta cells) with the three
+// shipped tabs (Overview · Table · Fixtures), a real semantic standings table (Pos · Team
+// · P · W · D · L · GF · GA · GD · Pts) with team links and signed GD, the Overview fixture
+// strip, and honest empty/unavailable states — with NO qualification/relegation zones,
+// NO fabricated numbers, and no betting language anywhere.
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
-  CompetitionHeader, EditionTabNav, FixtureRow, MatchesPanel,
-  TeamsPanel, StandingsTable, StandingsUnavailable, CompetitionIntelligenceNote,
+  CompetitionHeader, EditionTabNav, StandingsTable, StandingsEmpty, StandingsUnavailable,
+  FixtureStrip, QualificationZonesNote, EditionFactsRail, DataAvailableRail, standingsVariantLabel,
 } from '@/components/v2/competition';
-import { classifyFixtures } from '@/lib/v2/competition';
-import type { ApiEditionFixture, ApiEditionSummary, ApiTeam, EditionStandings } from '@/lib/v2/types';
+import type { ApiEditionFixture, ApiEditionSummary, StandingTable } from '@/lib/v2/types';
 
 function html(node: React.ReactElement): string { return renderToStaticMarkup(node); }
 function text(node: React.ReactElement): string {
   return renderToStaticMarkup(node).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-const TEAMS: ApiTeam[] = [
-  { id: '599', name: 'Flamengo', slug: 'flamengo-599' },
-  { id: '602', name: 'Botafogo', slug: 'botafogo-602' },
+const COMPETITION = { id: '28', name: 'Brasileirão Betano', slug: 'brasileirao-betano-325' };
+const EDITIONS: ApiEditionSummary[] = [
+  { id: '18', seasonLabel: 'Brasileiro Serie A 2026', competition: COMPETITION, fixtureCount: 286 },
 ];
-const FIX: ApiEditionFixture = {
-  fixtureId: '1384', kickoffAt: '2026-09-13T12:30:00.000Z', status: 'SCHEDULED',
-  homeTeam: TEAMS[0], awayTeam: TEAMS[1], score: null,
+const EDITION_REF = { id: '18', competition: { slug: 'brasileirao-betano-325' }, seasonLabel: 'Brasileiro Serie A 2026' };
+
+const TABLE: StandingTable = {
+  variant: 'TOTAL', asOf: '2026-08-11',
+  rows: [
+    { position: 1, team: { id: '72', name: 'Palmeiras', slug: 'palmeiras-1963' }, played: 22, won: 14, drawn: 6, lost: 2, goalsFor: 38, goalsAgainst: 16, goalDifference: 22, points: 48 },
+    { position: 20, team: { id: '57', name: 'Chapecoense', slug: 'chapecoense-1973' }, played: 21, won: 1, drawn: 7, lost: 13, goalsFor: 20, goalsAgainst: 43, goalDifference: -23, points: 10 },
+  ],
 };
-const SEASONS: ApiEditionSummary[] = [
-  { id: '11', seasonLabel: '2026', competition: { id: 'c1', name: 'Série A', slug: 'serie-a' }, fixtureCount: 120 },
-];
+
+function fx(id: string, kickoffAt: string, status: string, home: string, away: string, score: { home: number; away: number } | null = null): ApiEditionFixture {
+  const t = (n: string) => ({ id: n, name: n, slug: n.toLowerCase() });
+  return { fixtureId: id, kickoffAt, status, homeTeam: t(home), awayTeam: t(away), score };
+}
 
 describe('CompetitionHeader', () => {
-  const markup = html(<CompetitionHeader competitionName="Série A" seasonLabel="2026" seasons={SEASONS} currentEditionId="11" teamCount={20} fixtureCount={120} />);
-  test('shows competition identity, season and real counts', () => {
-    assert.match(markup, /Série A/);
-    assert.match(markup, /Season 2026/);
-    assert.match(markup, /120 fixtures/);
-    assert.match(markup, /20 teams/);
+  const markup = html(
+    <CompetitionHeader
+      country={{ code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }}
+      competition={COMPETITION} seasonLabel="Brasileiro Serie A 2026"
+      editions={EDITIONS} currentEditionId="18" editionRef={EDITION_REF}
+      fixtureCount={286} asOf="2026-08-11" variantLabel="Overall" activeTab="overview" />
+  );
+  test('shows identity, breadcrumb, meta cells and the three tabs', () => {
+    assert.match(markup, /Brasileirão Betano/);
+    assert.match(markup, /Brazil/);
+    assert.match(markup, /Brasileiro Serie A 2026/);
+    assert.match(markup, /286/);
+    assert.match(markup, /11 Aug 2026/);
+    assert.match(markup, /Overall/);
+    // breadcrumb links use the real entity routes
+    assert.match(markup, /href="\/v2"/);                          // Competitions index
+    assert.match(markup, /href="\/v2\/countries\/BR"/);           // country
+    assert.match(markup, /href="\/v2\/competitions\/brasileirao-betano-325-28"/); // competition
+    // three-tab nav, overview active, links under /v2 (readable edition slug)
+    assert.match(markup, /href="\/v2\/editions\/[^"]*\?tab=table"/);
+    assert.match(markup, /href="\/v2\/editions\/[^"]*\?tab=fixtures"/);
+    assert.match(markup, /aria-current="page"/);
     assert.equal(markup.includes('/pitch'), false);
+  });
+  test('one H1 (the competition name)', () => {
+    assert.equal((markup.match(/<h1/g) ?? []).length, 1);
+  });
+  test('country absent → no code block, breadcrumb omits country (no invented country)', () => {
+    const m = html(
+      <CompetitionHeader country={null} competition={COMPETITION} seasonLabel="2026"
+        editions={EDITIONS} currentEditionId="18" editionRef={EDITION_REF}
+        fixtureCount={286} asOf={null} variantLabel={null} activeTab="table" />
+    );
+    assert.equal(m.includes('/v2/countries/'), false);
+    assert.doesNotMatch(m, /BRA/);
   });
 });
 
 describe('EditionTabNav', () => {
-  const markup = html(<EditionTabNav edition="88" active="matches" />);
-  test('renders all tabs, marks the active one, links under /v2, none to /pitch', () => {
-    assert.match(markup, /href="\/v2\/editions\/88"/);            // Overview = clean base
-    assert.match(markup, /href="\/v2\/editions\/88\?tab=standings"/);
-    assert.match(markup, /aria-current="page"/);                  // active = matches
+  const markup = html(<EditionTabNav edition="88" active="table" />);
+  test('renders Overview/Table/Fixtures, marks active, links under /v2, none to /pitch', () => {
+    assert.match(markup, /href="\/v2\/editions\/88"/);              // overview clean base
+    assert.match(markup, /href="\/v2\/editions\/88\?tab=fixtures"/);
+    assert.match(markup, /aria-current="page"/);                    // active = table
+    assert.match(text(<EditionTabNav edition="88" active="table" />), /Overview .*Table .*Fixtures/);
     assert.equal(markup.includes('/pitch'), false);
   });
 });
 
-describe('FixtureRow', () => {
-  test('links to the canonical match slug', () => {
-    assert.match(html(<FixtureRow fixture={FIX} />), /href="\/v2\/matches\/flamengo-vs-botafogo-1384"/);
+describe('StandingsTable (governed observed snapshot — real semantic table)', () => {
+  test('full: all columns, team link, signed GD, as-of, semantic th scopes', () => {
+    const markup = html(<StandingsTable table={TABLE} asOf="2026-08-11" label="Overall" mode="full" />);
+    assert.match(markup, /<table/);
+    assert.match(markup, /scope="col"/);
+    assert.match(markup, /scope="row"/);
+    assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72"/);
+    const t = text(<StandingsTable table={TABLE} asOf="2026-08-11" label="Overall" mode="full" />);
+    assert.match(t, /Palmeiras/); assert.match(t, /48/);
+    assert.match(t, /\+22/);              // positive GD signed
+    assert.match(t, /−23/);          // negative GD signed (minus sign)
+    assert.match(t, /GF/); assert.match(t, /GA/);
+    assert.match(t, /As of 11 Aug 2026/);
+    assert.match(t, /Observed standings snapshot/i);
+  });
+  test('does NOT invent qualification/relegation zones (data discipline)', () => {
+    const t = text(<StandingsTable table={TABLE} asOf="2026-08-11" label="Overall" mode="full" />).toLowerCase();
+    for (const term of ['champions league', 'libertadores', 'europa', 'relegation', 'qualification', 'promotion']) {
+      assert.equal(t.includes(term), false, `standings must not name a zone: "${term}"`);
+    }
+  });
+  test('preview: top-N with a Full table link; deeper rows omitted', () => {
+    const t = text(<StandingsTable table={TABLE} asOf="2026-08-11" label="Overall" mode="preview" previewCount={1} editionRef={EDITION_REF} />);
+    assert.match(t, /Palmeiras/); assert.doesNotMatch(t, /Chapecoense/);
+    assert.match(t, /top 1/i); assert.match(t, /Full table/i);
   });
 });
 
-describe('MatchesPanel honest empties', () => {
-  test('no fixtures → an honest empty state, no fabricated rows', () => {
-    const t = text(<MatchesPanel grouped={classifyFixtures([])} />);
-    assert.match(t, /No fixtures are currently available/i);
+describe('honest standings states (never fabricated)', () => {
+  test('empty: coverage present, zero tables → neutral copy, no numbers', () => {
+    const t = text(<StandingsEmpty seasonLabel="Brasileiro Serie A 2026" />);
+    assert.match(t, /No table published yet/i);
+    assert.match(t, /Brasileiro Serie A 2026/);
+    assert.doesNotMatch(t, /\b\d+\s*(pts|points)\b/i);
+  });
+  test('unavailable: honest, never a computed table', () => {
+    const t = text(<StandingsUnavailable />);
+    assert.match(t, /not available/i);
+    assert.match(t, /never computes/i);
+    assert.doesNotMatch(t, /\b\d+\s*(pts|points)\b/i);
   });
 });
 
-describe('standings + competition intelligence are honest unavailable states', () => {
-  const standings = text(<StandingsUnavailable />);
-  const intel = text(<CompetitionIntelligenceNote hasMatches={true} />);
-  test('standings says not available and carries no fabricated numbers/table', () => {
-    assert.match(standings, /not available/i);
-    assert.match(standings, /never computes a table/i);
-    assert.doesNotMatch(standings, /\b\d+\s*(pts|points)\b/i); // no fabricated points
-  });
-  test('competition intelligence is framed as per-match sealed, not a competition score', () => {
-    assert.match(intel, /per match/i);
-    assert.match(intel, /sealed/i);
-    assert.match(intel, /no competition-wide governed score/i);
+describe('QualificationZonesNote is neutral (no bands drawn)', () => {
+  const t = text(<QualificationZonesNote />).toLowerCase();
+  test('states future config and draws no zones', () => {
+    assert.match(t, /future product configuration/);
+    assert.match(t, /no bands are drawn/);
+    assert.equal(t.includes('champions league'), false);
   });
 });
 
-const STANDINGS = (over: Partial<EditionStandings> = {}): EditionStandings => ({
-  tables: [{
-    variant: 'TOTAL', asOf: '2026-09-06',
-    rows: [
-      { position: 1, team: { id: '68', name: 'Flamengo', slug: 'flamengo-5981' }, played: 25, won: 18, drawn: 4, lost: 3, goalsFor: 50, goalsAgainst: 20, goalDifference: 30, points: 58 },
-      { position: 2, team: { id: '67', name: 'Fluminense', slug: 'fluminense-1961' }, played: 25, won: 15, drawn: 5, lost: 5, goalsFor: 40, goalsAgainst: 25, goalDifference: 15, points: 50 },
-    ],
-  }],
-  coverage: { standings: 'present', variantsPresent: ['TOTAL'], goalDifferenceIsDerived: true, standingsAreObservedSnapshots: true },
-  ...over,
-});
-
-describe('StandingsTable (governed observed snapshot — not client-computed)', () => {
-  test('renders position/P/W/D/L/GF/GA/GD/Pts with team links and signed GD', () => {
-    const markup = html(<StandingsTable standings={STANDINGS()} />);
-    assert.match(markup, /href="\/v2\/teams\/flamengo-5981-68"/);
-    const t = text(<StandingsTable standings={STANDINGS()} />);
-    assert.match(t, /Flamengo/); assert.match(t, /58/); assert.match(t, /\+30/); // points + signed GD
-    assert.match(t, /as of 2026-09-06/); assert.match(t, /read-layer derivation/i);
+describe('FixtureStrip (Overview)', () => {
+  const fixtures = [
+    fx('1', '2026-09-06T15:00:00.000Z', 'COMPLETED', 'Palmeiras', 'Santos', { home: 4, away: 1 }),
+    fx('2', '2026-09-12T21:30:00.000Z', 'SCHEDULED', 'Flamengo', 'Corinthians'),
+  ];
+  test('shows latest results + next scheduled with match links', () => {
+    const markup = html(<FixtureStrip fixtures={fixtures} editionRef={EDITION_REF} />);
+    assert.match(markup, /href="\/v2\/matches\/palmeiras-vs-santos-1/);
+    const t = text(<FixtureStrip fixtures={fixtures} editionRef={EDITION_REF} />);
+    assert.match(t, /Latest results/i); assert.match(t, /Next scheduled/i);
+    assert.match(t, /All fixtures/i);
   });
-  test('limit renders a top-N preview', () => {
-    const t = text(<StandingsTable standings={STANDINGS()} limit={1} />);
-    assert.match(t, /Flamengo/); assert.doesNotMatch(t, /Fluminense/);
-    assert.match(t, /top 1 of 2/i);
-  });
-  test('absent coverage → honest empty (never a fabricated/computed table)', () => {
-    const empty = STANDINGS({ tables: [], coverage: { standings: 'absent', variantsPresent: [], goalDifferenceIsDerived: true, standingsAreObservedSnapshots: true } });
-    const t = text(<StandingsTable standings={empty} />);
-    assert.match(t, /No standings snapshot has been ingested/i);
+  test('honest empties per side (no fabricated fixtures)', () => {
+    const t = text(<FixtureStrip fixtures={[]} editionRef={EDITION_REF} />);
+    assert.match(t, /No completed matches yet/i);
+    assert.match(t, /No scheduled fixtures/i);
   });
 });
 
-describe('no betting language across competition surfaces', () => {
-  test('header, tabs, standings, intelligence and teams carry no betting/odds lexicon', () => {
+describe('rails render real key/values', () => {
+  test('EditionFactsRail + DataAvailableRail show provided facts', () => {
+    const facts = text(<EditionFactsRail facts={[{ k: 'Season', v: 'Brasileiro Serie A 2026' }, { k: 'Fixtures', v: '286' }]} />);
+    assert.match(facts, /Season/); assert.match(facts, /286/);
+    const avail = text(<DataAvailableRail items={[{ k: 'Standings', v: 'Overall only', present: true }, { k: 'Fixture list', v: 'Available', present: true }]} />);
+    assert.match(avail, /Standings/); assert.match(avail, /Overall only/);
+  });
+});
+
+describe('standingsVariantLabel maps backend codes to product labels', () => {
+  test('TOTAL → Overall, HOME → Home, AWAY → Away', () => {
+    assert.equal(standingsVariantLabel('TOTAL'), 'Overall');
+    assert.equal(standingsVariantLabel('HOME'), 'Home');
+    assert.equal(standingsVariantLabel('AWAY'), 'Away');
+  });
+});
+
+describe('no betting language across edition surfaces', () => {
+  test('header, tabs, standings, strip and notes carry no betting/odds lexicon', () => {
     const all = [
-      text(<CompetitionHeader competitionName="Série A" seasonLabel="2026" seasons={SEASONS} currentEditionId="11" teamCount={20} fixtureCount={120} />),
+      text(<CompetitionHeader country={{ code: 'BR', name: 'Brazil', alpha3Code: 'BRA' }} competition={COMPETITION} seasonLabel="Brasileiro Serie A 2026" editions={EDITIONS} currentEditionId="18" editionRef={EDITION_REF} fixtureCount={286} asOf="2026-08-11" variantLabel="Overall" activeTab="overview" />),
       text(<EditionTabNav edition="88" active="overview" />),
+      text(<StandingsTable table={TABLE} asOf="2026-08-11" label="Overall" mode="full" />),
       text(<StandingsUnavailable />),
-      text(<CompetitionIntelligenceNote hasMatches={true} />),
-      text(<TeamsPanel teams={TEAMS} />),
+      text(<QualificationZonesNote />),
     ].join(' ').toLowerCase();
-    for (const term of ['odds', 'bookmaker', 'stake', 'wager', 'accumulator', 'payout', 'betting', 'best bet']) {
+    for (const term of ['odds', 'bookmaker', 'stake', 'wager', 'accumulator', 'payout', 'betting', 'best bet', 'tip', 'prediction']) {
       assert.equal(all.includes(term), false, `must not contain "${term}"`);
     }
     assert.doesNotMatch(all, /\bbet\b/);
