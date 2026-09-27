@@ -81,7 +81,7 @@ export function MarketingFooter() {
         </nav>
         <nav aria-label="Account" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span style={FOOT_GROUP_LABEL}>Account</span>
-          <SoonText>Log in</SoonText>
+          <Link href={routes.login()} style={FOOT_LINK}>Log in</Link>
           <SoonText>Sign up</SoonText>
         </nav>
         <nav aria-label="Legal" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -87,4 +87,8 @@ export const routes = {
   features: (): string => '/features',
   /** The public Pricing page (B3). */
   pricing: (): string => '/pricing',
+  /** The public Login page (B4). The page UI + client validation are real; the
+   *  authentication backend is not implemented yet, so sign-in itself is an honest
+   *  unavailable state (no fake session). */
+  login: (): string => '/login',
 } as const;
