@@ -1,0 +1,172 @@
+﻿{
+    "date":  "2026-08-15",
+    "fixtureCount":  4,
+    "countries":  [
+                      {
+                          "country":  {
+                                          "code":  "AT",
+                                          "name":  "Austria"
+                                      },
+                          "competitions":  [
+                                               {
+                                                   "competitionId":  "157",
+                                                   "name":  "Austrian Bundesliga",
+                                                   "slug":  "austrian-bundesliga-45",
+                                                   "edition":  {
+                                                                   "editionId":  "147",
+                                                                   "seasonLabel":  "Bundesliga 26/27"
+                                                               },
+                                                   "fixtures":  [
+                                                                    {
+                                                                        "fixtureId":  "1352",
+                                                                        "kickoffAt":  "2026-08-15T15:00:00.000Z",
+                                                                        "status":  "COMPLETED",
+                                                                        "homeTeam":  {
+                                                                                         "id":  "591",
+                                                                                         "name":  "SC Austria Lustenau",
+                                                                                         "slug":  "sc-austria-lustenau-2062"
+                                                                                     },
+                                                                        "awayTeam":  {
+                                                                                         "id":  "593",
+                                                                                         "name":  "Wolfsberger AC",
+                                                                                         "slug":  "wolfsberger-ac-2076"
+                                                                                     },
+                                                                        "score":  {
+                                                                                      "home":  2,
+                                                                                      "away":  1
+                                                                                  },
+                                                                        "result":  {
+                                                                                       "final":  {
+                                                                                                     "home":  2,
+                                                                                                     "away":  1
+                                                                                                 },
+                                                                                       "halfTime":  {
+                                                                                                        "home":  2,
+                                                                                                        "away":  1
+                                                                                                    },
+                                                                                       "extraTime":  null,
+                                                                                       "penalties":  null,
+                                                                                       "confirmedAt":  "2026-09-09T11:52:58.682Z"
+                                                                                   }
+                                                                    },
+                                                                    {
+                                                                        "fixtureId":  "1353",
+                                                                        "kickoffAt":  "2026-08-15T17:30:00.000Z",
+                                                                        "status":  "COMPLETED",
+                                                                        "homeTeam":  {
+                                                                                         "id":  "600",
+                                                                                         "name":  "SK Sturm Graz",
+                                                                                         "slug":  "sk-sturm-graz-2051"
+                                                                                     },
+                                                                        "awayTeam":  {
+                                                                                         "id":  "596",
+                                                                                         "name":  "SCR Altach",
+                                                                                         "slug":  "scr-altach-4856"
+                                                                                     },
+                                                                        "score":  {
+                                                                                      "home":  1,
+                                                                                      "away":  0
+                                                                                  },
+                                                                        "result":  {
+                                                                                       "final":  {
+                                                                                                     "home":  1,
+                                                                                                     "away":  0
+                                                                                                 },
+                                                                                       "halfTime":  {
+                                                                                                        "home":  0,
+                                                                                                        "away":  0
+                                                                                                    },
+                                                                                       "extraTime":  null,
+                                                                                       "penalties":  null,
+                                                                                       "confirmedAt":  "2026-09-09T11:53:00.188Z"
+                                                                                   }
+                                                                    }
+                                                                ]
+                                               }
+                                           ]
+                      },
+                      {
+                          "country":  {
+                                          "code":  "BR",
+                                          "name":  "Brazil"
+                                      },
+                          "competitions":  [
+                                               {
+                                                   "competitionId":  "28",
+                                                   "name":  "Brasileirão Betano",
+                                                   "slug":  "brasileirao-betano-325",
+                                                   "edition":  {
+                                                                   "editionId":  "18",
+                                                                   "seasonLabel":  "Brasileiro Serie A 2026"
+                                                               },
+                                                   "fixtures":  [
+                                                                    {
+                                                                        "fixtureId":  "239",
+                                                                        "kickoffAt":  "2026-08-15T19:30:00.000Z",
+                                                                        "status":  "COMPLETED",
+                                                                        "homeTeam":  {
+                                                                                         "id":  "67",
+                                                                                         "name":  "Fluminense",
+                                                                                         "slug":  "fluminense-1961"
+                                                                                     },
+                                                                        "awayTeam":  {
+                                                                                         "id":  "72",
+                                                                                         "name":  "Palmeiras",
+                                                                                         "slug":  "palmeiras-1963"
+                                                                                     },
+                                                                        "score":  {
+                                                                                      "home":  3,
+                                                                                      "away":  2
+                                                                                  },
+                                                                        "result":  {
+                                                                                       "final":  {
+                                                                                                     "home":  3,
+                                                                                                     "away":  2
+                                                                                                 },
+                                                                                       "halfTime":  {
+                                                                                                        "home":  1,
+                                                                                                        "away":  1
+                                                                                                    },
+                                                                                       "extraTime":  null,
+                                                                                       "penalties":  null,
+                                                                                       "confirmedAt":  "2026-08-18T18:32:55.108Z"
+                                                                                   }
+                                                                    },
+                                                                    {
+                                                                        "fixtureId":  "241",
+                                                                        "kickoffAt":  "2026-08-15T21:30:00.000Z",
+                                                                        "status":  "COMPLETED",
+                                                                        "homeTeam":  {
+                                                                                         "id":  "54",
+                                                                                         "name":  "Athletico",
+                                                                                         "slug":  "athletico-1967"
+                                                                                     },
+                                                                        "awayTeam":  {
+                                                                                         "id":  "64",
+                                                                                         "name":  "Red Bull Bragantino",
+                                                                                         "slug":  "red-bull-bragantino-1999"
+                                                                                     },
+                                                                        "score":  {
+                                                                                      "home":  1,
+                                                                                      "away":  1
+                                                                                  },
+                                                                        "result":  {
+                                                                                       "final":  {
+                                                                                                     "home":  1,
+                                                                                                     "away":  1
+                                                                                                 },
+                                                                                       "halfTime":  {
+                                                                                                        "home":  0,
+                                                                                                        "away":  0
+                                                                                                    },
+                                                                                       "extraTime":  null,
+                                                                                       "penalties":  null,
+                                                                                       "confirmedAt":  "2026-08-19T05:31:44.505Z"
+                                                                                   }
+                                                                    }
+                                                                ]
+                                               }
+                                           ]
+                      }
+                  ]
+}

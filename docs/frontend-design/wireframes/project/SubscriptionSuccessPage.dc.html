@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}</style></helmet>
+<div style="background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text);min-height:{{ minH }};display:flex;flex-direction:column">
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}">
+  <header style="border-bottom:1px solid var(--line);background:var(--ink)">
+    <div style="max-width:1152px;margin:0 auto;height:{{ hdrH }};padding:0 16px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <a aria-label="PitchTerminal home" style="text-decoration:none"><span style="font:700 15px Inter,sans-serif;color:var(--text)">Pitch<span style="color:var(--amber)">Terminal</span></span></a>
+      <span style="display:flex;align-items:center;gap:8px;min-width:0;font:400 11px 'JetBrains Mono',monospace"><span style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ signedLabel }}</span><span style="color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">analyst@example.com</span></span>
+    </div>
+  </header>
+</sc-if>
+<main style="flex:1;padding:{{ mainPad }};box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:20px">
+  <ol aria-label="Checkout progress" style="list-style:none;margin:0;padding:0;display:flex;gap:6px;align-items:center;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase">
+    <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3"><li aria-current="{{ s.current }}" style="display:flex;align-items:center;gap:6px;color:{{ s.color }}"><span style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;border:1px solid {{ s.border }};border-radius:3px;font-size:9px">{{ s.mark }}</span>{{ s.label }}<span aria-hidden="true" style="color:var(--line);margin-left:2px">{{ s.sep }}</span></li></sc-for>
+  </ol>
+
+  <section role="status" aria-live="polite" aria-labelledby="{{ uid }}h" style="width:100%;max-width:480px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:{{ panelPad }};box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <span aria-hidden="true" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px {{ tileStyle }} {{ tileColor }};border-radius:4px;background:{{ tileBg }};font:700 15px 'JetBrains Mono',monospace;color:{{ tileColor }}">{{ glyph }}</span>
+      <sc-if value="{{ annot }}"><span style="font:600 8.5px 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--warn);border:1px dashed var(--warn);border-radius:3px;padding:1px 4px">{{ annotLabel }}</span></sc-if>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:{{ eyebrowColor }}">{{ eyebrow }}</span>
+      <h1 id="{{ uid }}h" tabindex="-1" style="margin:0;font:700 22px/1.2 Inter,sans-serif;color:var(--text)">{{ title }}</h1>
+      <p style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">{{ body }}</p>
+    </div>
+    <dl style="margin:0;border-top:1px solid var(--line)">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:40px;border-bottom:1px solid var(--line)"><dt style="font:400 13px Inter,sans-serif;color:var(--muted)">{{ r.k }}</dt><dd style="margin:0;display:flex;align-items:center;gap:8px;font:500 13px 'JetBrains Mono',monospace;color:{{ r.c }};min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.v }}</dd></div>
+      </sc-for>
+    </dl>
+    <sc-if value="{{ confirmed }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <a style="display:flex;align-items:center;justify-content:center;height:48px;background:var(--amber);border:1px solid var(--amber);border-radius:4px;font:600 12px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:none;cursor:pointer" style-hover="box-shadow:0 0 0 1px var(--amber-dim),0 0 24px -8px var(--amber);color:var(--ink)">Open PitchTerminal</a>
+        <a style="display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-decoration:none;cursor:pointer" style-hover="background:var(--raised);color:var(--text)">Back to home</a>
+      </div>
+    </sc-if>
+    <sc-if value="{{ pending }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border:1px dashed var(--line);border-radius:4px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span aria-hidden="true" style="width:6px;height:6px;border-radius:50%;background:var(--muted);animation:pulse-dot 1.8s ease-in-out infinite"></span>Checking status</div>
+        <a style="display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-decoration:none;cursor:pointer" style-hover="background:var(--raised);color:var(--text)">Back to home</a>
+      </div>
+    </sc-if>
+  </section>
+</main>
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}">
+  <footer style="padding:20px 16px 24px;display:flex;flex-wrap:wrap;justify-content:center;gap:8px 20px;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><a style="color:var(--faint);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Terms</a><a style="color:var(--faint);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Privacy</a><span>© PitchTerminal</span></footer>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:900},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;panel&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;confirmed&quot;,&quot;pending&quot;],&quot;default&quot;:&quot;confirmed&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;plan&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Pro&quot;,&quot;Elite&quot;],&quot;default&quot;:&quot;Pro&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;annot&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop';
+    const frame = this.props.frame ?? 'full';
+    const plan = this.props.plan ?? 'Pro';
+    const pending = (this.props.state ?? 'confirmed') === 'pending';
+    const uid = this.uid || (this.uid = 'ss' + Math.random().toString(36).slice(2, 7));
+    const M = bp === 'mobile';
+    return {
+      uid, full: frame === 'full', annot: this.props.annot ?? true,
+      confirmed: !pending, pending,
+      minH: frame === 'full' ? (M ? '844px' : '900px') : 'auto', hdrH: M ? '52px' : '56px',
+      signedLabel: M ? '' : 'Signed in',
+      mainPad: frame === 'full' ? (M ? '24px 12px 32px' : bp === 'tablet' ? '72px 24px' : '88px 16px 64px') : '20px 16px',
+      panelPad: M ? '24px 20px' : '32px',
+      steps: ['Plan', 'Payment', 'Confirmation'].map((label, i) => {
+        const now = i === 2, doneMark = !now || !pending;
+        return { label, mark: doneMark ? '✓' : '3', current: now ? 'step' : 'false', color: now ? 'var(--text)' : 'var(--muted)', border: now ? (pending ? 'var(--line)' : 'var(--edge)') : 'var(--line)', sep: i < 2 ? '—' : '' };
+      }),
+      glyph: pending ? '◌' : '✓',
+      tileColor: pending ? 'var(--muted)' : 'var(--edge)', tileStyle: pending ? 'dashed' : 'solid',
+      tileBg: pending ? 'transparent' : 'color-mix(in srgb,var(--edge) 12%,transparent)',
+      eyebrow: pending ? 'Subscription · pending' : 'Subscription confirmed', eyebrowColor: pending ? 'var(--muted)' : 'var(--edge)',
+      title: pending ? 'Confirming your ' + plan + ' subscription' : 'Your ' + plan + ' subscription is confirmed',
+      body: pending ? 'Payment went through. Your subscription hasn’t been confirmed yet, so this page will update when it is.' : 'Your account now has ' + plan + ' access to PitchTerminal.',
+      annotLabel: pending ? 'SHOW ONLY IF BACKEND REPORTS PENDING' : 'ACTIVATION SEMANTICS PENDING',
+      rows: [
+        { k: 'Plan', v: plan, c: 'var(--text)' },
+        { k: 'Account', v: 'analyst@example.com', c: 'var(--text-secondary)' },
+        { k: 'Status', v: pending ? '◌ Pending' : '✓ Confirmed', c: pending ? 'var(--muted)' : 'var(--edge)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

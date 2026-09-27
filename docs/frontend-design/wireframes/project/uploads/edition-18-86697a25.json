@@ -1,0 +1,15 @@
+﻿{
+    "edition":  {
+                    "id":  "18",
+                    "seasonLabel":  "Brasileiro Serie A 2026",
+                    "competition":  {
+                                        "id":  "28",
+                                        "name":  "Brasileirão Betano",
+                                        "slug":  "brasileirao-betano-325"
+                                    }
+                },
+    "coverage":  {
+                     "edition":  "present",
+                     "competition":  "present"
+                 }
+}

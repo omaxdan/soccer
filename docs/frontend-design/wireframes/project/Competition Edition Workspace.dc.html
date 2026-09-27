@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:var(--amber)}a:hover{color:var(--text)}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:36px 0 10px;padding-top:18px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp code{font:12px ui-monospace,Menlo,monospace;background:#f2f0ec;padding:1px 4px;border-radius:3px}.sp .pend{font:600 10px ui-monospace,Menlo,monospace;color:#9a6a00;background:#fff3d6;padding:1px 5px;border-radius:3px}</style></helmet>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Fixtures payload connected · replaces pending areas in <a class="dv-oid" href="#1a">1a</a> <a class="dv-oid" href="#1d">1d</a> <a class="dv-oid" href="#1f">1f</a></span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Desktop 1440 · Fixtures tab · status filter + date groups (click the filter)</div>
+<div class="dv-card" style="width:1440px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">existing global nav</span></div>
+  <dc-import name="CompetitionHeader" layout="wide" tab="fixtures" annot="{{ annot }}" hint-size="100%,200px"></dc-import>
+  <div style="padding:24px 32px 40px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start">
+    <div style="grid-column:span 8;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--panel)">
+          <sc-for list="{{ fxFilters }}" as="b" hint-placeholder-count="3">
+            <button onClick="{{ b.onClick }}" style="display:flex;align-items:center;gap:8px;padding:7px 14px;border:0;border-right:1px solid var(--line);border-bottom:2px solid {{ b.border }};background:{{ b.bg }};color:{{ b.color }};font:500 12px ui-sans-serif,system-ui,sans-serif;cursor:pointer" style-hover="color:var(--text)">{{ b.label }}<span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">{{ b.n }}</span></button>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px"><sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">fixtures[].status counts</span></sc-if><span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">Times BRT · viewer’s local zone in production</span></div>
+      </div>
+      <sc-for list="{{ fxGroups }}" as="g" hint-placeholder-count="3">
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:var(--raised);border-bottom:1px solid var(--line)"><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">{{ g.label }}</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">{{ g.count }}</span></div>
+          <div style="padding:4px 8px 6px">
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 72px minmax(0,1fr) 96px;gap:14px;align-items:center;height:40px;padding:0 12px;border-radius:4px;background:{{ r.bg }};cursor:pointer" style-hover="background:var(--raised)">
+                <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ r.time }}</span>
+                <span style="font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;text-align:right;font-weight:{{ r.hw }};color:{{ r.hc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span>
+                <span style="justify-self:center;min-width:56px;text-align:center;padding:3px 0;border-radius:4px;background:var(--ink);border:1px solid var(--line);font:600 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;color:var(--text)">{{ r.center }}</span>
+                <span style="font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;font-weight:{{ r.aw }};color:{{ r.ac }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span>
+                <span style="justify-self:end;font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:{{ r.statusColor }}">{{ r.statusLabel }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">{{ fxNote }}</span>
+        <sc-if value="{{ fxMore }}"><button style="min-height:32px;padding:0 14px;background:var(--panel);border:1px solid var(--line);border-radius:4px;font:500 12px ui-sans-serif,system-ui,sans-serif;color:var(--text);cursor:pointer" style-hover="background:var(--raised)">Load earlier results</button></sc-if>
+      </div>
+      <sc-if value="{{ annot }}"><div style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool)">↳ group = date(kickoffAt) · time = kickoffAt · homeTeam.name · score.home – score.away (null → “–”) · awayTeam.name · status · row links via fixtureId</div></sc-if>
+    </div>
+    <div style="grid-column:span 4;display:flex;flex-direction:column;gap:16px">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Edition fixtures</span></div>
+        <div style="padding:6px 16px 10px;display:flex;flex-direction:column">
+          <sc-for list="{{ fxFacts }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">{{ f.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:var(--text);text-align:right">{{ f.v }}</span></div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ annot }}"><div style="padding:0 16px 12px;font:500 9px ui-monospace,Menlo,monospace;color:var(--cool)">↳ fixtures.length · min/max kickoffAt · max kickoffAt where COMPLETED · tables[].asOf</div></sc-if>
+      </div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+        <span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Table vs results</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary)">The table is dated 11 Aug 2026. Results run to 7 Sep 2026. The table is shown as published and is not recalculated from results.</span>
+      </div>
+      <div style="border:1px dashed var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+        <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">NOT IN PAYLOAD</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Round / matchday, venue and team filter data. Grouping is by kickoff date only.</span>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Overview · FixtureStrip module (replaces pending panel in <a class="dv-oid" href="#1a">1a</a>, main column 8)</div>
+<div class="dv-card" style="width:928px;background:var(--ink);padding:24px;box-sizing:border-box;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Fixtures</span><a style="font:500 12px ui-sans-serif,system-ui,sans-serif;color:var(--amber);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">All fixtures →</a></div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr))">
+      <div style="padding:10px 8px 8px;border-right:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;padding:0 8px 6px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Latest results</span><span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:var(--edge)">FT</span></div>
+        <sc-for list="{{ fxLatest }}" as="r" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:52px minmax(0,1fr) 28px;gap:10px;align-items:center;padding:6px 8px;border-radius:4px;background:{{ r.bg }};cursor:pointer" style-hover="background:var(--raised)">
+            <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">{{ r.date }}</span>
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-family:ui-sans-serif,system-ui,sans-serif;font-size:13px;font-weight:{{ r.hw }};color:{{ r.hc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span><span style="font-family:ui-sans-serif,system-ui,sans-serif;font-size:13px;font-weight:{{ r.aw }};color:{{ r.ac }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;font:600 13px ui-monospace,Menlo,monospace;color:var(--text)"><span>{{ r.hs }}</span><span>{{ r.as }}</span></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:10px 8px 8px">
+        <div style="display:flex;justify-content:space-between;padding:0 8px 6px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Next scheduled</span><span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:var(--cool)">SCHEDULED</span></div>
+        <sc-for list="{{ fxNext }}" as="r" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:52px minmax(0,1fr) 44px;gap:10px;align-items:center;padding:6px 8px;border-radius:4px;background:{{ r.bg }};cursor:pointer" style-hover="background:var(--raised)">
+            <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">{{ r.date }}</span>
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span><span style="font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span></div>
+            <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--text-secondary);text-align:right">{{ r.time }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ annot }}"><div style="padding:0 16px 12px;font:500 9px ui-monospace,Menlo,monospace;color:var(--cool)">↳ latest 5 where status=COMPLETED by kickoffAt desc · first 5 where status=SCHEDULED by kickoffAt asc (status taken as supplied, not inferred from clock)</div></sc-if>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Mobile 390 · Fixtures tab · stacked rows</div>
+<div class="dv-card" style="width:390px;background:var(--ink);font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:48px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span></div>
+  <dc-import name="CompetitionHeader" layout="mobile" tab="fixtures" hint-size="100%,300px"></dc-import>
+  <div style="padding:12px 12px 32px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+      <sc-for list="{{ fxFilters }}" as="b" hint-placeholder-count="3">
+        <button onClick="{{ b.onClick }}" style="flex:none;display:flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--line);border-bottom:2px solid {{ b.border }};border-radius:4px;background:{{ b.bg }};color:{{ b.color }};font:500 13px ui-sans-serif,system-ui,sans-serif">{{ b.label }}<span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">{{ b.n }}</span></button>
+      </sc-for>
+    </div>
+    <sc-for list="{{ fxGroups }}" as="g" hint-placeholder-count="2">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--line)"><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">{{ g.label }}</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:var(--faint)">{{ g.count }}</span></div>
+        <div style="padding:4px 6px 6px">
+          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:52px minmax(0,1fr) 28px;gap:10px;align-items:center;min-height:56px;padding:6px 8px;border-radius:4px;background:{{ r.bg }}">
+              <div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--text-secondary)">{{ r.time }}</span><span style="font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.06em;text-transform:uppercase;color:{{ r.statusColor }}">{{ r.statusLabel }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;font-weight:{{ r.hw }};color:{{ r.hc }}">{{ r.hShort }}</span><span style="font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;font-weight:{{ r.aw }};color:{{ r.ac }}">{{ r.aShort }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;font:600 14px ui-monospace,Menlo,monospace;color:var(--text)"><span>{{ r.hs }}</span><span>{{ r.as }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+    <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint);text-align:center">{{ fxNote }}</span>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="2d"><div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Spec changes for fixtures</div>
+<div class="dv-card sp" style="width:900px;box-sizing:border-box">
+<h2>Fixtures payload · spec delta</h2>
+<p style="color:#6b6f76">Source: edition-18-fixtures.json · 286 fixtures · fields: fixtureId, kickoffAt, status, homeTeam{id,name,slug}, awayTeam{…}, score{home,away} | null.</p>
+<h3>Field → UI</h3>
+<table>
+<tr><th>Field</th><th>UI</th></tr>
+<tr><td><code>kickoffAt</code></td><td>Date group header (Sat 6 Sep 2026), row time (19:00), Overview date, rail first/last kickoff</td></tr>
+<tr><td><code>status</code></td><td>COMPLETED → “FT” --edge · SCHEDULED → “Scheduled” --cool · POSTPONED → “Postponed” --warn. Always a text label, never colour alone. Also drives filter counts 250 / 27 / 9.</td></tr>
+<tr><td><code>homeTeam.name</code> / <code>awayTeam.name</code></td><td>Team names; winner in --text 600, loser --text-secondary (derived from score). Mobile uses <code>country.teams[].shortName</code> joined on id.</td></tr>
+<tr><td><code>score.home</code> / <code>score.away</code></td><td>Score box “2 – 1”; <code>null</code> → “–”</td></tr>
+<tr><td><code>fixtureId</code>, team <code>slug</code></td><td>Link targets only</td></tr>
+</table>
+<h3>Components</h3>
+<ul>
+<li><b>FixtureRow</b>: desktop five-column grid (time · home · score · away · status); mobile stacked (time/status · teams · scores). Zebra and hover match StandingRow.</li>
+<li><b>FixtureDateGroup</b>: header row on --raised, same as the V1 FeedTable group header.</li>
+<li><b>StatusFilter</b>: segmented control; each segment shows only when that status has fixtures.</li>
+<li><b>FixtureStrip</b> (Overview): Latest results and Next scheduled, 5 rows each.</li>
+</ul>
+<h3>Data notes surfaced in UI</h3>
+<ul>
+<li>The standings <code>asOf</code> (11 Aug) is older than the latest result (7 Sep). The table is not recalculated from fixtures; the rail says so in plain words.</li>
+<li>Status is displayed as supplied. Some SCHEDULED kickoffs are earlier than later COMPLETED ones (for example 30 Aug), so the UI never relabels by clock (no “upcoming” or “overdue”).</li>
+<li>Postponed rows show their original <code>kickoffAt</code>; the payload has no rescheduled date.</li>
+</ul>
+<h3>Still not displayed / pending</h3>
+<ul>
+<li>Round/matchday, venue, attendance, events, odds are not in the payload, so there's no round navigation and no venue column.</li>
+<li>Team filter: team list is derivable from rows but deferred (product decision).</li>
+<li>Pagination: the endpoint returns all 286; UI renders the latest 20 results and loads earlier results on demand.</li>
+</ul>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: "default the Fixtures tab to Scheduled" · "add a team filter to <a class="dv-oid" href="#2a">2a</a>" · "put the FixtureStrip into the full <a class="dv-oid" href="#1a">1a</a> layout"</p>
+</section>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Competition / Edition workspace · Brasileirão Betano · Brasileiro Serie A 2026 (edition 18)</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440 · Overview · main 8 / rail 4</div>
+<div class="dv-card" style="width:1440px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">existing global nav</span></div>
+  <dc-import name="CompetitionHeader" layout="wide" tab="overview" annot="{{ annot }}" hint-size="100%,200px"></dc-import>
+  <div style="padding:24px 32px 40px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start">
+    <div style="grid-column:span 8;display:flex;flex-direction:column;gap:16px">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+          <div style="display:flex;align-items:center;gap:10px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Table · top 5</span><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:2px 7px">Overall</span></div>
+          <div style="display:flex;align-items:center;gap:16px"><span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">As of <span style="color:var(--text-secondary)">11 Aug 2026</span></span><a style="font:500 12px ui-sans-serif,system-ui,sans-serif;color:var(--amber);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Full table →</a></div>
+        </div>
+        <div style="padding:6px 8px 8px">
+          <div style="display:grid;grid-template-columns:44px minmax(0,1fr) repeat(6,56px);align-items:center;height:30px;padding:0 12px;font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Pos</span><span>Team</span><span style="text-align:right">P</span><span style="text-align:right">W</span><span style="text-align:right">D</span><span style="text-align:right">L</span><span style="text-align:right">GD</span><span style="text-align:right">Pts</span></div>
+          <sc-for list="{{ leaders }}" as="row" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:44px minmax(0,1fr) repeat(6,56px);align-items:center;height:38px;padding:0 12px;border-radius:4px;background:{{ row.bg }};cursor:pointer" style-hover="background:var(--raised)">
+              <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ row.pos }}</span>
+              <span style="font:500 14px ui-sans-serif,system-ui,sans-serif;color:var(--text)">{{ row.name }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.p }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.w }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.d }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.l }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:{{ row.gdColor }}">{{ row.gd }}</span>
+              <span style="font:600 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text)">{{ row.pts }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ annot }}"><div style="padding:0 16px 12px;font:500 9px ui-monospace,Menlo,monospace;color:var(--cool)">↳ standings.tables[variant=TOTAL].rows[0..4] · position · team.name · played · won · drawn · lost · goalDifference · points</div></sc-if>
+      </div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Fixtures</span><span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:2px 6px">PAYLOAD PENDING</span></div>
+        <div style="padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px">
+          <div style="border:1px dashed var(--line);border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(255,255,255,.018) 8px 16px);padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+            <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">FixtureStrip · recent / upcoming · reuses approved FixtureRow · source: /api/v2/editions/18/fixtures</span>
+            <sc-for list="{{ skel3 }}" as="s" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:80px minmax(0,1fr) 64px minmax(0,1fr);gap:16px;align-items:center;height:36px;padding:0 8px;border-radius:4px;background:{{ s.bg }}">
+                <span style="height:8px;width:56px;background:var(--raised);border-radius:2px"></span><span style="height:8px;width:60%;justify-self:end;background:var(--raised);border-radius:2px"></span><span style="height:14px;width:40px;justify-self:center;background:var(--raised);border-radius:2px"></span><span style="height:8px;width:55%;background:var(--raised);border-radius:2px"></span>
+              </div>
+            </sc-for>
+          </div>
+          <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">286 fixtures in this edition. Fixture list not yet connected.</span>
+        </div>
+      </div>
+    </div>
+    <div style="grid-column:span 4;display:flex;flex-direction:column;gap:16px">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Edition</span></div>
+        <div style="padding:6px 16px 10px;display:flex;flex-direction:column">
+          <sc-for list="{{ editionFacts }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">{{ f.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:var(--text);text-align:right">{{ f.v }}</span></div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ annot }}"><div style="padding:0 16px 12px;font:500 9px ui-monospace,Menlo,monospace;color:var(--cool)">↳ edition.seasonLabel · edition.competition.name · country.name · editions[].fixtureCount · tables[].asOf</div></sc-if>
+      </div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Data available</span></div>
+        <div style="padding:6px 16px 10px">
+          <sc-for list="{{ coverage }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary)">{{ c.k }}</span><span style="display:flex;align-items:center;gap:6px;font:500 11px ui-monospace,Menlo,monospace;color:{{ c.color }}"><span style="font-size:9px">{{ c.glyph }}</span>{{ c.v }}</span></div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ annot }}"><div style="padding:0 16px 12px;font:500 9px ui-monospace,Menlo,monospace;color:var(--cool)">↳ coverage.competition · coverage.edition · standings.coverage.standings · variantsPresent</div></sc-if>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Desktop 1440 · Table · full width (recommended)</div>
+<div class="dv-card" style="width:1440px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">existing global nav</span></div>
+  <dc-import name="CompetitionHeader" layout="wide" tab="table" annot="{{ annot }}" hint-size="100%,200px"></dc-import>
+  <div style="padding:24px 32px 40px;display:flex;flex-direction:column;gap:12px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:12px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Standings</span><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:2px 7px">Overall</span><sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">tables[].variant = TOTAL → “Overall” · variantsPresent = [TOTAL] → no selector</span></sc-if></div>
+        <div style="display:flex;align-items:center;gap:8px"><sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">tables[].asOf</span></sc-if><span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">As of <span style="color:var(--text-secondary)">11 Aug 2026</span></span></div>
+      </div>
+      <div style="padding:6px 8px 8px">
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr) repeat(8,80px);align-items:center;height:32px;padding:0 16px;border-bottom:1px solid var(--line);margin-bottom:4px;font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Pos</span><span>Team</span><span style="text-align:right">P</span><span style="text-align:right">W</span><span style="text-align:right">D</span><span style="text-align:right">L</span><span style="text-align:right">GF</span><span style="text-align:right">GA</span><span style="text-align:right">GD</span><span style="text-align:right">Pts</span></div>
+        <sc-for list="{{ rows }}" as="row" hint-placeholder-count="20">
+          <div style="display:grid;grid-template-columns:64px minmax(0,1fr) repeat(8,80px);align-items:center;height:38px;padding:0 16px;border-radius:4px;background:{{ row.bg }};cursor:pointer" style-hover="background:var(--raised)">
+            <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ row.pos }}</span>
+            <span style="font:500 14px ui-sans-serif,system-ui,sans-serif;color:var(--text)">{{ row.name }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.p }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.w }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.d }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.l }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.gf }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.ga }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:{{ row.gdColor }}">{{ row.gd }}</span>
+            <span style="font:600 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text)">{{ row.pts }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">
+      <span>GD shown with sign: +n positive · −n negative · 0 level</span>
+      <span style="border:1px dashed var(--line);border-radius:4px;padding:3px 8px">Qualification / relegation zones · FUTURE PRODUCT CONFIGURATION</span>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Desktop 1440 · Table · alternative 8 + 4 with rail</div>
+<div class="dv-card" style="width:1440px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">existing global nav</span></div>
+  <dc-import name="CompetitionHeader" layout="wide" tab="table" hint-size="100%,200px"></dc-import>
+  <div style="padding:24px 32px 40px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start">
+    <div style="grid-column:span 8;background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:12px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Standings</span><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:2px 7px">Overall</span></div>
+        <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">As of <span style="color:var(--text-secondary)">11 Aug 2026</span></span>
+      </div>
+      <div style="padding:6px 8px 8px">
+        <div style="display:grid;grid-template-columns:44px minmax(0,1fr) repeat(8,52px);align-items:center;height:32px;padding:0 12px;border-bottom:1px solid var(--line);margin-bottom:4px;font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Pos</span><span>Team</span><span style="text-align:right">P</span><span style="text-align:right">W</span><span style="text-align:right">D</span><span style="text-align:right">L</span><span style="text-align:right">GF</span><span style="text-align:right">GA</span><span style="text-align:right">GD</span><span style="text-align:right">Pts</span></div>
+        <sc-for list="{{ rows }}" as="row" hint-placeholder-count="20">
+          <div style="display:grid;grid-template-columns:44px minmax(0,1fr) repeat(8,52px);align-items:center;height:36px;padding:0 12px;border-radius:4px;background:{{ row.bg }};cursor:pointer" style-hover="background:var(--raised)">
+            <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ row.pos }}</span>
+            <span style="font:500 14px ui-sans-serif,system-ui,sans-serif;color:var(--text)">{{ row.name }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.p }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.w }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.d }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.l }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.gf }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.ga }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:{{ row.gdColor }}">{{ row.gd }}</span>
+            <span style="font:600 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text)">{{ row.pts }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="grid-column:span 4;display:flex;flex-direction:column;gap:16px">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Edition</span></div>
+        <div style="padding:6px 16px 10px;display:flex;flex-direction:column">
+          <sc-for list="{{ editionFacts }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">{{ f.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:var(--text);text-align:right">{{ f.v }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="border:1px dashed var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(255,255,255,.018) 8px 16px)">
+        <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">FUTURE PRODUCT CONFIGURATION</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Table zones and legend. Not supplied by the standings payload; no bands are drawn.</span>
+      </div>
+      <div style="border:1px dashed var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+        <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">PAYLOAD PENDING</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Next fixtures for the selected team. Requires fixtures payload.</span>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Desktop 1440 · Fixtures · structure only, payload pending</div>
+<div class="dv-card" style="width:1440px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">existing global nav</span></div>
+  <dc-import name="CompetitionHeader" layout="wide" tab="fixtures" hint-size="100%,200px"></dc-import>
+  <div style="padding:24px 32px 40px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start">
+    <div style="grid-column:span 8;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid var(--warn);border-radius:4px;background:var(--panel)">
+        <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">PAYLOAD PENDING</span>
+        <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--text-secondary)">GET /api/v2/editions/18/fixtures</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted);margin-left:auto">286 fixtures reported for this edition</span>
+      </div>
+      <sc-for list="{{ skelGroups }}" as="g" hint-placeholder-count="2">
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+          <div style="padding:10px 16px;background:var(--raised);border-bottom:1px solid var(--line);display:flex;justify-content:space-between"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Group header · field TBD by payload</span><span style="height:8px;width:48px;background:var(--line);border-radius:2px;align-self:center"></span></div>
+          <div style="padding:6px 8px 8px">
+            <sc-for list="{{ g.rows }}" as="s" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:96px minmax(0,1fr) 80px minmax(0,1fr) 96px;gap:16px;align-items:center;height:40px;padding:0 12px;border-radius:4px;background:{{ s.bg }}" style-hover="background:var(--raised)">
+                <span style="height:8px;width:52px;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:55%;justify-self:end;background:var(--raised);border-radius:2px"></span><span style="height:16px;width:44px;justify-self:center;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:50%;background:var(--raised);border-radius:2px"></span><span style="height:8px;width:40px;justify-self:end;background:var(--raised);border-radius:2px"></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">Row = approved PitchTerminal FixtureRow (kickoff · home · score/status · away · status). Grouping key and fields confirmed only once the payload is attached.</span>
+    </div>
+    <div style="grid-column:span 4;display:flex;flex-direction:column;gap:16px">
+      <div style="border:1px dashed var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+        <span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Filter rail</span>
+        <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">PAYLOAD PENDING</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Date / round navigation and team filter. Controls appear only for dimensions the fixtures payload supplies.</span>
+      </div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Edition</span></div>
+        <div style="padding:6px 16px 10px;display:flex;flex-direction:column">
+          <sc-for list="{{ editionFacts }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">{{ f.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:var(--text);text-align:right">{{ f.v }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Tablet 834 · Table · single column, rail stacks below</div>
+<div class="dv-card" style="width:834px;background:var(--ink);font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:44px;display:flex;align-items:center;padding:0 32px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span></div>
+  <dc-import name="CompetitionHeader" layout="wide" tab="table" hint-size="100%,260px"></dc-import>
+  <div style="padding:20px 24px 32px;display:flex;flex-direction:column;gap:16px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:12px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Standings</span><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:2px 7px">Overall</span></div>
+        <span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">As of <span style="color:var(--text-secondary)">11 Aug 2026</span></span>
+      </div>
+      <div style="padding:6px 6px 8px">
+        <div style="display:grid;grid-template-columns:36px minmax(0,1fr) repeat(8,48px);align-items:center;height:32px;padding:0 10px;border-bottom:1px solid var(--line);margin-bottom:4px;font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Pos</span><span>Team</span><span style="text-align:right">P</span><span style="text-align:right">W</span><span style="text-align:right">D</span><span style="text-align:right">L</span><span style="text-align:right">GF</span><span style="text-align:right">GA</span><span style="text-align:right">GD</span><span style="text-align:right">Pts</span></div>
+        <sc-for list="{{ rows }}" as="row" hint-placeholder-count="20">
+          <div style="display:grid;grid-template-columns:36px minmax(0,1fr) repeat(8,48px);align-items:center;height:40px;padding:0 10px;border-radius:4px;background:{{ row.bg }}" style-hover="background:var(--raised)">
+            <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ row.pos }}</span>
+            <span style="font:500 14px ui-sans-serif,system-ui,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.name }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.p }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.w }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.d }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.l }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.gf }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text-secondary)">{{ row.ga }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:{{ row.gdColor }}">{{ row.gd }}</span>
+            <span style="font:600 13px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text)">{{ row.pts }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Edition</span></div>
+        <div style="padding:6px 16px 10px;display:flex;flex-direction:column">
+          <sc-for list="{{ editionFacts }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">{{ f.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:var(--text);text-align:right">{{ f.v }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="border:1px dashed var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;align-self:start">
+        <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">FUTURE PRODUCT CONFIGURATION</span>
+        <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Table zones and legend.</span>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Mobile 390 · Overview</div>
+<div class="dv-card" style="width:390px;background:var(--ink);font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:48px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span></div>
+  <dc-import name="CompetitionHeader" layout="mobile" tab="overview" hint-size="100%,300px"></dc-import>
+  <div style="padding:16px 12px 32px;display:flex;flex-direction:column;gap:12px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Table · top 5</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">As of <span style="color:var(--text-secondary)">11 Aug 2026</span></span></div>
+      <div style="padding:4px 6px 6px">
+        <div style="display:grid;grid-template-columns:28px minmax(0,1fr) 32px 44px 40px;align-items:center;height:28px;padding:0 8px;font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>#</span><span>Team</span><span style="text-align:right">P</span><span style="text-align:right">GD</span><span style="text-align:right">Pts</span></div>
+        <sc-for list="{{ leaders }}" as="row" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:28px minmax(0,1fr) 32px 44px 40px;align-items:center;min-height:44px;padding:0 8px;border-radius:4px;background:{{ row.bg }}">
+            <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ row.pos }}</span>
+            <span style="font:500 14px ui-sans-serif,system-ui,sans-serif;color:var(--text)">{{ row.short }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;text-align:right;color:var(--text-secondary)">{{ row.p }}</span>
+            <span style="font:400 13px ui-monospace,Menlo,monospace;text-align:right;color:{{ row.gdColor }}">{{ row.gd }}</span>
+            <span style="font:600 13px ui-monospace,Menlo,monospace;text-align:right;color:var(--text)">{{ row.pts }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <a style="display:flex;align-items:center;justify-content:center;min-height:44px;border-top:1px solid var(--line);font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--amber);text-decoration:none">Full table →</a>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Fixtures</span><span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">PAYLOAD PENDING</span></div>
+      <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{ skel3 }}" as="s" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:12px;align-items:center;min-height:52px;padding:0 8px;border-radius:4px;background:{{ s.bg }}">
+            <div style="display:flex;flex-direction:column;gap:6px"><span style="height:8px;width:60%;background:var(--raised);border-radius:2px"></span><span style="height:8px;width:50%;background:var(--raised);border-radius:2px"></span></div><span style="height:16px;background:var(--raised);border-radius:2px"></span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="padding:12px;border-bottom:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Edition</span></div>
+      <div style="padding:4px 12px 8px;display:flex;flex-direction:column">
+        <sc-for list="{{ editionFacts }}" as="f" hint-placeholder-count="5">
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">{{ f.k }}</span><span style="font:500 12px ui-monospace,Menlo,monospace;color:var(--text);text-align:right">{{ f.v }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Mobile 390 · Table · tap a row to expand W D L GF GA</div>
+<div class="dv-card" style="width:390px;background:var(--ink);font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text)">
+  <div style="height:48px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line)"><span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.16em;color:var(--amber)">PITCHTERMINAL</span></div>
+  <dc-import name="CompetitionHeader" layout="mobile" tab="table" hint-size="100%,300px"></dc-import>
+  <div style="padding:16px 12px 32px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;border-bottom:1px solid var(--line)"><span style="font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:2px 7px">Overall</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:var(--muted)">As of <span style="color:var(--text-secondary)">11 Aug 2026</span></span></div>
+      <div style="padding:4px 6px 6px">
+        <div style="display:grid;grid-template-columns:28px minmax(0,1fr) 32px 44px 40px 20px;align-items:center;height:28px;padding:0 8px;font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>#</span><span>Team</span><span style="text-align:right">P</span><span style="text-align:right">GD</span><span style="text-align:right">Pts</span><span></span></div>
+        <sc-for list="{{ rows }}" as="row" hint-placeholder-count="20">
+          <div style="display:flex;flex-direction:column">
+            <div onClick="{{ row.toggle }}" style="display:grid;grid-template-columns:28px minmax(0,1fr) 32px 44px 40px 20px;align-items:center;min-height:44px;padding:0 8px;border-radius:4px;background:{{ row.bg }};cursor:pointer" style-hover="background:var(--raised)">
+              <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--muted)">{{ row.pos }}</span>
+              <span style="font:500 14px ui-sans-serif,system-ui,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.short }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;text-align:right;color:var(--text-secondary)">{{ row.p }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;text-align:right;color:{{ row.gdColor }}">{{ row.gd }}</span>
+              <span style="font:600 13px ui-monospace,Menlo,monospace;text-align:right;color:var(--text)">{{ row.pts }}</span>
+              <span style="font:400 13px ui-monospace,Menlo,monospace;text-align:right;color:var(--faint)">{{ row.caret }}</span>
+            </div>
+            <sc-if value="{{ row.expanded }}" hint-placeholder-val="{{ false }}">
+              <div style="margin:2px 0 6px;background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--text)">{{ row.name }}</span><a style="font:500 12px ui-sans-serif,system-ui,sans-serif;color:var(--amber);text-decoration:none">Team →</a></div>
+                <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">
+                  <div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--muted)">W</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">{{ row.w }}</span></div>
+                  <div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--muted)">D</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">{{ row.d }}</span></div>
+                  <div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--muted)">L</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">{{ row.l }}</span></div>
+                  <div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--muted)">GF</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">{{ row.gf }}</span></div>
+                  <div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--muted)">GA</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">{{ row.ga }}</span></div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>States · loading · empty · unavailable · pending · controls</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);font-family:ui-sans-serif,system-ui,sans-serif;color:var(--text);padding:28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;box-sizing:border-box">
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)">LoadingSkeleton · table</span>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between"><span style="height:8px;width:80px;background:var(--raised);border-radius:2px"></span><span style="height:8px;width:96px;background:var(--raised);border-radius:2px"></span></div>
+      <div style="padding:6px 8px 8px">
+        <sc-for list="{{ skel6 }}" as="s" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:24px minmax(0,1fr) 28px 28px;gap:12px;align-items:center;height:34px;padding:0 8px;border-radius:4px;background:{{ s.bg }}"><span style="height:8px;background:var(--raised);border-radius:2px"></span><span style="height:8px;width:60%;background:var(--raised);border-radius:2px"></span><span style="height:8px;background:var(--raised);border-radius:2px"></span><span style="height:8px;background:var(--raised);border-radius:2px"></span></div></sc-for>
+      </div>
+    </div>
+    <span style="font:400 11px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Column grid and row height match the loaded table so nothing shifts. Header meta cells skeleton the same way.</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)">EmptyState · tables = []</span>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center">
+      <span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Standings</span>
+      <span style="font:500 15px ui-sans-serif,system-ui,sans-serif;color:var(--text)">No table published yet</span>
+      <span style="font:400 13px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary);max-width:260px">Brasileiro Serie A 2026 has no standings snapshot so far.</span>
+    </div>
+    <span style="font:400 11px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">coverage present, zero tables. Neutral tone, no retry.</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)">Unavailable · coverage ≠ present / error</span>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+      <span style="display:flex;align-items:center;gap:6px;font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--risk)">■ UNAVAILABLE</span>
+      <span style="font:500 15px ui-sans-serif,system-ui,sans-serif;color:var(--text)">Standings couldn’t be loaded</span>
+      <button style="min-height:32px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 12px ui-sans-serif,system-ui,sans-serif;color:var(--text);cursor:pointer" style-hover="border-color:var(--muted)">Try again</button>
+    </div>
+    <span style="font:400 11px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Rest of workspace stays usable; only the failed panel swaps.</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)">Payload pending</span>
+    <div style="border:1px dashed var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:6px;background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(255,255,255,.018) 8px 16px)">
+      <span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--warn)">PAYLOAD PENDING</span>
+      <span style="font:400 12px ui-monospace,Menlo,monospace;color:var(--text-secondary)">/api/v2/editions/:editionId/fixtures</span>
+      <span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Design-time marker only. Production hides the module until the contract ships.</span>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)">VariantSelector</span>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 11px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Now · variantsPresent = [TOTAL] → static label</span><span style="align-self:flex-start;font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:2px 7px">Overall</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px;opacity:.55"><span style="font:400 11px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Future · only if API adds HOME / AWAY</span>
+        <div style="align-self:flex-start;display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;font:500 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase"><span style="padding:4px 10px;background:var(--raised);color:var(--text);border-bottom:2px solid var(--amber)">Overall</span><span style="padding:4px 10px;color:var(--muted);border-left:1px solid var(--line)">Home</span><span style="padding:4px 10px;color:var(--muted);border-left:1px solid var(--line)">Away</span></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)">WorkspaceTabs · StandingRow · GD</span>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;gap:20px;border-bottom:1px solid var(--line)">
+        <span style="padding:6px 0 8px;font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--muted)">Default</span>
+        <span style="padding:6px 0 8px;font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--text)">Hover</span>
+        <span style="padding:6px 0 8px;font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--text);border-bottom:2px solid var(--amber)">Active</span>
+        <span style="padding:4px 4px 6px;font:500 13px ui-sans-serif,system-ui,sans-serif;color:var(--text);outline:2px solid var(--amber);outline-offset:2px;border-radius:4px">Focus</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;justify-content:space-between;height:32px;align-items:center;padding:0 10px;border-radius:4px;background:color-mix(in srgb,var(--raised) 30%,transparent)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary)">Odd row · raised 30%</span><span style="font:400 13px ui-monospace,Menlo,monospace;color:var(--edge)">+22</span></div>
+        <div style="display:flex;justify-content:space-between;height:32px;align-items:center;padding:0 10px;border-radius:4px"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary)">Even row · transparent</span><span style="font:400 13px ui-monospace,Menlo,monospace;color:var(--faint)">0</span></div>
+        <div style="display:flex;justify-content:space-between;height:32px;align-items:center;padding:0 10px;border-radius:4px;background:var(--raised)"><span style="font:400 12px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary)">Hover · raised</span><span style="font:400 13px ui-monospace,Menlo,monospace;color:var(--risk)">−23</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>Specification</div>
+<div class="dv-card sp" style="width:1100px;box-sizing:border-box">
+<h2>Competition / Edition workspace · spec</h2>
+<p style="color:#6b6f76">Sources: competition-28.json · country-BR.json · edition-18.json · edition-18-standings.json · editions.json · globals.css. Nothing on screen is derived from outside these files.</p>
+
+<h3>1 · Information hierarchy</h3>
+<ol>
+<li><b>Identity</b> — country (code, alpha-3, name) → competition name → edition season label with edition switcher.</li>
+<li><b>Edition meta</b> — fixture count, table as-of date, table view. Three cells, always visible in the header.</li>
+<li><b>Workspace tabs</b> — Overview · Table · Fixtures.</li>
+<li><b>Active tab content</b> — main column first; supporting rail second (stacks below on tablet/mobile).</li>
+</ol>
+<p><b>Tab decision:</b> only Overview, Table, Fixtures ship. Goals and Performance become sections inside Overview/Table once their payloads exist. Teams, Players and Venues are edition-scoped and would be tabs of this workspace, but they are hidden until a payload reports coverage present. No placeholder tabs are rendered.</p>
+
+<h3>2–4 · Wireframes</h3>
+<p>Desktop: <a class="dv-oid" href="#1a">1a</a> Overview (8/4), <a class="dv-oid" href="#1b">1b</a> Table full width (recommended; the table is the page), <a class="dv-oid" href="#1c">1c</a> Table 8/4 alternative, <a class="dv-oid" href="#1d">1d</a> Fixtures structure. Tablet: <a class="dv-oid" href="#1e">1e</a>. Mobile: <a class="dv-oid" href="#1f">1f</a> Overview, <a class="dv-oid" href="#1g">1g</a> Table. States: <a class="dv-oid" href="#1h">1h</a>.</p>
+
+<h3>5 · Component inventory (shared, not implemented)</h3>
+<table>
+<tr><th>Component</th><th>Responsibility</th><th>Inputs</th></tr>
+<tr><td>CompetitionHeader</td><td>Breadcrumbs, country code block, name, edition switcher, meta cells. wide / mobile layouts.</td><td>country, competition, edition, editions[], fixtureCount, asOf, variant</td></tr>
+<tr><td>WorkspaceTabs</td><td>Tab row; amber 2px underline on active; horizontal scroll on mobile. Reusable on Team/Player/Venue detail pages.</td><td>tabs[], active, coverage (to hide unsupported tabs)</td></tr>
+<tr><td>StandingsTable</td><td>.panel wrapper, header row, zebra rows. Modes: full, top-N, compact (mobile).</td><td>standings.tables[variant]</td></tr>
+<tr><td>StandingRow</td><td>One row; odd zebra, hover raised; mobile expands to raised sub-row.</td><td>rows[] item</td></tr>
+<tr><td>VariantSelector</td><td>Static “Overall” label when one variant; segmented control when several.</td><td>coverage.variantsPresent, tables[].variant</td></tr>
+<tr><td>AsOfLabel</td><td>“As of 11 Aug 2026”. Date formatted DD Mon YYYY.</td><td>tables[].asOf</td></tr>
+<tr><td>CompetitionSummary</td><td>Edition key/value list in the rail.</td><td>seasonLabel, competition.name, country.name, fixtureCount, asOf, variantsPresent</td></tr>
+<tr><td>FixtureStrip</td><td>Recent/upcoming FixtureRows on Overview. <span class="pend">PAYLOAD PENDING</span></td><td>/editions/:id/fixtures</td></tr>
+<tr><td>EmptyState</td><td>Neutral message, entity name from payload, no retry.</td><td>label, seasonLabel</td></tr>
+<tr><td>LoadingSkeleton</td><td>Same grid/row height as the loaded component.</td><td>rows, columns</td></tr>
+</table>
+
+<h3>6 · API field → UI mapping</h3>
+<table>
+<tr><th>Field</th><th>UI</th><th>Where</th></tr>
+<tr><td><code>country.code</code> / <code>alpha3Code</code></td><td>Code block “BR / BRA”</td><td>Header</td></tr>
+<tr><td><code>country.name</code></td><td>Breadcrumb, eyebrow, Edition › Country</td><td>Header, rail</td></tr>
+<tr><td><code>competition.name</code></td><td>H1, breadcrumb, Edition › Competition</td><td>Header, rail</td></tr>
+<tr><td><code>competition.countryCode</code></td><td>Join key to country payload (not shown)</td><td>—</td></tr>
+<tr><td><code>competition.slug</code>, <code>team.slug</code></td><td>Link targets only</td><td>Breadcrumb, team rows</td></tr>
+<tr><td><code>edition.seasonLabel</code></td><td>Edition switcher, breadcrumb, Edition › Season, empty-state copy</td><td>Header, rail, states</td></tr>
+<tr><td><code>competition-28.editions[]</code></td><td>Switcher options (one today)</td><td>Header</td></tr>
+<tr><td><code>editions[].fixtureCount</code></td><td>“Fixtures 286”</td><td>Header, rail, Fixtures banner</td></tr>
+<tr><td><code>tables[].variant</code></td><td>TOTAL → “Overall”</td><td>VariantSelector, header</td></tr>
+<tr><td><code>tables[].asOf</code></td><td>“As of 11 Aug 2026”</td><td>AsOfLabel, header, rail</td></tr>
+<tr><td><code>rows[].position</code> · <code>team.name</code> · <code>played</code> · <code>won</code> · <code>drawn</code> · <code>lost</code> · <code>goalsFor</code> · <code>goalsAgainst</code> · <code>goalDifference</code> · <code>points</code></td><td>Pos · Team · P · W · D · L · GF · GA · GD · Pts</td><td>StandingsTable</td></tr>
+<tr><td><code>country.teams[].shortName</code> (joined on team.id)</td><td>Team label on mobile</td><td><a class="dv-oid" href="#1f">1f</a> <a class="dv-oid" href="#1g">1g</a></td></tr>
+<tr><td><code>coverage.*</code>, <code>standings.coverage.standings</code>, <code>variantsPresent</code></td><td>“Data available” list; drives empty/unavailable states and selector mode</td><td>Rail, states</td></tr>
+</table>
+
+<h3>7 · Token usage</h3>
+<ul>
+<li><b>--ink</b> canvas + header band · <b>--panel</b> every .panel · <b>--raised</b> hover, zebra (30% mix), variant chip, mobile sub-row, skeleton bars, fixture group header · <b>--line</b> all borders/dividers.</li>
+<li><b>--text</b> names, points, meta values · <b>--text-secondary</b> stat cells, body copy · <b>--muted</b> .label-cap / .eyebrow, position · <b>--faint</b> breadcrumbs, zero GD, notes.</li>
+<li><b>--amber</b> active tab underline, focus ring, links · <b>--edge</b> positive GD · <b>--risk</b> negative GD, unavailable · <b>--warn</b> PAYLOAD PENDING / FUTURE markers · <b>--cool</b> used here only for design-time field annotations (not shipped).</li>
+<li>.mono/.tnum on every number; .label-cap on column heads and panel titles; .eyebrow on the country line. Radius 4px; no shadows.</li>
+</ul>
+
+<h3>8 · Interaction states</h3>
+<ul>
+<li>Tabs: muted → hover text → active text + amber underline → focus amber outline. Route-backed (<code>/competitions/:slug/:edition/table</code>).</li>
+<li>Standing row: odd zebra, hover --raised, whole row links to team; keyboard focus uses global amber ring. Mobile: tap toggles raised sub-row (+/−).</li>
+<li>Edition switcher: dropdown of competition editions; single option renders without menu affordance being actionable.</li>
+<li>VariantSelector: static with one variant; segmented with two or more; selection swaps table and AsOfLabel.</li>
+<li>“Full table →” on Overview switches to Table tab.</li>
+<li>Loading → skeleton per panel; error → per-panel unavailable with retry; empty → neutral copy.</li>
+</ul>
+
+<h3>9 · Responsive behavior</h3>
+<ul>
+<li><b>≥1024 (lg)</b>: header meta cells right-aligned; Overview 8/4; Table full width (<a class="dv-oid" href="#1b">1b</a>) or 8/4 (<a class="dv-oid" href="#1c">1c</a>).</li>
+<li><b>768–1023 (md)</b>: meta cells wrap below identity; all 10 table columns kept, team names ellipsize; rail becomes 2-up grid under main.</li>
+<li><b>&lt;768</b>: breadcrumb collapses to back link; switcher full-width 44px; meta becomes 3-cell grid; tabs scroll horizontally; table shows # · Team (shortName) · P · GD · Pts with W D L GF GA in the expandable sub-row; all targets ≥44px.</li>
+</ul>
+
+<h3>10 · Intentionally not displayed</h3>
+<ul>
+<li>Internal ids (competition 28, edition 18, team ids) and slugs as text.</li>
+<li><code>goalDifferenceIsDerived</code>, <code>standingsAreObservedSnapshots</code> and raw “present” strings.</li>
+<li>Team count, matchday/round, dates, total/average goals, BTTS, form — not in any payload. Row count is not presented as a team count.</li>
+<li>Qualification/relegation bands and legend.</li>
+<li>Other competitions’ editions from editions.json (only used to confirm fixtureCount).</li>
+<li>Country team list beyond shortName lookup; flags/crests (no image fields).</li>
+</ul>
+
+<h3>11 · Future / payload-pending</h3>
+<ul>
+<li><span class="pend">PAYLOAD PENDING</span> Fixtures tab and Overview FixtureStrip — <code>/api/v2/editions/:editionId/fixtures</code>; grouping, filters and row fields confirmed on arrival.</li>
+<li><span class="pend">FUTURE PRODUCT CONFIGURATION</span> table zones (per competition config, not standings payload).</li>
+<li>HOME / AWAY variants — enabled automatically when <code>variantsPresent</code> lists them.</li>
+<li>Goals, Performance, Advanced observations — Overview/Table sections. Teams, Players, Venues — workspace tabs. All require payloads before any UI is drawn.</li>
+</ul>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: "go with <a class="dv-oid" href="#1b">1b</a> and tighten row height" · "try a header without meta cells" · "explore horizontal-scroll mobile table instead of <a class="dv-oid" href="#1g">1g</a> expand"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;annotations&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;gdSemantic&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { exp: '72' };
+  renderVals() {
+    const R = [[1,'72','Palmeiras',22,14,6,2,38,16,22,48],[2,'68','Flamengo',21,12,6,3,39,18,21,42],[3,'54','Athletico',22,12,4,6,30,19,11,40],[4,'67','Fluminense',22,9,8,5,31,26,5,35],[5,'60','Cruzeiro',22,9,6,7,30,31,-1,33],[6,'62','Bahia',22,8,9,5,29,25,4,33],[7,'63','Corinthians',22,8,8,6,24,20,4,32],[8,'64','Red Bull Bragantino',21,9,4,8,26,22,4,31],[9,'61','Botafogo',21,8,6,7,35,33,2,30],[10,'65','Coritiba',22,8,6,8,27,29,-2,30],[11,'73','Atlético Mineiro',21,8,5,8,27,27,0,29],[12,'69','São Paulo',21,7,5,9,26,25,1,26],[13,'71','Vitória',22,7,5,10,22,33,-11,26],[14,'66','Grêmio',21,6,7,8,24,27,-3,25],[15,'59','Mirassol',21,6,5,10,24,30,-6,23],[16,'55','Internacional',22,5,8,9,23,27,-4,23],[17,'56','Santos',21,5,7,9,29,35,-6,22],[18,'58','Vasco da Gama',21,5,7,9,23,31,-8,22],[19,'70','Remo',22,5,7,10,26,36,-10,22],[20,'57','Chapecoense',21,1,7,13,20,43,-23,10]];
+    const SHORT = {'54':'Athletico','73':'Atlético-MG','62':'Bahia','61':'Botafogo','57':'Chapecoense','63':'Corinthians','65':'Coritiba','60':'Cruzeiro','68':'Flamengo','67':'Fluminense','66':'Grêmio','55':'Internacional','59':'Mirassol','72':'Palmeiras','64':'RB Bragantino','70':'Remo','56':'Santos','69':'São Paulo','58':'Vasco','71':'Vitória'};
+    const Z = 'color-mix(in srgb, var(--raised) 30%, transparent)';
+    const sem = this.props.gdSemantic ?? true;
+    const zebra = i => (i % 2 === 0 ? Z : 'transparent');
+    const rows = R.map(([pos,id,name,p,w,d,l,gf,ga,gd,pts], i) => {
+      const expanded = this.state.exp === id;
+      return {
+        pos, name, short: SHORT[id] || name, p, w, d, l, gf, ga, pts, bg: zebra(i),
+        gd: gd > 0 ? '+' + gd : gd < 0 ? '\u2212' + Math.abs(gd) : '0',
+        gdColor: !sem ? 'var(--text-secondary)' : gd > 0 ? 'var(--edge)' : gd < 0 ? 'var(--risk)' : 'var(--faint)',
+        expanded, caret: expanded ? '\u2212' : '+',
+        toggle: () => this.setState(s => ({ exp: s.exp === id ? null : id }))
+      };
+    });
+    const sk = n => Array.from({ length: n }, (_, i) => ({ bg: zebra(i) }));
+    const F = [["292","2026-08-23T19:00","C","72","Palmeiras","58","Vasco da Gama",4,1],["293","2026-08-23T21:30","C","57","Chapecoense","69","São Paulo",1,0],["294","2026-08-23T21:30","C","56","Santos","59","Mirassol",1,1],["295","2026-08-23T22:30","C","65","Coritiba","63","Corinthians",2,1],["296","2026-08-24T23:00","C","61","Botafogo","54","Athletico",2,3],["297","2026-08-29T21:30","C","73","Atlético Mineiro","71","Vitória",2,1],["298","2026-08-29T23:00","C","69","São Paulo","64","Red Bull Bragantino",2,1],["299","2026-08-30T00:20","C","58","Vasco da Gama","60","Cruzeiro",3,1],["343","2026-08-31T23:00","C","70","Remo","65","Coritiba",2,3],["344","2026-09-02T22:30","C","68","Flamengo","59","Mirassol",2,0],["345","2026-09-05T19:00","C","64","Red Bull Bragantino","62","Bahia",2,3],["346","2026-09-05T21:30","C","69","São Paulo","73","Atlético Mineiro",2,0],["347","2026-09-06T00:00","C","67","Fluminense","58","Vasco da Gama",1,0],["348","2026-09-06T14:00","C","65","Coritiba","59","Mirassol",1,2],["349","2026-09-06T19:00","C","70","Remo","68","Flamengo",0,1],["350","2026-09-06T19:00","C","55","Internacional","56","Santos",2,3],["351","2026-09-06T19:00","C","60","Cruzeiro","54","Athletico",3,1],["352","2026-09-06T21:30","C","61","Botafogo","72","Palmeiras",0,0],["353","2026-09-06T22:30","C","63","Corinthians","57","Chapecoense",1,2],["354","2026-09-07T23:00","C","71","Vitória","66","Grêmio",1,0],["337","2026-08-30T14:00","S","54","Athletico","67","Fluminense",null,null],["338","2026-08-30T19:00","S","68","Flamengo","61","Botafogo",null,null],["339","2026-08-30T19:00","S","63","Corinthians","56","Santos",null,null],["340","2026-08-30T21:30","S","59","Mirassol","72","Palmeiras",null,null],["341","2026-08-30T21:30","S","66","Grêmio","57","Chapecoense",null,null],["342","2026-08-30T22:30","S","62","Bahia","55","Internacional",null,null],["478","2026-09-12T00:00","S","65","Coritiba","54","Athletico",null,null],["479","2026-09-12T19:00","S","66","Grêmio","58","Vasco da Gama",null,null],["480","2026-09-12T19:00","S","73","Atlético Mineiro","67","Fluminense",null,null],["481","2026-09-12T20:00","S","57","Chapecoense","55","Internacional",null,null],["482","2026-09-12T21:30","S","72","Palmeiras","69","São Paulo",null,null],["483","2026-09-12T23:30","S","61","Botafogo","64","Red Bull Bragantino",null,null],["484","2026-09-13T00:00","S","56","Santos","60","Cruzeiro",null,null],["485","2026-09-13T19:00","S","59","Mirassol","71","Vitória",null,null],["486","2026-09-13T20:30","S","68","Flamengo","63","Corinthians",null,null],["487","2026-09-14T23:00","S","62","Bahia","70","Remo",null,null],["488","2026-09-16T22:30","S","61","Botafogo","66","Grêmio",null,null],["489","2026-09-19T19:00","S","73","Atlético Mineiro","57","Chapecoense",null,null],["490","2026-09-19T20:00","S","59","Mirassol","61","Botafogo",null,null],["491","2026-09-19T21:30","S","70","Remo","56","Santos",null,null],["492","2026-09-19T23:30","S","58","Vasco da Gama","65","Coritiba",null,null],["493","2026-09-20T00:00","S","69","São Paulo","55","Internacional",null,null],["494","2026-09-20T14:00","S","66","Grêmio","72","Palmeiras",null,null],["495","2026-09-20T19:00","S","63","Corinthians","67","Fluminense",null,null],["496","2026-09-20T19:00","S","71","Vitória","60","Cruzeiro",null,null],["497","2026-09-20T21:30","S","68","Flamengo","64","Red Bull Bragantino",null,null],["498","2026-09-20T22:30","S","54","Athletico","62","Bahia",null,null],["1952","2026-02-04T18:00","P","54","Athletico","63","Corinthians",null,null],["1918","2026-02-25T18:00","P","62","Bahia","57","Chapecoense",null,null],["1919","2026-02-25T18:00","P","61","Botafogo","71","Vitória",null,null],["1920","2026-02-25T18:00","P","68","Flamengo","59","Mirassol",null,null],["1929","2026-03-11T22:00","P","54","Athletico","61","Botafogo",null,null],["36","2026-07-30T18:00","P","73","Atlético Mineiro","64","Red Bull Bragantino",null,null],["37","2026-07-30T18:00","P","57","Chapecoense","58","Vasco da Gama",null,null],["38","2026-07-30T18:00","P","61","Botafogo","66","Grêmio",null,null],["39","2026-07-30T18:00","P","69","São Paulo","56","Santos",null,null]];
+    const TZ = 'America/Sao_Paulo';
+    const dKey = d => d.toLocaleDateString('en-CA', { timeZone: TZ });
+    const dLabel = d => d.toLocaleDateString('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(',', '');
+    const dShort = d => d.toLocaleDateString('en-GB', { timeZone: TZ, day: 'numeric', month: 'short' });
+    const tLabel = d => d.toLocaleTimeString('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+    const ST = { C: ['FT', 'var(--edge)'], S: ['Scheduled', 'var(--cool)'], P: ['Postponed', 'var(--warn)'] };
+    const fx = F.map(([id, k, s, hid, home, aid, away, hs, as]) => {
+      const d = new Date(k + ':00Z'), done = s === 'C';
+      const hw = done && hs > as, aw = done && as > hs;
+      return { id, d, s, home, away, hShort: SHORT[hid] || home, aShort: SHORT[aid] || away,
+        hs: done ? hs : '', as: done ? as : '', center: done ? hs + ' \u2013 ' + as : '\u2013',
+        time: tLabel(d), date: dShort(d), dk: dKey(d), dl: dLabel(d),
+        hc: done && !hw && hs !== as ? 'var(--text-secondary)' : 'var(--text)', hw: hw ? 600 : 500,
+        ac: done && !aw && hs !== as ? 'var(--text-secondary)' : 'var(--text)', aw: aw ? 600 : 500,
+        statusLabel: ST[s][0], statusColor: ST[s][1] };
+    });
+    const groupBy = list => { const g = []; list.forEach(x => { let last = g[g.length - 1]; if (!last || last.dk !== x.dk) { last = { dk: x.dk, label: x.dl, rows: [] }; g.push(last); } last.rows.push(x); }); g.forEach(gr => { gr.count = gr.rows.length + (gr.rows.length === 1 ? ' fixture' : ' fixtures'); gr.rows.forEach((r, i) => r.bg = zebra(i)); }); return g; };
+    const byStatus = s => { const l = fx.filter(x => x.s === s); return s === 'C' ? l.slice().reverse() : l; };
+    const filt = this.state.fxf || 'C';
+    const mk = (s, label, n) => ({ label, n, onClick: () => this.setState({ fxf: s }), bg: filt === s ? 'var(--raised)' : 'transparent', color: filt === s ? 'var(--text)' : 'var(--muted)', border: filt === s ? 'var(--amber)' : 'transparent' });
+    const fxNote = { C: 'Showing latest 20 of 250 results', S: 'All 27 scheduled fixtures', P: 'All 9 postponed fixtures · original kickoff shown' }[filt];
+    return {
+      fxFilters: [mk('C', 'Results', 250), mk('S', 'Scheduled', 27), mk('P', 'Postponed', 9)],
+      fxGroups: groupBy(byStatus(filt)), fxNote, fxMore: filt === 'C',
+      fxLatest: byStatus('C').slice(0, 5).map((r, i) => ({ ...r, bg: zebra(i) })),
+      fxNext: byStatus('S').slice(0, 5).map((r, i) => ({ ...r, bg: zebra(i) })),
+      fxFacts: [
+        { k: 'Fixtures', v: '286' },
+        { k: 'First kickoff', v: '28 Jan 2026' },
+        { k: 'Last kickoff', v: '20 Sep 2026' },
+        { k: 'Latest result', v: '7 Sep 2026' },
+        { k: 'Table as of', v: '11 Aug 2026' }
+      ],
+      annot: this.props.annotations ?? true,
+      rows, leaders: rows.slice(0, 5),
+      skel3: sk(3), skel6: sk(6),
+      skelGroups: [{ rows: sk(4) }, { rows: sk(3) }],
+      editionFacts: [
+        { k: 'Season', v: 'Brasileiro Serie A 2026' },
+        { k: 'Competition', v: 'Brasileirão Betano' },
+        { k: 'Country', v: 'Brazil' },
+        { k: 'Fixtures', v: '286' },
+        { k: 'Table as of', v: '11 Aug 2026' }
+      ],
+      coverage: [
+        { k: 'Competition', v: 'Available', glyph: '●', color: 'var(--edge)' },
+        { k: 'Edition', v: 'Available', glyph: '●', color: 'var(--edge)' },
+        { k: 'Standings', v: 'Overall only', glyph: '●', color: 'var(--edge)' },
+        { k: 'Fixture list', v: 'Pending', glyph: '○', color: 'var(--faint)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

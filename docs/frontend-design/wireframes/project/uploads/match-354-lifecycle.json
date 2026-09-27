@@ -1,0 +1,51 @@
+﻿{
+    "match":  {
+                  "fixtureId":  "354",
+                  "kickoffAt":  "2026-09-07T23:00:00.000Z",
+                  "status":  "COMPLETED",
+                  "competition":  {
+                                      "id":  "28",
+                                      "name":  "Brasileirão Betano",
+                                      "slug":  "brasileirao-betano-325"
+                                  },
+                  "homeTeam":  {
+                                   "id":  "71",
+                                   "name":  "Vitória",
+                                   "slug":  "vitoria-1962"
+                               },
+                  "awayTeam":  {
+                                   "id":  "66",
+                                   "name":  "Grêmio",
+                                   "slug":  "gremio-5926"
+                               }
+              },
+    "lifecycle":  {
+                      "transitions":  [
+                                          {
+                                              "fromState":  null,
+                                              "toState":  {
+                                                              "code":  "SCHEDULED",
+                                                              "displayName":  "Scheduled"
+                                                          },
+                                              "transitionedAt":  "2026-09-01T09:40:42.669Z",
+                                              "providerStatusRaw":  null
+                                          },
+                                          {
+                                              "fromState":  {
+                                                                "code":  "SCHEDULED",
+                                                                "displayName":  "Scheduled"
+                                                            },
+                                              "toState":  {
+                                                              "code":  "COMPLETED",
+                                                              "displayName":  "Completed"
+                                                          },
+                                              "transitionedAt":  "2026-09-08T19:08:00.999Z",
+                                              "providerStatusRaw":  null
+                                          }
+                                      ],
+                      "coverage":  {
+                                       "transitions":  "present",
+                                       "transitionsAreObserved":  true
+                                   }
+                  }
+}

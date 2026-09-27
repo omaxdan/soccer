@@ -1,0 +1,39 @@
+﻿{
+    "match":  {
+                  "fixtureId":  "354",
+                  "kickoffAt":  "2026-09-07T23:00:00.000Z",
+                  "status":  "COMPLETED",
+                  "competition":  {
+                                      "id":  "28",
+                                      "name":  "Brasileirão Betano",
+                                      "slug":  "brasileirao-betano-325"
+                                  },
+                  "homeTeam":  {
+                                   "id":  "71",
+                                   "name":  "Vitória",
+                                   "slug":  "vitoria-1962"
+                               },
+                  "awayTeam":  {
+                                   "id":  "66",
+                                   "name":  "Grêmio",
+                                   "slug":  "gremio-5926"
+                               }
+              },
+    "result":  {
+                   "final":  {
+                                 "home":  1,
+                                 "away":  0
+                             },
+                   "halfTime":  {
+                                    "home":  0,
+                                    "away":  0
+                                },
+                   "extraTime":  null,
+                   "penalties":  null,
+                   "confirmedAt":  "2026-09-08T19:08:01.514Z"
+               },
+    "coverage":  {
+                     "result":  "present",
+                     "resultIsObserved":  true
+                 }
+}

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}.dv-turn{padding:40px 44px 32px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">I</a><span class="dv-tname">Phase I · Search · results are structural examples drawn from the supplied list payloads (no search endpoint exists)</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>A · Idle · type bra, bundesliga, palmeiras or gabriel</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" state="idle" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>D / E · "bra" · five categories</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" query="bra" state="results" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>F · "bundesliga" · disambiguation</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" query="bundesliga" state="results" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>C · Typing / I · Loading</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" query="gab" state="typing" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>H · No results</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" query="zzqx" state="results" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>J · Search failure</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" query="gabriel" state="failed" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Tablet 834 · "gabriel"</div><div class="dv-card" style="width:834px"><dc-import name="SearchSurface" bp="tablet" query="gabriel" state="results" hint-size="834px,760px"></dc-import></div></div>
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>M · Mobile · idle</div><div class="dv-card" style="width:390px"><dc-import name="SearchSurface" bp="mobile" state="idle" hint-size="390px,760px"></dc-import></div></div>
+<div class="dv-opt" id="1j"><div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>M · Mobile · "bra"</div><div class="dv-card" style="width:390px"><dc-import name="SearchSurface" bp="mobile" query="bra" state="results" hint-size="390px,760px"></dc-import></div></div>
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>G · "palmeiras" · single result</div><div class="dv-card" style="width:1440px"><dc-import name="SearchSurface" bp="desktop" query="palmeiras" state="results" hint-size="1440px,720px"></dc-import></div></div>
+<div class="dv-opt" id="1k"><div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>Phase I spec</div>
+<div class="dv-card" style="width:960px;background:#fff;padding:36px 44px;box-sizing:border-box;color:#1c1f24;font:14px/1.55 system-ui,sans-serif">
+<h2 style="font:600 22px system-ui,sans-serif;margin:0 0 8px">Phase I · Search · spec</h2>
+<p style="margin:0 0 14px;color:#6b6f76">Discovery only: find an entity, then open its existing workspace. No previews, rankings, trending items or recent searches.</p>
+<p style="margin:0 0 6px"><b>1 · Entry point</b>: the Phase A SearchTrigger in the header (field on desktop, icon on tablet/mobile, "/" focuses it) opens this surface. The page underneath is dimmed, and the header is unchanged.</p>
+<p style="margin:0 0 6px"><b>2–6 · Field and states</b>: a visible label "Search PitchTerminal", 48px input, a text Clear × button, and "All" plus type chips as a secondary limiter. States: idle (one sentence) → focused (amber ring) → typing (row skeletons, query stays visible, pulse dot) → results → no results → failure. Clear restores idle without reloading.</p>
+<p style="margin:0 0 6px"><b>7–13 · Groups and rows</b>: groups show only when they have results, in type order Teams · Players · Competitions · Seasons · Venues · Countries. Within a group, rows keep the order the backend returns. Each row: TYPE tag (text) · name · one line of context. The context comes only from existing list fields:</p>
+<ul style="margin:0 0 6px;padding-left:20px"><li>Team: short name · country (<code>teams[]</code>)</li><li>Player: team (<code>players[].team</code>, which is present in the actual list payload)</li><li>Competition: country when known (<code>competition.countryCode</code>)</li><li>Season: competition name (<code>editions[]</code>)</li><li>Venue: city · country (venue payload; no list exists yet)</li><li>Country: code</li></ul>
+<p style="margin:0 0 6px"><b>14 · Disambiguation</b> (<a class="dv-oid" href="#1c">1c</a>): two "Bundesliga 26/27" seasons are told apart by their competition. When context is missing, the row says "No further context recorded".</p>
+<p style="margin:0 0 6px"><b>15–18</b>: no results names the query and offers Clear; failure (role=alert) keeps the query and offers Try again. Loading is announced; the result count is announced.</p>
+<p style="margin:0 0 6px"><b>19–21 · Layout</b>: desktop 680px panel 72px below the top · tablet full-width panel · mobile full-screen with Close, 44px chips and 56px rows.</p>
+<p style="margin:0 0 6px"><b>22 · Accessibility</b>: form role=search; input role=combobox with aria-controls on a listbox; groups use role=group with a count; rows are options with a spoken "type, name, context"; the arrow keys, Enter and Esc hint is shown on screen.</p>
+<p style="margin:0 0 6px"><b>23 · Destinations</b>: Team → E · Player → G · Competition / Season → D · Venue → H · Country → the existing countries/[code] route (not redesigned). Matches aren't searchable.</p>
+<p style="margin:0 0 6px"><b>24 · Backend dependency</b>: there is no unified search endpoint. The UI expects a search contract that returns typed entity results, in order, with the context fields above. Its name, parameters, matching and ordering are <span style="font:600 9px ui-monospace,Menlo,monospace;background:#fff0cf;color:#8a5a00;padding:1px 5px;border-radius:3px">PENDING</span>. The mock-up's results are hand-picked from the supplied list payloads; the product must not download and filter full lists in the browser.</p>
+<pre style="font:12px/1.5 ui-monospace,Menlo,monospace;background:#f6f5f2;padding:12px 14px;border-radius:4px;margin:10px 0 0">Search UI ─► search contract (PENDING) ─► Teams · Players · Competitions · Seasons · Venues · Countries</pre>
+<p style="margin:12px 0 0">Scope: Phase I only. Next: Phase J · Account / Subscription.</p>
+</div></div>
+</div>
+</section>
+</x-dc>
+</body>
+</html>

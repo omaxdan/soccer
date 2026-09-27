@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}</style></helmet>
+<div style="background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text);min-height:{{ minH }};display:flex;flex-direction:column">
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><dc-import name="AppHeader" layout="{{ bp }}" auth="anon" active="Fixtures" hint-size="100%,56px"></dc-import></sc-if>
+<main aria-busy="{{ loading }}" style="flex:1;max-width:1152px;width:100%;margin:0 auto;padding:{{ mainPad }};box-sizing:border-box;display:flex;flex-direction:column;gap:20px">
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px 24px">
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Fixtures</span>
+        <h1 style="margin:0;font-weight:700;font-size:{{ h1Size }};line-height:1.15;letter-spacing:-.01em;color:var(--text)">{{ dateLong }}</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span style="font-weight:600;color:{{ countColor }}">{{ countLabel }}</span><span>·</span><span>Times in UTC</span><sc-if value="{{ isToday }}"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber);background:var(--amber-dim);border-radius:4px;padding:1px 6px">TODAY</span></sc-if></div>
+      </div>
+      <div role="group" aria-label="Change date" style="display:flex;align-items:center;gap:6px">
+        <a aria-label="{{ prevLabel }}" style="width:{{ navBtn }};height:{{ navBtn }};display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--line);border-radius:4px;font:500 14px 'JetBrains Mono',monospace;color:var(--text-secondary);text-decoration:none;cursor:pointer" style-hover="background:var(--raised);color:var(--text)">‹</a>
+        <a aria-current="{{ todayCurrent }}" style="height:{{ navBtn }};padding:0 14px;display:flex;align-items:center;background:{{ todayBg }};border:1px solid {{ todayBorder }};border-radius:4px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ todayColor }};text-decoration:none;cursor:pointer" style-hover="border-color:var(--amber)">Today</a>
+        <a aria-label="{{ nextLabel }}" style="width:{{ navBtn }};height:{{ navBtn }};display:flex;align-items:center;justify-content:center;background:var(--panel);border:1px solid var(--line);border-radius:4px;font:500 14px 'JetBrains Mono',monospace;color:var(--text-secondary);text-decoration:none;cursor:pointer" style-hover="background:var(--raised);color:var(--text)">›</a>
+        <label style="position:relative;height:{{ navBtn }};padding:0 10px;display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer" style-hover="color:var(--text);background:var(--raised)"><span aria-hidden="true" style="width:10px;height:10px;border:1.5px solid currentColor;border-radius:2px"></span>{{ pickLabel }}<input type="date" aria-label="Choose a date" value="{{ iso }}" style="position:absolute;inset:0;opacity:0;cursor:pointer"></input></label>
+      </div>
+    </div>
+    <nav aria-label="Nearby dates" style="display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line)">
+      <sc-for list="{{ strip }}" as="d" hint-placeholder-count="7">
+        <a aria-current="{{ d.current }}" aria-label="{{ d.aria }}" style="flex:{{ stripFlex }};min-width:64px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 10px 9px;border-bottom:2px solid {{ d.under }};margin-bottom:-1px;text-decoration:none;cursor:pointer" style-hover="background:var(--panel)"><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ d.dayColor }}">{{ d.dow }}</span><span style="font:600 14px 'JetBrains Mono',monospace;color:{{ d.numColor }}">{{ d.num }}</span><span style="font:600 8.5px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber);min-height:11px">{{ d.tag }}</span></a>
+      </sc-for>
+    </nav>
+  </div>
+
+  <sc-if value="{{ showGroups }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <sc-if value="{{ structural }}"><div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px dashed var(--warn);border-radius:4px"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--warn)">STRUCTURAL EXAMPLE</span><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Generic rows showing a state not present in the supplied payloads. Not live records.</span></div></sc-if>
+      <sc-for list="{{ groups }}" as="c" hint-placeholder-count="2">
+        <section aria-label="{{ c.aria }}" style="display:flex;flex-direction:column;gap:8px">
+          <h2 style="margin:0;display:flex;align-items:center;gap:8px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.08em;color:var(--faint);border:1px {{ c.codeStyle }} var(--line);border-radius:3px;padding:1px 4px">{{ c.code }}</span>{{ c.name }}</h2>
+          <sc-for list="{{ c.comps }}" as="k" hint-placeholder-count="1">
+            <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+              <h3 style="margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:10px 14px;background:var(--raised);border-bottom:1px solid var(--line)"><a style="font:600 13px Inter,sans-serif;color:var(--text);text-decoration:none;cursor:pointer" style-hover="text-decoration:underline">{{ k.name }}</a><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ k.season }}</span><span style="margin-left:auto;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ k.count }}</span></h3>
+              <ul style="list-style:none;margin:0;padding:0">
+                <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                  <li style="border-top:{{ r.rule }}">
+                    <sc-if value="{{ wideRows }}" hint-placeholder-val="{{ true }}">
+                      <a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:{{ rowCols }};gap:14px;align-items:center;min-height:44px;padding:0 14px;text-decoration:none;cursor:pointer" style-hover="background:var(--raised)">
+                        <time dateTime="{{ r.iso }}" style="font:400 12px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--muted)">{{ r.time }}</time>
+                        <span style="font-family:Inter,sans-serif;font-size:14px;text-align:right;font-weight:{{ r.hw }};color:{{ r.hc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span>
+                        <span style="justify-self:center;min-width:64px;display:flex;justify-content:center;gap:6px;padding:3px 8px;border-radius:4px;background:var(--ink);border:1px solid var(--line);font:600 14px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:{{ r.scoreColor }}">{{ r.score }}</span>
+                        <span style="font-family:Inter,sans-serif;font-size:14px;font-weight:{{ r.aw }};color:{{ r.ac }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span>
+                        <span style="justify-self:end;display:inline-flex;align-items:center;gap:5px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ r.sc }};border:1px {{ r.sStyle }} {{ r.sc }};border-radius:4px;padding:1px 6px;white-space:nowrap"><span aria-hidden="true" style="font-size:8px;animation:{{ r.anim }}">{{ r.glyph }}</span>{{ r.label }}</span>
+                        <span aria-hidden="true" style="font:400 13px 'JetBrains Mono',monospace;color:var(--faint);text-align:right">›</span>
+                      </a>
+                    </sc-if>
+                    <sc-if value="{{ stackRows }}" hint-placeholder-val="{{ false }}">
+                      <a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:72px minmax(0,1fr) 28px;gap:10px;align-items:center;min-height:60px;padding:8px 12px;text-decoration:none">
+                        <div style="display:flex;flex-direction:column;gap:5px"><time dateTime="{{ r.iso }}" style="font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.time }}</time><span style="display:inline-flex;align-items:center;gap:4px;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ r.sc }}"><span aria-hidden="true" style="font-size:7px;animation:{{ r.anim }}">{{ r.glyph }}</span>{{ r.label }}</span></div>
+                        <div style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-family:Inter,sans-serif;font-size:15px;font-weight:{{ r.hw }};color:{{ r.hc }}">{{ r.home }}</span><span style="font-family:Inter,sans-serif;font-size:15px;font-weight:{{ r.aw }};color:{{ r.ac }}">{{ r.away }}</span></div>
+                        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;font:600 15px 'JetBrains Mono',monospace;color:{{ r.scoreColor }}"><span>{{ r.hs }}</span><span>{{ r.as }}</span></div>
+                      </a>
+                    </sc-if>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+          </sc-for>
+        </section>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ sEmpty }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+      <span aria-hidden="true" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:4px;font:400 14px 'JetBrains Mono',monospace;color:var(--faint)">○</span>
+      <h2 style="margin:0;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">No fixtures</h2>
+      <p style="margin:0;font:400 15px Inter,sans-serif;color:var(--text-secondary)">There are no fixtures recorded for this date.</p>
+      <span style="font:400 12px Inter,sans-serif;color:var(--faint)">Use ‹ › or the date strip to browse nearby days.</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ sLoading }}" hint-placeholder-val="{{ false }}">
+    <div aria-hidden="true" style="display:flex;flex-direction:column;gap:24px">
+      <sc-for list="{{ skelGroups }}" as="g" hint-placeholder-count="2">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span style="height:9px;width:90px;background:var(--raised);border-radius:2px"></span>
+          <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+            <div style="height:38px;background:var(--raised);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 14px"><span style="height:9px;width:160px;background:var(--line);border-radius:2px"></span><span style="height:8px;width:80px;background:var(--line);border-radius:2px"></span></div>
+            <sc-for list="{{ g }}" as="w" hint-placeholder-count="2"><div style="display:grid;grid-template-columns:{{ skelCols }};gap:14px;align-items:center;height:44px;padding:0 14px;border-top:1px solid var(--line)"><span style="height:8px;width:36px;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:{{ w }};justify-self:end;background:var(--raised);border-radius:2px"></span><span style="height:18px;width:56px;justify-self:center;background:var(--raised);border-radius:3px"></span><span style="height:9px;width:{{ w }};background:var(--raised);border-radius:2px"></span></div></sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading fixtures</span>
+  </sc-if>
+
+  <sc-if value="{{ sFailed }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+      <span aria-hidden="true" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--risk);border-radius:4px;font:700 13px 'JetBrains Mono',monospace;color:var(--risk)">!</span>
+      <h2 style="margin:0;font:600 15px Inter,sans-serif;color:var(--text)">Unable to load fixtures for this date</h2>
+      <p style="margin:0;font:400 13px Inter,sans-serif;color:var(--muted)">Check your connection and try again.</p>
+      <button style="margin-top:4px;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer" style-hover="border-color:var(--muted)">Try again</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ sInvalid }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+      <span aria-hidden="true" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--warn);border-radius:4px;font:700 13px 'JetBrains Mono',monospace;color:var(--warn)">?</span>
+      <h2 style="margin:0;font:600 15px Inter,sans-serif;color:var(--text)">Invalid date</h2>
+      <p style="margin:0;font:400 13px Inter,sans-serif;color:var(--muted)">The selected date is not valid.</p>
+      <a style="margin-top:4px;display:inline-flex;align-items:center;height:36px;padding:0 14px;background:var(--amber);border:1px solid var(--amber);border-radius:4px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:none;cursor:pointer">Go to today</a>
+    </div>
+  </sc-if>
+</main>
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}">
+  <footer style="max-width:1152px;width:100%;margin:40px auto 0;padding:24px 16px;box-sizing:border-box;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span style="font:700 13px Inter,sans-serif;color:var(--text-secondary)">Pitch<span style="color:var(--amber)">Terminal</span></span><div style="display:flex;flex-wrap:wrap;gap:8px 18px"><a style="color:var(--faint);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Features</a><a style="color:var(--faint);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Pricing</a><a style="color:var(--faint);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Terms</a><a style="color:var(--faint);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">Privacy</a><span>© PitchTerminal</span></div></footer>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;panel&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;aug15&quot;,&quot;statuses&quot;,&quot;upcoming&quot;,&quot;empty&quot;,&quot;loading&quot;,&quot;failed&quot;,&quot;invalid&quot;],&quot;default&quot;:&quot;aug15&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop';
+    const frame = this.props.frame ?? 'full';
+    const s = this.props.state ?? 'aug15';
+    const M = bp === 'mobile', D = bp === 'desktop';
+    const TODAY = '2026-09-27';
+    const isoMap = { aug15: '2026-08-15', statuses: '2026-08-15', upcoming: '2026-10-03', empty: '2026-09-26', loading: '2026-08-15', failed: '2026-08-15', invalid: null };
+    const iso = s in isoMap ? isoMap[s] : '2026-08-15';
+    const d0 = iso ? new Date(iso + 'T00:00:00Z') : null;
+    const fmt = (d, o) => d.toLocaleDateString('en-GB', { timeZone: 'UTC', ...o });
+    const S = {
+      SCHEDULED: ['UPCOMING', 'var(--cool)', '○', 'solid', 'upcoming'],
+      IN_PROGRESS: ['LIVE', 'var(--amber)', '●', 'solid', 'live'],
+      COMPLETED: ['FT', 'var(--edge)', '■', 'solid', 'full time'],
+      AET: ['AET', 'var(--edge)', '■', 'solid', 'after extra time'],
+      PEN: ['PEN', 'var(--edge)', '■', 'solid', 'decided on penalties'],
+      POSTPONED: ['POSTPONED', 'var(--warn)', '▲', 'solid', 'postponed'],
+      ABANDONED: ['ABANDONED', 'var(--warn)', '▲', 'solid', 'abandoned'],
+      CANCELLED: ['CANCELLED', 'var(--risk)', '✕', 'solid', 'cancelled'],
+      UNKNOWN: ['STATUS UNKNOWN', 'var(--faint)', '?', 'dashed', 'status unknown']
+    };
+    const mk = (time, home, away, status, res, idx) => {
+      const fin = res && res.final;
+      const extra = status === 'COMPLETED' && res && res.penalties ? 'PEN' : status === 'COMPLETED' && res && res.extraTime ? 'AET' : status;
+      const [label, sc, glyph, sStyle, word] = S[extra];
+      const live = status === 'IN_PROGRESS';
+      const hasScore = !!fin;
+      const hs = hasScore ? fin.home : null, as = hasScore ? fin.away : null;
+      const showScore = hasScore && (status === 'COMPLETED' || live);
+      const missing = status === 'COMPLETED' && !hasScore;
+      return {
+        time, iso: iso + 'T' + time + ':00Z', home, away, label, sc, glyph, sStyle, anim: live ? 'pulse-dot 1.8s ease-in-out infinite' : 'none',
+        score: showScore ? hs + ' – ' + as : missing ? '—' : '–', scoreColor: showScore ? 'var(--text)' : 'var(--faint)',
+        hs: showScore ? hs : missing ? '—' : '', as: showScore ? as : missing ? '—' : '',
+        hw: showScore && status === 'COMPLETED' && hs > as ? 600 : 500, aw: showScore && status === 'COMPLETED' && as > hs ? 600 : 500,
+        hc: showScore && status === 'COMPLETED' && hs < as ? 'var(--text-secondary)' : 'var(--text)',
+        ac: showScore && status === 'COMPLETED' && as < hs ? 'var(--text-secondary)' : 'var(--text)',
+        rule: idx === 0 ? '0' : '1px solid var(--line)',
+        aria: home + ' ' + (showScore ? hs + ' ' + as + ' ' : missing ? 'no score ' : '') + away + ', ' + word + ', ' + time + ' UTC. Open match.'
+      };
+    };
+    const R = (f, h, a) => ({ final: { home: f[0], away: f[1] }, halfTime: h ? { home: h[0], away: h[1] } : null, extraTime: null, penalties: null });
+    const comp = (name, season, rows) => ({ name, season, count: rows.length + (rows.length === 1 ? ' fixture' : ' fixtures'), rows: rows.map((r, i) => mk(...r, i)) });
+    const country = (code, name, comps) => ({ code: code || '—', name: name || 'Country not specified', codeStyle: code ? 'solid' : 'dashed', aria: (name || 'Country not specified') + ' fixtures', comps });
+    let groups = [], structural = false, count = 0;
+    if (s === 'aug15') {
+      groups = [
+        country('AT', 'Austria', [comp('Austrian Bundesliga', 'Bundesliga 26/27', [['15:00', 'SC Austria Lustenau', 'Wolfsberger AC', 'COMPLETED', R([2, 1], [2, 1])], ['17:30', 'SK Sturm Graz', 'SCR Altach', 'COMPLETED', R([1, 0], [0, 0])]])]),
+        country('BR', 'Brazil', [comp('Brasileirão Betano', 'Brasileiro Serie A 2026', [['19:30', 'Fluminense', 'Palmeiras', 'COMPLETED', R([3, 2], [1, 1])], ['21:30', 'Athletico', 'Red Bull Bragantino', 'COMPLETED', R([1, 1], [0, 0])]])])
+      ];
+      count = 4;
+    } else if (s === 'statuses') {
+      structural = true;
+      groups = [country('', '', [comp('Competition name', 'Season label', [
+        ['12:00', 'Home team', 'Away team', 'SCHEDULED', null],
+        ['12:00', 'Home team', 'Away team', 'IN_PROGRESS', R([1, 0])],
+        ['12:00', 'Home team', 'Away team', 'COMPLETED', R([2, 1])],
+        ['12:00', 'Home team', 'Away team', 'COMPLETED', R([0, 0])],
+        ['12:00', 'Home team', 'Away team', 'COMPLETED', null],
+        ['12:00', 'Home team', 'Away team', 'COMPLETED', { final: { home: 2, away: 1 }, extraTime: { home: 1, away: 0 }, penalties: null }],
+        ['12:00', 'Home team', 'Away team', 'COMPLETED', { final: { home: 1, away: 1 }, extraTime: { home: 0, away: 0 }, penalties: { home: 4, away: 3 } }],
+        ['12:00', 'Home team', 'Away team', 'POSTPONED', null],
+        ['12:00', 'Home team', 'Away team', 'ABANDONED', null],
+        ['12:00', 'Home team', 'Away team', 'CANCELLED', null],
+        ['12:00', 'Home team', 'Away team', 'UNKNOWN', null]
+      ])])];
+      count = 11;
+    } else if (s === 'upcoming') {
+      structural = true;
+      groups = [country('', '', [comp('Competition name', 'Season label', [['14:00', 'Home team', 'Away team', 'SCHEDULED', null], ['16:30', 'Home team', 'Away team', 'SCHEDULED', null], ['19:00', 'Home team', 'Away team', 'SCHEDULED', null]])])];
+      count = 3;
+    }
+    const strip = d0 ? Array.from({ length: M ? 5 : 7 }, (_, i) => {
+      const off = i - (M ? 2 : 3);
+      const d = new Date(d0.getTime() + off * 864e5);
+      const k = d.toISOString().slice(0, 10), on = off === 0, today = k === TODAY;
+      return { dow: fmt(d, { weekday: 'short' }), num: fmt(d, { day: 'numeric', month: 'short' }), current: on ? 'date' : 'false',
+        aria: fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }) + (today ? ', today' : ''),
+        under: on ? 'var(--amber)' : 'transparent', dayColor: on ? 'var(--text)' : 'var(--faint)', numColor: on ? 'var(--text)' : 'var(--muted)', tag: today ? 'TODAY' : '' };
+    }) : [];
+    const isToday = iso === TODAY;
+    const known = ['aug15', 'statuses', 'upcoming', 'empty'].includes(s);
+    return {
+      bp, full: frame === 'full', loading: s === 'loading',
+      minH: frame === 'full' ? (M ? '844px' : '900px') : 'auto',
+      mainPad: M ? '16px 12px' : bp === 'tablet' ? '24px 24px' : '28px 16px',
+      h1Size: M ? '22px' : '26px', navBtn: M ? '44px' : '36px', pickLabel: M ? '' : 'Date', stripFlex: M ? '1 1 0' : '0 0 auto',
+      dateLong: d0 ? fmt(d0, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'Date not recognised',
+      iso: iso || '',
+      countLabel: known ? count + (count === 1 ? ' fixture' : ' fixtures') : s === 'loading' ? 'Loading…' : '—',
+      countColor: known && count ? 'var(--text-secondary)' : 'var(--faint)',
+      isToday, todayCurrent: isToday ? 'date' : 'false',
+      todayBg: isToday ? 'var(--amber-dim)' : 'var(--panel)', todayBorder: isToday ? 'var(--amber)' : 'var(--line)', todayColor: isToday ? 'var(--amber)' : 'var(--text)',
+      prevLabel: d0 ? 'Previous day, ' + fmt(new Date(d0 - 864e5), { weekday: 'long', day: 'numeric', month: 'long' }) : 'Previous day',
+      nextLabel: d0 ? 'Next day, ' + fmt(new Date(+d0 + 864e5), { weekday: 'long', day: 'numeric', month: 'long' }) : 'Next day',
+      strip, groups, structural,
+      showGroups: groups.length > 0, sEmpty: s === 'empty', sLoading: s === 'loading', sFailed: s === 'failed', sInvalid: s === 'invalid',
+      wideRows: !M, stackRows: M,
+      rowCols: D ? '64px minmax(0,1fr) 88px minmax(0,1fr) 132px 14px' : '52px minmax(0,1fr) 76px minmax(0,1fr) 112px 12px',
+      skelCols: D ? '64px minmax(0,1fr) 88px minmax(0,1fr)' : '52px minmax(0,1fr) 76px minmax(0,1fr)',
+      skelGroups: [['52%', '38%', '46%'], ['44%', '56%']]
+    };
+  }
+}
+</script>
+</body>
+</html>

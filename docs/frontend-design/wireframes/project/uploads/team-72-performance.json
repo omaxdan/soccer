@@ -1,0 +1,98 @@
+﻿{
+    "team":  {
+                 "id":  "72",
+                 "name":  "Palmeiras",
+                 "slug":  "palmeiras-1963",
+                 "shortName":  "Palmeiras",
+                 "countryCode":  "BR"
+             },
+    "overall":  {
+                    "homeForm":  {
+                                     "value":  48.33,
+                                     "unit":  "index",
+                                     "direction":  "HIGHER_IS_STRONGER",
+                                     "sample":  {
+                                                    "matches":  6,
+                                                    "meetsThreshold":  true
+                                                },
+                                     "asOf":  "2026-09-06T21:30:00.000Z"
+                                 },
+                    "awayForm":  {
+                                     "value":  34,
+                                     "unit":  "index",
+                                     "direction":  "HIGHER_IS_STRONGER",
+                                     "sample":  {
+                                                    "matches":  4,
+                                                    "meetsThreshold":  false
+                                                },
+                                     "asOf":  "2026-09-06T21:30:00.000Z"
+                                 },
+                    "momentum":  {
+                                     "value":  -7,
+                                     "unit":  "points",
+                                     "direction":  "HIGHER_IS_STRONGER",
+                                     "sample":  {
+                                                    "matches":  10,
+                                                    "meetsThreshold":  true
+                                                },
+                                     "asOf":  "2026-09-06T21:30:00.000Z"
+                                 },
+                    "goalMarginVolatility":  {
+                                                 "value":  1.89,
+                                                 "unit":  "goals",
+                                                 "direction":  "UNSIGNED",
+                                                 "sample":  {
+                                                                "matches":  10,
+                                                                "meetsThreshold":  true
+                                                            },
+                                                 "asOf":  "2026-09-06T21:30:00.000Z"
+                                             },
+                    "giantKillerPpg":  {
+                                           "value":  1.33,
+                                           "unit":  "ppg",
+                                           "direction":  "HIGHER_IS_STRONGER",
+                                           "sample":  {
+                                                          "matches":  9,
+                                                          "meetsThreshold":  true
+                                                      },
+                                           "asOf":  "2026-09-06T21:30:00.000Z"
+                                       }
+                },
+    "byCompetition":  [
+                          {
+                              "edition":  {
+                                              "id":  "18",
+                                              "seasonLabel":  "Brasileiro Serie A 2026",
+                                              "competition":  {
+                                                                  "id":  "28",
+                                                                  "name":  "Brasileirão Betano",
+                                                                  "slug":  "brasileirao-betano-325"
+                                                              }
+                                          },
+                              "homeWinRate":  {
+                                                  "value":  50,
+                                                  "unit":  "index",
+                                                  "direction":  "HIGHER_IS_STRONGER",
+                                                  "sample":  {
+                                                                 "matches":  4,
+                                                                 "meetsThreshold":  true
+                                                             },
+                                                  "asOf":  "2026-09-06T21:30:00.000Z"
+                                              },
+                              "awayWinRate":  {
+                                                  "value":  66.67,
+                                                  "unit":  "index",
+                                                  "direction":  "HIGHER_IS_STRONGER",
+                                                  "sample":  {
+                                                                 "matches":  3,
+                                                                 "meetsThreshold":  true
+                                                             },
+                                                  "asOf":  "2026-09-06T21:30:00.000Z"
+                                              }
+                          }
+                      ],
+    "coverage":  {
+                     "overall":  "present",
+                     "performanceIsDescriptive":  true
+                 }
+}

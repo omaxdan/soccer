@@ -1,0 +1,975 @@
+﻿{
+    "player":  {
+                   "id":  "40",
+                   "fullName":  "Agustín Canobbio",
+                   "slug":  "agustin-canobbio-846413"
+               },
+    "scope":  {
+                  "competition":  "all",
+                  "editionId":  null,
+                  "label":  "all competitions"
+              },
+    "asOf":  "2026-09-26T18:44:25.983Z",
+    "aggregation":  {
+                        "version":  "player-temporal-1"
+                    },
+    "comparisonStatus":  "available",
+    "sample":  {
+                   "eligibleObservations":  19,
+                   "requiredForComparison":  10
+               },
+    "windows":  {
+                    "last5":  {
+                                  "status":  "complete",
+                                  "observationCount":  5,
+                                  "windowSize":  5,
+                                  "from":  "2026-07-30T00:30:00.000Z",
+                                  "to":  "2026-09-06T00:00:00.000Z",
+                                  "fixtureIds":  [
+                                                     "34",
+                                                     "45",
+                                                     "239",
+                                                     "287",
+                                                     "347"
+                                                 ]
+                              },
+                    "previous5":  {
+                                      "status":  "complete",
+                                      "observationCount":  5,
+                                      "windowSize":  5,
+                                      "from":  "2026-05-03T21:30:00.000Z",
+                                      "to":  "2026-07-26T21:30:00.000Z",
+                                      "fixtureIds":  [
+                                                         "1847",
+                                                         "1850",
+                                                         "1801",
+                                                         "61",
+                                                         "28"
+                                                     ]
+                                  }
+                },
+    "participation":  {
+                          "last5":  {
+                                        "started":  4,
+                                        "bench":  1,
+                                        "unknown":  0
+                                    },
+                          "previous5":  {
+                                            "started":  3,
+                                            "bench":  2,
+                                            "unknown":  0
+                                        },
+                          "change":  {
+                                         "started":  1,
+                                         "bench":  -1,
+                                         "unknown":  0
+                                     }
+                      },
+    "comparisons":  [
+                        {
+                            "metric":  "minutesPlayed",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  252,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  335,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  83,
+                            "changeType":  "absolute",
+                            "percentageChange":  32.9,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "goals",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1,
+                                              "observations":  1,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  null,
+                                          "observations":  0,
+                                          "windowSize":  5
+                                      },
+                            "change":  null,
+                            "changeType":  "absolute",
+                            "percentageChange":  null,
+                            "direction":  "UNAVAILABLE"
+                        },
+                        {
+                            "metric":  "goalAssist",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  1,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  0,
+                            "changeType":  "absolute",
+                            "percentageChange":  0,
+                            "direction":  "UNCHANGED"
+                        },
+                        {
+                            "metric":  "expectedAssists",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  0.32,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  0.89,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  0.57,
+                            "changeType":  "absolute",
+                            "percentageChange":  178.1,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "bigChanceCreated",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1,
+                                              "observations":  1,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  3,
+                                          "observations":  2,
+                                          "windowSize":  5
+                                      },
+                            "change":  2,
+                            "changeType":  "absolute",
+                            "percentageChange":  200,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "totalShots",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  3,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  9,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  6,
+                            "changeType":  "absolute",
+                            "percentageChange":  200,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "expectedGoals",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  0.35,
+                                              "observations":  2,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  0.98,
+                                          "observations":  3,
+                                          "windowSize":  5
+                                      },
+                            "change":  0.63,
+                            "changeType":  "absolute",
+                            "percentageChange":  180,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "expectedGoalsOnTarget",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1.12,
+                                              "observations":  2,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  0.63,
+                                          "observations":  2,
+                                          "windowSize":  5
+                                      },
+                            "change":  -0.49,
+                            "changeType":  "absolute",
+                            "percentageChange":  -43.8,
+                            "direction":  "DOWN"
+                        },
+                        {
+                            "metric":  "bigChanceMissed",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  null,
+                                              "observations":  0,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  1,
+                                          "observations":  1,
+                                          "windowSize":  5
+                                      },
+                            "change":  null,
+                            "changeType":  "absolute",
+                            "percentageChange":  null,
+                            "direction":  "UNAVAILABLE"
+                        },
+                        {
+                            "metric":  "totalPass",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  94,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  146,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  52,
+                            "changeType":  "absolute",
+                            "percentageChange":  55.3,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "accuratePass",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  76,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  125,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  49,
+                            "changeType":  "absolute",
+                            "percentageChange":  64.5,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "totalOppositionHalfPasses",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  69,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  111,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  42,
+                            "changeType":  "absolute",
+                            "percentageChange":  60.9,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "accurateOppositionHalfPasses",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  58,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  92,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  34,
+                            "changeType":  "absolute",
+                            "percentageChange":  58.6,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "totalOwnHalfPasses",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  25,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  35,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  10,
+                            "changeType":  "absolute",
+                            "percentageChange":  40,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "accurateOwnHalfPasses",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  18,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  33,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  15,
+                            "changeType":  "absolute",
+                            "percentageChange":  83.3,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "touches",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  144,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  237,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  93,
+                            "changeType":  "absolute",
+                            "percentageChange":  64.6,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "totalBallCarriesDistance",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  369.94,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  665.23,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  295.29,
+                            "changeType":  "absolute",
+                            "percentageChange":  79.8,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "ballCarriesCount",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  43,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  77,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  34,
+                            "changeType":  "absolute",
+                            "percentageChange":  79.1,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "totalProgression",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  148.31,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  322.95,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  174.64,
+                            "changeType":  "absolute",
+                            "percentageChange":  117.8,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "progressiveBallCarriesCount",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  5,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  8,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  3,
+                            "changeType":  "absolute",
+                            "percentageChange":  60,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "possessionLostCtrl",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  36,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  52,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  16,
+                            "changeType":  "absolute",
+                            "percentageChange":  44.4,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "duelWon",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  15,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  25,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  10,
+                            "changeType":  "absolute",
+                            "percentageChange":  66.7,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "duelLost",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  18,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  24,
+                                          "observations":  4,
+                                          "windowSize":  5
+                                      },
+                            "change":  6,
+                            "changeType":  "absolute",
+                            "percentageChange":  33.3,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "ballRecovery",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  13,
+                                              "observations":  2,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  18,
+                                          "observations":  4,
+                                          "windowSize":  5
+                                      },
+                            "change":  5,
+                            "changeType":  "absolute",
+                            "percentageChange":  38.5,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "totalTackle",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  2,
+                                              "observations":  1,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  9,
+                                          "observations":  4,
+                                          "windowSize":  5
+                                      },
+                            "change":  7,
+                            "changeType":  "absolute",
+                            "percentageChange":  350,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "interceptionWon",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1,
+                                              "observations":  1,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  1,
+                                          "observations":  1,
+                                          "windowSize":  5
+                                      },
+                            "change":  0,
+                            "changeType":  "absolute",
+                            "percentageChange":  0,
+                            "direction":  "UNCHANGED"
+                        },
+                        {
+                            "metric":  "totalClearance",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  2,
+                                              "observations":  2,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  1,
+                                          "observations":  1,
+                                          "windowSize":  5
+                                      },
+                            "change":  -1,
+                            "changeType":  "absolute",
+                            "percentageChange":  -50,
+                            "direction":  "DOWN"
+                        },
+                        {
+                            "metric":  "totalContest",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  8,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  12,
+                                          "observations":  4,
+                                          "windowSize":  5
+                                      },
+                            "change":  4,
+                            "changeType":  "absolute",
+                            "percentageChange":  50,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "wonContest",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  5,
+                                              "observations":  3,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  5,
+                                          "observations":  3,
+                                          "windowSize":  5
+                                      },
+                            "change":  0,
+                            "changeType":  "absolute",
+                            "percentageChange":  0,
+                            "direction":  "UNCHANGED"
+                        },
+                        {
+                            "metric":  "kilometersCovered",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  28.88,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  39.09,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  10.21,
+                            "changeType":  "absolute",
+                            "percentageChange":  35.4,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "numberOfSprints",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  68,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  73,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  5,
+                            "changeType":  "absolute",
+                            "percentageChange":  7.4,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "topSpeed",
+                            "class":  "MEAN",
+                            "previous5":  {
+                                              "value":  32.8,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  31.35,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  -1.45,
+                            "changeType":  "absolute",
+                            "percentageChange":  null,
+                            "direction":  "DOWN"
+                        },
+                        {
+                            "metric":  "metersCoveredHighSpeedRunningKm",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1.87,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  2.51,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  0.64,
+                            "changeType":  "absolute",
+                            "percentageChange":  34.2,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "metersCoveredRunningKm",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  4.31,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  6.89,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  2.58,
+                            "changeType":  "absolute",
+                            "percentageChange":  59.9,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "metersCoveredSprintingKm",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1.09,
+                                              "observations":  4,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  1.19,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  0.1,
+                            "changeType":  "absolute",
+                            "percentageChange":  9.2,
+                            "direction":  "UP"
+                        }
+                    ],
+    "season":  {
+                   "observationCount":  19,
+                   "scopeLabel":  "all competitions",
+                   "participation":  {
+                                         "started":  16,
+                                         "bench":  3,
+                                         "unknown":  0
+                                     },
+                   "metrics":  [
+                                   {
+                                       "metric":  "minutesPlayed",
+                                       "class":  "SUM",
+                                       "value":  1322,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "goals",
+                                       "class":  "SUM",
+                                       "value":  4,
+                                       "observations":  4,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "goalAssist",
+                                       "class":  "SUM",
+                                       "value":  3,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "expectedAssists",
+                                       "class":  "SUM",
+                                       "value":  2.36,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "bigChanceCreated",
+                                       "class":  "SUM",
+                                       "value":  5,
+                                       "observations":  4,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalShots",
+                                       "class":  "SUM",
+                                       "value":  30,
+                                       "observations":  19,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "expectedGoals",
+                                       "class":  "SUM",
+                                       "value":  3.38,
+                                       "observations":  13,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "expectedGoalsOnTarget",
+                                       "class":  "SUM",
+                                       "value":  4.85,
+                                       "observations":  10,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "bigChanceMissed",
+                                       "class":  "SUM",
+                                       "value":  5,
+                                       "observations":  5,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalPass",
+                                       "class":  "SUM",
+                                       "value":  544,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "accuratePass",
+                                       "class":  "SUM",
+                                       "value":  464,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalOppositionHalfPasses",
+                                       "class":  "SUM",
+                                       "value":  420,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "accurateOppositionHalfPasses",
+                                       "class":  "SUM",
+                                       "value":  356,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalOwnHalfPasses",
+                                       "class":  "SUM",
+                                       "value":  124,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "accurateOwnHalfPasses",
+                                       "class":  "SUM",
+                                       "value":  108,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "touches",
+                                       "class":  "SUM",
+                                       "value":  865,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalBallCarriesDistance",
+                                       "class":  "SUM",
+                                       "value":  2419.17,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "ballCarriesCount",
+                                       "class":  "SUM",
+                                       "value":  268,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalProgression",
+                                       "class":  "SUM",
+                                       "value":  1268.86,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "progressiveBallCarriesCount",
+                                       "class":  "SUM",
+                                       "value":  43,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "possessionLostCtrl",
+                                       "class":  "SUM",
+                                       "value":  200,
+                                       "observations":  18,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "duelWon",
+                                       "class":  "SUM",
+                                       "value":  86,
+                                       "observations":  17,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "duelLost",
+                                       "class":  "SUM",
+                                       "value":  90,
+                                       "observations":  16,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "ballRecovery",
+                                       "class":  "SUM",
+                                       "value":  56,
+                                       "observations":  15,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalTackle",
+                                       "class":  "SUM",
+                                       "value":  28,
+                                       "observations":  13,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "interceptionWon",
+                                       "class":  "SUM",
+                                       "value":  4,
+                                       "observations":  4,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalClearance",
+                                       "class":  "SUM",
+                                       "value":  9,
+                                       "observations":  8,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "totalContest",
+                                       "class":  "SUM",
+                                       "value":  49,
+                                       "observations":  16,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "wonContest",
+                                       "class":  "SUM",
+                                       "value":  23,
+                                       "observations":  13,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "kilometersCovered",
+                                       "class":  "SUM",
+                                       "value":  137.43,
+                                       "observations":  17,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "numberOfSprints",
+                                       "class":  "SUM",
+                                       "value":  301,
+                                       "observations":  17,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "topSpeed",
+                                       "class":  "MEAN",
+                                       "value":  32.27,
+                                       "observations":  17,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "metersCoveredHighSpeedRunningKm",
+                                       "class":  "SUM",
+                                       "value":  9.05,
+                                       "observations":  17,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "metersCoveredRunningKm",
+                                       "class":  "SUM",
+                                       "value":  20.65,
+                                       "observations":  17,
+                                       "total":  19
+                                   },
+                                   {
+                                       "metric":  "metersCoveredSprintingKm",
+                                       "class":  "SUM",
+                                       "value":  4.61,
+                                       "observations":  17,
+                                       "total":  19
+                                   }
+                               ]
+               },
+    "provenance":  {
+                       "source":  "playerObservations",
+                       "aggregationVersion":  "player-temporal-1",
+                       "asOf":  "2026-09-26T18:44:25.983Z",
+                       "last5FixtureIds":  [
+                                               "34",
+                                               "45",
+                                               "239",
+                                               "287",
+                                               "347"
+                                           ],
+                       "previous5FixtureIds":  [
+                                                   "1847",
+                                                   "1850",
+                                                   "1801",
+                                                   "61",
+                                                   "28"
+                                               ]
+                   }
+}

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp pre{font:12px/1.5 ui-monospace,Menlo,monospace;background:#f6f5f2;padding:12px 14px;border-radius:4px;margin:0}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">B5</a><span class="dv-tname">Phase B5 · Sign Up · paired with <a href="Login%20Page.dc.html">B4 Login</a></span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440 · interactive: submit empty, mismatch, then valid</div><div class="dv-card" style="width:1440px"><dc-import name="SignupPage" bp="desktop" hint-size="1440px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Tablet 834</div><div class="dv-card" style="width:834px"><dc-import name="SignupPage" bp="tablet" state="filled" hint-size="834px,1000px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Mobile 390 · password mismatch</div><div class="dv-card" style="width:390px"><dc-import name="SignupPage" bp="mobile" state="mismatch" hint-size="390px,844px"></dc-import></div></div>
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Login ↔ Sign up pair, desktop panel</div>
+<div class="dv-card" style="width:900px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+  <div class="st"><b>B4 · SIGN IN</b><dc-import name="LoginPage" frame="panel" annot="{{ false }}" hint-size="100%,520px"></dc-import></div>
+  <div class="st"><b>B5 · SIGN UP</b><dc-import name="SignupPage" frame="panel" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Field + form states</div>
+<div class="dv-card" style="width:1760px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px">
+  <div class="st"><b>DEFAULT</b><dc-import name="SignupPage" frame="panel" state="default" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+  <div class="st"><b>FOCUS · email</b><dc-import name="SignupPage" frame="panel" state="focus" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+  <div class="st"><b>VALIDATION ERROR</b><dc-import name="SignupPage" frame="panel" state="invalid" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+  <div class="st"><b>PASSWORD MISMATCH</b><dc-import name="SignupPage" frame="panel" state="mismatch" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+  <div class="st"><b>SUBMITTING</b><dc-import name="SignupPage" frame="panel" state="submitting" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+  <div class="st"><b>REGISTRATION FAILURE</b><dc-import name="SignupPage" frame="panel" state="failure" annot="{{ false }}" hint-size="100%,640px"></dc-import></div>
+  <div class="st"><b>SUCCESS · transition</b><dc-import name="SignupPage" frame="panel" state="success" annot="{{ true }}" hint-size="100%,340px"></dc-import></div>
+  <div class="st"><b>FILLED</b><dc-import name="SignupPage" frame="panel" state="filled" annot="{{ false }}" hint-size="100%,600px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Sign Up spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>B5 · Sign Up · spec</h2>
+<p style="color:#6b6f76"><span class="v">VERIFIED DESIGN SYSTEM</span> · <span class="p">PROPOSED UX</span> · <span class="d">AUTH IMPLEMENTATION PENDING</span></p>
+
+<h3>1–2 · Compositions</h3>
+<p>Desktop <a class="dv-oid" href="#1a">1a</a> works: submitting empty shows field errors, a mismatch shows the confirm error, and a valid submit shows "Creating account…" and then the success transition. Tablet <a class="dv-oid" href="#1b">1b</a>. Mobile <a class="dv-oid" href="#1c">1c</a>: full-width panel, 12px page margins, three 44px fields, no scroll on an 844px screen.</p>
+
+<h3>3 · Form hierarchy</h3>
+<ol>
+<li>AuthHeader: wordmark + "← Back to PitchTerminal" (same as B4).</li>
+<li>AuthPanel: eyebrow "Sign up" (pairs with "Sign in") → h1 "Create your account" → one sentence.</li>
+<li>Form-level error banner (failure only).</li>
+<li>Email → Password (Show/Hide) → Confirm password (Show/Hide).</li>
+<li>Create account: primary, full width.</li>
+<li>Rule, then "Already have an account? Sign in" → B4.</li>
+<li>AuthFooter: Terms · Privacy · © (same as B4; no consent wording added).</li>
+</ol>
+<p>Not included, as instructed: name, username, phone, country, organisation, role, marketing consent, plan, payment.</p>
+
+<h3>4 · Field states</h3>
+<table>
+<tr><th>State</th><th>Treatment (identical to B4)</th></tr>
+<tr><td>Default</td><td>--raised fill, 1px --line, 44px, label-cap label above</td></tr>
+<tr><td>Focus</td><td>--amber border + 2px amber ring, offset 2</td></tr>
+<tr><td>Filled</td><td>--text value; password masked until Show</td></tr>
+<tr><td>Invalid</td><td>--risk border + "!" message in a reserved 16px slot under the field (so the layout doesn't jump)</td></tr>
+<tr><td>Locked (submitting)</td><td>--panel fill, --faint text, toggles disabled</td></tr>
+</table>
+
+<h3>5 · Validation and errors</h3>
+<table>
+<tr><th>Case</th><th>Copy</th><th>Status</th></tr>
+<tr><td>Empty email</td><td>Enter your email address.</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Malformed email</td><td>Enter a complete email address.</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Empty password</td><td>Enter a password.</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Password rules</td><td>No rules shown; the hint slot under Password is reserved for them</td><td><span class="d">PENDING</span></td></tr>
+<tr><td>Empty confirm</td><td>Confirm your password.</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Mismatch</td><td>Passwords don't match. (on the confirm field only)</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Registration failure</td><td>role="alert" banner: "We couldn't create your account. Please try again." Generic; server reasons (e.g. email already in use) are not surfaced until the auth contract defines them</td><td><span class="d">PENDING</span></td></tr>
+</table>
+<p>Validation runs on submit, then live on the field being corrected. The banner clears on the next edit.</p>
+
+<h3>6 · Submission</h3>
+<p>The button becomes "Creating account…" with the pulse-dot and is disabled. Fields lock, the form gets aria-busy, a polite status announces progress, and a repeat submit is ignored. Same pattern as "Signing in…" in B4.</p>
+
+<h3>7 · Success transition</h3>
+<p>The form is replaced in place by a confirmation in the same panel: ✓ tile (--edge, text + glyph), eyebrow "Account created", h1 "Your account is ready", the email in mono, and a primary "Continue". Focus moves to the h1 and a live region announces it.</p>
+<p>Where Continue goes is <span class="d">PENDING</span>:</p>
+<pre>email verification required? ── yes ─► verification notice (future auth work)
+        │ no
+plan chosen on Pricing (Pro/Elite)? ── yes ─► B6 Checkout
+        │ no
+return to origin page, else Fixtures (Phase C)</pre>
+<p>This transition isn't B7. B7 Subscription Success follows Checkout.</p>
+
+<h3>8 · Responsive</h3>
+<ul>
+<li>Desktop and tablet: 400px panel, top-aligned, padding 32; desktop offset 96px from the header, tablet 96px with 24px side margins.</li>
+<li>Mobile: panel fills the width with 12px margins and padding 24/20; header 52px; all targets 44px; nothing hides. The form stays one column and the same order.</li>
+</ul>
+
+<h3>9 · Accessibility</h3>
+<ul>
+<li>Visible &lt;label for&gt; on all fields. autocomplete="email", and "new-password" on both password fields so managers offer to generate one.</li>
+<li>Tab order: email → password → Show → confirm → Show → Create account → Sign in.</li>
+<li>Errors: aria-invalid + aria-describedby to the message id; "!" glyph and text as well as --risk; focus moves to the first invalid field.</li>
+<li>Failure banner role="alert"; success uses role="status" and moves focus to its heading.</li>
+<li>Show/Hide are buttons with aria-pressed and aria-controls; each controls its own field.</li>
+<li>Contrast follows the Phase A text tiers; the focus ring is the global amber 2px.</li>
+</ul>
+
+<h3>10 · Relationship to B4 Login</h3>
+<table>
+<tr><th>Element</th><th>B4 Login</th><th>B5 Sign Up</th></tr>
+<tr><td>AuthShell / header / footer</td><td colspan="2">Identical: wordmark, "← Back to PitchTerminal", Terms · Privacy · ©</td></tr>
+<tr><td>AuthPanel</td><td colspan="2">Identical: .panel, max 400, padding 32 / 24·20, gap 20</td></tr>
+<tr><td>Eyebrow → h1</td><td>Sign in → Sign in to PitchTerminal</td><td>Sign up → Create your account + one line</td></tr>
+<tr><td>FormField / PasswordField</td><td>Email, Password (current-password)</td><td>Email, Password, Confirm (new-password); reserved error slots</td></tr>
+<tr><td>Secondary on the label row</td><td>Forgot password?</td><td>— (password rules slot, pending)</td></tr>
+<tr><td>Persistence</td><td>Keep me signed in (pending)</td><td>—</td></tr>
+<tr><td>PrimaryButton</td><td>Sign in → Signing in…</td><td>Create account → Creating account…</td></tr>
+<tr><td>Form-level error</td><td>Credentials incorrect</td><td>Couldn't create account</td></tr>
+<tr><td>Cross-link</td><td>Don't have an account? Sign up</td><td>Already have an account? Sign in</td></tr>
+<tr><td>Success</td><td>Navigates away</td><td>In-panel confirmation + Continue</td></tr>
+</table>
+
+<h3>Open auth questions</h3>
+<ol>
+<li>Password rules and whether a strength hint is shown.</li>
+<li>Is email verification required before first sign-in?</li>
+<li>Does sign-up sign the user in immediately?</li>
+<li>What happens with an email that's already registered (copy and privacy stance)?</li>
+<li>Is acknowledgement of Terms/Privacy required at sign-up (B8)?</li>
+<li>How is a plan chosen on Pricing carried into Checkout?</li>
+<li>Rate limiting and bot protection, and where they appear.</li>
+</ol>
+
+<h3>Scope</h3>
+<p>Only B5 was designed. Checkout, Subscription Success, Legal and every Phase C–L page were not. Next: B6 Checkout.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "drop the confirm field's Show toggle" · "put the password-rules slot in view as a placeholder" · "approve B5 and start B6 Checkout"</p>
+</section>
+</x-dc>
+</body>
+</html>

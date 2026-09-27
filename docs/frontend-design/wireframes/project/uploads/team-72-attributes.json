@@ -1,0 +1,290 @@
+﻿{
+    "team":  {
+                 "id":  "72",
+                 "name":  "Palmeiras",
+                 "slug":  "palmeiras-1963"
+             },
+    "scope":  {
+                  "type":  "edition",
+                  "editionId":  "18",
+                  "label":  "edition 18"
+              },
+    "asOf":  "2026-09-26T18:40:40.966Z",
+    "context":  "current edition, completed matches to date",
+    "sample":  {
+                   "completedFixtures":  25,
+                   "classificationFloor":  8
+               },
+    "benchmarkVersion":  "result-edition-cumedist-v1",
+    "provenance":  {
+                       "source":  "teamBenchmark",
+                       "reconstructed":  true,
+                       "immutable":  false
+                   },
+    "insufficientSample":  false,
+    "strengths":  [
+                      {
+                          "key":  "goals_per_match",
+                          "label":  "Goals scored per match",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "HIGHER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "goals_per_match",
+                                           "signalValue":  1.76,
+                                           "benchmark":  {
+                                                             "rank":  2,
+                                                             "teams":  20,
+                                                             "percentile":  0.95,
+                                                             "median":  1.26,
+                                                             "q1":  1.0825,
+                                                             "q3":  1.48
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      },
+                      {
+                          "key":  "scored_in_match_rate",
+                          "label":  "Scoring consistency",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "HIGHER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "scored_in_match_rate",
+                                           "signalValue":  0.88,
+                                           "benchmark":  {
+                                                             "rank":  2,
+                                                             "teams":  20,
+                                                             "percentile":  0.95,
+                                                             "median":  0.76,
+                                                             "q1":  0.6767,
+                                                             "q3":  0.8534
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      },
+                      {
+                          "key":  "goals_conceded_per_match",
+                          "label":  "Goals conceded per match",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "LOWER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "goals_conceded_per_match",
+                                           "signalValue":  0.8,
+                                           "benchmark":  {
+                                                             "rank":  20,
+                                                             "teams":  20,
+                                                             "percentile":  0.05,
+                                                             "median":  1.2866,
+                                                             "q1":  1.12,
+                                                             "q3":  1.5463
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      },
+                      {
+                          "key":  "clean_sheet_rate",
+                          "label":  "Clean-sheet frequency",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "HIGHER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "clean_sheet_rate",
+                                           "signalValue":  0.4,
+                                           "benchmark":  {
+                                                             "rank":  2,
+                                                             "teams":  20,
+                                                             "percentile":  0.95,
+                                                             "median":  0.2196,
+                                                             "q1":  0.1859,
+                                                             "q3":  0.32
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      },
+                      {
+                          "key":  "win_rate",
+                          "label":  "Win rate",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "HIGHER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "win_rate",
+                                           "signalValue":  0.6,
+                                           "benchmark":  {
+                                                             "rank":  1,
+                                                             "teams":  20,
+                                                             "percentile":  1,
+                                                             "median":  0.3531,
+                                                             "q1":  0.2725,
+                                                             "q3":  0.4154
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      },
+                      {
+                          "key":  "points_per_match",
+                          "label":  "Points per match",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "HIGHER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "points_per_match",
+                                           "signalValue":  2.08,
+                                           "benchmark":  {
+                                                             "rank":  1,
+                                                             "teams":  20,
+                                                             "percentile":  1,
+                                                             "median":  1.3059,
+                                                             "q1":  1.0704,
+                                                             "q3":  1.6039
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      },
+                      {
+                          "key":  "negative_goal_difference_fixture_rate",
+                          "label":  "Losing-margin fixture frequency",
+                          "type":  "strength",
+                          "level":  "TOP_QUARTILE",
+                          "direction":  "HIGHER_IS_MORE",
+                          "qualityOrientation":  "LOWER_IS_BETTER",
+                          "evidence":  {
+                                           "signalKey":  "negative_goal_difference_fixture_rate",
+                                           "signalValue":  0.12,
+                                           "benchmark":  {
+                                                             "rank":  20,
+                                                             "teams":  20,
+                                                             "percentile":  0.05,
+                                                             "median":  0.375,
+                                                             "q1":  0.3008,
+                                                             "q3":  0.4591
+                                                         },
+                                           "teamFixtures":  25
+                                       }
+                      }
+                  ],
+    "weaknesses":  [
+
+                   ],
+    "tendencies":  [
+                       {
+                           "key":  "total_goals_3plus_rate",
+                           "label":  "3+ Total Goals",
+                           "type":  "tendency",
+                           "level":  "TOP_QUARTILE",
+                           "direction":  "NEUTRAL",
+                           "qualityOrientation":  "NEUTRAL",
+                           "evidence":  {
+                                            "signalKey":  "total_goals_3plus_rate",
+                                            "signalValue":  0.56,
+                                            "benchmark":  {
+                                                              "rank":  4,
+                                                              "teams":  20,
+                                                              "percentile":  0.85,
+                                                              "median":  0.49,
+                                                              "q1":  0.4125,
+                                                              "q3":  0.56
+                                                          },
+                                            "teamFixtures":  25
+                                        }
+                       },
+                       {
+                           "key":  "one_nil_win_rate",
+                           "label":  "1-0 wins",
+                           "type":  "tendency",
+                           "level":  "TOP_QUARTILE",
+                           "direction":  "HIGHER_IS_MORE",
+                           "qualityOrientation":  "NEUTRAL",
+                           "evidence":  {
+                                            "signalKey":  "one_nil_win_rate",
+                                            "signalValue":  0.2,
+                                            "benchmark":  {
+                                                              "rank":  1,
+                                                              "teams":  20,
+                                                              "percentile":  1,
+                                                              "median":  0.0784,
+                                                              "q1":  0.0417,
+                                                              "q3":  0.12
+                                                          },
+                                            "teamFixtures":  25
+                                        }
+                       }
+                   ],
+    "statistical":  {
+                        "scope":  {
+                                      "type":  "edition",
+                                      "editionId":  "18",
+                                      "label":  "edition 18"
+                                  },
+                        "asOf":  "2026-09-26T18:40:41.806Z",
+                        "context":  "current edition, completed matches to date",
+                        "sample":  {
+                                       "completedFixtures":  25,
+                                       "classificationFloor":  8
+                                   },
+                        "benchmarkVersion":  "stat-edition-cumedist-v1",
+                        "provenance":  {
+                                           "source":  "teamObservations",
+                                           "reconstructed":  true,
+                                           "immutable":  false
+                                       },
+                        "insufficientSample":  false,
+                        "strengths":  [
+                                          {
+                                              "key":  "errorsLeadToShot",
+                                              "label":  "Errors leading to a shot",
+                                              "type":  "strength",
+                                              "level":  "TOP_QUARTILE",
+                                              "direction":  "HIGHER_IS_MORE",
+                                              "qualityOrientation":  "LOWER_IS_BETTER",
+                                              "evidence":  {
+                                                               "signalKey":  "errorsLeadToShot",
+                                                               "signalValue":  0.6,
+                                                               "benchmark":  {
+                                                                                 "rank":  16,
+                                                                                 "teams":  20,
+                                                                                 "percentile":  0.25,
+                                                                                 "median":  0.8167,
+                                                                                 "q1":  0.7,
+                                                                                 "q3":  1
+                                                                             },
+                                                               "usableSample":  10
+                                                           }
+                                          }
+                                      ],
+                        "weaknesses":  [
+                                           {
+                                               "key":  "bigChanceCreated",
+                                               "label":  "Big chances created",
+                                               "type":  "weakness",
+                                               "level":  "BOTTOM_QUARTILE",
+                                               "direction":  "HIGHER_IS_MORE",
+                                               "qualityOrientation":  "HIGHER_IS_BETTER",
+                                               "evidence":  {
+                                                                "signalKey":  "bigChanceCreated",
+                                                                "signalValue":  1.7391,
+                                                                "benchmark":  {
+                                                                                  "rank":  17,
+                                                                                  "teams":  20,
+                                                                                  "percentile":  0.2,
+                                                                                  "median":  2.245,
+                                                                                  "q1":  1.7562,
+                                                                                  "q3":  2.4837
+                                                                              },
+                                                                "usableSample":  23
+                                                            }
+                                           }
+                                       ],
+                        "tendencies":  [
+
+                                       ]
+                    }
+}

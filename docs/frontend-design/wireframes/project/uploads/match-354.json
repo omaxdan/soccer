@@ -1,0 +1,978 @@
+﻿{
+    "match":  {
+                  "fixtureId":  "354",
+                  "kickoffAt":  "2026-09-07T23:00:00.000Z",
+                  "status":  "COMPLETED",
+                  "competition":  {
+                                      "id":  "28",
+                                      "name":  "Brasileirão Betano",
+                                      "slug":  "brasileirao-betano-325"
+                                  },
+                  "edition":  {
+                                  "id":  "18",
+                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                              },
+                  "homeTeam":  {
+                                   "id":  "71",
+                                   "name":  "Vitória",
+                                   "slug":  "vitoria-1962"
+                               },
+                  "awayTeam":  {
+                                   "id":  "66",
+                                   "name":  "Grêmio",
+                                   "slug":  "gremio-5926"
+                               },
+                  "score":  {
+                                "home":  1,
+                                "away":  0
+                            }
+              },
+    "form":  {
+                 "home":  [
+                              {
+                                  "fixtureId":  "297",
+                                  "kickoffAt":  "2026-08-29T21:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "290",
+                                  "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "246",
+                                  "kickoffAt":  "2026-08-16T21:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "51",
+                                  "kickoffAt":  "2026-08-09T22:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "35",
+                                  "kickoffAt":  "2026-07-30T00:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  4
+                              },
+                              {
+                                  "fixtureId":  "30",
+                                  "kickoffAt":  "2026-07-26T22:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "67",
+                                  "kickoffAt":  "2026-07-23T22:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "57",
+                                  "kickoffAt":  "2026-07-16T22:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1784",
+                                  "kickoffAt":  "2026-05-30T23:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  3
+                              },
+                              {
+                                  "fixtureId":  "1809",
+                                  "kickoffAt":  "2026-05-23T20:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1807",
+                                  "kickoffAt":  "2026-05-17T21:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1850",
+                                  "kickoffAt":  "2026-05-09T21:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1840",
+                                  "kickoffAt":  "2026-05-02T21:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  4,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "1835",
+                                  "kickoffAt":  "2026-04-26T21:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  3
+                              },
+                              {
+                                  "fixtureId":  "1881",
+                                  "kickoffAt":  "2026-04-18T23:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1870",
+                                  "kickoffAt":  "2026-04-11T19:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1862",
+                                  "kickoffAt":  "2026-04-05T19:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "1852",
+                                  "kickoffAt":  "2026-04-01T23:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  3
+                              },
+                              {
+                                  "fixtureId":  "1905",
+                                  "kickoffAt":  "2026-03-22T21:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1938",
+                                  "kickoffAt":  "2026-03-14T21:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  0
+                              }
+                          ],
+                 "away":  [
+                              {
+                                  "fixtureId":  "291",
+                                  "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "244",
+                                  "kickoffAt":  "2026-08-16T19:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  3
+                              },
+                              {
+                                  "fixtureId":  "42",
+                                  "kickoffAt":  "2026-08-08T19:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "28",
+                                  "kickoffAt":  "2026-07-26T21:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "60",
+                                  "kickoffAt":  "2026-07-17T23:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1783",
+                                  "kickoffAt":  "2026-05-30T20:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  3
+                              },
+                              {
+                                  "fixtureId":  "1812",
+                                  "kickoffAt":  "2026-05-23T22:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  3,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1804",
+                                  "kickoffAt":  "2026-05-17T19:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "1797",
+                                  "kickoffAt":  "2026-05-10T22:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "1842",
+                                  "kickoffAt":  "2026-05-02T23:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1833",
+                                  "kickoffAt":  "2026-04-26T19:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1822",
+                                  "kickoffAt":  "2026-04-18T23:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1873",
+                                  "kickoffAt":  "2026-04-11T23:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1868",
+                                  "kickoffAt":  "2026-04-05T23:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  0,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1857",
+                                  "kickoffAt":  "2026-04-03T00:30:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1903",
+                                  "kickoffAt":  "2026-03-22T19:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  2
+                              },
+                              {
+                                  "fixtureId":  "1895",
+                                  "kickoffAt":  "2026-03-19T22:00:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  0
+                              },
+                              {
+                                  "fixtureId":  "1887",
+                                  "kickoffAt":  "2026-03-16T23:00:00.000Z",
+                                  "isHome":  false,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "1937",
+                                  "kickoffAt":  "2026-03-13T00:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  1,
+                                  "goalsAgainst":  1
+                              },
+                              {
+                                  "fixtureId":  "1925",
+                                  "kickoffAt":  "2026-02-26T00:30:00.000Z",
+                                  "isHome":  true,
+                                  "goalsFor":  2,
+                                  "goalsAgainst":  1
+                              }
+                          ]
+             },
+    "recentVenueForm":  {
+                            "home":  {
+                                         "lastHome":  [
+                                                          {
+                                                              "fixtureId":  "290",
+                                                              "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  2,
+                                                              "opponent":  {
+                                                                               "id":  "62",
+                                                                               "name":  "Bahia",
+                                                                               "slug":  "bahia-1955"
+                                                                           },
+                                                              "venueName":  "Estádio Manoel Barradas",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "246",
+                                                              "kickoffAt":  "2026-08-16T21:30:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  0,
+                                                              "opponent":  {
+                                                                               "id":  "61",
+                                                                               "name":  "Botafogo",
+                                                                               "slug":  "botafogo-1958"
+                                                                           },
+                                                              "venueName":  "Estádio Manoel Barradas",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "35",
+                                                              "kickoffAt":  "2026-07-30T00:30:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  4,
+                                                              "opponent":  {
+                                                                               "id":  "72",
+                                                                               "name":  "Palmeiras",
+                                                                               "slug":  "palmeiras-1963"
+                                                                           },
+                                                              "venueName":  "Estádio Manoel Barradas",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "57",
+                                                              "kickoffAt":  "2026-07-16T22:30:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  0,
+                                                              "opponent":  {
+                                                                               "id":  "58",
+                                                                               "name":  "Vasco da Gama",
+                                                                               "slug":  "vasco-da-gama-1974"
+                                                                           },
+                                                              "venueName":  "Estádio Manoel Barradas",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1809",
+                                                              "kickoffAt":  "2026-05-23T20:00:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  2,
+                                                              "goalsAgainst":  0,
+                                                              "opponent":  {
+                                                                               "id":  "55",
+                                                                               "name":  "Internacional",
+                                                                               "slug":  "internacional-1966"
+                                                                           },
+                                                              "venueName":  "Estádio Manoel Barradas",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          }
+                                                      ],
+                                         "lastAway":  [
+                                                          {
+                                                              "fixtureId":  "297",
+                                                              "kickoffAt":  "2026-08-29T21:30:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  2,
+                                                              "opponent":  {
+                                                                               "id":  "73",
+                                                                               "name":  "Atlético Mineiro",
+                                                                               "slug":  "atletico-mineiro-1977"
+                                                                           },
+                                                              "venueName":  "Arena MRV",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "51",
+                                                              "kickoffAt":  "2026-08-09T22:30:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  2,
+                                                              "opponent":  {
+                                                                               "id":  "68",
+                                                                               "name":  "Flamengo",
+                                                                               "slug":  "flamengo-5981"
+                                                                           },
+                                                              "venueName":  "Estádio do Maracanã",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "30",
+                                                              "kickoffAt":  "2026-07-26T22:30:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  2,
+                                                              "opponent":  {
+                                                                               "id":  "70",
+                                                                               "name":  "Remo",
+                                                                               "slug":  "remo-2012"
+                                                                           },
+                                                              "venueName":  "Mangueirão",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "67",
+                                                              "kickoffAt":  "2026-07-23T22:30:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  0,
+                                                              "opponent":  {
+                                                                               "id":  "61",
+                                                                               "name":  "Botafogo",
+                                                                               "slug":  "botafogo-1958"
+                                                                           },
+                                                              "venueName":  "Estádio Nilton Santos",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1784",
+                                                              "kickoffAt":  "2026-05-30T23:00:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  3,
+                                                              "opponent":  {
+                                                                               "id":  "56",
+                                                                               "name":  "Santos",
+                                                                               "slug":  "santos-1968"
+                                                                           },
+                                                              "venueName":  "Estádio Urbano Caldeira",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          }
+                                                      ]
+                                     },
+                            "away":  {
+                                         "lastHome":  [
+                                                          {
+                                                              "fixtureId":  "42",
+                                                              "kickoffAt":  "2026-08-08T19:00:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  2,
+                                                              "goalsAgainst":  1,
+                                                              "opponent":  {
+                                                                               "id":  "69",
+                                                                               "name":  "São Paulo",
+                                                                               "slug":  "sao-paulo-1981"
+                                                                           },
+                                                              "venueName":  "Arena do Grêmio",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "28",
+                                                              "kickoffAt":  "2026-07-26T21:30:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  1,
+                                                              "opponent":  {
+                                                                               "id":  "67",
+                                                                               "name":  "Fluminense",
+                                                                               "slug":  "fluminense-1961"
+                                                                           },
+                                                              "venueName":  "Arena do Grêmio",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1783",
+                                                              "kickoffAt":  "2026-05-30T20:30:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  3,
+                                                              "opponent":  {
+                                                                               "id":  "63",
+                                                                               "name":  "Corinthians",
+                                                                               "slug":  "corinthians-1957"
+                                                                           },
+                                                              "venueName":  "Arena do Grêmio",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1812",
+                                                              "kickoffAt":  "2026-05-23T22:00:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  3,
+                                                              "goalsAgainst":  2,
+                                                              "opponent":  {
+                                                                               "id":  "56",
+                                                                               "name":  "Santos",
+                                                                               "slug":  "santos-1968"
+                                                                           },
+                                                              "venueName":  "Arena do Grêmio",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1797",
+                                                              "kickoffAt":  "2026-05-10T22:30:00.000Z",
+                                                              "isHome":  true,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  1,
+                                                              "opponent":  {
+                                                                               "id":  "68",
+                                                                               "name":  "Flamengo",
+                                                                               "slug":  "flamengo-5981"
+                                                                           },
+                                                              "venueName":  "Arena do Grêmio",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          }
+                                                      ],
+                                         "lastAway":  [
+                                                          {
+                                                              "fixtureId":  "291",
+                                                              "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  1,
+                                                              "opponent":  {
+                                                                               "id":  "64",
+                                                                               "name":  "Red Bull Bragantino",
+                                                                               "slug":  "red-bull-bragantino-1999"
+                                                                           },
+                                                              "venueName":  "Estádio Cícero de Souza Marques",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "244",
+                                                              "kickoffAt":  "2026-08-16T19:00:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  3,
+                                                              "opponent":  {
+                                                                               "id":  "73",
+                                                                               "name":  "Atlético Mineiro",
+                                                                               "slug":  "atletico-mineiro-1977"
+                                                                           },
+                                                              "venueName":  "Arena MRV",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "60",
+                                                              "kickoffAt":  "2026-07-17T23:00:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  2,
+                                                              "opponent":  {
+                                                                               "id":  "59",
+                                                                               "name":  "Mirassol",
+                                                                               "slug":  "mirassol-21982"
+                                                                           },
+                                                              "venueName":  "Estádio José Maria de Campos Maia",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1804",
+                                                              "kickoffAt":  "2026-05-17T19:00:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  1,
+                                                              "goalsAgainst":  1,
+                                                              "opponent":  {
+                                                                               "id":  "62",
+                                                                               "name":  "Bahia",
+                                                                               "slug":  "bahia-1955"
+                                                                           },
+                                                              "venueName":  "Arena Fonte Nova",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          },
+                                                          {
+                                                              "fixtureId":  "1842",
+                                                              "kickoffAt":  "2026-05-02T23:30:00.000Z",
+                                                              "isHome":  false,
+                                                              "goalsFor":  0,
+                                                              "goalsAgainst":  0,
+                                                              "opponent":  {
+                                                                               "id":  "54",
+                                                                               "name":  "Athletico",
+                                                                               "slug":  "athletico-1967"
+                                                                           },
+                                                              "venueName":  "Arena da Baixada",
+                                                              "competition":  {
+                                                                                  "id":  "28",
+                                                                                  "name":  "Brasileirão Betano",
+                                                                                  "slug":  "brasileirao-betano-325"
+                                                                              }
+                                                          }
+                                                      ]
+                                     }
+                        },
+    "intelligence":  {
+                         "home":  {
+                                      "readiness":  {
+                                                        "moduleKey":  "readiness_tracker",
+                                                        "status":  "INACTIVE",
+                                                        "strength":  null,
+                                                        "confidence":  null,
+                                                        "sampleObservationCount":  0,
+                                                        "sampleMeetsThreshold":  false,
+                                                        "asOf":  "2026-09-07T23:00:00.000Z",
+                                                        "verdictText":  null,
+                                                        "inactiveReason":  "FEATURE_ABSENT",
+                                                        "evidence":  null
+                                                    },
+                                      "homeAwaySplit":  {
+                                                            "moduleKey":  "home_away_split",
+                                                            "status":  "SUPPORTS",
+                                                            "strength":  null,
+                                                            "confidence":  null,
+                                                            "sampleObservationCount":  4,
+                                                            "sampleMeetsThreshold":  true,
+                                                            "asOf":  "2026-09-07T23:00:00.000Z",
+                                                            "verdictText":  "Pronounced home/away split: home minus away win rate is 50.00 points.",
+                                                            "inactiveReason":  null,
+                                                            "evidence":  {
+                                                                             "declaredInputCount":  2,
+                                                                             "presentInputCount":  2,
+                                                                             "belowThresholdInputCount":  0,
+                                                                             "estimatedInputCount":  0,
+                                                                             "items":  [
+                                                                                           {
+                                                                                               "featureKey":  "team.away_win_rate",
+                                                                                               "displayName":  "Away win rate",
+                                                                                               "value":  0,
+                                                                                               "asOf":  "2026-09-07T23:00:00.000Z",
+                                                                                               "contributionDirection":  "SUPPORTS"
+                                                                                           },
+                                                                                           {
+                                                                                               "featureKey":  "team.home_win_rate",
+                                                                                               "displayName":  "Home win rate",
+                                                                                               "value":  50,
+                                                                                               "asOf":  "2026-09-07T23:00:00.000Z",
+                                                                                               "contributionDirection":  "SUPPORTS"
+                                                                                           }
+                                                                                       ]
+                                                                         }
+                                                        }
+                                  },
+                         "away":  {
+                                      "readiness":  {
+                                                        "moduleKey":  "readiness_tracker",
+                                                        "status":  "INACTIVE",
+                                                        "strength":  null,
+                                                        "confidence":  null,
+                                                        "sampleObservationCount":  0,
+                                                        "sampleMeetsThreshold":  false,
+                                                        "asOf":  "2026-09-07T23:00:00.000Z",
+                                                        "verdictText":  null,
+                                                        "inactiveReason":  "FEATURE_ABSENT",
+                                                        "evidence":  null
+                                                    },
+                                      "homeAwaySplit":  {
+                                                            "moduleKey":  "home_away_split",
+                                                            "status":  "SUPPORTS",
+                                                            "strength":  null,
+                                                            "confidence":  null,
+                                                            "sampleObservationCount":  2,
+                                                            "sampleMeetsThreshold":  true,
+                                                            "asOf":  "2026-09-07T23:00:00.000Z",
+                                                            "verdictText":  "Pronounced home/away split: home minus away win rate is 50.00 points.",
+                                                            "inactiveReason":  null,
+                                                            "evidence":  {
+                                                                             "declaredInputCount":  2,
+                                                                             "presentInputCount":  2,
+                                                                             "belowThresholdInputCount":  0,
+                                                                             "estimatedInputCount":  0,
+                                                                             "items":  [
+                                                                                           {
+                                                                                               "featureKey":  "team.away_win_rate",
+                                                                                               "displayName":  "Away win rate",
+                                                                                               "value":  0,
+                                                                                               "asOf":  "2026-09-07T23:00:00.000Z",
+                                                                                               "contributionDirection":  "SUPPORTS"
+                                                                                           },
+                                                                                           {
+                                                                                               "featureKey":  "team.home_win_rate",
+                                                                                               "displayName":  "Home win rate",
+                                                                                               "value":  50,
+                                                                                               "asOf":  "2026-09-07T23:00:00.000Z",
+                                                                                               "contributionDirection":  "SUPPORTS"
+                                                                                           }
+                                                                                       ]
+                                                                         }
+                                                        }
+                                  }
+                     },
+    "teamFeatures":  {
+                         "home":  {
+                                      "homeForm":  {
+                                                       "value":  34,
+                                                       "sampleObservationCount":  4,
+                                                       "sampleMeetsThreshold":  false,
+                                                       "asOf":  "2026-09-07T23:00:00.000Z",
+                                                       "direction":  "HIGHER_IS_STRONGER",
+                                                       "unit":  "index"
+                                                   },
+                                      "awayForm":  {
+                                                       "value":  5.67,
+                                                       "sampleObservationCount":  4,
+                                                       "sampleMeetsThreshold":  false,
+                                                       "asOf":  "2026-09-07T23:00:00.000Z",
+                                                       "direction":  "HIGHER_IS_STRONGER",
+                                                       "unit":  "index"
+                                                   },
+                                      "momentum":  {
+                                                       "value":  -3,
+                                                       "sampleObservationCount":  10,
+                                                       "sampleMeetsThreshold":  true,
+                                                       "asOf":  "2026-08-23T19:00:00.000Z",
+                                                       "direction":  "HIGHER_IS_STRONGER",
+                                                       "unit":  "points"
+                                                   },
+                                      "rest":  {
+                                                   "value":  9.1,
+                                                   "sampleObservationCount":  1,
+                                                   "sampleMeetsThreshold":  true,
+                                                   "asOf":  "2026-09-07T23:00:00.000Z",
+                                                   "direction":  "HIGHER_IS_STRONGER",
+                                                   "unit":  "days"
+                                               },
+                                      "congestion":  {
+                                                         "value":  10,
+                                                         "sampleObservationCount":  3,
+                                                         "sampleMeetsThreshold":  true,
+                                                         "asOf":  "2026-09-07T23:00:00.000Z",
+                                                         "direction":  "LOWER_IS_STRONGER",
+                                                         "unit":  "index"
+                                                     }
+                                  },
+                         "away":  {
+                                      "homeForm":  {
+                                                       "value":  22.67,
+                                                       "sampleObservationCount":  2,
+                                                       "sampleMeetsThreshold":  false,
+                                                       "asOf":  "2026-09-07T23:00:00.000Z",
+                                                       "direction":  "HIGHER_IS_STRONGER",
+                                                       "unit":  "index"
+                                                   },
+                                      "awayForm":  {
+                                                       "value":  0,
+                                                       "sampleObservationCount":  3,
+                                                       "sampleMeetsThreshold":  false,
+                                                       "asOf":  "2026-09-07T23:00:00.000Z",
+                                                       "direction":  "HIGHER_IS_STRONGER",
+                                                       "unit":  "index"
+                                                   },
+                                      "momentum":  {
+                                                       "value":  -4,
+                                                       "sampleObservationCount":  10,
+                                                       "sampleMeetsThreshold":  true,
+                                                       "asOf":  "2026-08-23T19:00:00.000Z",
+                                                       "direction":  "HIGHER_IS_STRONGER",
+                                                       "unit":  "points"
+                                                   },
+                                      "rest":  {
+                                                   "value":  15.2,
+                                                   "sampleObservationCount":  1,
+                                                   "sampleMeetsThreshold":  true,
+                                                   "asOf":  "2026-09-07T23:00:00.000Z",
+                                                   "direction":  "HIGHER_IS_STRONGER",
+                                                   "unit":  "days"
+                                               },
+                                      "congestion":  {
+                                                         "value":  0,
+                                                         "sampleObservationCount":  2,
+                                                         "sampleMeetsThreshold":  false,
+                                                         "asOf":  "2026-09-07T23:00:00.000Z",
+                                                         "direction":  "LOWER_IS_STRONGER",
+                                                         "unit":  "index"
+                                                     }
+                                  }
+                     },
+    "matchModules":  [
+                         {
+                             "moduleKey":  "travel_impact",
+                             "status":  "CONTRADICTS",
+                             "strength":  null,
+                             "confidence":  null,
+                             "sampleObservationCount":  2,
+                             "sampleMeetsThreshold":  true,
+                             "asOf":  "2026-09-07T23:00:00.000Z",
+                             "verdictText":  "Home travelled 447 km farther.",
+                             "inactiveReason":  null,
+                             "evidence":  null
+                         },
+                         {
+                             "moduleKey":  "rest_advantage",
+                             "status":  "CONTRADICTS",
+                             "strength":  null,
+                             "confidence":  null,
+                             "sampleObservationCount":  1,
+                             "sampleMeetsThreshold":  true,
+                             "asOf":  "2026-09-07T23:00:00.000Z",
+                             "verdictText":  "Away fresher: 6.1 days more rest.",
+                             "inactiveReason":  null,
+                             "evidence":  null
+                         },
+                         {
+                             "moduleKey":  "form_gap_accuracy",
+                             "status":  "SUPPORTS",
+                             "strength":  null,
+                             "confidence":  null,
+                             "sampleObservationCount":  3,
+                             "sampleMeetsThreshold":  true,
+                             "asOf":  "2026-09-07T23:00:00.000Z",
+                             "verdictText":  "Home venue form stronger by 34.00.",
+                             "inactiveReason":  null,
+                             "evidence":  null
+                         }
+                     ],
+    "historicalResponse":  {
+                               "home":  {
+                                            "subjectKind":  "TEAM",
+                                            "subjectId":  "71",
+                                            "scope":  "ALL_COMPETITIONS",
+                                            "asOf":  "2026-09-07T23:00:00.000Z",
+                                            "triggers":  {
+                                                             "POST_WIN":  {
+                                                                              "engaged":  false,
+                                                                              "n":  8,
+                                                                              "response":  {
+                                                                                               "wins":  0,
+                                                                                               "draws":  3,
+                                                                                               "losses":  5
+                                                                                           }
+                                                                          },
+                                                             "POST_LOSS":  {
+                                                                               "engaged":  true,
+                                                                               "n":  11,
+                                                                               "response":  {
+                                                                                                "wins":  5,
+                                                                                                "draws":  2,
+                                                                                                "losses":  4
+                                                                                            }
+                                                                           }
+                                                         },
+                                            "anyEngaged":  true,
+                                            "provenance":  {
+                                                               "source":  "football.fixture+football.result",
+                                                               "mode":  "READ_MODEL",
+                                                               "version":  "historical-response-v1"
+                                                           },
+                                            "version":  "historical-response-v1"
+                                        },
+                               "away":  {
+                                            "subjectKind":  "TEAM",
+                                            "subjectId":  "66",
+                                            "scope":  "ALL_COMPETITIONS",
+                                            "asOf":  "2026-09-07T23:00:00.000Z",
+                                            "triggers":  {
+                                                             "POST_WIN":  {
+                                                                              "engaged":  false,
+                                                                              "n":  6,
+                                                                              "response":  {
+                                                                                               "wins":  0,
+                                                                                               "draws":  2,
+                                                                                               "losses":  4
+                                                                                           }
+                                                                          },
+                                                             "POST_LOSS":  {
+                                                                               "engaged":  false,
+                                                                               "n":  9,
+                                                                               "response":  {
+                                                                                                "wins":  3,
+                                                                                                "draws":  3,
+                                                                                                "losses":  3
+                                                                                            }
+                                                                           }
+                                                         },
+                                            "anyEngaged":  false,
+                                            "provenance":  {
+                                                               "source":  "football.fixture+football.result",
+                                                               "mode":  "READ_MODEL",
+                                                               "version":  "historical-response-v1"
+                                                           },
+                                            "version":  "historical-response-v1"
+                                        }
+                           }
+}

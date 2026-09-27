@@ -1,0 +1,21 @@
+﻿{
+    "venue":  {
+                  "id":  "309",
+                  "name":  "Estádio Doutor Oswaldo Teixeira Duarte",
+                  "city":  "Sao Paulo",
+                  "countryCode":  "BR",
+                  "latitude":  -23.520523,
+                  "longitude":  -46.618704,
+                  "elevationMetres":  null,
+                  "timezoneName":  null,
+                  "capacity":  21004,
+                  "surface":  null
+              },
+    "homeTeams":  [
+
+                  ],
+    "coverage":  {
+                     "venue":  "present",
+                     "homeTeams":  "absent"
+                 }
+}

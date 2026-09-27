@@ -1,0 +1,44 @@
+﻿{
+    "editions":  [
+                     {
+                         "id":  "147",
+                         "seasonLabel":  "Bundesliga 26/27",
+                         "competition":  {
+                                             "id":  "157",
+                                             "name":  "Austrian Bundesliga",
+                                             "slug":  "austrian-bundesliga-45"
+                                         },
+                         "fixtureCount":  135
+                     },
+                     {
+                         "id":  "18",
+                         "seasonLabel":  "Brasileiro Serie A 2026",
+                         "competition":  {
+                                             "id":  "28",
+                                             "name":  "Brasileirão Betano",
+                                             "slug":  "brasileirao-betano-325"
+                                         },
+                         "fixtureCount":  286
+                     },
+                     {
+                         "id":  "148",
+                         "seasonLabel":  "Bundesliga 26/27",
+                         "competition":  {
+                                             "id":  "158",
+                                             "name":  "Bundesliga",
+                                             "slug":  "bundesliga-35"
+                                         },
+                         "fixtureCount":  306
+                     },
+                     {
+                         "id":  "143",
+                         "seasonLabel":  "Premier League 26/27",
+                         "competition":  {
+                                             "id":  "153",
+                                             "name":  "Premier League",
+                                             "slug":  "premier-league-17"
+                                         },
+                         "fixtureCount":  380
+                     }
+                 ]
+}

@@ -1,0 +1,161 @@
+﻿{
+    "country":  {
+                    "code":  "BR",
+                    "name":  "Brazil",
+                    "alpha3Code":  "BRA"
+                },
+    "teams":  [
+                  {
+                      "id":  "54",
+                      "name":  "Athletico",
+                      "slug":  "athletico-1967",
+                      "shortName":  "Athletico",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "73",
+                      "name":  "Atlético Mineiro",
+                      "slug":  "atletico-mineiro-1977",
+                      "shortName":  "Atlético-MG",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "62",
+                      "name":  "Bahia",
+                      "slug":  "bahia-1955",
+                      "shortName":  "Bahia",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "61",
+                      "name":  "Botafogo",
+                      "slug":  "botafogo-1958",
+                      "shortName":  "Botafogo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "57",
+                      "name":  "Chapecoense",
+                      "slug":  "chapecoense-21845",
+                      "shortName":  "Chapecoense",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "63",
+                      "name":  "Corinthians",
+                      "slug":  "corinthians-1957",
+                      "shortName":  "Corinthians",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "65",
+                      "name":  "Coritiba",
+                      "slug":  "coritiba-1982",
+                      "shortName":  "Coritiba",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "60",
+                      "name":  "Cruzeiro",
+                      "slug":  "cruzeiro-1954",
+                      "shortName":  "Cruzeiro",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "68",
+                      "name":  "Flamengo",
+                      "slug":  "flamengo-5981",
+                      "shortName":  "Flamengo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "67",
+                      "name":  "Fluminense",
+                      "slug":  "fluminense-1961",
+                      "shortName":  "Fluminense",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "66",
+                      "name":  "Grêmio",
+                      "slug":  "gremio-5926",
+                      "shortName":  "Grêmio",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "55",
+                      "name":  "Internacional",
+                      "slug":  "internacional-1966",
+                      "shortName":  "Internacional",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "59",
+                      "name":  "Mirassol",
+                      "slug":  "mirassol-21982",
+                      "shortName":  "Mirassol",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "72",
+                      "name":  "Palmeiras",
+                      "slug":  "palmeiras-1963",
+                      "shortName":  "Palmeiras",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "64",
+                      "name":  "Red Bull Bragantino",
+                      "slug":  "red-bull-bragantino-1999",
+                      "shortName":  "RB Bragantino",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "70",
+                      "name":  "Remo",
+                      "slug":  "remo-2012",
+                      "shortName":  "Remo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "56",
+                      "name":  "Santos",
+                      "slug":  "santos-1968",
+                      "shortName":  "Santos",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "69",
+                      "name":  "São Paulo",
+                      "slug":  "sao-paulo-1981",
+                      "shortName":  "São Paulo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "58",
+                      "name":  "Vasco da Gama",
+                      "slug":  "vasco-da-gama-1974",
+                      "shortName":  "Vasco",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "71",
+                      "name":  "Vitória",
+                      "slug":  "vitoria-1962",
+                      "shortName":  "Vitória",
+                      "countryCode":  "BR"
+                  }
+              ],
+    "competitions":  [
+                         {
+                             "id":  "28",
+                             "name":  "Brasileirão Betano",
+                             "slug":  "brasileirao-betano-325"
+                         }
+                     ],
+    "coverage":  {
+                     "country":  "present",
+                     "teams":  "present",
+                     "competitions":  "present"
+                 }
+}

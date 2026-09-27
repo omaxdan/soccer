@@ -1,0 +1,294 @@
+﻿{
+    "edition":  {
+                    "id":  "18",
+                    "seasonLabel":  "Brasileiro Serie A 2026"
+                },
+    "competition":  {
+                        "id":  "28",
+                        "name":  "Brasileirão Betano",
+                        "slug":  "brasileirao-betano-325"
+                    },
+    "scope":  {
+                  "editionId":  "18",
+                  "label":  "Brasileirão Betano Brasileiro Serie A 2026"
+              },
+    "asOf":  "2026-09-26T18:39:40.206Z",
+    "aggregation":  {
+                        "version":  "edition-temporal-1"
+                    },
+    "comparisonStatus":  "available",
+    "sample":  {
+                   "eligibleObservations":  250,
+                   "requiredForComparison":  10
+               },
+    "windows":  {
+                    "last5":  {
+                                  "status":  "complete",
+                                  "observationCount":  5,
+                                  "windowSize":  5,
+                                  "from":  "2026-09-06T19:00:00.000Z",
+                                  "to":  "2026-09-07T23:00:00.000Z",
+                                  "fixtureIds":  [
+                                                     "350",
+                                                     "351",
+                                                     "352",
+                                                     "353",
+                                                     "354"
+                                                 ]
+                              },
+                    "previous5":  {
+                                      "status":  "complete",
+                                      "observationCount":  5,
+                                      "windowSize":  5,
+                                      "from":  "2026-09-05T19:00:00.000Z",
+                                      "to":  "2026-09-06T19:00:00.000Z",
+                                      "fixtureIds":  [
+                                                         "345",
+                                                         "346",
+                                                         "347",
+                                                         "348",
+                                                         "349"
+                                                     ]
+                                  }
+                },
+    "results":  {
+                    "last5":  {
+                                  "matchesCompleted":  5,
+                                  "homeWins":  2,
+                                  "draws":  1,
+                                  "awayWins":  2,
+                                  "homeWinPct":  40,
+                                  "drawPct":  20,
+                                  "awayWinPct":  40,
+                                  "goals":  {
+                                                "total":  13,
+                                                "home":  7,
+                                                "away":  6,
+                                                "perMatch":  2.6
+                                            },
+                                  "cleanSheets":  {
+                                                      "home":  2,
+                                                      "away":  1,
+                                                      "total":  3
+                                                  }
+                              },
+                    "previous5":  {
+                                      "matchesCompleted":  5,
+                                      "homeWins":  2,
+                                      "draws":  0,
+                                      "awayWins":  3,
+                                      "homeWinPct":  40,
+                                      "drawPct":  0,
+                                      "awayWinPct":  60,
+                                      "goals":  {
+                                                    "total":  12,
+                                                    "home":  6,
+                                                    "away":  6,
+                                                    "perMatch":  2.4
+                                                },
+                                      "cleanSheets":  {
+                                                          "home":  2,
+                                                          "away":  1,
+                                                          "total":  3
+                                                      }
+                                  },
+                    "change":  {
+                                   "matchesCompleted":  0,
+                                   "homeWins":  0,
+                                   "draws":  1,
+                                   "awayWins":  -1,
+                                   "goalsTotal":  1,
+                                   "goalsHome":  1,
+                                   "goalsAway":  0,
+                                   "cleanSheetsTotal":  0,
+                                   "goalsPerMatch":  0.2
+                               }
+                },
+    "comparisons":  [
+                        {
+                            "metric":  "expectedGoals",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  16.73,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  13.93,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  -2.8,
+                            "changeType":  "absolute",
+                            "percentageChange":  -16.7,
+                            "direction":  "DOWN"
+                        },
+                        {
+                            "metric":  "shots",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  109,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  111,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  2,
+                            "changeType":  "absolute",
+                            "percentageChange":  1.8,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "shotsOnTarget",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  47,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  53,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  6,
+                            "changeType":  "absolute",
+                            "percentageChange":  12.8,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "yellowCards",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  24,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  29,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  5,
+                            "changeType":  "absolute",
+                            "percentageChange":  20.8,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "redCards",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  1,
+                                              "observations":  1,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  2,
+                                          "observations":  2,
+                                          "windowSize":  5
+                                      },
+                            "change":  1,
+                            "changeType":  "absolute",
+                            "percentageChange":  100,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "fouls",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  136,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  145,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  9,
+                            "changeType":  "absolute",
+                            "percentageChange":  6.6,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "kilometersCovered",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  970.47,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  974.37,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  3.9,
+                            "changeType":  "absolute",
+                            "percentageChange":  0.4,
+                            "direction":  "UP"
+                        },
+                        {
+                            "metric":  "numberOfSprints",
+                            "class":  "SUM",
+                            "previous5":  {
+                                              "value":  915,
+                                              "observations":  5,
+                                              "windowSize":  5
+                                          },
+                            "last5":  {
+                                          "value":  933,
+                                          "observations":  5,
+                                          "windowSize":  5
+                                      },
+                            "change":  18,
+                            "changeType":  "absolute",
+                            "percentageChange":  2,
+                            "direction":  "UP"
+                        }
+                    ],
+    "current":  {
+                    "sequenceIndex":  250,
+                    "throughFixtureId":  "354",
+                    "throughKickoffAt":  "2026-09-07T23:00:00.000Z",
+                    "matchesCompleted":  250,
+                    "goals":  {
+                                  "total":  653,
+                                  "home":  370,
+                                  "away":  283
+                              },
+                    "cleanSheets":  {
+                                        "home":  74,
+                                        "away":  46,
+                                        "total":  120
+                                    }
+                },
+    "provenance":  {
+                       "source":  "editionObservations",
+                       "statSource":  "team_match_statistic (bounded window reconstruction)",
+                       "aggregationVersion":  "edition-temporal-1",
+                       "asOf":  "2026-09-26T18:39:40.206Z",
+                       "last5FixtureIds":  [
+                                               "350",
+                                               "351",
+                                               "352",
+                                               "353",
+                                               "354"
+                                           ],
+                       "previous5FixtureIds":  [
+                                                   "345",
+                                                   "346",
+                                                   "347",
+                                                   "348",
+                                                   "349"
+                                               ],
+                       "boundaries":  {
+                                          "previousBoundarySequence":  240,
+                                          "previousEndSequence":  245,
+                                          "lastEndSequence":  250
+                                      }
+                   }
+}

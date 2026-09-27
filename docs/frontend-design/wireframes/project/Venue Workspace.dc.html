@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:28px 0 10px;padding-top:14px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul{padding-left:20px;margin:0}.sp code{font:12px ui-monospace,Menlo,monospace;background:#f2f0ec;padding:1px 4px;border-radius:3px}.sp pre{font:12px/1.5 ui-monospace,Menlo,monospace;background:#f6f5f2;padding:12px 14px;border-radius:4px;margin:0}.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;background:#fff0cf;color:#8a5a00}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">H</a><span class="dv-tname">Phase H · Venue workspace · venue-309 payload (+ match-354 venue reference)</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>A / F · Overview · Estádio Doutor Oswaldo Teixeira Duarte · tabs clickable</div><div class="dv-card" style="width:1440px"><dc-import name="VenueWorkspace" bp="desktop" venue="309" hint-size="1440px,800px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>E · Matches · none referenced (venue 309)</div><div class="dv-card" style="width:1440px"><dc-import name="VenueWorkspace" bp="desktop" venue="309" tab="matches" hint-size="1440px,700px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>D · Matches · Estádio Manoel Barradas, reached from Match 354</div><div class="dv-card" style="width:1440px"><dc-import name="VenueWorkspace" bp="desktop" venue="30" tab="matches" hint-size="1440px,700px"></dc-import></div></div>
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Tablet 834 · Overview</div><div class="dv-card" style="width:834px"><dc-import name="VenueWorkspace" bp="tablet" venue="309" hint-size="834px,1000px"></dc-import></div></div>
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>K · Mobile · Overview</div><div class="dv-card" style="width:390px"><dc-import name="VenueWorkspace" bp="mobile" venue="309" hint-size="390px,1200px"></dc-import></div></div>
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>K · Mobile · Matches</div><div class="dv-card" style="width:390px"><dc-import name="VenueWorkspace" bp="mobile" venue="30" tab="matches" hint-size="390px,800px"></dc-import></div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>States</div>
+<div class="dv-card" style="width:2200px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
+  <div class="st"><b>B · LIMITED METADATA</b><dc-import name="VenueWorkspace" frame="panel" state="limited" hint-size="100%,560px"></dc-import></div>
+  <div class="st"><b>C · WITH HOME TEAM · structural</b><dc-import name="VenueWorkspace" frame="panel" state="teams" hint-size="100%,600px"></dc-import></div>
+  <div class="st"><b>G · LOCATION UNAVAILABLE</b><dc-import name="VenueWorkspace" frame="panel" state="noLocation" hint-size="100%,560px"></dc-import></div>
+  <div class="st"><b>H · MATCHES LOADING</b><dc-import name="VenueWorkspace" frame="panel" tab="matches" state="matchesLoading" hint-size="100%,520px"></dc-import></div>
+  <div class="st"><b>I · MATCHES FAILED</b><dc-import name="VenueWorkspace" frame="panel" tab="matches" state="matchesFailed" hint-size="100%,440px"></dc-import></div>
+  <div class="st"><b>J · VENUE NOT FOUND</b><dc-import name="VenueWorkspace" frame="panel" state="notFound" hint-size="100%,320px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Phase H spec</div>
+<div class="dv-card sp" style="width:960px;box-sizing:border-box">
+<h2>Phase H · Venue workspace · spec</h2>
+<p style="color:#6b6f76">venue-309: <code>venue</code> {name, city, countryCode, latitude, longitude, capacity; elevationMetres, timezoneName and surface are null}, <code>homeTeams: []</code>, <code>coverage.homeTeams = absent</code>. There is no venue-matches endpoint. The match-354 venue payload supplies the second venue and its one known match.</p>
+<h3>1–4 · Header, identity, location, details</h3>
+<ul><li>Header: eyebrow VENUE · h1 name · "Sao Paulo · Brazil" (city exactly as supplied; country from <code>countryCode</code>) · Capacity 21,004 on the right. No image or crest.</li>
+<li>Location panel: City · Country · Latitude · Longitude as text, next to a provider-neutral <b>location marker</b> (grid + marker, no map tiles, no provider). The text always carries the information; the marker has an aria-label with the coordinates. No address is shown or geocoded.</li>
+<li>Venue details: capacity only, with a line noting that surface, elevation and time zone aren't recorded. No empty rows.</li></ul>
+<h3>5–6 · Teams and competitions</h3>
+<p>"Home teams" shows "No home team is recorded for this venue." (<code>homeTeams</code> absent). With data, it lists team links → E tagged HOME VENUE (structural example in <a class="dv-oid" href="#1g">1g</a>). A team is never linked from a single match, or from Team.homeVenueName, which is a name, not an id. No competition association is supplied, so none is shown.</p>
+<h3>7–8 · Matches</h3>
+<ul><li>A venue-first list: date and competition · home · score · away · FT → Match (F). The table grammar follows Phase C/D.</li>
+<li>Header note: "From match records · not a complete list". No count is shown, because no endpoint guarantees completeness.</li>
+<li>Venue 309: no match references, so "No associated matches available. This doesn't mean no matches were played here."</li>
+<li>Venue 30 (reached from Match 354): the one referenced match, Vitória 1–0 Grêmio, 7 Sep 2026.</li>
+<li>A dedicated venue→matches endpoint is <span class="d">PENDING</span>. The tab is ready for it.</li></ul>
+<h3>9 · History</h3><p>Not created: no longitudinal venue data exists.</p>
+<h3>10–13 · States</h3><p>Limited metadata · location unavailable · home team (structural) · matches loading / failed · not found. All are section-level; the header always renders.</p>
+<h3>14–16 · Layout</h3><p>Desktop 7 / 5 (location | details + teams). Tablet stacks, and the location panel keeps text and marker side by side. Mobile stacks the marker below the text, uses stacked match rows and 44px tabs.</p>
+<h3>17 · Accessibility</h3><p>h1 venue → h2 panels; tabs use role=tab; dl for details; the marker has an aria-label; match rows have a full spoken summary; FT is a word + glyph.</p>
+<h3>18–20 · Navigation</h3><pre>Venue ─► Team (when homeTeams present)   ·   Venue ─► Match (rows)   ·   Venue ─► Competition (only if supplied; not today)
+Match header venue link ─► Venue (breadcrumb shows the match you came from)</pre>
+<p>Scope: Phase H only. Next: Phase I · Search.</p>
+</div></div>
+</div>
+</section>
+</x-dc>
+</body>
+</html>

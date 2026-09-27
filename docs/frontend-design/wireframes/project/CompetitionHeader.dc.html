@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="background:var(--ink);border-bottom:1px solid var(--line);font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--text)">
+<sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}">
+<div style="padding:20px 32px 0;display:flex;flex-direction:column;gap:18px">
+  <nav style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font:400 11px ui-monospace,Menlo,monospace;color:var(--faint)">
+    <a style="color:var(--faint);text-decoration:none" style-hover="color:var(--text)">Competitions</a><span>/</span>
+    <a style="color:var(--faint);text-decoration:none" style-hover="color:var(--text)">Brazil</a><span>/</span>
+    <a style="color:var(--faint);text-decoration:none" style-hover="color:var(--text)">Brasileirão Betano</a><span>/</span>
+    <span style="color:var(--text-secondary)">Brasileiro Serie A 2026</span>
+    <sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">country.name · competition.name · edition.seasonLabel</span></sc-if>
+  </nav>
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:20px 32px">
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="width:52px;height:52px;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+        <span style="font:600 14px ui-monospace,Menlo,monospace;color:var(--text)">BR</span>
+        <span style="font:400 9px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--faint)">BRA</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+        <div style="display:flex;gap:8px;align-items:center"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Brazil · Competition</span><sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">country.code · alpha3Code · name</span></sc-if></div>
+        <div style="display:flex;gap:8px;align-items:center"><h1 style="margin:0;font:600 28px/1.1 ui-sans-serif,system-ui,sans-serif;letter-spacing:-.01em;color:var(--text)">Brasileirão Betano</h1><sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">competition.name</span></sc-if></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button style="display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;font:400 13px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary);cursor:pointer" style-hover="background:var(--raised)">Brasileiro Serie A 2026<span style="color:var(--faint);font-size:10px">▾</span></button>
+          <sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">competition.editions[] → edition.seasonLabel</span></sc-if>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+      <div style="display:flex;background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="padding:10px 18px;display:flex;flex-direction:column;gap:4px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Fixtures</span><span style="font:500 18px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;color:var(--text)">286</span></div>
+        <div style="padding:10px 18px;display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Table as of</span><span style="font:500 18px ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;color:var(--text)">11 Aug 2026</span></div>
+        <div style="padding:10px 18px;display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line)"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Table view</span><span style="font:500 18px ui-monospace,Menlo,monospace;color:var(--text)">Overall</span></div>
+      </div>
+      <sc-if value="{{ annot }}"><span style="font:500 9px ui-monospace,Menlo,monospace;color:var(--cool);border:1px dashed var(--cool);padding:1px 4px;border-radius:3px">editions[].fixtureCount · tables[].asOf · coverage.variantsPresent</span></sc-if>
+    </div>
+  </div>
+  <div style="display:flex;gap:28px">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+      <a style="padding:10px 0 12px;font:500 13px ui-sans-serif,system-ui,sans-serif;color:{{ t.color }};border-bottom:2px solid {{ t.border }};text-decoration:none;cursor:pointer" style-hover="color:var(--text)">{{ t.label }}</a>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+<sc-if value="{{ mobile }}" hint-placeholder-val="{{ false }}">
+<div style="padding:12px 16px 0;display:flex;flex-direction:column;gap:12px">
+  <a style="font:400 11px ui-monospace,Menlo,monospace;color:var(--faint);text-decoration:none">‹ Brazil</a>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="width:40px;height:40px;flex:none;background:var(--panel);border:1px solid var(--line);border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+      <span style="font:600 12px ui-monospace,Menlo,monospace;color:var(--text)">BR</span>
+      <span style="font:400 8px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--faint)">BRA</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+      <span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Brazil · Competition</span>
+      <h1 style="margin:0;font:600 20px/1.15 ui-sans-serif,system-ui,sans-serif;color:var(--text)">Brasileirão Betano</h1>
+    </div>
+  </div>
+  <button style="display:flex;align-items:center;justify-content:space-between;min-height:44px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 12px;font:400 14px ui-sans-serif,system-ui,sans-serif;color:var(--text-secondary)">Brasileiro Serie A 2026<span style="color:var(--faint);font-size:10px">▾</span></button>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+    <div style="background:var(--panel);padding:8px 10px;display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Fixtures</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">286</span></div>
+    <div style="background:var(--panel);padding:8px 10px;display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">As of</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">11 Aug 2026</span></div>
+    <div style="background:var(--panel);padding:8px 10px;display:flex;flex-direction:column;gap:3px"><span style="font:400 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">View</span><span style="font:500 13px ui-monospace,Menlo,monospace;color:var(--text)">Overall</span></div>
+  </div>
+  <div style="display:flex;gap:24px;overflow-x:auto;scrollbar-width:none">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+      <a style="flex:none;padding:12px 0;font:500 14px ui-sans-serif,system-ui,sans-serif;color:{{ t.color }};border-bottom:2px solid {{ t.border }};text-decoration:none">{{ t.label }}</a>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:220},&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;wide&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;wide&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;table&quot;,&quot;fixtures&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;annot&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const tab = this.props.tab ?? 'overview';
+    const mobile = this.props.layout === 'mobile';
+    return {
+      wide: !mobile, mobile, annot: !!this.props.annot && !mobile,
+      tabs: ['Overview', 'Table', 'Fixtures'].map(l => {
+        const on = l.toLowerCase() === tab;
+        return { label: l, color: on ? 'var(--text)' : 'var(--muted)', border: on ? 'var(--amber)' : 'transparent' };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

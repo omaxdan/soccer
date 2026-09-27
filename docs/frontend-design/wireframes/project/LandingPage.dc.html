@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}</style></helmet>
+<div style="container-type:inline-size;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text)">
+<dc-import name="AppHeader" layout="{{ headerLayout }}" auth="anon" hint-size="100%,56px"></dc-import>
+<main>
+
+<section aria-labelledby="hero-h" data-screen-label="Hero" style="max-width:1152px;margin:0 auto;padding:clamp(40px,6cqi,88px) 16px clamp(40px,5cqi,72px);box-sizing:border-box;display:grid;grid-template-columns:{{ heroCols }};gap:clamp(32px,4cqi,56px);align-items:center">
+  <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+    <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Football intelligence</span>
+    <h1 id="hero-h" style="margin:0;font-weight:700;font-size:clamp(34px,4cqi,54px);line-height:1.04;letter-spacing:-.025em;color:var(--text);text-wrap:balance">The evidence behind every fixture.</h1>
+    <p style="margin:0;font:400 16px/1.6 Inter,sans-serif;color:var(--text-secondary);max-width:480px;text-wrap:pretty">PitchTerminal brings fixtures, team form, match context and historical patterns into one structured view, so you can read a match from the evidence up.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;padding-top:4px">
+      <a style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;background:var(--amber);border:1px solid var(--amber);border-radius:4px;font:600 11px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:none;cursor:pointer;flex:{{ ctaFlex }}" style-hover="box-shadow:0 0 0 1px var(--amber-dim),0 0 24px -8px var(--amber);color:var(--ink)">Explore fixtures</a>
+      <a href="#how" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 20px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;cursor:pointer;flex:{{ ctaFlex }}" style-hover="border-color:var(--muted);color:var(--text)">How it works</a>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>Observed match data</span><span>·</span><span>Evidence on every reading</span><span>·</span><span>No odds, no picks</span></div>
+  </div>
+
+  <figure style="margin:0;display:flex;flex-direction:column;gap:8px;min-width:0">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 1px 0 0 rgba(255,255,255,.02) inset,0 8px 24px -12px rgba(0,0,0,.6);overflow:hidden">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><span style="color:var(--cool)">Brazil</span><span style="color:var(--faint)">/</span><span style="color:var(--cool)">Brasileirão Betano</span><span style="color:var(--faint)">/</span><span style="color:var(--muted)">Botafogo v Palmeiras</span></div>
+      <div style="padding:16px 14px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center">
+        <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end;min-width:0"><span style="font:600 15px Inter,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Botafogo</span><span aria-hidden="true" style="width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 10px 'JetBrains Mono',monospace;color:var(--muted)">BOT</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="font:700 24px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--text)">0<span style="color:var(--faint);margin:0 6px">–</span>0</span><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px solid var(--muted);border-radius:4px;padding:1px 6px">■ FT</span></div>
+        <div style="display:flex;align-items:center;gap:10px;min-width:0"><span aria-hidden="true" style="width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 10px 'JetBrains Mono',monospace;color:var(--muted)">PAL</span><span style="font:600 15px Inter,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Palmeiras</span></div>
+      </div>
+      <div style="display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none">
+        <sc-for list="{{ matchTabs }}" as="t" hint-placeholder-count="8"><span style="flex:none;padding:8px 8px;font:500 9.5px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ t.color }};border-bottom:2px solid {{ t.border }};margin-bottom:-1px">{{ t.label }}</span></sc-for>
+      </div>
+      <div style="padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center;border-bottom:1px solid var(--line)">
+        <div style="display:flex;gap:4px;justify-content:flex-end"><sc-for list="{{ formHome }}" as="f" hint-placeholder-count="5"><span title="{{ f.word }}" aria-label="{{ f.word }}" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:{{ f.c }};background:color-mix(in srgb,{{ f.c }} 15%,transparent);border:1px solid color-mix(in srgb,{{ f.c }} 40%,transparent);border-radius:4px">{{ f.r }}</span></sc-for></div>
+        <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:center">Last 5</span>
+        <div style="display:flex;gap:4px"><sc-for list="{{ formAway }}" as="f" hint-placeholder-count="5"><span title="{{ f.word }}" aria-label="{{ f.word }}" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:{{ f.c }};background:color-mix(in srgb,{{ f.c }} 15%,transparent);border:1px solid color-mix(in srgb,{{ f.c }} 40%,transparent);border-radius:4px">{{ f.r }}</span></sc-for></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:5px 14px;background:var(--raised);border-bottom:1px solid var(--line);font:400 9.6px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)"><span>Brasileirão Betano · Sun 6 Sep</span><span style="color:var(--faint)">6</span></div>
+      <div style="padding:4px 6px 6px">
+        <sc-for list="{{ previewRows }}" as="r" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:44px minmax(0,1fr) 52px minmax(0,1fr) 34px;gap:10px;align-items:center;height:34px;padding:0 8px;border-radius:4px;background:{{ r.bg }};border:1px solid {{ r.border }};cursor:pointer" style-hover="background:var(--raised)">
+            <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.time }}</span>
+            <span style="font-family:Inter,sans-serif;font-size:13px;text-align:right;font-weight:{{ r.hw }};color:{{ r.hc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span>
+            <span style="text-align:center;font:600 12px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--text)">{{ r.hs }}<span style="color:var(--faint)"> – </span>{{ r.as }}</span>
+            <span style="font-family:Inter,sans-serif;font-size:13px;font-weight:{{ r.aw }};color:{{ r.ac }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span>
+            <span style="justify-self:end;font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted)">FT</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <figcaption style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Product UI with recorded data · Brasileirão Betano, 6 Sep 2026 (BRT)</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="cap-h" data-screen-label="Capabilities" style="max-width:1152px;margin:0 auto;padding:clamp(40px,5cqi,72px) 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px;border-top:1px solid var(--line)">
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:640px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">What you get</span><h2 id="cap-h" style="margin:0;font-weight:700;font-size:clamp(24px,2.3cqi,32px);line-height:1.15;letter-spacing:-.015em">What you can read in PitchTerminal</h2></div>
+  <div style="display:grid;grid-template-columns:{{ capCols }};gap:12px">
+    <article style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber)">01</span>
+      <h3 style="margin:0;font:600 17px Inter,sans-serif;color:var(--text)">Fixtures &amp; results</h3>
+      <p style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">Every match by country and competition, with kickoff, status and final score.</p>
+      <div style="margin-top:auto;display:grid;grid-template-columns:minmax(0,1fr) 52px minmax(0,1fr) 30px;gap:8px;align-items:center;height:34px;padding:0 10px;border-radius:4px;background:color-mix(in srgb,var(--raised) 40%,transparent)"><span style="font:600 13px Inter,sans-serif;text-align:right;color:var(--text)">Cruzeiro</span><span style="text-align:center;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">3<span style="color:var(--faint)"> – </span>1</span><span style="font:500 13px Inter,sans-serif;color:var(--text-secondary)">Athletico</span><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted)">FT</span></div>
+    </article>
+    <article style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber)">02</span>
+      <h3 style="margin:0;font:600 17px Inter,sans-serif;color:var(--text)">Team form &amp; readiness</h3>
+      <p style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">How each side has been playing going into a match, result by result.</p>
+      <div style="margin-top:auto;display:flex;align-items:center;gap:10px;height:34px"><span style="font:500 13px Inter,sans-serif;color:var(--text)">Palmeiras</span><div style="display:flex;gap:4px"><sc-for list="{{ formAway }}" as="f" hint-placeholder-count="5"><span aria-label="{{ f.word }}" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:{{ f.c }};background:color-mix(in srgb,{{ f.c }} 15%,transparent);border:1px solid color-mix(in srgb,{{ f.c }} 40%,transparent);border-radius:4px">{{ f.r }}</span></sc-for></div></div>
+    </article>
+    <article style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber)">03</span>
+      <h3 style="margin:0;font:600 17px Inter,sans-serif;color:var(--text)">Match intelligence</h3>
+      <p style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">Readings that say whether the evidence supports or contradicts a side, with the evidence attached.</p>
+      <div style="margin-top:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:34px"><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--edge);border:1px solid var(--edge);border-radius:4px;padding:1px 6px">SUPPORTS</span><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px solid var(--muted);border-radius:4px;padding:1px 6px">NEUTRAL</span><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--risk);border:1px solid var(--risk);border-radius:4px;padding:1px 6px">CONTRADICTS</span></div>
+    </article>
+  </div>
+  <div style="display:flex;flex-direction:column">
+    <sc-for list="{{ supporting }}" as="s" hint-placeholder-count="4">
+      <div style="display:grid;grid-template-columns:{{ supCols }};gap:8px 24px;align-items:baseline;padding:16px 4px;border-top:1px solid var(--line)">
+        <h3 style="margin:0;font:600 15px Inter,sans-serif;color:var(--text)">{{ s.title }}</h3>
+        <p style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">{{ s.body }}</p>
+        <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ s.where }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="how" aria-labelledby="how-h" data-screen-label="Intelligence model" style="background:var(--panel);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div style="max-width:1152px;margin:0 auto;padding:clamp(40px,5cqi,72px) 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:640px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">How it works</span><h2 id="how-h" style="margin:0;font-weight:700;font-size:clamp(24px,2.3cqi,32px);line-height:1.15;letter-spacing:-.015em">From fixture to intelligence</h2><p style="margin:0;font:400 15px/1.6 Inter,sans-serif;color:var(--text-secondary)">A score tells you what happened. PitchTerminal layers what surrounds it, step by step.</p></div>
+    <ol style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:{{ flowCols }};gap:12px">
+      <sc-for list="{{ flow }}" as="s" hint-placeholder-count="5">
+        <li style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:4px;background:{{ s.bg }};border:1px solid {{ s.border }}">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 11px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ s.numColor }}">{{ s.n }}</span><span aria-hidden="true" style="font:400 14px 'JetBrains Mono',monospace;color:var(--faint)">{{ s.arrow }}</span></div>
+          <h3 style="margin:0;font:600 15px Inter,sans-serif;color:var(--text)">{{ s.title }}</h3>
+          <p style="margin:0;font:400 13px/1.5 Inter,sans-serif;color:var(--text-secondary)">{{ s.body }}</p>
+        </li>
+      </sc-for>
+    </ol>
+  </div>
+</section>
+
+<section aria-labelledby="ev-h" data-screen-label="Evidence" style="max-width:1152px;margin:0 auto;padding:clamp(48px,6cqi,88px) 16px;box-sizing:border-box;display:grid;grid-template-columns:{{ evCols }};gap:clamp(28px,4cqi,56px);align-items:start">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Evidence first</span>
+    <h2 id="ev-h" style="margin:0;font-weight:700;font-size:clamp(28px,3cqi,40px);line-height:1.1;letter-spacing:-.02em;text-wrap:balance">Every reading shows its working.</h2>
+    <div style="margin-top:8px;background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Reading</span><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--faint);border-radius:4px;padding:1px 6px">◌ STATUS</span></div>
+      <span style="font:400 14px Inter,sans-serif;color:var(--faint)">Not enough data yet</span>
+      <div style="padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>Why? · evidence</span><span>sample —</span></div>
+    </div>
+    <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">A reading with too little evidence says so, instead of guessing.</span>
+  </div>
+  <dl style="margin:0;display:flex;flex-direction:column">
+    <sc-for list="{{ principles }}" as="p" hint-placeholder-count="4">
+      <div style="display:grid;grid-template-columns:{{ prCols }};gap:6px 24px;padding:18px 0;border-top:1px solid var(--line)">
+        <dt style="font:600 15px Inter,sans-serif;color:var(--text)">{{ p.title }}</dt>
+        <dd style="margin:0;font:400 14px/1.6 Inter,sans-serif;color:var(--text-secondary)">{{ p.body }}</dd>
+      </div>
+    </sc-for>
+  </dl>
+</section>
+
+<section aria-labelledby="aud-h" data-screen-label="Audience" style="border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div style="max-width:1152px;margin:0 auto;padding:clamp(36px,4cqi,56px) 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:24px">
+    <h2 id="aud-h" style="margin:0;font-weight:700;font-size:clamp(22px,2cqi,28px);letter-spacing:-.01em">Built for people who read football closely</h2>
+    <ul style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:{{ audCols }};gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+      <sc-for list="{{ audience }}" as="a" hint-placeholder-count="4">
+        <li style="background:var(--ink);padding:18px 20px;display:flex;flex-direction:column;gap:6px"><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text)">{{ a.who }}</span><span style="font:400 14px/1.5 Inter,sans-serif;color:var(--text-secondary)">{{ a.what }}</span></li>
+      </sc-for>
+    </ul>
+  </div>
+</section>
+
+<section aria-labelledby="price-h" data-screen-label="Pricing bridge" style="max-width:1152px;margin:0 auto;padding:clamp(48px,6cqi,88px) 16px;box-sizing:border-box">
+  <div style="display:grid;grid-template-columns:{{ tierCols }};gap:12px;align-items:stretch">
+    <div style="display:flex;flex-direction:column;gap:12px;padding:4px 12px 4px 0">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Access</span>
+      <h2 id="price-h" style="margin:0;font-weight:700;font-size:clamp(24px,2.3cqi,32px);line-height:1.15;letter-spacing:-.015em">Choose how deep you go</h2>
+      <p style="margin:0;font:400 15px/1.6 Inter,sans-serif;color:var(--text-secondary)">Different levels of access open different depths of the product. Plans and details are on the pricing page.</p>
+      <a style="align-self:flex-start;display:inline-flex;align-items:center;min-height:40px;padding:0 16px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;cursor:pointer" style-hover="border-color:var(--muted);color:var(--text)">View pricing →</a>
+    </div>
+    <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="2">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:12px">
+        <span style="align-self:flex-start;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ t.chipColor }};background:{{ t.chipBg }};border:1px solid {{ t.chipBorder }};border-radius:4px;padding:1px 6px">{{ t.chip }}</span>
+        <h3 style="margin:0;font:600 17px Inter,sans-serif;color:var(--text)">{{ t.name }}</h3>
+        <p style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">{{ t.body }}</p>
+        <span style="margin-top:auto;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Price and inclusions defined in Pricing</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section aria-labelledby="cta-h" data-screen-label="Final CTA" style="background:var(--panel);border-top:1px solid var(--amber-dim);border-bottom:1px solid var(--line)">
+  <div style="max-width:1152px;margin:0 auto;padding:clamp(56px,7cqi,104px) 16px;box-sizing:border-box;display:flex;flex-direction:column;align-items:{{ ctaAlign }};text-align:{{ ctaText }};gap:18px">
+    <h2 id="cta-h" style="margin:0;font-weight:700;font-size:clamp(32px,3.8cqi,52px);line-height:1.05;letter-spacing:-.025em;text-wrap:balance">See what the evidence says.</h2>
+    <p style="margin:0;font:400 16px/1.6 Inter,sans-serif;color:var(--text-secondary);max-width:520px">Start with the fixtures and follow the evidence into any match.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:{{ ctaAlign }};width:{{ ctaWidth }}">
+      <a style="display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;background:var(--amber);border:1px solid var(--amber);border-radius:4px;font:600 12px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:none;cursor:pointer;flex:{{ ctaFlex }}" style-hover="box-shadow:0 0 0 1px var(--amber-dim),0 0 24px -8px var(--amber);color:var(--ink)">Explore fixtures</a>
+      <a style="display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;background:transparent;border:1px solid var(--line);border-radius:4px;font:500 12px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;cursor:pointer;flex:{{ ctaFlex }}" style-hover="background:var(--raised);color:var(--text)">View pricing</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer data-screen-label="Footer" style="max-width:1152px;margin:0 auto;padding:40px 16px 32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px">
+  <div style="display:grid;grid-template-columns:{{ footCols }};gap:28px 24px">
+    <div style="display:flex;flex-direction:column;gap:8px;grid-column:{{ brandSpan }}"><span style="font:700 15px Inter,sans-serif;color:var(--text)">Pitch<span style="color:var(--amber)">Terminal</span></span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Football Intelligence</span></div>
+    <sc-for list="{{ footer }}" as="g" hint-placeholder-count="4">
+      <nav aria-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:10px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ g.title }}</span>
+        <sc-for list="{{ g.links }}" as="l" hint-placeholder-count="3"><a style="font:400 13px Inter,sans-serif;color:var(--text-secondary);text-decoration:none;cursor:pointer" style-hover="color:var(--text)">{{ l }}</a></sc-for>
+      </nav>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding-top:16px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>© PitchTerminal</span><span>Football intelligence. Not betting advice.</span></div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop';
+    const D = bp === 'desktop', M = bp === 'mobile';
+    const RC = { W: ['var(--edge)', 'Win'], D: ['var(--muted)', 'Draw'], L: ['var(--risk)', 'Loss'] };
+    const form = s => s.split('').map(r => ({ r, c: RC[r][0], word: RC[r][1] }));
+    const Z = 'color-mix(in srgb, var(--raised) 40%, transparent)';
+    const FX = [['352','18:30','Botafogo','Palmeiras',0,0],['348','11:00','Coritiba','Mirassol',1,2],['349','16:00','Remo','Flamengo',0,1],['350','16:00','Internacional','Santos',2,3],['351','16:00','Cruzeiro','Athletico',3,1],['353','19:30','Corinthians','Chapecoense',1,2]];
+    const order = ['348','349','350','351','352','353'];
+    let rows = order.map(id => FX.find(f => f[0] === id));
+    if (M) rows = rows.filter(f => ['351','352','353'].includes(f[0]));
+    const previewRows = rows.map(([id, time, home, away, hs, as], i) => {
+      const sel = id === '352';
+      return { time, home, away, hs, as,
+        hw: hs > as ? 600 : 500, aw: as > hs ? 600 : 500,
+        hc: hs < as ? 'var(--text-secondary)' : 'var(--text)', ac: as < hs ? 'var(--text-secondary)' : 'var(--text)',
+        bg: sel ? 'var(--raised)' : 'transparent', border: sel ? 'var(--amber-dim)' : 'transparent' };
+    });
+    const flow = [
+      ['Fixture', 'The match itself: teams, kickoff, status and result.'],
+      ['Context', 'Where it sits: the competition, the table, the venue.'],
+      ['Team performance', 'How each side has been playing: form, readiness and attributes.'],
+      ['Historical patterns', 'What has happened before between these sides and in similar matches.'],
+      ['Match intelligence', 'Readings on which way the evidence points, with the evidence attached.']
+    ].map(([title, body], i, a) => ({ n: String(i + 1).padStart(2, '0'), title, body,
+      arrow: i === a.length - 1 ? '' : (D ? '→' : '↓'),
+      bg: i === a.length - 1 ? 'var(--raised)' : 'var(--ink)', border: i === a.length - 1 ? 'var(--amber-dim)' : 'var(--line)',
+      numColor: i === a.length - 1 ? 'var(--amber)' : 'var(--muted)' }));
+    return {
+      headerLayout: bp,
+      heroCols: D ? 'minmax(0,5fr) minmax(0,7fr)' : '1fr',
+      capCols: D ? 'repeat(3,minmax(0,1fr))' : '1fr',
+      supCols: D ? '220px minmax(0,1fr) 260px' : M ? '1fr' : '200px minmax(0,1fr)',
+      flowCols: D ? 'repeat(5,minmax(0,1fr))' : '1fr',
+      evCols: D ? 'minmax(0,5fr) minmax(0,7fr)' : '1fr',
+      prCols: M ? '1fr' : '200px minmax(0,1fr)',
+      audCols: D ? 'repeat(4,minmax(0,1fr))' : M ? '1fr' : 'repeat(2,minmax(0,1fr))',
+      tierCols: D ? 'minmax(0,1.3fr) repeat(2,minmax(0,1fr))' : M ? '1fr' : 'repeat(2,minmax(0,1fr))',
+      footCols: D ? 'minmax(0,2fr) repeat(4,minmax(0,1fr))' : M ? 'repeat(2,minmax(0,1fr))' : 'repeat(4,minmax(0,1fr))',
+      brandSpan: D ? 'auto' : '1 / -1',
+      ctaAlign: M ? 'stretch' : 'center', ctaText: M ? 'left' : 'center', ctaWidth: M ? '100%' : 'auto', ctaFlex: M ? '1 1 100%' : '0 0 auto',
+      matchTabs: ['Overview','Comparison','Form','Lineups','H2H','Statistics','Venue','Intelligence'].map((l, i) => ({ label: l, color: i === 2 ? 'var(--text)' : 'var(--muted)', border: i === 2 ? 'var(--amber)' : 'transparent' })),
+      formHome: form('WDLLD'), formAway: form('WDLWD'),
+      previewRows, flow,
+      supporting: [
+        { title: 'Match context', body: 'Competition, standing and venue around each fixture, so a result is never read in isolation.', where: 'Match · Overview, Venue' },
+        { title: 'Historical patterns', body: 'Previous meetings and recurring patterns, shown alongside the match they relate to.', where: 'Match · H2H' },
+        { title: 'Performance', body: 'Side-by-side comparison of how two teams have been performing.', where: 'Match · Comparison' },
+        { title: 'Statistical attributes', body: 'Descriptive team and player attributes drawn from recorded matches.', where: 'Match · Statistics · Teams' }
+      ],
+      principles: [
+        { title: 'Observed, not assumed', body: 'Readings are built from recorded match data, not opinion or tips.' },
+        { title: 'Missing stays missing', body: 'Where data does not exist you see a dash. Never a zero, never a guess.' },
+        { title: 'Sample size on show', body: 'Each reading states how much evidence it rests on.' },
+        { title: 'Direction, not certainty', body: 'Readings say whether the evidence supports or contradicts. They do not tell you what will happen.' }
+      ],
+      audience: [
+        { who: 'Analysts', what: 'Structured, comparable data across teams and competitions.' },
+        { who: 'Scouts', what: 'Form and attributes in context, not in isolation.' },
+        { who: 'Journalists', what: 'Checkable facts and patterns behind a story.' },
+        { who: 'Serious fans', what: 'A deeper read of the match before kickoff.' }
+      ],
+      tiers: [
+        { chip: '○ OPEN', chipColor: 'var(--cool)', chipBg: 'transparent', chipBorder: 'var(--cool)', name: 'Explore', body: 'Browse fixtures, results and competitions.' },
+        { chip: '■ SUBSCRIBER', chipColor: 'var(--amber)', chipBg: 'var(--amber-dim)', chipBorder: 'transparent', name: 'Go deeper', body: 'Unlock the deeper intelligence layers of each match.' }
+      ],
+      footer: [
+        { title: 'Product', links: ['Features', 'Pricing'] },
+        { title: 'Explore', links: ['Fixtures', 'Competitions', 'Teams', 'Players'] },
+        { title: 'Account', links: ['Log in', 'Sign up'] },
+        { title: 'Legal', links: ['Terms', 'Privacy'] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

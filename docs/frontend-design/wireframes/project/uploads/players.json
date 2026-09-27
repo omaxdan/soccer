@@ -1,0 +1,1317 @@
+﻿{
+    "players":  [
+                    {
+                        "id":  "40",
+                        "fullName":  "Agustín Canobbio",
+                        "shortName":  "A. Canobbio",
+                        "slug":  "agustin-canobbio-846413",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "715",
+                        "fullName":  "Agustín Giay",
+                        "shortName":  "A. Giay",
+                        "slug":  "agustin-giay-1106603",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "51",
+                        "fullName":  "Agustin Sant Anna",
+                        "shortName":  "A. Sant Anna",
+                        "slug":  "agustin-sant-anna-869726",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1241",
+                        "fullName":  "Alexander Barboza",
+                        "shortName":  "A. Barboza",
+                        "slug":  "alexander-barboza-801044",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "880",
+                        "fullName":  "Alisson",
+                        "shortName":  "Alisson",
+                        "slug":  "alisson-291723",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "52",
+                        "fullName":  "Alix Vinicius",
+                        "shortName":  "A. Vinicius",
+                        "slug":  "alix-vinicius-1117597",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "720",
+                        "fullName":  "Andreas Pereira",
+                        "shortName":  "A. Pereira",
+                        "slug":  "andreas-pereira-285949",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "718",
+                        "fullName":  "Arthur Gabriel",
+                        "shortName":  "A. Gabriel",
+                        "slug":  "arthur-gabriel-1633501",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1248",
+                        "fullName":  "Bruno Bertinato",
+                        "shortName":  "B. Bertinato",
+                        "slug":  "bruno-bertinato-977079",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "716",
+                        "fullName":  "Bruno Fuchs",
+                        "shortName":  "B. Fuchs",
+                        "slug":  "bruno-fuchs-973737",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1049",
+                        "fullName":  "Bruno Goncalves",
+                        "shortName":  "B. Goncalves",
+                        "slug":  "bruno-goncalves-1868441",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1062",
+                        "fullName":  "Bruno Praxedes",
+                        "shortName":  "B. Praxedes",
+                        "slug":  "bruno-praxedes-1018093",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "714",
+                        "fullName":  "Carlos Miguel",
+                        "shortName":  "C. Miguel",
+                        "slug":  "carlos-miguel-973738",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "54",
+                        "fullName":  "Cauê Nascimento",
+                        "shortName":  "C. N. Santos",
+                        "slug":  "caue-nascimento-1632360",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "66",
+                        "fullName":  "Cleiton",
+                        "shortName":  "Cleiton",
+                        "slug":  "cleiton-844576",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1065",
+                        "fullName":  "Davi Gomes",
+                        "shortName":  "D. Gomes",
+                        "slug":  "davi-gomes-2032806",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "68",
+                        "fullName":  "Eduardo Santos",
+                        "shortName":  "E. Santos",
+                        "slug":  "eduardo-santos-925189",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "60",
+                        "fullName":  "Eduardo Sasha",
+                        "shortName":  "E. Sasha",
+                        "slug":  "eduardo-sasha-143846",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "729",
+                        "fullName":  "Emiliano Martínez",
+                        "shortName":  "E. Martínez",
+                        "slug":  "emiliano-martinez-973533",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "55",
+                        "fullName":  "Eric Ramires",
+                        "shortName":  "E. Ramires",
+                        "slug":  "eric-ramires-950545",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1233",
+                        "fullName":  "Erick Belé",
+                        "shortName":  "E. Belé",
+                        "slug":  "erick-bele-1633503",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "65",
+                        "fullName":  "Fabinho",
+                        "shortName":  "Fabinho",
+                        "slug":  "fabinho-1117513",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "27",
+                        "fullName":  "Fábio",
+                        "shortName":  "Fábio",
+                        "slug":  "fabio-17785",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1080",
+                        "fullName":  "Fabrício",
+                        "shortName":  "Fabrício",
+                        "slug":  "fabricio-1047208",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "725",
+                        "fullName":  "Felipe Anderson",
+                        "shortName":  "F. Anderson",
+                        "slug":  "felipe-anderson-152276",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "59",
+                        "fullName":  "Fernando",
+                        "shortName":  "Fernando",
+                        "slug":  "fernando-911195",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1081",
+                        "fullName":  "Fernando Costa",
+                        "shortName":  "F. Costa",
+                        "slug":  "fernando-costa-2140167",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "124",
+                        "fullName":  "Gabriel Girotto",
+                        "shortName":  "G. Girotto",
+                        "slug":  "gabriel-girotto-242052",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1050",
+                        "fullName":  "Gabriel Novaes",
+                        "shortName":  "G. Novaes",
+                        "slug":  "gabriel-novaes-882854",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "827",
+                        "fullName":  "Ganso",
+                        "shortName":  "Ganso",
+                        "slug":  "ganso-116853",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "42",
+                        "fullName":  "Germán Cano",
+                        "shortName":  "G. Cano",
+                        "slug":  "german-cano-33238",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "28",
+                        "fullName":  "Guga",
+                        "shortName":  "Guga",
+                        "slug":  "guga-928134",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "44",
+                        "fullName":  "Guilherme Arana",
+                        "shortName":  "G. Arana",
+                        "slug":  "guilherme-arana-1127439",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "717",
+                        "fullName":  "Gustavo Gómez",
+                        "shortName":  "G. Gómez",
+                        "slug":  "gustavo-gomez-220833",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "53",
+                        "fullName":  "Gustavo Marques",
+                        "shortName":  "G. Marques",
+                        "slug":  "gustavo-marques-1174764",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "69",
+                        "fullName":  "Gustavo Neves",
+                        "shortName":  "G. Neves",
+                        "slug":  "gustavo-neves-1463904",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "136",
+                        "fullName":  "Gustavo Reis",
+                        "shortName":  "G. Reis",
+                        "slug":  "gustavo-reis-1881677",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "67",
+                        "fullName":  "Guzmán Rodríguez",
+                        "shortName":  "G. Rodríguez",
+                        "slug":  "guzman-rodriguez-997239",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1224",
+                        "fullName":  "Heittor",
+                        "shortName":  "Heittor",
+                        "slug":  "heittor-1884619",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "62",
+                        "fullName":  "Henry Mosquera",
+                        "shortName":  "H. Mosquera",
+                        "slug":  "henry-mosquera-1170680",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "32",
+                        "fullName":  "Hércules",
+                        "shortName":  "Hércules",
+                        "slug":  "hercules-1104068",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "37",
+                        "fullName":  "Hulk",
+                        "shortName":  "Hulk",
+                        "slug":  "hulk-34705",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "39",
+                        "fullName":  "Ignácio",
+                        "shortName":  "Ignácio",
+                        "slug":  "ignacio-958382",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "70",
+                        "fullName":  "Ignacio Sosa",
+                        "shortName":  "I. Sosa",
+                        "slug":  "ignacio-sosa-1112896",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "776",
+                        "fullName":  "Igor Rabello",
+                        "shortName":  "I. Rabello",
+                        "slug":  "igor-rabello-753662",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "129",
+                        "fullName":  "Isidro Pitta",
+                        "shortName":  "I. Pitta",
+                        "slug":  "isidro-pitta-979861",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "34",
+                        "fullName":  "Jefferson Savarino",
+                        "shortName":  "J. Savarino",
+                        "slug":  "jefferson-savarino-874739",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "733",
+                        "fullName":  "Jefté",
+                        "shortName":  "Jefté",
+                        "slug":  "jefte-1116665",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "29",
+                        "fullName":  "Jemmes",
+                        "shortName":  "Jemmes",
+                        "slug":  "jemmes-1527129",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "722",
+                        "fullName":  "Jhon Arias",
+                        "shortName":  "J. Arias",
+                        "slug":  "jhon-arias-844096",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1040",
+                        "fullName":  "Jhonny",
+                        "shortName":  "Jhonny",
+                        "slug":  "jhonny-1185449",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1051",
+                        "fullName":  "Jhuan Nunes Coelho",
+                        "shortName":  "J. N. Coelho",
+                        "slug":  "jhuan-nunes-coelho-1828980",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1109",
+                        "fullName":  "Joaquín Piquerez",
+                        "shortName":  "J. Piquerez",
+                        "slug":  "joaquin-piquerez-881110",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "41",
+                        "fullName":  "John Kennedy",
+                        "shortName":  "John Kennedy",
+                        "slug":  "john-kennedy-1087399",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "61",
+                        "fullName":  "José Andrés Hurtado",
+                        "shortName":  "J. A. Hurtado",
+                        "slug":  "jose-andres-hurtado-987589",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "56",
+                        "fullName":  "José Herrera",
+                        "shortName":  "J. Herrera",
+                        "slug":  "jose-herrera-1179171",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "723",
+                        "fullName":  "José Manuel López",
+                        "shortName":  "J. López",
+                        "slug":  "jose-manuel-lopez-1094179",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "38",
+                        "fullName":  "Juan Pablo Freytes",
+                        "shortName":  "J. Freytes",
+                        "slug":  "juan-pablo-freytes-962187",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "30",
+                        "fullName":  "Julián Millán",
+                        "shortName":  "J. Millán",
+                        "slug":  "julian-millan-839085",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "45",
+                        "fullName":  "Júlio Fidelis",
+                        "shortName":  "J. Fidelis",
+                        "slug":  "julio-fidelis-1561524",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "123",
+                        "fullName":  "Juninho Capixaba",
+                        "shortName":  "J. Capixaba",
+                        "slug":  "juninho-capixaba-870556",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1052",
+                        "fullName":  "Kawê",
+                        "shortName":  "Kawê",
+                        "slug":  "kawe-1046800",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "36",
+                        "fullName":  "Kevin Serna",
+                        "shortName":  "K. Serna",
+                        "slug":  "kevin-serna-981374",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "728",
+                        "fullName":  "Khellven",
+                        "shortName":  "Khellven",
+                        "slug":  "khellven-984896",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "734",
+                        "fullName":  "Larson",
+                        "shortName":  "Larson",
+                        "slug":  "larson-2057364",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "57",
+                        "fullName":  "Lucas Barbosa",
+                        "shortName":  "L. Barbosa",
+                        "slug":  "lucas-barbosa-1067641",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "727",
+                        "fullName":  "Lucas Evangelista",
+                        "shortName":  "L. Evangelista",
+                        "slug":  "lucas-evangelista-331397",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "35",
+                        "fullName":  "Luciano Acosta",
+                        "shortName":  "L. Acosta",
+                        "slug":  "luciano-acosta-548030",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "732",
+                        "fullName":  "Luis Benedetti",
+                        "shortName":  "L. Benedetti",
+                        "slug":  "luis-benedetti-1485284",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1126",
+                        "fullName":  "Luis Pacheco",
+                        "shortName":  "L. F. Pacheco",
+                        "slug":  "luis-pacheco-1884646",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "71",
+                        "fullName":  "Marcelinho Braz",
+                        "shortName":  "M. Braz",
+                        "slug":  "marcelinho-braz-1485603",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "730",
+                        "fullName":  "Marcelo Lomba",
+                        "shortName":  "M. Lomba",
+                        "slug":  "marcelo-lomba-34141",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "43",
+                        "fullName":  "Marcelo Pitaluga",
+                        "shortName":  "M. Pitaluga",
+                        "slug":  "marcelo-pitaluga-1093974",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "719",
+                        "fullName":  "Marlon Freitas",
+                        "shortName":  "M. Freitas",
+                        "slug":  "marlon-freitas-840202",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "33",
+                        "fullName":  "Martinelli",
+                        "shortName":  "Martinelli",
+                        "slug":  "martinelli-1067671",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "64",
+                        "fullName":  "Matheus Fernandes",
+                        "shortName":  "M. Fernandes",
+                        "slug":  "matheus-fernandes-840150",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1014",
+                        "fullName":  "Matheus Reis",
+                        "shortName":  "M. Reis",
+                        "slug":  "matheus-reis-1483339",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "726",
+                        "fullName":  "Mauricio",
+                        "shortName":  "Mauricio",
+                        "slug":  "mauricio-986233",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1225",
+                        "fullName":  "Miguel Cinoncelli Bilong",
+                        "shortName":  "M. C. Bilong",
+                        "slug":  "miguel-cinoncelli-bilong-2551774",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1108",
+                        "fullName":  "Murilo",
+                        "shortName":  "Murilo",
+                        "slug":  "murilo-874729",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "47",
+                        "fullName":  "Nonato",
+                        "shortName":  "Nonato",
+                        "slug":  "nonato-922566",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "48",
+                        "fullName":  "Otávio",
+                        "shortName":  "Otávio",
+                        "slug":  "otavio-552686",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1057",
+                        "fullName":  "Patrick",
+                        "shortName":  "Patrick",
+                        "slug":  "patrick-1485290",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1222",
+                        "fullName":  "Paulinho",
+                        "shortName":  "Paulinho",
+                        "slug":  "paulinho-885179",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "724",
+                        "fullName":  "Ramón Sosa",
+                        "shortName":  "R. Sosa",
+                        "slug":  "ramon-sosa-1015733",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "31",
+                        "fullName":  "Renê",
+                        "shortName":  "Renê",
+                        "slug":  "rene-243113",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "778",
+                        "fullName":  "Riquelme Felipe",
+                        "shortName":  "R. Felipe",
+                        "slug":  "riquelme-felipe-1884803",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "49",
+                        "fullName":  "Rodrigo Castillo",
+                        "shortName":  "R. Castillo",
+                        "slug":  "rodrigo-castillo-1182504",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "58",
+                        "fullName":  "Rodriguinho",
+                        "shortName":  "Rodriguinho",
+                        "slug":  "rodriguinho-1200730",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1028",
+                        "fullName":  "Ruan Sales",
+                        "shortName":  "R. Sales",
+                        "slug":  "ruan-sales-1862245",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1075",
+                        "fullName":  "Ryan Augusto",
+                        "shortName":  "R. Augusto",
+                        "slug":  "ryan-augusto-2026380",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "772",
+                        "fullName":  "Samuel Xavier",
+                        "shortName":  "S. Xavier",
+                        "slug":  "samuel-xavier-795773",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1029",
+                        "fullName":  "Thiago Silva",
+                        "shortName":  "T. Silva",
+                        "slug":  "thiago-silva-33541",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "50",
+                        "fullName":  "Tiago Volpi",
+                        "shortName":  "T. Volpi",
+                        "slug":  "tiago-volpi-243509",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "133",
+                        "fullName":  "Vanderlan",
+                        "shortName":  "Vanderlan",
+                        "slug":  "vanderlan-1067640",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "72",
+                        "fullName":  "Vinicinho",
+                        "shortName":  "Vinicinho",
+                        "slug":  "vinicinho-1587965",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "775",
+                        "fullName":  "Vitor Eudes",
+                        "shortName":  "Vitor Eudes",
+                        "slug":  "vitor-eudes-927666",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1116",
+                        "fullName":  "Vitor Roque",
+                        "shortName":  "V. Roque",
+                        "slug":  "vitor-roque-1150391",
+                        "team":  {
+                                     "id":  "72",
+                                     "name":  "Palmeiras",
+                                     "slug":  "palmeiras-1963",
+                                     "shortName":  "Palmeiras",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1044",
+                        "fullName":  "Wallace Yan",
+                        "shortName":  "Wallace",
+                        "slug":  "wallace-yan-1466084",
+                        "team":  {
+                                     "id":  "64",
+                                     "name":  "Red Bull Bragantino",
+                                     "slug":  "red-bull-bragantino-1999",
+                                     "shortName":  "RB Bragantino",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "1027",
+                        "fullName":  "Yago",
+                        "shortName":  "Yago",
+                        "slug":  "yago-1518961",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    },
+                    {
+                        "id":  "46",
+                        "fullName":  "Yeferson Soteldo",
+                        "shortName":  "Y. Soteldo",
+                        "slug":  "yeferson-soteldo-789960",
+                        "team":  {
+                                     "id":  "67",
+                                     "name":  "Fluminense",
+                                     "slug":  "fluminense-1961",
+                                     "shortName":  "Fluminense",
+                                     "countryCode":  "BR"
+                                 }
+                    }
+                ]
+}

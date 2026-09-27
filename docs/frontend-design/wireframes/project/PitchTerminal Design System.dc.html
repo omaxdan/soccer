@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:var(--cool)}a:hover{color:var(--text)}@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp code{font:12px ui-monospace,Menlo,monospace;background:#f2f0ec;padding:1px 4px;border-radius:3px}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">A</a><span class="dv-tname">Phase A · global design system + application shell · boards A–J</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>A · Token board</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:24px">
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">A · Design tokens</span><h2 style="margin:0;font:700 22px Inter,sans-serif">One dark theme · 14 colour tokens · 4 semantic aliases</h2><span style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">Values read from globals.css (v1 = v2, byte-identical). No new colours.</span></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:2px 6px">VERIFIED</span>
+      <span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:2px 6px">PROPOSED</span>
+      <span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber);background:var(--amber-dim);border:1px solid transparent;border-radius:4px;padding:2px 6px">DECISION</span>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+    <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="14">
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:56px;background:{{ t.value }};border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:flex-end;padding:6px 8px"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);background:var(--ink);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+        <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;gap:8px"><span style="font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ t.name }}</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ t.value }}</span></div>
+          <span style="font:400 12px/1.4 Inter,sans-serif;color:var(--text-secondary)">{{ t.role }}</span>
+          <div style="display:flex;flex-direction:column;gap:4px;padding-top:8px;border-top:1px solid var(--line)">
+            <span style="font:400 11px/1.4 Inter,sans-serif;color:var(--text-secondary)"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted)">USE </span>{{ t.use }}</span>
+            <span style="font:400 11px/1.4 Inter,sans-serif;color:var(--text-secondary)"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--risk)">NOT </span>{{ t.avoid }}</span>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Semantic aliases · verified</span>
+      <sc-for list="{{ aliases }}" as="a" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;font:400 11px 'JetBrains Mono',monospace"><span style="color:var(--text)">{{ a.name }}</span><span style="color:{{ a.value }}">{{ a.to }}</span></div></sc-for>
+      <span style="font:400 11px Inter,sans-serif;color:var(--faint)">Use on new components; existing names stay.</span>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Radius · verified</span>
+      <div style="display:flex;gap:10px;align-items:center"><span style="width:40px;height:40px;background:var(--raised);border:1px solid var(--line);border-radius:4px"></span><div style="display:flex;flex-direction:column;gap:2px"><span style="font:600 12px 'JetBrains Mono',monospace;color:var(--text)">4px</span><span style="font:400 11px Inter,sans-serif;color:var(--muted)">rounded-term · .panel · focus</span></div></div>
+      <span style="font:400 11px Inter,sans-serif;color:var(--faint)">Inline 6/8px on a few components → normalise to 4px.</span><span style="align-self:flex-start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED</span>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Elevation · verified</span>
+      <div style="display:flex;gap:10px"><span style="flex:1;height:40px;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 1px 0 0 rgba(255,255,255,.02) inset,0 8px 24px -12px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font:400 9px 'JetBrains Mono',monospace;color:var(--faint)">shadow-panel</span><span style="flex:1;height:40px;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 0 0 1px var(--amber-dim),0 0 24px -8px var(--amber);display:flex;align-items:center;justify-content:center;font:400 9px 'JetBrains Mono',monospace;color:var(--faint)">shadow-glow</span></div>
+      <span style="font:400 11px Inter,sans-serif;color:var(--faint)">Borders do the work. Glow only for the primary action hover.</span>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Motion + texture · verified</span>
+      <div style="display:flex;flex-direction:column;gap:4px;font:400 11px 'JetBrains Mono',monospace;color:var(--text-secondary)"><span>pulse-dot 1.8s · live only</span><span>meter-fill 0.7s · meters</span><span>fade-up 0.4s · entry</span><span>body grid 40px · 1.4% white</span></div>
+      <span style="font:400 11px Inter,sans-serif;color:var(--faint)">All motion off under reduced-motion. .scanlines stays hero-only.</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:4px;background:var(--panel)"><span style="width:14px;height:14px;background:var(--amber);border-radius:2px"></span><span style="width:14px;height:14px;background:var(--warn);border-radius:2px"></span><span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">--amber and --warn are close hues. Amber means brand, focus and selection. Warn means state. Never place them next to each other without a text label.</span><span style="margin-left:auto;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED RULE</span></div>
+</div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>B · Typography board</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">B · Typography</span><h2 style="margin:0;font:700 22px Inter,sans-serif">Inter for words · JetBrains Mono for labels and numbers</h2><span style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">Both loaded in layout.tsx (400–700). The type scale is fixed across breakpoints; layout adapts, type does not.</span></div>
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Role</span><span>Sample</span><span>Spec</span><span>Source</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Display / hero</span><span style="font:700 40px/1.05 Inter,sans-serif;letter-spacing:-.02em;color:var(--text)">Football, read as evidence</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Inter 700 · 40/1.05 · −0.02em · --text · public hero only</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">H1 · page title</span><span style="font:700 22px/1.2 Inter,sans-serif;color:var(--text)">Page title</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Inter 700 · 22 · --text · one per page</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">H2 · section title</span><span style="font:600 16px/1.3 Inter,sans-serif;color:var(--text)">Section title</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Inter 600 · 16 · --text · real &lt;h2&gt;</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">H3 · panel title</span><span style="font:600 13px/1.3 Inter,sans-serif;color:var(--text)">Panel title</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Inter 600 · 13 · --text · or .eyebrow when label-like</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Body</span><span style="font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary);max-width:520px">Body copy explains what a reading means and where it came from, in plain sentences.</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Inter 400 · 14/1.55 · --text-secondary</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED SIZE</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Metadata</span><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Updated 11 Aug · sample 22</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Inter 400 · 12 · --muted (quietest: --faint)</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED SIZE</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">.eyebrow</span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Section kicker</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Mono · 0.625rem · 0.16em · upper · --muted</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">.label-cap</span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Column head · field label</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Mono · 0.625rem · 0.1em · upper · --muted</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Compact numeric</span><span style="display:flex;gap:24px;align-items:baseline"><span style="font:600 24px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--text)">48</span><span style="font:600 16px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--text)">2 – 1</span><span style="font:500 13px 'JetBrains Mono',monospace;color:var(--faint)">—</span></span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">.mono · 600 · 24 tile / 16 score · null = — in --faint</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">PROPOSED SIZE</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Table numeric</span><span style="display:flex;gap:18px;font:400 12px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--text)"><span>22</span><span>14</span><span>6</span><span>+22</span><span style="font-weight:700">48</span></span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">.mono .tnum · 11–12 · right-aligned · fixed column</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Navigation</span><span style="display:flex;gap:20px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><span style="color:var(--text)">Active</span><span style="color:var(--muted)">Default</span></span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">.label-cap · --muted → --text active</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+    <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 300px 96px;gap:16px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Status chip</span><span style="display:flex;gap:8px"><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--cool);border:1px solid var(--cool);border-radius:4px;padding:1px 6px">Upcoming</span><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--muted);border-radius:4px;padding:1px 6px">FT</span></span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">.label-cap · 10 · colour + same-colour border</span><span style="justify-self:start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--text-secondary);border:1px solid var(--muted);border-radius:4px;padding:1px 5px">VERIFIED</span></div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>C · Surface board</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">C · Surfaces</span><h2 style="margin:0;font:700 22px Inter,sans-serif">Four levels. Every later page uses only these.</h2></div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start">
+    <div style="border:1px dashed var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">S0 · Canvas · --ink + 40px grid</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px">
+        <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">S1 · Primary panel · .panel</span>
+        <div style="background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px">
+          <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">S2 · Raised / active · .panel-raised · hover</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">S3 · Content + accents</span>
+            <span style="font:600 13px 'JetBrains Mono',monospace;color:var(--text)">48</span>
+            <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--edge);border:1px solid var(--edge);border-radius:4px;padding:1px 6px">SUPPORTS</span>
+            <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--risk);border:1px solid var(--risk);border-radius:4px;padding:1px 6px">CONTRADICTS</span>
+          </div>
+        </div>
+      </div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--faint)">Never skip a level: no raised surface directly on canvas, no panel inside a panel. Semantic colour lives in text, borders and 15% washes only.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Generic item · five states</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px;display:flex;flex-direction:column;gap:4px">
+        <div style="display:grid;grid-template-columns:84px minmax(0,1fr) 48px;gap:12px;align-items:center;height:40px;padding:0 12px;border-radius:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">DEFAULT</span><span style="font:500 13px Inter,sans-serif;color:var(--text)">Item label</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text-secondary)">12</span></div>
+        <div style="display:grid;grid-template-columns:84px minmax(0,1fr) 48px;gap:12px;align-items:center;height:40px;padding:0 12px;border-radius:4px;background:var(--raised)"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">HOVER</span><span style="font:500 13px Inter,sans-serif;color:var(--text)">Item label</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text-secondary)">12</span></div>
+        <div style="display:grid;grid-template-columns:84px minmax(0,1fr) 48px;gap:12px;align-items:center;height:40px;padding:0 11px;border-radius:4px;background:var(--raised);border:1px solid var(--amber-dim)"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber)">SELECTED</span><span style="font:600 13px Inter,sans-serif;color:var(--text)">Item label</span><span style="font:600 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text)">12</span></div>
+        <div style="border-radius:4px;background:var(--raised)"><div style="display:grid;grid-template-columns:84px minmax(0,1fr) 48px;gap:12px;align-items:center;height:40px;padding:0 12px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">EXPANDED</span><span style="font:500 13px Inter,sans-serif;color:var(--text)">Item label</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text-secondary)">−</span></div><div style="margin:0 8px 8px;padding:10px 12px;border-top:1px solid var(--line);font:400 12px Inter,sans-serif;color:var(--text-secondary)">Detail sits on the same raised surface under a hairline.</div></div>
+        <div style="display:grid;grid-template-columns:84px minmax(0,1fr) 48px;gap:12px;align-items:center;height:40px;padding:0 12px;border-radius:4px;cursor:not-allowed"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">DISABLED</span><span style="font:500 13px Inter,sans-serif;color:var(--faint)">Item label</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:var(--faint)">—</span></div>
+      </div>
+      <span style="font:400 11px Inter,sans-serif;color:var(--faint)">Selected = raised + 1px --amber-dim edge + weight change (not colour alone). No left accent bars.</span>
+      <span style="align-self:flex-start;font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px dashed var(--muted);border-radius:4px;padding:1px 5px">HOVER VERIFIED · SELECTED / EXPANDED / DISABLED PROPOSED</span>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Grid / layout primitives</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Layout</span><h2 style="margin:0;font:700 22px Inter,sans-serif">1152 rail · 16 gutter · 12 columns · six primitives</h2></div>
+  <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Max width</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">1152 / 760</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">max-w-6xl rail · reading column</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Page padding</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">16 / 16</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">px-4 py-4 at every width</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Columns</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">12</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">page-level split grid</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--muted)">PROPOSED</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Gaps</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">16 · 12 · 8</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">page cols · card grids · in-panel</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--muted)">12/8 VERIFIED · 16 PROPOSED</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Vertical rhythm</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">16 · 20 · 8</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">sections · heavy entity pages · label→body</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED</span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px;padding:16px;border:1px solid var(--line);border-radius:4px">
+    <div style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px"><sc-for list="{{ cols12 }}" as="c" hint-placeholder-count="12"><div style="height:18px;background:var(--amber-dim);border-radius:2px;font:400 9px 'JetBrains Mono',monospace;color:var(--amber);display:flex;align-items:center;justify-content:center">{{ c }}</div></sc-for></div>
+    <sc-for list="{{ layouts }}" as="l" hint-placeholder-count="6">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;gap:12px;align-items:baseline"><span style="font:600 11px 'JetBrains Mono',monospace;color:var(--text)">{{ l.name }}</span><span style="font:400 11px Inter,sans-serif;color:var(--muted)">{{ l.use }}</span><span style="margin-left:auto;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ l.collapse }}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px">
+          <sc-for list="{{ l.blocks }}" as="b" hint-placeholder-count="2"><div style="grid-column:{{ b.span }};height:44px;background:{{ b.bg }};border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">{{ b.label }}</div></sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>D · Components · actions, tabs, chips</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">D · Components 1/2</span><h2 style="margin:0;font:700 22px Inter,sans-serif">Buttons · tabs · chips</h2></div>
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Button · 6 variants × 6 states · 32px default, 44px on touch</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">Secondary = the verified Retry button. Others proposed from existing tokens.</span></div>
+    <div style="display:grid;grid-template-columns:120px repeat(6,minmax(0,1fr));gap:12px;padding:6px 0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span></span><span>Default</span><span>Hover</span><span>Focus</span><span>Active</span><span>Disabled</span><span>Loading</span></div>
+    <sc-for list="{{ buttons }}" as="v" hint-placeholder-count="6">
+      <div style="display:grid;grid-template-columns:120px repeat(6,minmax(0,1fr));gap:12px;align-items:center;min-height:44px;border-top:1px solid var(--line)">
+        <span style="font:500 12px Inter,sans-serif;color:var(--text-secondary)">{{ v.name }}</span>
+        <sc-for list="{{ v.cells }}" as="c" hint-placeholder-count="6"><div><button style="display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;min-width:{{ c.w }};padding:0 {{ c.px }};background:{{ c.bg }};color:{{ c.color }};border:1px solid {{ c.border }};border-radius:4px;box-shadow:{{ c.shadow }};outline:{{ c.outline }};outline-offset:2px;text-decoration:{{ c.deco }};font:{{ c.font }};letter-spacing:.1em;text-transform:{{ c.tt }};cursor:{{ c.cursor }}">{{ c.label }}</button></div></sc-for>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">WorkspaceTabs · states</span>
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto">
+        <span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap">Default</span>
+        <span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);border-bottom:2px solid var(--line);margin-bottom:-1px;white-space:nowrap">Hover</span>
+        <span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);border-bottom:2px solid var(--amber);margin-bottom:-1px;white-space:nowrap">Active</span>
+        <span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;cursor:not-allowed">Disabled</span>
+        <span style="display:flex;align-items:center;gap:6px;padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap">Pending<span style="font-size:8px;border:1px dashed var(--faint);border-radius:3px;padding:0 3px">SOON</span></span>
+        <span style="display:flex;align-items:center;gap:6px;padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap">Locked<span style="width:7px;height:7px;border:1.5px solid var(--amber);border-radius:1px"></span></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font:400 12px Inter,sans-serif;color:var(--text-secondary)">
+        <span>Active: --text + 2px --amber underline on the 1px container rule; aria-current="page". <span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED</span></span>
+        <span>Hover: --text + 2px --line underline. Disabled: --faint, not focusable. Pending: --faint + dashed SOON tag, focusable, opens explanation. Locked: stays --muted and navigable; content shows GatedState. <span style="font:600 9px 'JetBrains Mono',monospace;color:var(--muted)">PROPOSED</span></span>
+        <span>Overflow: horizontal scroll, hidden scrollbar, never wraps. <span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED</span></span>
+      </div>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:12px">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Selector chip · context tag · form badge</span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;background:var(--amber);color:var(--ink);border:1px solid var(--amber);border-radius:4px;padding:5px 10px">Active</span>
+        <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:5px 10px">Option</span>
+        <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:5px 10px">Option</span>
+        <span style="width:1px;height:20px;background:var(--line);margin:0 6px"></span>
+        <span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--cool);border:1px solid var(--cool);border-radius:4px;padding:0 5px">context</span>
+        <span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">absent</span>
+        <span style="width:1px;height:20px;background:var(--line);margin:0 6px"></span>
+        <span title="Win" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:var(--edge);background:color-mix(in srgb,var(--edge) 15%,transparent);border:1px solid color-mix(in srgb,var(--edge) 40%,transparent);border-radius:4px">W</span>
+        <span title="Draw" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:var(--muted);background:color-mix(in srgb,var(--muted) 15%,transparent);border:1px solid color-mix(in srgb,var(--muted) 40%,transparent);border-radius:4px">D</span>
+        <span title="Loss" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:var(--risk);background:color-mix(in srgb,var(--risk) 15%,transparent);border:1px solid color-mix(in srgb,var(--risk) 40%,transparent);border-radius:4px">L</span>
+      </div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">All three exist today. Selector chips select; status chips describe. Never render a status chip as clickable. <span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED</span></span>
+    </div>
+  </div>
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">StatusChip · UI grammar (backend lifecycle vocabulary unchanged)</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">Text + colour + border + glyph. Colour is never the only signal.</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 24px">
+      <sc-for list="{{ chips }}" as="c" hint-placeholder-count="9">
+        <div style="display:grid;grid-template-columns:120px minmax(0,1fr) 72px;gap:10px;align-items:center;min-height:36px;border-top:1px solid var(--line)">
+          <span style="justify-self:start;display:inline-flex;align-items:center;gap:5px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ c.color }};background:{{ c.bg }};border:1px {{ c.bstyle }} {{ c.bcolor }};border-radius:4px;padding:1px 6px"><span style="font-size:8px">{{ c.glyph }}</span>{{ c.label }}</span>
+          <span style="font:400 11px Inter,sans-serif;color:var(--text-secondary)">{{ c.rule }}</span>
+          <span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.08em;color:{{ c.clsColor }}">{{ c.cls }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>D · Components · cards, rows, tables</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">D · Components 2/2</span><h2 style="margin:0;font:700 22px Inter,sans-serif">Six surfaces · six row states · two table patterns</h2></div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Primary panel · 16</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px"><div style="display:flex;align-items:baseline;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Section</span><span style="font:400 10px 'JetBrains Mono',monospace;color:var(--faint)">24</span><span style="margin-left:auto;font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--cool);border:1px solid var(--cool);border-radius:4px;padding:0 5px">CONTEXT</span></div><div style="padding:16px;height:64px;background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(255,255,255,.02) 8px 16px)"></div></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Compact panel · 12</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Label</span><span style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">One short block of supporting content.</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">MetricCard · tile</span>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Metric</span><span style="font:600 22px 'JetBrains Mono',monospace;color:var(--text)">48</span></div><div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Metric</span><span style="font:600 22px 'JetBrains Mono',monospace;color:var(--text)">1.62</span></div><div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Metric</span><span aria-label="no value" style="font:600 22px 'JetBrains Mono',monospace;color:var(--faint)">—</span></div></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Summary card</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Kicker</span><span style="font:600 16px Inter,sans-serif;color:var(--text)">Summary headline</span><span style="font:400 13px/1.5 Inter,sans-serif;color:var(--text-secondary)">Two lines of descriptive copy that lead into a detail page.</span><a style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--cool);text-decoration:none">Open →</a></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Supporting card · rail</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:4px 16px"><div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Field</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--text)">Value</span></div><div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Field</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--text)">Value</span></div><div style="display:flex;justify-content:space-between;padding:9px 0"><span style="font:400 12px Inter,sans-serif;color:var(--muted)">Field</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--faint)">—</span></div></div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Expanded detail · .panel-raised</span>
+      <div style="background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Reading</span><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--edge)">SUPPORTS</span></div><span style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">Verdict line in secondary text.</span><div style="padding-top:8px;border-top:1px solid var(--line);font:400 11px Inter,sans-serif;color:var(--faint)">Why? · evidence block under a hairline</div></div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Row states · text · numbers · status · action</span><span style="font:400 11px Inter,sans-serif;color:var(--faint)">Same grammar in both table patterns.</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 8px">
+      <sc-for list="{{ rowStates }}" as="r" hint-placeholder-count="6">
+        <div style="display:flex;flex-direction:column;border-radius:4px;background:{{ r.bg }};border:1px solid {{ r.border }};margin:2px 0">
+          <div style="display:grid;grid-template-columns:100px minmax(0,1fr) 56px 56px 120px 64px;gap:12px;align-items:center;height:40px;padding:0 12px;cursor:{{ r.cursor }}">
+            <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ r.stateColor }}">{{ r.state }}</span>
+            <span style="font-family:Inter,sans-serif;font-size:13px;font-weight:{{ r.weight }};color:{{ r.text }}">{{ r.label }}</span>
+            <span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:{{ r.num }}">{{ r.n1 }}</span>
+            <span style="font:600 12px 'JetBrains Mono',monospace;text-align:right;color:{{ r.num }}">{{ r.n2 }}</span>
+            <span style="justify-self:start;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ r.chipColor }};border:1px {{ r.chipStyle }} {{ r.chipColor }};border-radius:4px;padding:1px 6px">{{ r.chip }}</span>
+            <span style="justify-self:end;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ r.actColor }}">{{ r.act }}</span>
+          </div>
+          <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ false }}"><div style="margin:0 12px 10px;padding:10px 0 0;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px"><div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">FIELD</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--text)">14</span></div><div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">FIELD</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--text)">6</span></div><div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">FIELD</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--text)">2</span></div><div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">FIELD</span><span style="font:500 12px 'JetBrains Mono',monospace;color:var(--faint)">—</span></div></div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px;align-items:baseline"><span style="font:600 11px 'JetBrains Mono',monospace;color:var(--text)">DataTable · border-separated</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED · FeedTable / StandingsTable</span></div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:40px minmax(0,1fr) repeat(4,56px);padding:8px 12px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>#</span><span>Entity</span><span style="text-align:right">A</span><span style="text-align:right">B</span><span style="text-align:right">C</span><span style="text-align:right">Tot</span></div>
+        <div style="padding:4px 12px;background:var(--raised);border-bottom:1px solid var(--line);font:400 9.6px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Group header <span style="color:var(--faint);margin-left:8px">3</span></div>
+        <sc-for list="{{ tableRows }}" as="r" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:40px minmax(0,1fr) repeat(4,56px);align-items:center;height:36px;padding:0 12px;border-top:1px solid var(--line);cursor:pointer" style-hover="background:var(--raised)">
+            <span style="font:400 12px 'JetBrains Mono',monospace;color:var(--faint)">{{ r.i }}</span><span style="font:500 13px Inter,sans-serif;color:var(--text)">Entity name</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text)">{{ r.a }}</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text)">{{ r.b }}</span><span style="font:400 12px 'JetBrains Mono',monospace;text-align:right;color:{{ r.cColor }}">{{ r.c }}</span><span style="font:700 12px 'JetBrains Mono',monospace;text-align:right;color:var(--text)">{{ r.t }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">Use for dense multi-column data: fixtures boards, standings, statistics grids, intelligence evidence, dense observations. .label-cap heads, 1px row rules, hover --raised, whole row = one link, wide tables scroll inside the panel.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px;align-items:baseline"><span style="font:600 11px 'JetBrains Mono',monospace;color:var(--text)">ZebraRow · list</span><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text-secondary)">VERIFIED · PredictedXI</span></div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px;display:flex;flex-direction:column;gap:1px">
+        <sc-for list="{{ zebraRows }}" as="z" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;background:{{ z.bg }}" style-hover="background:var(--raised)"><span style="width:24px;text-align:right;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ z.n }}</span><span style="flex:1;font:400 12px 'JetBrains Mono',monospace;color:var(--text)">List item</span><span style="width:40px;text-align:right;font:500 11px 'JetBrains Mono',monospace;color:{{ z.pc }}">{{ z.p }}</span></div>
+        </sc-for>
+      </div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">Use for compact scannable lists: lineups, attribute lists, per-player rows, rail lists. Odd rows color-mix(--raised 40%). Never combine zebra and row rules.</span>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>E · Desktop shell 1440</div>
+<div class="dv-card" style="width:1440px;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,sans-serif;color:var(--text)">
+  <dc-import name="AppHeader" layout="desktop" auth="signed" active="Competitions" hint-size="100%,56px"></dc-import>
+  <main style="max-width:1152px;margin:0 auto;padding:16px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+    <nav aria-label="breadcrumb" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><a style="color:var(--cool);text-decoration:none">Level one</a><span style="color:var(--faint)">/</span><a style="color:var(--cool);text-decoration:none">Level two</a><span style="color:var(--faint)">/</span><span aria-current="page" style="color:var(--muted)">Current entity</span></nav>
+    <header style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;align-items:center;gap:16px">
+      <span aria-hidden="true" style="width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 14px 'JetBrains Mono',monospace;color:var(--amber)">EN</span>
+      <div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Entity type</span><h1 style="margin:0;font:700 22px Inter,sans-serif;color:var(--text)">PageHeader title</h1><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Context · subline</span></div>
+      <div style="margin-left:auto;display:flex;gap:24px"><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Stat</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">—</span></div><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Stat</span><span style="font:600 16px 'JetBrains Mono',monospace;color:var(--text)">—</span></div></div>
+    </header>
+    <div style="display:flex;gap:4px;border-bottom:1px solid var(--line)"><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);border-bottom:2px solid var(--amber);margin-bottom:-1px">Tab one</span><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab two</span><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab three</span></div>
+    <div style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px">
+      <div style="grid-column:span 8;height:420px;border:1px dashed var(--line);border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(255,255,255,.015) 10px 20px);display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">page content · layout primitive from <a class="dv-oid" href="#1d">1d</a> · Phases B–J</div>
+      <div style="grid-column:span 4;height:420px;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">supporting rail · optional</div>
+    </div>
+  </main>
+  <footer style="border-top:1px solid var(--line);margin-top:24px">
+    <div style="max-width:1152px;margin:0 auto;padding:20px 16px;box-sizing:border-box;display:flex;align-items:center;gap:24px">
+      <span style="font:700 13px Inter,sans-serif;color:var(--text-secondary)">Pitch<span style="color:var(--amber)">Terminal</span></span>
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Football Intelligence</span>
+      <div style="margin-left:auto;display:flex;gap:18px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Footer link</span><span>Footer link</span><span>Footer link</span></div>
+      <span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber);background:var(--amber-dim);border-radius:4px;padding:2px 6px">LINKS · DECISION</span>
+    </div>
+  </footer>
+</div></div>
+
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>F · Tablet shell 834</div>
+<div class="dv-card" style="width:834px;background:var(--ink);font-family:Inter,sans-serif;color:var(--text)">
+  <dc-import name="AppHeader" layout="tablet" auth="signed" active="Competitions" hint-size="100%,56px"></dc-import>
+  <main style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    <nav aria-label="breadcrumb" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><a style="color:var(--cool);text-decoration:none">Level one</a><span style="color:var(--faint)">/</span><a style="color:var(--cool);text-decoration:none">Level two</a><span style="color:var(--faint)">/</span><span style="color:var(--muted);max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Current entity</span></nav>
+    <header style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+      <span style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 14px 'JetBrains Mono',monospace;color:var(--amber)">EN</span>
+      <div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Entity type</span><h1 style="margin:0;font:700 22px Inter,sans-serif">PageHeader title</h1></div>
+    </header>
+    <div style="display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto"><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);border-bottom:2px solid var(--amber);margin-bottom:-1px;white-space:nowrap">Tab one</span><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Tab two</span><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Tab three</span></div>
+    <div style="height:260px;border:1px dashed var(--line);border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(255,255,255,.015) 10px 20px);display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">main · full width below lg (1024)</div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><div style="height:110px;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">rail card</div><div style="height:110px;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">rail card</div></div>
+    <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Tagline hidden · search → icon · rail drops below main as md:grid-cols-2</span>
+  </main>
+</div></div>
+
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>G · Mobile shell 390</div>
+<div class="dv-card" style="width:390px;background:var(--ink);font-family:Inter,sans-serif;color:var(--text)">
+  <dc-import name="AppHeader" layout="mobile" auth="anon" active="Competitions" hint-size="100%,92px"></dc-import>
+  <main style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    <nav aria-label="breadcrumb" style="display:flex;align-items:center;gap:6px;min-height:32px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><a style="color:var(--cool);text-decoration:none">‹ Level two</a><span style="color:var(--faint)">/</span><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Current entity with a long name</span></nav>
+    <header style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;align-items:center;gap:12px">
+      <span style="width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 12px 'JetBrains Mono',monospace;color:var(--amber)">EN</span>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Entity type</span><h1 style="margin:0;font:700 22px/1.15 Inter,sans-serif">PageHeader title</h1></div>
+    </header>
+    <div style="position:relative"><div style="display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none"><span style="flex:none;display:flex;align-items:center;min-height:44px;padding:0 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);border-bottom:2px solid var(--amber);margin-bottom:-1px">Tab one</span><span style="flex:none;display:flex;align-items:center;padding:0 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab two</span><span style="flex:none;display:flex;align-items:center;padding:0 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab three</span><span style="flex:none;display:flex;align-items:center;padding:0 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab four</span><span style="flex:none;display:flex;align-items:center;padding:0 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab five</span></div><span style="position:absolute;right:0;top:0;bottom:1px;width:32px;background:linear-gradient(to right,transparent,var(--ink));pointer-events:none"></span></div>
+    <div style="height:200px;border:1px dashed var(--line);border-radius:4px;background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(255,255,255,.015) 10px 20px);display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">main · single column</div>
+    <div style="height:90px;border:1px dashed var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">rail card · stacked</div>
+    <div style="display:flex;flex-direction:column;gap:4px;font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>· Nav moves to a scrolling second row</span><span>· Search + account → 44px icon targets</span><span>· Breadcrumb → parent back-link + current</span><span>· Tabs scroll with an edge fade</span></div>
+  </main>
+</div></div>
+
+<div class="dv-opt" id="1j"><div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>H · Navigation states</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px 0;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:20px">
+  <div style="padding:0 32px;display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">H · Navigation</span><h2 style="margin:0;font:700 22px Inter,sans-serif">One header, four audience states</h2><span style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">Only the right-hand account cluster changes. Brand, primary nav and search stay identical for public and app pages.</span></div>
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="padding:0 32px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">1 · Anonymous · Sign in + Get access</span><dc-import name="AppHeader" layout="desktop" auth="anon" active="Fixtures" hint-size="100%,56px"></dc-import></div>
+  <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:200px"><span style="padding:0 32px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">2 · Signed-in · account menu open</span><dc-import name="AppHeader" layout="desktop" auth="signed" active="Teams" menu-open="{{ true }}" hint-size="100%,56px"></dc-import></div>
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="padding:0 32px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">3 · Subscribed · plan tag · <span style="color:var(--amber)">DECISION: tag wording and whether to show it</span></span><dc-import name="AppHeader" layout="desktop" auth="subscribed" active="Players" hint-size="100%,56px"></dc-import></div>
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="padding:0 32px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">4 · Subscription-gated · header unchanged, gate lives in tabs + content</span>
+    <div style="margin:0 32px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--line)"><span style="padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Tab one</span><span style="display:flex;align-items:center;gap:6px;padding:8px 12px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);border-bottom:2px solid var(--amber);margin-bottom:-1px">Gated tab<span style="width:7px;height:7px;border:1.5px solid var(--amber);border-radius:1px"></span></span></div>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;align-items:center;gap:16px"><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber);background:var(--amber-dim);border-radius:4px;padding:2px 6px">■ LOCKED</span><span style="font:500 14px Inter,sans-serif;color:var(--text)">Available with a subscription</span><span style="font:400 13px Inter,sans-serif;color:var(--muted)">GatedState · see <a class="dv-oid" href="#1k">1k</a></span></div>
+    </div>
+  </div>
+  <div style="margin:8px 32px 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:12px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">PrimaryNav item states</span>
+      <div style="display:flex;gap:18px;align-items:center;height:40px;border-bottom:1px solid var(--line);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><span style="color:var(--muted)">Default</span><span style="color:var(--text)">Hover</span><span style="color:var(--text);align-self:stretch;display:flex;align-items:center;border-bottom:2px solid var(--amber);margin-bottom:-1px">Active</span><span style="color:var(--text);outline:2px solid var(--amber);outline-offset:2px;border-radius:4px">Focus</span></div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">Active = section the current page belongs to, not only exact URL. aria-current="page".</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Breadcrumbs</span>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><span style="color:var(--cool)">Root</span><span style="color:var(--faint)">/</span><span style="color:var(--cool)">Parent</span><span style="color:var(--faint)">/</span><span style="color:var(--muted)">Current</span></div>
+      <div style="display:flex;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;min-width:0"><span style="color:var(--cool)">Root</span><span style="color:var(--faint)">/</span><span style="color:var(--cool)">…</span><span style="color:var(--faint)">/</span><span style="color:var(--cool)">Parent</span><span style="color:var(--faint)">/</span><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">A very long current entity name</span></div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">Links --cool, separator / --faint, current --muted + aria-current. Over 4 levels collapse the middle to "…". Current truncates.</span></div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-direction:column;gap:10px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">SearchTrigger</span>
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;background:var(--panel);border:1px solid var(--amber);border-radius:4px"><span style="font:400 12px Inter,sans-serif;color:var(--text)">Search</span><span style="width:1px;height:14px;background:var(--text)"></span><span style="margin-left:auto;font:500 10px 'JetBrains Mono',monospace;color:var(--faint)">esc</span></div>
+      <span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">"/" focuses. Desktop inline field; tablet/mobile icon opens a full-width field under the header. Results UI is Phase I.</span></div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1k"><div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>I · Global system states</div>
+<div class="dv-card" style="width:1200px;background:var(--ink);padding:32px;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--text);display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">I · States</span><h2 style="margin:0;font:700 22px Inter,sans-serif">Cue · heading · supporting text · optional action</h2><span style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">Page-scope shown. Panel-scope uses the same parts at padding 16 with a .label-cap heading.</span></div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">LoadingState</span>
+      <div aria-busy="true" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:12px;min-height:200px;box-sizing:border-box">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:6px;height:6px;border-radius:50%;background:var(--muted);animation:pulse-dot 1.8s ease-in-out infinite"></span><span style="font:400 13px Inter,sans-serif;color:var(--muted)">Loading…</span></div>
+        <span style="height:10px;width:70%;background:var(--raised);border-radius:2px"></span><span style="height:10px;width:90%;background:var(--raised);border-radius:2px"></span><span style="height:10px;width:55%;background:var(--raised);border-radius:2px"></span>
+        <span style="font:400 11px Inter,sans-serif;color:var(--faint)">"Loading…" panel VERIFIED · skeleton bars PROPOSED, match final layout, no shimmer</span>
+      </div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">EmptyState</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:200px;box-sizing:border-box">
+        <span style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:4px;font:400 14px 'JetBrains Mono',monospace;color:var(--faint)">○</span>
+        <span style="font:600 14px Inter,sans-serif;color:var(--text)">Nothing here yet</span>
+        <span style="font:400 13px Inter,sans-serif;color:var(--muted);max-width:260px">No records exist for this view. This is not an error.</span>
+      </div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">ErrorState</span>
+      <div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:200px;box-sizing:border-box">
+        <span style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--risk);border-radius:4px;font:700 13px 'JetBrains Mono',monospace;color:var(--risk)">!</span>
+        <span style="font:600 14px Inter,sans-serif;color:var(--risk)">Something went wrong</span>
+        <span style="font:400 13px Inter,sans-serif;color:var(--muted);max-width:260px">The service didn’t respond. Try again in a moment.</span>
+        <button style="margin-top:4px;height:32px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer" style-hover="border-color:var(--muted)">Retry</button>
+      </div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Not found</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:200px;box-sizing:border-box">
+        <span style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:600 11px 'JetBrains Mono',monospace;color:var(--muted)">404</span>
+        <span style="font:600 14px Inter,sans-serif;color:var(--text)">Page not found</span>
+        <span style="font:400 13px Inter,sans-serif;color:var(--muted);max-width:260px">The address doesn’t match anything we track.</span>
+        <a style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--cool);text-decoration:none">Back to a known page →</a>
+      </div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Unavailable</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:200px;box-sizing:border-box">
+        <span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">absent</span>
+        <span style="font:600 14px Inter,sans-serif;color:var(--text)">Not available for this item</span>
+        <span style="font:400 13px Inter,sans-serif;color:var(--muted);max-width:260px">This data isn’t covered yet. Values show as —, never 0.</span>
+      </div></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">GatedState</span>
+      <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;min-height:200px;box-sizing:border-box">
+        <span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--amber);background:var(--amber-dim);border-radius:4px;padding:2px 6px">■ LOCKED</span>
+        <span style="font:600 14px Inter,sans-serif;color:var(--text)">Available with a subscription</span>
+        <span style="font:400 13px Inter,sans-serif;color:var(--muted);max-width:260px">Copy and plan names are a product decision (Phase J).</span>
+        <div style="display:flex;gap:8px;margin-top:4px"><button style="height:32px;padding:0 14px;background:var(--amber);border:1px solid var(--amber);border-radius:4px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink)">See access</button><button style="height:32px;padding:0 14px;background:transparent;border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text)">Sign in</button></div>
+      </div></div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1l"><div class="dv-olabel"><a class="dv-oid" href="#1l">1l</a>J · Design rules, inventory, classification</div>
+<div class="dv-card sp" style="width:1100px;box-sizing:border-box">
+<h2>PitchTerminal V2 · Phase A spec</h2>
+<p style="color:#6b6f76">Tags: <span class="v">VERIFIED</span> exists in repo · <span class="p">PROPOSED</span> design-system recommendation · <span class="d">DECISION</span> needs a product call.</p>
+
+<h3>1 · Design system summary</h3>
+<p>One dark theme. Four surfaces (ink → panel → raised → content). Inter for words, JetBrains Mono for labels and numbers. Borders frame, colour signals state, amber marks brand, focus and selection. Two table patterns, one status-chip grammar, one state grammar (cue · heading · text · action). Everything is drawn from globals.css and tailwind.config.ts; nothing new is added to the palette.</p>
+
+<h3>2–6 · Boards</h3>
+<p>Tokens <a class="dv-oid" href="#1a">1a</a> · Typography <a class="dv-oid" href="#1b">1b</a> · Surfaces <a class="dv-oid" href="#1c">1c</a> · Grid <a class="dv-oid" href="#1d">1d</a> · Components <a class="dv-oid" href="#1e">1e</a> <a class="dv-oid" href="#1f">1f</a></p>
+
+<h3>7 · Component inventory</h3>
+<table>
+<tr><th>Component</th><th>Definition</th><th>Status</th></tr>
+<tr><td>AppShell</td><td>Sticky Header + per-page &lt;main&gt; + Footer on --ink</td><td><span class="v">VERIFIED</span> header · <span class="p">PROPOSED</span> footer</td></tr>
+<tr><td>Header</td><td>h-14, border-b --line, 1152 rail, px-4; brand · tag · tagline · nav · search · account</td><td><span class="v">VERIFIED</span> frame · <span class="p">PROPOSED</span> search/account</td></tr>
+<tr><td>PrimaryNav</td><td>.label-cap links, --muted → --text, 2px amber active underline; mobile second scrolling row</td><td><span class="v">VERIFIED</span> style · <span class="d">DECISION</span> items</td></tr>
+<tr><td>SearchTrigger</td><td>Inline field (desktop), icon button (tablet/mobile), "/" shortcut</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>AccountMenu</td><td>Anon: Sign in + Get access. Signed: initials button → menu (Account, Subscription, API access, Sign out)</td><td><span class="p">PROPOSED</span> · <span class="d">DECISION</span> items</td></tr>
+<tr><td>Breadcrumbs</td><td>.label-cap, links --cool, "/" --faint, current --muted; middle collapse; mobile back-link</td><td><span class="v">VERIFIED</span> style · <span class="p">PROPOSED</span> collapse</td></tr>
+<tr><td>WorkspaceTabs</td><td>.label-cap 8×12, amber underline on 1px rule, scrolls; + disabled / pending / locked</td><td><span class="v">VERIFIED</span> base · <span class="p">PROPOSED</span> states</td></tr>
+<tr><td>PageContainer</td><td>Rail 1152 (workspace) or 760 (index/status); padding 16; space-y 16/20</td><td><span class="v">VERIFIED</span></td></tr>
+<tr><td>PageHeader</td><td>.panel p16: monogram · eyebrow · h1 22/700 · label-cap subline · optional stats</td><td><span class="v">VERIFIED</span></td></tr>
+<tr><td>Panel</td><td>.panel / .panel-raised; primary 16, compact 12, state 24</td><td><span class="v">VERIFIED</span></td></tr>
+<tr><td>MetricCard</td><td>label-cap over mono value; null → —</td><td><span class="v">VERIFIED</span> (GeoField)</td></tr>
+<tr><td>StatusChip</td><td>label-cap 10, colour + border + glyph; grammar in <a class="dv-oid" href="#1e">1e</a></td><td><span class="v">VERIFIED</span> base · <span class="p">PROPOSED</span> extra states</td></tr>
+<tr><td>Button / IconButton</td><td>6 variants × 6 states, 32px (44 touch), radius 4</td><td><span class="v">VERIFIED</span> secondary · <span class="p">PROPOSED</span> rest</td></tr>
+<tr><td>DataTable</td><td>Border-separated, .panel wrapper, row rules, hover raised, group header band</td><td><span class="v">VERIFIED</span></td></tr>
+<tr><td>ZebraRow</td><td>li, odd color-mix(--raised 40%), px-2 py-1.5, rounded-term</td><td><span class="v">VERIFIED</span></td></tr>
+<tr><td>EmptyState · LoadingState · ErrorState</td><td>Panel p24, cue + heading + text (+ action)</td><td><span class="v">VERIFIED</span> base · <span class="p">PROPOSED</span> cue/skeleton</td></tr>
+<tr><td>GatedState</td><td>LOCKED chip + heading + text + primary/secondary</td><td><span class="p">PROPOSED</span> · <span class="d">DECISION</span> copy</td></tr>
+<tr><td>Footer</td><td>Border-top, 1152 rail, brand + tagline + links</td><td><span class="p">PROPOSED</span> · <span class="d">DECISION</span> links</td></tr>
+</table>
+
+<h3>8–10 · Shells</h3>
+<p>Desktop <a class="dv-oid" href="#1g">1g</a> · Tablet <a class="dv-oid" href="#1h">1h</a> · Mobile <a class="dv-oid" href="#1i">1i</a></p>
+<ul>
+<li><b>≥1024</b>: full header (tagline, inline search); splits active (8+4, 7+5); rail beside main.</li>
+<li><b>640–1023</b>: tagline + divider hidden below 640 only (<span class="v">VERIFIED</span>); search becomes icon below 1024; rails drop under main as a 2-up grid at md (<span class="p">PROPOSED</span>).</li>
+<li><b>&lt;640</b>: header 52 + 40px scrolling nav row; search/account 44px targets; breadcrumb → back-link + current; tabs scroll with edge fade; padding stays 16; everything single column (<span class="p">PROPOSED</span>). The fade is the only new visual.</li>
+</ul>
+
+<h3>11 · Navigation states</h3>
+<p><a class="dv-oid" href="#1j">1j</a>: anonymous, signed-in (menu open), subscribed, gated. The gate never changes the header; it appears as a locked tab plus GatedState in content, so public and app pages share one shell.</p>
+
+<h3>12 · Global states</h3>
+<p><a class="dv-oid" href="#1k">1k</a>. Empty is neutral (no action), error uses --risk for the heading only and always offers Retry, unavailable uses the verified "absent" tag, and gated uses amber because it is an access state, not a data state.</p>
+
+<h3>13 · Accessibility</h3>
+<ul>
+<li>Focus: 2px --amber outline, 2px offset, on every focusable element; never suppressed <span class="v">VERIFIED</span>.</li>
+<li>Keyboard: native links/buttons only; one tab stop per row (whole-row link); "/" focuses search; Esc closes menus and search; menu uses arrow keys, role="menu" <span class="p">PROPOSED</span>.</li>
+<li>Headings: one h1 per page (PageHeader); new sections use real h2/h3 rather than eyebrow paragraphs <span class="p">PROPOSED</span>.</li>
+<li>Landmarks: shell = header + nav(aria-label="primary"); each page owns &lt;main&gt;; breadcrumb nav aria-label="breadcrumb" <span class="v">VERIFIED</span>.</li>
+<li>Tabs: aria-current="page" on the active tab; disabled tabs are not focusable; locked tabs are focusable and announce "locked" <span class="p">PROPOSED</span>.</li>
+<li>Tables: native table/th, or role="table" on grid layouts <span class="v">VERIFIED</span>.</li>
+<li>Status: every chip has a text label and glyph; W/D/L carry the full word in aria-label; missing values read as "no value" <span class="v">VERIFIED</span>.</li>
+<li>Contrast: all four text tiers ≥4.5:1 on ink, panel and raised. --line is decorative; functional boundaries (inputs, selected) add amber or a text change <span class="v">VERIFIED</span>.</li>
+<li>Touch: 44px minimum on mobile controls <span class="p">PROPOSED</span>.</li>
+</ul>
+
+<h3>14 · Reusable rules</h3>
+<ol>
+<li>Four surfaces, in order. No panel-in-panel, no raised on canvas.</li>
+<li>Numbers are mono + tnum, right-aligned, fixed width. Missing is —, never 0.</li>
+<li>Colour never carries meaning alone: text, glyph or weight goes with it.</li>
+<li>Amber is brand, focus, active and primary action. Warn is state. Keep them apart.</li>
+<li>Border-separated tables for dense data, zebra for compact lists, never both.</li>
+<li>Tabs and chip rows scroll; they never wrap.</li>
+<li>Type scale is fixed; layout adapts.</li>
+<li>Radius is 4px everywhere.</li>
+<li>No shadows except the two verified ones; glow only on primary hover.</li>
+<li>No new colours. New needs are met with color-mix of existing tokens (15% wash, 40% border, 30/40% zebra).</li>
+</ol>
+
+<h3>15 · VERIFIED</h3>
+<p>All 14 colour tokens and 4 aliases; 4px radius; Inter + JetBrains Mono; .mono .tnum .eyebrow .label-cap .panel .panel-raised .hairline .scanlines .no-scrollbar; rounded-term, text-2xs, shadow-panel, shadow-glow, pulse-dot / meter-fill / fade-up; body 40px grid; focus ring; reduced-motion; h-14 sticky header on ink; 1152 and 760 containers; px-4 py-4; space-y-4/5; md:grid-cols-2 collapse; Tailwind default breakpoints; breadcrumb style; tab style; selector chip; context tag; form badge; StatusChip base (completed → muted, in-progress → warn, else cool); FeedTable and StandingsTable patterns; PredictedXI zebra 40%; Retry button; loading / error / not-found pages; the "missing ≠ zero" rule.</p>
+
+<h3>16 · PROPOSED</h3>
+<p>Display, H2, H3, body, metadata and numeric sizes; 12-column page grid with 16 gap and the six layout primitives; lg as the rail collapse point; normalise button radius 6 → 4; full button matrix; tab hover, disabled, pending and locked states; selected, expanded, disabled and unavailable rows; status chips POSTPONED, CANCELLED, WARNING, INFO, LOCKED, PENDING and their glyphs; SearchTrigger; AccountMenu; mobile nav second row; breadcrumb middle collapse and mobile back-link; tab edge fade; skeleton bars; Empty, Unavailable and Gated state visuals; Footer; 44px touch targets; real h2/h3 in new pages.</p>
+
+<h3>17 · Needs product decisions</h3>
+<ul>
+<li><span class="d">DECISION</span> Primary nav items and order (shown: Fixtures · Competitions · Teams · Players; verified nav has three links whose labels aren't in the attached context).</li>
+<li><span class="d">DECISION</span> Completed-fixture chip colour: verified StatusChip uses --muted; the token note and the earlier Competition wireframes used --edge for FT. Recommendation: keep --muted (FT is neutral, not positive) and reconcile the Competition wireframes in Phase D.</li>
+<li><span class="d">DECISION</span> Standings pattern: the verified StandingsTable is border-separated without zebra; the earlier Competition brief asked for zebra. Pick one in Phase D; this system recommends border-separated for standings.</li>
+<li><span class="d">DECISION</span> Whether "UPCOMING" or "SCHEDULED" is the display word; backend vocabulary is unchanged either way.</li>
+<li><span class="d">DECISION</span> Anonymous CTA wording ("Get access"), subscribed tag, gated copy, plan names — Phase J.</li>
+<li><span class="d">DECISION</span> Account menu items; API access is future and not in nav.</li>
+<li><span class="d">DECISION</span> Footer links (legal, data sources, contact).</li>
+<li><span class="d">DECISION</span> Whether public marketing pages use the same header or a lighter variant (this system assumes the same header).</li>
+</ul>
+</div></div>
+
+</div>
+<p class="dv-next">Try next: "lock the nav as Fixtures · Competitions · Teams · Players · Search" · "FT stays muted — update the Competition wireframes" · "try a lighter public header variant next to <a class="dv-oid" href="#1j">1j</a>"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const T = (name, value, role, use, avoid) => ({ name, value, role, use, avoid });
+    const tokens = [
+      T('--ink', '#0b0f14', 'Canvas, sticky header, text on amber.', 'Page background, header band, label on amber fills.', 'Cards, rows, anything that should read as a surface.'),
+      T('--panel', '#121821', 'Primary surface · .panel.', 'Every card, header, table wrapper, state panel.', 'Page background; hover fills; nested inside another panel.'),
+      T('--raised', '#1a222e', 'Raised / active · .panel-raised.', 'Hover, selected, expanded, group-header bands, zebra base, secondary button.', 'Large default areas; directly on canvas.'),
+      T('--line', '#1d2633', 'Borders and dividers (decorative).', 'Panel borders, row rules, tab rail, separators.', 'Text; the only cue on a functional control.'),
+      T('--text', '#f4f6f9', 'Primary text · 16.5:1.', 'Names, values, scores, headings, active nav.', 'Long body paragraphs.'),
+      T('--text-secondary', '#c3cbd6', 'Secondary text · 10.9:1.', 'Body copy, descriptions, verdict lines.', 'Labels and metadata.'),
+      T('--muted', '#90a0b4', 'Labels · 6.7:1.', '.eyebrow, .label-cap, inactive nav/tabs, timestamps, FT chip.', 'Primary values the user compares.'),
+      T('--faint', '#7e8aa0', 'Quietest tier · 5.1:1.', 'Em-dash nulls, counts, separators, disabled text.', 'Anything needed to act or decide.'),
+      T('--amber', '#ffb020', 'Brand + interaction accent.', 'Logo, active tab/nav, active chip, focus ring, primary button.', 'Data meaning or status; large fills.'),
+      T('--amber-dim', 'rgba(255,176,32,.22)', 'Dim amber wash.', 'Captain badge, glow ring, LOCKED chip, selected edge.', 'Text colour.'),
+      T('--edge', '#2fbf87', 'Positive · alias --success.', 'Win, supports, positive delta.', 'Brand, links, neutral completion.'),
+      T('--warn', '#f5b301', 'Caution / live · alias --warning.', 'Live, postponed, medium band, warnings.', 'Brand accent; next to amber without a label.'),
+      T('--risk', '#f0544f', 'Negative · alias --danger.', 'Loss, contradicts, errors, cancelled, destructive.', 'Decoration; emphasis that is not negative.'),
+      T('--cool', '#4c8dff', 'Informational · alias --info.', 'Links, breadcrumbs, context tag, upcoming.', 'Primary buttons; positive/negative meaning.')
+    ];
+    const aliases = [
+      { name: '--success', to: '→ --edge', value: 'var(--edge)' },
+      { name: '--warning', to: '→ --warn', value: 'var(--warn)' },
+      { name: '--danger', to: '→ --risk', value: 'var(--risk)' },
+      { name: '--info', to: '→ --cool', value: 'var(--cool)' }
+    ];
+    const layouts = [
+      { name: 'Full width', use: 'Tables that are the page (standings, boards)', collapse: 'no collapse · table scrolls', blocks: [{ span: 'span 12', label: '12', bg: 'var(--panel)' }] },
+      { name: '8 + 4', use: 'Detail pages: main + supporting rail', collapse: '< lg → stacked, rail as md 2-up', blocks: [{ span: 'span 8', label: 'main 8', bg: 'var(--panel)' }, { span: 'span 4', label: 'rail 4', bg: 'var(--raised)' }] },
+      { name: '7 + 5', use: 'Evidence + readings (Match intelligence)', collapse: '< lg → stacked', blocks: [{ span: 'span 7', label: 'main 7', bg: 'var(--panel)' }, { span: 'span 5', label: 'rail 5', bg: 'var(--raised)' }] },
+      { name: '6 + 6', use: 'Symmetric comparison (home / away)', collapse: '< md → stacked (verified md:grid-cols-2)', blocks: [{ span: 'span 6', label: '6', bg: 'var(--panel)' }, { span: 'span 6', label: '6', bg: 'var(--panel)' }] },
+      { name: '4 + 4 + 4', use: 'Card rows, dashboard tiles', collapse: '< lg → 2-up · < md → 1', blocks: [{ span: 'span 4', label: '4', bg: 'var(--panel)' }, { span: 'span 4', label: '4', bg: 'var(--panel)' }, { span: 'span 4', label: '4', bg: 'var(--panel)' }] },
+      { name: 'Reading column 760', use: 'Index lists, status pages, account', collapse: 'fluid below 760', blocks: [{ span: '3 / span 8', label: '760 column', bg: 'var(--panel)' }] }
+    ];
+    const MONO = "500 10px 'JetBrains Mono',monospace", SANS = "500 13px Inter,sans-serif";
+    const ring = '2px solid var(--amber)', glow = '0 0 0 1px var(--amber-dim),0 0 24px -8px var(--amber)';
+    const base = { w: '0', px: '14px', shadow: 'none', outline: 'none', deco: 'none', font: MONO, tt: 'uppercase', cursor: 'pointer' };
+    const V = (name, label, d, h, a, dis) => ({ name, cells: [
+      { ...base, ...d, label }, { ...base, ...d, ...h, label }, { ...base, ...d, outline: ring, label }, { ...base, ...d, ...a, label },
+      { ...base, ...d, ...dis, cursor: 'not-allowed', shadow: 'none', label }, { ...base, ...d, label: d.icon ? '…' : '● Loading', cursor: 'progress' }
+    ]});
+    const buttons = [
+      V('Primary', 'Continue', { bg: 'var(--amber)', color: 'var(--ink)', border: 'var(--amber)' }, { shadow: glow }, { shadow: 'inset 0 1px 0 rgba(0,0,0,.25)' }, { bg: 'var(--raised)', color: 'var(--faint)', border: 'var(--line)' }),
+      V('Secondary', 'Retry', { bg: 'var(--raised)', color: 'var(--text)', border: 'var(--line)' }, { border: 'var(--muted)' }, { bg: 'var(--panel)' }, { bg: 'var(--panel)', color: 'var(--faint)' }),
+      V('Ghost', 'Cancel', { bg: 'transparent', color: 'var(--muted)', border: 'transparent' }, { bg: 'var(--raised)', color: 'var(--text)' }, { bg: 'var(--raised)', color: 'var(--text)', border: 'var(--line)' }, { color: 'var(--faint)' }),
+      V('Icon', '+', { bg: 'var(--raised)', color: 'var(--text-secondary)', border: 'var(--line)', w: '32px', px: '0', icon: true, font: "500 14px 'JetBrains Mono',monospace" }, { border: 'var(--muted)', color: 'var(--text)' }, { bg: 'var(--panel)' }, { bg: 'var(--panel)', color: 'var(--faint)' }),
+      V('Text link', 'Open detail', { bg: 'transparent', color: 'var(--cool)', border: 'transparent', px: '2px', font: SANS, tt: 'none' }, { deco: 'underline', color: 'var(--text)' }, { color: 'var(--text)' }, { color: 'var(--faint)' }),
+      V('Destructive', 'Remove', { bg: 'transparent', color: 'var(--risk)', border: 'color-mix(in srgb,var(--risk) 50%,transparent)' }, { bg: 'color-mix(in srgb,var(--risk) 12%,transparent)', border: 'var(--risk)' }, { bg: 'color-mix(in srgb,var(--risk) 20%,transparent)', border: 'var(--risk)' }, { color: 'var(--faint)', border: 'var(--line)' })
+    ];
+    const C = (label, color, glyph, rule, cls, extra = {}) => ({ label, color, glyph, rule, cls, bg: 'transparent', bcolor: color, bstyle: 'solid', clsColor: cls === 'VERIFIED' ? 'var(--text-secondary)' : 'var(--muted)', ...extra });
+    const chips = [
+      C('LIVE', 'var(--warn)', '●', 'In progress · pulse-dot on glyph', 'VERIFIED'),
+      C('FT', 'var(--muted)', '■', 'Completed · neutral, not positive', 'VERIFIED'),
+      C('UPCOMING', 'var(--cool)', '○', 'Not started · default lifecycle', 'VERIFIED'),
+      C('POSTPONED', 'var(--warn)', '▲', 'Moved · triangle separates from live', 'PROPOSED'),
+      C('CANCELLED', 'var(--risk)', '✕', 'Will not be played', 'PROPOSED'),
+      C('WARNING', 'var(--warn)', '!', 'Caution on data or state', 'PROPOSED'),
+      C('INFO', 'var(--cool)', 'i', 'Neutral context', 'PROPOSED'),
+      C('LOCKED', 'var(--amber)', '■', 'Access state · amber-dim fill', 'PROPOSED', { bg: 'var(--amber-dim)', bcolor: 'transparent' }),
+      C('PENDING', 'var(--faint)', '◌', 'Awaiting data · dashed border', 'PROPOSED', { bstyle: 'dashed' })
+    ];
+    const R = (state, o) => ({ state, label: 'Row label', n1: '22', n2: '48', chip: 'FT', chipColor: 'var(--muted)', chipStyle: 'solid', act: 'OPEN →', actColor: 'var(--cool)', bg: 'transparent', border: 'transparent', text: 'var(--text)', num: 'var(--text)', weight: 500, stateColor: 'var(--faint)', cursor: 'pointer', expanded: false, ...o });
+    const rowStates = [
+      R('DEFAULT', {}),
+      R('HOVER', { bg: 'var(--raised)' }),
+      R('SELECTED', { bg: 'var(--raised)', border: 'var(--amber-dim)', weight: 600, stateColor: 'var(--amber)' }),
+      R('EXPANDED', { bg: 'var(--raised)', act: 'CLOSE −', expanded: true }),
+      R('DISABLED', { text: 'var(--faint)', num: 'var(--faint)', chipColor: 'var(--faint)', actColor: 'var(--faint)', cursor: 'not-allowed' }),
+      R('UNAVAILABLE', { n1: '—', n2: '—', num: 'var(--faint)', chip: 'ABSENT', chipColor: 'var(--faint)', act: '', cursor: 'default' })
+    ];
+    const Z = 'color-mix(in srgb, var(--raised) 40%, transparent)';
+    return {
+      tokens, aliases, layouts, buttons, chips, rowStates,
+      cols12: Array.from({ length: 12 }, (_, i) => i + 1),
+      tableRows: [{ i: 1, a: 22, b: 14, c: '+22', cColor: 'var(--edge)', t: 48 }, { i: 2, a: 21, b: 12, c: '0', cColor: 'var(--faint)', t: 42 }, { i: 3, a: 22, b: 12, c: '−4', cColor: 'var(--risk)', t: 40 }],
+      zebraRows: [1, 2, 3, 4, 5].map((n, i) => ({ n, p: n === 4 ? '—' : (92 - n * 7) + '%', pc: n === 4 ? 'var(--faint)' : 'var(--text-secondary)', bg: i % 2 === 0 ? Z : 'transparent' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

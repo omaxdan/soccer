@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}</style></helmet>
+<div style="background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text);min-height:{{ minH }};display:flex;flex-direction:column">
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><dc-import name="AppHeader" layout="{{ bp }}" auth="anon" active="Teams" hint-size="100%,56px"></dc-import></sc-if>
+<main style="flex:1;max-width:1152px;width:100%;margin:0 auto;padding:{{ mainPad }};box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+
+<sc-if value="{{ notFound }}" hint-placeholder-val="{{ false }}">
+  <div role="alert" style="margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span aria-hidden="true" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:600 10px 'JetBrains Mono',monospace;color:var(--muted)">404</span><h1 style="margin:0;font:600 17px Inter,sans-serif">Team not found</h1><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted)">This team doesn’t exist or is no longer available.</p><a style="margin-top:4px;display:inline-flex;align-items:center;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none">Browse fixtures</a></div>
+</sc-if>
+
+<sc-if value="{{ found }}" hint-placeholder-val="{{ true }}">
+  <nav aria-label="breadcrumb" style="display:flex;flex-wrap:wrap;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><a style="color:var(--cool);text-decoration:none;cursor:pointer">Teams</a><span style="color:var(--faint)">/</span><a style="color:var(--cool);text-decoration:none;cursor:pointer">Brazil</a><span style="color:var(--faint)">/</span><span aria-current="page" style="color:var(--muted)">Palmeiras</span></nav>
+
+  <header style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <span aria-hidden="true" style="width:{{ monoSize }};height:{{ monoSize }};flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 13px 'JetBrains Mono',monospace;color:var(--muted)">PAL</span>
+      <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+        <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Brazil · Team</span>
+        <h1 style="margin:0;font:700 22px/1.15 Inter,sans-serif">Palmeiras</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 14px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Home venue · <span style="color:var(--text-secondary)">Nubank Parque</span></span><a style="color:var(--cool);text-decoration:none;cursor:pointer" style-hover="text-decoration:underline">Brasileirão Betano · Brasileiro Serie A 2026</a></div>
+      </div>
+    </div>
+    <dl style="margin:0 0 0 {{ metaMargin }};display:flex;gap:24px">
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:{{ metaAlign }}"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Latest match</dt><dd style="margin:0;font:600 15px 'JetBrains Mono',monospace;color:var(--text)">6 Sep 2026</dd></div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:{{ metaAlign }}"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Next fixture</dt><dd style="margin:0;font:600 15px 'JetBrains Mono',monospace;color:var(--faint)">None recorded</dd></div>
+    </dl>
+  </header>
+
+  <nav role="tablist" aria-label="Team sections" style="display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><button role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="flex:none;min-height:{{ tabH }};padding:0 12px;background:transparent;border:0;border-bottom:2px solid {{ t.under }};margin-bottom:-1px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ t.color }};cursor:pointer" style-hover="color:var(--text)">{{ t.label }}</button></sc-for>
+  </nav>
+
+  <sc-if value="{{ loadingAll }}" hint-placeholder-val="{{ true }}">
+    <div aria-busy="true" style="display:flex;flex-direction:column;gap:12px"><span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading</span><sc-for list="{{ skelBlocks }}" as="h" hint-placeholder-count="3"><div style="background:var(--panel);border:1px solid var(--line);border-radius:4px"><div style="height:40px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px"><span style="height:8px;width:120px;background:var(--raised);border-radius:2px"></span></div><div style="height:{{ h }};padding:12px 16px;display:flex;flex-direction:column;gap:10px"><span style="height:9px;width:70%;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:55%;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:62%;background:var(--raised);border-radius:2px"></span></div></div></sc-for></div>
+  </sc-if>
+
+  <sc-if value="{{ tOverview }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:{{ splitCols }};gap:16px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section aria-labelledby="{{ uid }}rd" style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><h2 id="{{ uid }}rd" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Current readings</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">As of 6 Sep 2026</span></div>
+          <sc-if value="{{ readingsOk }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:{{ readCols }};gap:8px">
+              <sc-for list="{{ readings }}" as="r" hint-placeholder-count="3">
+                <article aria-label="{{ r.title }} reading" style="background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:12px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">{{ r.title }}</h3><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ r.sc }};border:1px solid {{ r.sc }};border-radius:4px;padding:0 5px">{{ r.status }}</span></div>
+                  <p style="margin:0;font:400 13px/1.5 Inter,sans-serif;color:var(--text-secondary)">{{ r.verdict }}</p>
+                  <dl style="margin:0;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px"><sc-for list="{{ r.items }}" as="i" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;font:400 11px 'JetBrains Mono',monospace"><dt style="color:var(--faint)">{{ i.name }}</dt><dd style="margin:0;color:var(--text)">{{ i.v }}</dd></div></sc-for></dl>
+                  <span style="margin-top:auto;font:400 10px 'JetBrains Mono',monospace;color:var(--faint)">{{ r.foot }}</span>
+                </article>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ readingsNone }}" hint-placeholder-val="{{ false }}"><div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;gap:10px;align-items:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">Not enough data yet for current readings.</span></div></sc-if>
+          <sc-if value="{{ readingsFailed }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center"><span aria-hidden="true" style="font:700 12px 'JetBrains Mono',monospace;color:var(--risk)">!</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">Readings couldn’t be loaded. The rest of the page is unaffected.</span><button style="margin-left:auto;height:32px;padding:0 12px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Try again</button></div></sc-if>
+        </section>
+
+        <section aria-labelledby="{{ uid }}at" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}at" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Team attributes · Brasileirão Betano</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Compared with the 20 teams · 25 completed matches</span></div>
+          <sc-if value="{{ attrsOk }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ attrGroups }}" as="g" hint-placeholder-count="3">
+              <div role="table" aria-label="{{ g.name }}">
+                <div role="row" style="display:grid;grid-template-columns:{{ attrCols }};gap:8px;padding:8px 16px;background:var(--raised);border-top:1px solid var(--line);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)"><span role="columnheader">{{ g.name }} <span style="color:var(--faint)">{{ g.count }}</span></span><span role="columnheader" style="text-align:right">Value</span><span role="columnheader" style="text-align:right">Rank</span><sc-if value="{{ wide }}"><span role="columnheader" style="text-align:right">Median</span><span role="columnheader">Reading</span></sc-if></div>
+                <sc-for list="{{ g.rows }}" as="a" hint-placeholder-count="3"><div role="row" style="display:grid;grid-template-columns:{{ attrCols }};gap:8px;align-items:center;min-height:38px;padding:4px 16px;border-top:1px solid var(--line)"><span role="rowheader" style="display:flex;flex-direction:column;gap:2px;font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ a.label }}<span style="font:400 10px 'JetBrains Mono',monospace;color:var(--faint)">{{ a.orient }}</span></span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ a.v }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ a.rank }}</span><sc-if value="{{ wide }}"><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ a.med }}</span><span role="cell" style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted)">{{ a.level }}</span></sc-if></div></sc-for>
+              </div>
+            </sc-for>
+            <p style="margin:0;padding:10px 16px 12px;border-top:1px solid var(--line);font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Rank 1 = highest value among the 20 teams. Whether higher or lower is better is shown under each attribute, as defined by PitchTerminal.</p>
+          </sc-if>
+          <sc-if value="{{ attrsNone }}" hint-placeholder-val="{{ false }}"><div style="padding:16px;display:flex;gap:10px;align-items:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">Not enough completed matches this season to compare attributes.</span></div></sc-if>
+        </section>
+
+        <section aria-labelledby="{{ uid }}rr" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}rr" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Recent results · all competitions</h2><button onClick="{{ goPerf }}" style="background:transparent;border:0;padding:0;font:500 12px Inter,sans-serif;color:var(--cool);cursor:pointer">Home and away →</button></div>
+          <ul style="list-style:none;margin:0;padding:0"><sc-for list="{{ recent }}" as="r" hint-placeholder-count="5"><li style="border-top:{{ r.rule }}"><a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:{{ mCols }};gap:10px;align-items:center;min-height:42px;padding:4px 16px;text-decoration:none;cursor:pointer" style-hover="background:var(--raised)"><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.dateS }}</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:500 14px Inter,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.vs }} {{ r.opp }}</span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.comp }}</span></span><span style="font:600 13px 'JetBrains Mono',monospace;color:var(--text);text-align:right">{{ r.score }}</span><span title="{{ r.word }}" style="justify-self:end;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:{{ r.rc }};background:color-mix(in srgb,{{ r.rc }} 15%,transparent);border:1px solid color-mix(in srgb,{{ r.rc }} 40%,transparent);border-radius:4px">{{ r.res }}</span></a></li></sc-for></ul>
+        </section>
+      </div>
+
+      <aside style="display:flex;flex-direction:column;gap:16px">
+        <section aria-labelledby="{{ uid }}cp" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+          <h2 id="{{ uid }}cp" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Competitions this season</h2>
+          <ul style="list-style:none;margin:0;padding:4px 16px 8px"><sc-for list="{{ participation }}" as="p" hint-placeholder-count="3"><li style="display:flex;flex-direction:column;gap:3px;padding:10px 0;border-bottom:1px solid var(--line)"><a style="font:500 14px Inter,sans-serif;color:var(--cool);text-decoration:none;cursor:pointer" style-hover="text-decoration:underline">{{ p.comp }}</a><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ p.season }}</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ p.line }}</span></li></sc-for></ul>
+        </section>
+        <section aria-labelledby="{{ uid }}av" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}av" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Unavailable players</h2><button onClick="{{ goSquad }}" style="background:transparent;border:0;padding:0;font:500 12px Inter,sans-serif;color:var(--cool);cursor:pointer">Squad →</button></div>
+          <ul style="list-style:none;margin:0;padding:4px 16px 8px"><sc-for list="{{ availability }}" as="a" hint-placeholder-count="2"><li style="display:flex;justify-content:space-between;gap:10px;align-items:center;min-height:48px;border-bottom:1px solid var(--line)"><span style="display:flex;flex-direction:column;gap:2px"><span style="font:500 14px Inter,sans-serif;color:var(--text)">{{ a.name }}</span><span style="font:400 12px Inter,sans-serif;color:var(--muted)">{{ a.reason }} · since {{ a.from }}</span></span><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 5px">▲ {{ a.kind }}</span></li></sc-for></ul>
+          <p style="margin:0;padding:8px 16px 12px;font:400 11px/1.5 Inter,sans-serif;color:var(--faint)">No expected return dates recorded.</p>
+        </section>
+      </aside>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tSquad }}" hint-placeholder-val="{{ false }}">
+    <sc-if value="{{ squadOk }}" hint-placeholder-val="{{ true }}">
+      <section aria-labelledby="{{ uid }}sq" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}sq" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Registered squad · 29 players</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Sorted by minutes · all competitions · values as of 17 Sep 2026</span></div>
+        <div role="table" aria-label="Registered squad">
+          <sc-if value="{{ wide }}"><div role="row" style="display:grid;grid-template-columns:{{ sqCols }};gap:8px;padding:8px 16px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader">Player</span><span role="columnheader" style="text-align:right" title="Matches in the matchday squad">Squad</span><span role="columnheader" style="text-align:right">Started</span><span role="columnheader" style="text-align:right">Bench</span><span role="columnheader" style="text-align:right">Minutes</span><span role="columnheader" style="text-align:right">Goals</span><span role="columnheader" style="text-align:right">Value</span><span role="columnheader">Status</span></div></sc-if>
+          <sc-for list="{{ squad }}" as="p" hint-placeholder-count="12">
+            <div role="row" style="border-top:1px solid var(--line)" style-hover="background:var(--raised)">
+              <sc-if value="{{ wide }}"><div style="display:grid;grid-template-columns:{{ sqCols }};gap:8px;align-items:center;min-height:40px;padding:0 16px"><a role="rowheader" style="font:500 14px Inter,sans-serif;color:var(--text);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer" style-hover="color:var(--cool)">{{ p.name }}</a><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ p.obs }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ p.started }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ p.bench }}</span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:{{ p.minC }}">{{ p.min }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:{{ p.goalsC }}">{{ p.goals }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:{{ p.valueC }}">{{ p.value }}</span><span role="cell"><sc-if value="{{ p.isOut }}"><span title="{{ p.out }}" style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 5px">▲ INJURY</span></sc-if></span></div></sc-if>
+              <sc-if value="{{ narrow }}"><div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><a style="font:500 15px Inter,sans-serif;color:var(--text);text-decoration:none">{{ p.name }}</a><sc-if value="{{ p.isOut }}"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 5px">▲ {{ p.out }}</span></sc-if></div><div style="display:flex;flex-wrap:wrap;gap:4px 14px;font:400 11px 'JetBrains Mono',monospace;color:var(--muted)"><span>{{ p.min }} min</span><span>{{ p.started }} started · {{ p.bench }} bench</span><span>{{ p.goals }} goals</span><span>{{ p.value }}</span></div></div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <details style="border-top:1px solid var(--line)"><summary style="min-height:44px;display:flex;align-items:center;padding:0 16px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer">Also appeared this season, not currently registered · 12</summary><ul style="list-style:none;margin:0;padding:0 16px 12px;display:grid;grid-template-columns:{{ othersCols }};gap:4px 16px"><sc-for list="{{ others }}" as="o" hint-placeholder-count="12"><li style="display:flex;justify-content:space-between;gap:8px;min-height:30px;align-items:center;font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ o.name }}<span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ o.line }}</span></li></sc-for></ul></details>
+        <p style="margin:0;padding:10px 16px 12px;border-top:1px solid var(--line);font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Positions, shirt numbers and ages aren’t recorded, so the squad isn’t grouped by role. — means no value is recorded.</p>
+      </section>
+    </sc-if>
+    <sc-if value="{{ squadEmpty }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><h2 style="margin:0;font:600 15px Inter,sans-serif">No squad data available</h2><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted)">No registered players are recorded for this team yet.</p></div></sc-if>
+    <sc-if value="{{ squadFailed }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span aria-hidden="true" style="font:700 13px 'JetBrains Mono',monospace;color:var(--risk)">!</span><h2 style="margin:0;font:600 15px Inter,sans-serif">Unable to load the squad</h2><button style="margin-top:4px;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Try again</button></div></sc-if>
+  </sc-if>
+
+  <sc-if value="{{ tPerf }}" hint-placeholder-val="{{ false }}">
+    <sc-if value="{{ perfLoading }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="display:grid;grid-template-columns:{{ haCols }};gap:16px"><span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading performance</span><sc-for list="{{ skel2 }}" as="s" hint-placeholder-count="2"><div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px 16px;display:flex;flex-direction:column;gap:12px"><span style="height:8px;width:110px;background:var(--raised);border-radius:2px"></span><sc-for list="{{ s }}" as="w" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:48px 1fr 40px 22px;gap:10px;align-items:center;height:30px"><span style="height:8px;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:{{ w }};background:var(--raised);border-radius:2px"></span><span style="height:9px;background:var(--raised);border-radius:2px"></span><span style="height:18px;background:var(--raised);border-radius:3px"></span></div></sc-for></div></sc-for></div></sc-if>
+    <sc-if value="{{ perfEmpty }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><h2 style="margin:0;font:600 15px Inter,sans-serif">No performance data available</h2><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted)">No completed matches are recorded for this team yet.</p></div></sc-if>
+    <sc-if value="{{ perfOk }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <section aria-labelledby="{{ uid }}pi" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}pi" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Performance indicators</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Descriptive · as of 6 Sep 2026</span></div>
+          <dl style="margin:0;display:grid;grid-template-columns:{{ piCols }}"><sc-for list="{{ perf }}" as="m" hint-placeholder-count="7"><div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:4px"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ m.k }}</dt><dd style="margin:0;display:flex;align-items:baseline;gap:6px"><span style="font:600 20px 'JetBrains Mono',monospace;color:var(--text)">{{ m.v }}</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ m.unit }}</span></dd><dd style="margin:0;font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ m.dir }}</dd><dd style="margin:0;font:400 11px 'JetBrains Mono',monospace;color:{{ m.nc }}">{{ m.n }}</dd></div></sc-for></dl>
+        </section>
+
+        <div style="display:grid;grid-template-columns:{{ haCols }};gap:16px">
+          <sc-for list="{{ haLists }}" as="h" hint-placeholder-count="2">
+            <section aria-label="{{ h.title }}" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 style="margin:0;display:flex;align-items:center;gap:8px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)"><span style="font:600 9px 'JetBrains Mono',monospace;color:var(--text);border:1px solid var(--line);border-radius:3px;padding:1px 5px">{{ h.tag }}</span>{{ h.title }}</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">last 5</span></div>
+              <ul style="list-style:none;margin:0;padding:0"><sc-for list="{{ h.rows }}" as="r" hint-placeholder-count="5"><li style="border-top:{{ r.rule }}"><a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:{{ mCols }};gap:10px;align-items:center;min-height:42px;padding:4px 16px;text-decoration:none;cursor:pointer" style-hover="background:var(--raised)"><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.dateS }}</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:500 14px Inter,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.vs }} {{ r.opp }}</span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.comp }}</span></span><span style="font:600 13px 'JetBrains Mono',monospace;color:var(--text);text-align:right">{{ r.score }}</span><span title="{{ r.word }}" style="justify-self:end;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:{{ r.rc }};background:color-mix(in srgb,{{ r.rc }} 15%,transparent);border:1px solid color-mix(in srgb,{{ r.rc }} 40%,transparent);border-radius:4px">{{ r.res }}</span></a></li></sc-for></ul>
+            </section>
+          </sc-for>
+        </div>
+
+        <section aria-labelledby="{{ uid }}sg" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <div style="display:flex;flex-direction:column;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px"><h2 id="{{ uid }}sg" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Performance signals</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Last 5: 9 Aug – 6 Sep · Previous 5: 22 Jul – 6 Aug · Season: 28 matches (14 home · 14 away)</span></div>
+            <div role="radiogroup" aria-label="Signal group" style="display:flex;gap:4px;overflow-x:auto;scrollbar-width:none"><sc-for list="{{ sigTabs }}" as="f" hint-placeholder-count="7"><button role="radio" aria-checked="{{ f.on }}" onClick="{{ f.pick }}" style="flex:none;min-height:{{ tabH }};padding:0 10px;background:{{ f.bg }};border:1px solid {{ f.border }};border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ f.color }};cursor:pointer">{{ f.label }}</button></sc-for></div>
+          </div>
+          <div role="table" aria-label="{{ sigLabel }}" style="padding:4px 16px 10px;overflow-x:auto">
+            <div role="row" style="display:grid;grid-template-columns:{{ sigCols }};gap:8px;padding:6px 0;min-width:{{ sigMin }};font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader">Signal</span><span role="columnheader" style="text-align:right">Prev 5</span><span role="columnheader" style="text-align:right">Last 5</span><span role="columnheader" style="text-align:right">Season</span><span role="columnheader" style="text-align:right">Home</span><span role="columnheader" style="text-align:right">Away</span></div>
+            <sc-for list="{{ sigRows }}" as="r" hint-placeholder-count="5"><div role="row" style="display:grid;grid-template-columns:{{ sigCols }};gap:8px;align-items:center;min-height:36px;min-width:{{ sigMin }};border-top:1px solid var(--line)"><span role="rowheader" style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ r.label }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.prev5 }}</span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ r.last5 }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.season }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.home }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.away }}</span></div></sc-for>
+          </div>
+          <div style="padding:10px 16px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Current runs</span><sc-for list="{{ streaks }}" as="s" hint-placeholder-count="8"><span style="font:400 12px Inter,sans-serif;color:var(--text-secondary)">{{ s.label }} <span style="font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ s.len }}</span></span></sc-for></div>
+        </section>
+      </div>
+    </sc-if>
+  </sc-if>
+
+  <sc-if value="{{ tHistory }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <section aria-labelledby="{{ uid }}sr" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}sr" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Season record · all competitions</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ histRange }}</span></div>
+        <dl style="margin:0;display:grid;grid-template-columns:{{ recCols }}"><sc-for list="{{ record }}" as="m" hint-placeholder-count="7"><div style="padding:12px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ m.k }}</dt><dd style="margin:0;font:600 20px 'JetBrains Mono',monospace;color:{{ m.c }}">{{ m.v }}</dd></div></sc-for></dl>
+      </section>
+
+      <section aria-labelledby="{{ uid }}mb" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}mb" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Match by match · goals for and against</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Oldest → latest · bars above the line = scored, below = conceded</span></div>
+        <figure style="margin:0;padding:16px">
+          <svg role="img" aria-label="{{ chartAria }}" viewBox="{{ chartView }}" preserveAspectRatio="none" style="width:100%;height:160px;display:block"><line x1="0" y1="80" x2="{{ chartW }}" y2="80" stroke="#1d2633"></line><sc-for list="{{ bars }}" as="b" hint-placeholder-count="28"><rect x="{{ b.x }}" y="{{ b.yf }}" width="{{ b.w }}" height="{{ b.hf }}" fill="#c3cbd6"></rect><rect x="{{ b.x }}" y="81" width="{{ b.w }}" height="{{ b.ha }}" fill="#7e8aa0"></rect></sc-for></svg>
+          <div aria-hidden="true" style="display:grid;grid-template-columns:repeat({{ nMatches }},minmax(0,1fr));gap:2px;margin-top:8px"><sc-for list="{{ bars }}" as="b" hint-placeholder-count="28"><span title="{{ b.title }}" style="height:16px;display:flex;align-items:center;justify-content:center;font:700 8px 'JetBrains Mono',monospace;color:{{ b.rc }};background:color-mix(in srgb,{{ b.rc }} 15%,transparent);border-radius:2px">{{ b.res }}</span></sc-for></div>
+          <figcaption style="display:flex;justify-content:space-between;margin-top:6px;font:400 10px 'JetBrains Mono',monospace;color:var(--faint)"><span>{{ firstDate }}</span><span>{{ nMatches }} matches</span><span>{{ lastDate }}</span></figcaption>
+        </figure>
+      </section>
+
+      <div style="display:grid;grid-template-columns:{{ histCols }};gap:16px;align-items:start">
+        <section aria-labelledby="{{ uid }}ml" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}ml" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Match log</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Latest first</span></div>
+          <div role="table" aria-label="Match log, latest first">
+            <div role="row" style="display:grid;grid-template-columns:{{ logCols }};gap:8px;padding:8px 16px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader">Date</span><span role="columnheader">Opponent</span><span role="columnheader" style="text-align:right">Score</span><sc-if value="{{ wide }}"><span role="columnheader" style="text-align:right">xG</span><span role="columnheader" style="text-align:right">xGA</span></sc-if><span role="columnheader" style="text-align:right">Res</span></div>
+            <sc-for list="{{ logRows }}" as="r" hint-placeholder-count="10"><a role="row" aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:{{ logCols }};gap:8px;align-items:center;min-height:40px;padding:0 16px;border-top:1px solid var(--line);text-decoration:none;cursor:pointer" style-hover="background:var(--raised)"><span role="cell" style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.dateS }}</span><span role="cell" style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font:500 13px Inter,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.vs }} {{ r.opp }}</span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.comp }}</span></span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ r.score }}</span><sc-if value="{{ wide }}"><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:{{ r.xgC }}">{{ r.xg }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:{{ r.xgC }}">{{ r.xga }}</span></sc-if><span role="cell" title="{{ r.word }}" style="justify-self:end;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font:700 11px 'JetBrains Mono',monospace;color:{{ r.rc }};background:color-mix(in srgb,{{ r.rc }} 15%,transparent);border:1px solid color-mix(in srgb,{{ r.rc }} 40%,transparent);border-radius:4px">{{ r.res }}</span></a></sc-for>
+          </div>
+          <sc-if value="{{ logMore }}"><button onClick="{{ toggleLog }}" style="width:100%;min-height:44px;background:transparent;border:0;border-top:1px solid var(--line);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer" style-hover="background:var(--raised);color:var(--text)">{{ logLabel }}</button></sc-if>
+        </section>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <section aria-labelledby="{{ uid }}sm" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+            <h2 id="{{ uid }}sm" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Season statistics</h2>
+            <dl style="margin:0;padding:4px 16px 10px"><sc-for list="{{ seasonMetrics }}" as="m" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:minmax(0,1fr) 72px 64px;gap:8px;align-items:center;min-height:36px;border-bottom:1px solid var(--line)"><dt style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ m.k }}</dt><dd style="margin:0;text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ m.v }}</dd><dd style="margin:0;text-align:right;font:400 10px 'JetBrains Mono',monospace;color:var(--faint)">{{ m.note }}</dd></div></sc-for></dl>
+          </section>
+          <div style="border:1px dashed var(--line);border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">EARLIER SEASONS</span><span style="font:400 13px/1.5 Inter,sans-serif;color:var(--muted)">{{ earlierNote }}</span></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</sc-if>
+</main>
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><footer style="max-width:1152px;width:100%;margin:40px auto 0;padding:24px 16px;box-sizing:border-box;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span style="font:700 13px Inter,sans-serif;color:var(--text-secondary)">Pitch<span style="color:var(--amber)">Terminal</span></span><div style="display:flex;flex-wrap:wrap;gap:8px 18px"><a style="color:var(--faint);text-decoration:none">Features</a><a style="color:var(--faint);text-decoration:none">Pricing</a><a style="color:var(--faint);text-decoration:none">Terms</a><a style="color:var(--faint);text-decoration:none">Privacy</a><span>© PitchTerminal</span></div></footer></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;panel&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;squad&quot;,&quot;performance&quot;,&quot;history&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;default&quot;,&quot;limited&quot;,&quot;readingsFailed&quot;,&quot;squadEmpty&quot;,&quot;squadFailed&quot;,&quot;perfLoading&quot;,&quot;perfEmpty&quot;,&quot;historyThin&quot;,&quot;notFound&quot;],&quot;default&quot;:&quot;default&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { data: null, tab: null, sig: 'scoring', logAll: false };
+  componentDidMount() {
+    fetch('./team-72-view.json').then(r => r.json()).then(data => this.setState({ data })).catch(() => {});
+  }
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop', frame = this.props.frame ?? 'full', s = this.props.state ?? 'default';
+    const tab = this.state.tab ?? this.props.tab ?? 'overview';
+    const M = bp === 'mobile', D = bp === 'desktop';
+    const uid = this.uid || (this.uid = 'tw' + Math.random().toString(36).slice(2, 7));
+    const d = this.state.data;
+    const ready = !!d;
+    const RC = { W: ['var(--edge)', 'Win'], D: ['var(--muted)', 'Draw'], L: ['var(--risk)', 'Loss'] };
+    const dS = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+    const money = v => v == null ? '—' : v >= 1e6 ? '€' + (v / 1e6).toFixed(1) + 'm' : '€' + Math.round(v / 1e3) + 'k';
+    const mrow = (r, i) => { const rc = RC[r.res] || ['var(--faint)', 'No result']; return { dateS: dS(r.date), vs: r.home ? 'v' : '@', opp: r.opp, comp: r.comp, score: r.gf + ' – ' + r.ga, res: r.res || '—', rc: rc[0], word: rc[1], rule: i === 0 ? '0' : '1px solid var(--line)', aria: (r.home ? 'Home' : 'Away') + ' v ' + r.opp + ', ' + r.comp + ', ' + dS(r.date) + ', ' + r.gf + ' ' + r.ga + ', ' + rc[1] + '. Open match.' }; };
+    const tabs = [['overview', 'Overview'], ['squad', 'Squad'], ['performance', 'Performance'], ['history', 'History']].map(([k, label]) => ({ label, on: k === tab, pick: () => this.setState({ tab: k }), under: k === tab ? 'var(--amber)' : 'transparent', color: k === tab ? 'var(--text)' : 'var(--muted)' }));
+    const base = {
+      uid, bp, full: frame === 'full', found: s !== 'notFound', notFound: s === 'notFound', tabs, wide: !M, narrow: M,
+      minH: frame === 'full' ? (M ? '844px' : '900px') : 'auto', mainPad: M ? '12px 12px 24px' : bp === 'tablet' ? '20px 24px' : '20px 16px',
+      monoSize: M ? '40px' : '48px', metaMargin: D ? 'auto' : '0', metaAlign: D ? 'flex-end' : 'flex-start', tabH: M ? '44px' : '32px',
+      loadingAll: !ready && s !== 'notFound', skelBlocks: ['120px', '160px', '100px'],
+      tOverview: ready && tab === 'overview', tSquad: ready && tab === 'squad', tPerf: ready && tab === 'performance', tHistory: ready && tab === 'history',
+      goPerf: () => this.setState({ tab: 'performance' }), goSquad: () => this.setState({ tab: 'squad' }),
+      splitCols: D ? 'minmax(0,8fr) minmax(0,4fr)' : '1fr', readCols: D ? 'repeat(3,minmax(0,1fr))' : M ? '1fr' : 'repeat(2,minmax(0,1fr))',
+      mCols: '52px minmax(0,1fr) 44px 22px', haCols: M ? '1fr' : 'repeat(2,minmax(0,1fr))'
+    };
+    if (!ready) return base;
+    const mod = (title, m) => ({ title, status: m.status, sc: m.status === 'MEASURED' ? 'var(--cool)' : 'var(--muted)', verdict: m.verdict, items: m.items.map(i => ({ name: i.name, v: i.v })), foot: m.sample + ' matches' + (m.scope === 'COMPETITION_SCOPED' ? ' · Brasileirão Betano' : m.scope === 'ALL_COMPETITIONS' ? ' · all competitions' : '') });
+    const orient = { HIGHER_IS_BETTER: 'higher is better', LOWER_IS_BETTER: 'lower is better', NEUTRAL: 'neither better nor worse' };
+    const fmt = v => (Math.round(v * 100) / 100).toString();
+    const ag = (name, l) => ({ name, count: l.length, rows: l.map(a => ({ label: a.label, orient: orient[a.q] || '', v: fmt(a.v), rank: a.rank + ' / ' + a.of, med: fmt(a.med), level: a.level.replace('_', ' ') })) });
+    const attrGroups = [ag('Strengths', d.attrs.strengths), ag('Tendencies', d.attrs.tendencies), ag('Weaknesses', d.attrs.weaknesses)].filter(g => g.rows.length);
+    const dirL = { HIGHER_IS_STRONGER: 'higher = stronger', UNSIGNED: 'size only, no direction' };
+    const unitL = { index: 'index', points: 'pts', goals: 'goals', ppg: 'pts / match' };
+    const pm = m => ({ k: m.k, v: m.v, unit: unitL[m.unit] || m.unit, dir: dirL[m.dir] || '', n: m.n + ' matches' + (m.meets ? '' : ' · small sample'), nc: m.meets ? 'var(--faint)' : 'var(--warn)' });
+    const perf = d.perf.map(m => pm({ ...m, k: m.k === 'Points per match vs stronger opponents' ? 'Giant-killer points per match' : m.k })).concat(d.perfComp.rows.map(m => pm({ ...m, k: m.k + ' · Brasileirão' })));
+    const GN = { scoring: 'Scoring', conceding: 'Conceding', result: 'Results', btts: 'Both scored', attack: 'Finishing vs xG', defensiveXg: 'Defending vs xGA', creation: 'Chance creation' };
+    const sg = d.sig.find(g => g.g === this.state.sig) || d.sig[0];
+    const log = d.log.slice().reverse();
+    const thin = s === 'historyThin';
+    const logSrc = thin ? log.slice(0, 3) : log;
+    const chartW = 560, n = thin ? 3 : d.log.length, bw = chartW / n;
+    const logForChart = thin ? d.log.slice(-3) : d.log;
+    const bars = logForChart.map((o, i) => { const rc = RC[o.res]; return { x: (i * bw + 1).toFixed(1), w: Math.max(bw - 2, 1).toFixed(1), yf: (80 - o.gf * 14).toFixed(1), hf: (o.gf * 14).toFixed(1), ha: (o.ga * 14).toFixed(1), res: o.res, rc: rc[0], title: dS(o.date) + ' ' + (o.side === 'home' ? 'v' : '@') + ' ' + o.opp + ' ' + o.gf + '–' + o.ga }; });
+    const rec = thin ? { wins: 1, draws: 1, losses: 1 } : d.season;
+    const squadOk = !['squadEmpty', 'squadFailed'].includes(s);
+    return {
+      ...base,
+      readingsOk: s !== 'limited' && s !== 'readingsFailed', readingsNone: s === 'limited', readingsFailed: s === 'readingsFailed',
+      readings: [mod('Readiness', d.readiness), mod('Home and away', d.homeAway), mod('Consistency', d.consistency)],
+      attrsOk: s !== 'limited', attrsNone: s === 'limited', attrGroups, attrCols: M ? 'minmax(0,1fr) 52px 52px' : 'minmax(0,1fr) 64px 64px 64px 96px',
+      recent: d.recent.map(mrow),
+      participation: d.participation.map(p => ({ comp: p.comp, season: p.season, line: p.done + ' of ' + p.total + ' played' + (p.sched ? ' · ' + p.sched + ' scheduled' : '') })),
+      availability: d.availability.map(a => ({ name: a.name, reason: a.reason, from: dS(a.from), kind: a.kind })),
+      squadOk, squadEmpty: s === 'squadEmpty', squadFailed: s === 'squadFailed',
+      sqCols: D ? 'minmax(0,1fr) 56px 60px 52px 68px 52px 72px 84px' : 'minmax(0,1fr) 44px 48px 44px 56px 44px 60px 72px',
+      squad: d.squad.map(p => ({ name: p.name, obs: p.obs, started: p.started, bench: p.bench, min: p.min ?? '—', minC: p.min == null ? 'var(--faint)' : 'var(--text)', goals: p.goals ?? '—', goalsC: p.goals == null ? 'var(--faint)' : 'var(--text-secondary)', value: money(p.value), valueC: p.value == null ? 'var(--faint)' : 'var(--text-secondary)', isOut: !!p.out, out: p.out })),
+      others: d.others.map(o => ({ name: o.name, line: o.obs + ' in squad · ' + (o.min ?? '—') + ' min' })), othersCols: M ? '1fr' : D ? 'repeat(3,minmax(0,1fr))' : 'repeat(2,minmax(0,1fr))',
+      perfLoading: s === 'perfLoading', perfEmpty: s === 'perfEmpty', perfOk: !['perfLoading', 'perfEmpty'].includes(s),
+      skel2: [['60%', '48%', '55%', '40%', '52%'], ['50%', '58%', '44%', '62%', '46%']],
+      perf, piCols: D ? 'repeat(7,minmax(0,1fr))' : M ? 'repeat(2,minmax(0,1fr))' : 'repeat(4,minmax(0,1fr))',
+      haLists: [{ tag: 'H', title: 'Recent home', rows: d.home.map(mrow) }, { tag: 'A', title: 'Recent away', rows: d.away.map(mrow) }],
+      sigTabs: d.sig.map(g => { const on = g.g === sg.g; return { label: GN[g.g], on, pick: () => this.setState({ sig: g.g }), bg: on ? 'var(--raised)' : 'transparent', border: on ? 'var(--amber)' : 'var(--line)', color: on ? 'var(--text)' : 'var(--muted)' }; }),
+      sigRows: sg.rows, sigLabel: GN[sg.g] + ' signals by window', sigCols: 'minmax(170px,1fr) 64px 64px 64px 64px 64px', sigMin: '520px',
+      streaks: d.streaks.map(x => ({ label: x.label, len: x.len })),
+      histRange: thin ? 'Structural example · 3 matches' : dS(d.log[0].date) + ' – ' + dS(d.log[d.log.length - 1].date) + ' 2026 · ' + d.seasonN + ' matches',
+      record: [['Won', rec.wins, 'var(--text)'], ['Drawn', rec.draws, 'var(--text)'], ['Lost', rec.losses, 'var(--text)'], ['Points', thin ? '—' : d.season.points, 'var(--text)'], ['Goals for', thin ? '—' : d.season.goalsFor, 'var(--text)'], ['Goals against', thin ? '—' : d.season.goalsAgainst, 'var(--text)'], ['Goal diff.', thin ? '—' : '+' + d.season.goalDifference, 'var(--text)']].map(([k, v, c]) => ({ k, v, c })),
+      recCols: D ? 'repeat(7,minmax(0,1fr))' : M ? 'repeat(3,minmax(0,1fr))' : 'repeat(4,minmax(0,1fr))',
+      bars, nMatches: n, chartW, chartView: '0 0 ' + chartW + ' 160', firstDate: dS(logForChart[0].date), lastDate: dS(logForChart[logForChart.length - 1].date),
+      chartAria: 'Goals scored and conceded in each of ' + n + ' matches from ' + dS(logForChart[0].date) + ' to ' + dS(logForChart[logForChart.length - 1].date) + '. Full values in the match log.',
+      histCols: D ? 'minmax(0,7fr) minmax(0,5fr)' : '1fr', logCols: M ? '48px minmax(0,1fr) 40px 22px' : '56px minmax(0,1fr) 48px 44px 44px 22px',
+      logRows: (this.state.logAll ? logSrc : logSrc.slice(0, 10)).map(o => { const rc = RC[o.res]; return { dateS: dS(o.date), vs: o.side === 'home' ? 'v' : '@', opp: o.opp, comp: o.comp, score: o.gf + ' – ' + o.ga, xg: o.xg ?? '—', xga: o.xga ?? '—', xgC: o.xg == null ? 'var(--faint)' : 'var(--text-secondary)', res: o.res, rc: rc[0], word: rc[1], aria: dS(o.date) + ', ' + o.side + ' v ' + o.opp + ', ' + o.gf + ' ' + o.ga + ', ' + rc[1] + '. Open match.' }; }),
+      logMore: logSrc.length > 10, logLabel: this.state.logAll ? 'Show latest 10' : 'Show all ' + logSrc.length + ' matches', toggleLog: () => this.setState(st => ({ logAll: !st.logAll })),
+      seasonMetrics: d.seasonMetrics.map(m => ({ k: m.k, v: m.cls === 'MEAN' ? m.v : m.v, note: (m.cls === 'MEAN' ? 'avg' : 'total') + (m.n < m.of ? ' · ' + m.n + '/' + m.of : '') })),
+      earlierNote: thin ? 'Only a few matches are recorded so far, so longer-term patterns aren’t shown yet.' : 'Records start on 28 Jan 2026. Earlier seasons aren’t in the current data, so there’s no multi-season comparison yet.'
+    };
+  }
+}
+</script>
+</body>
+</html>

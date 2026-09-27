@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp code{font:12px ui-monospace,Menlo,monospace;background:#f2f0ec;padding:1px 4px;border-radius:3px}.sp pre{font:12px/1.5 ui-monospace,Menlo,monospace;background:#f6f5f2;padding:12px 14px;border-radius:4px;margin:0}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">D</a><span class="dv-tname">Phase D · Competition / Edition workspace · Brasileirão Betano · Brasileiro Serie A 2026 · built on Phase A–C</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>A · Desktop Overview · tabs are clickable</div><div class="dv-card" style="width:1440px"><dc-import name="EditionWorkspace" bp="desktop" tab="overview" hint-size="1440px,1000px"></dc-import></div></div>
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>C · Desktop Fixtures · Results / Scheduled / Postponed</div><div class="dv-card" style="width:1440px"><dc-import name="EditionWorkspace" bp="desktop" tab="fixtures" hint-size="1440px,1200px"></dc-import></div></div>
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>D/E · Desktop Table · standings populated</div><div class="dv-card" style="width:1440px"><dc-import name="EditionWorkspace" bp="desktop" tab="table" hint-size="1440px,1300px"></dc-import></div></div>
+<div class="dv-opt" id="2i"><div class="dv-olabel"><a class="dv-oid" href="#2i">2i</a>Performance · Season (observations)</div><div class="dv-card" style="width:1440px"><dc-import name="EditionWorkspace" bp="desktop" tab="performance" perf="season" hint-size="1440px,1300px"></dc-import></div></div>
+<div class="dv-opt" id="2j"><div class="dv-olabel"><a class="dv-oid" href="#2j">2j</a>Performance · Last 5 vs previous 5 (temporal-performance)</div><div class="dv-card" style="width:1440px"><dc-import name="EditionWorkspace" bp="desktop" tab="performance" perf="recent" hint-size="1440px,1000px"></dc-import></div></div>
+<div class="dv-opt" id="2k"><div class="dv-olabel"><a class="dv-oid" href="#2k">2k</a>Performance · Positions (position-trajectory) · click a team</div><div class="dv-card" style="width:1440px"><dc-import name="EditionWorkspace" bp="desktop" tab="performance" perf="positions" hint-size="1440px,1100px"></dc-import></div></div>
+<div class="dv-opt" id="2l"><div class="dv-olabel"><a class="dv-oid" href="#2l">2l</a>Mobile · Performance · Positions</div><div class="dv-card" style="width:390px"><dc-import name="EditionWorkspace" bp="mobile" tab="performance" perf="positions" hint-size="390px,1600px"></dc-import></div></div>
+<div class="dv-opt" id="2d"><div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Tablet 834 · Table</div><div class="dv-card" style="width:834px"><dc-import name="EditionWorkspace" bp="tablet" tab="table" hint-size="834px,1300px"></dc-import></div></div>
+<div class="dv-opt" id="2e"><div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a>J · Mobile Overview</div><div class="dv-card" style="width:390px"><dc-import name="EditionWorkspace" bp="mobile" tab="overview" hint-size="390px,1600px"></dc-import></div></div>
+<div class="dv-opt" id="2f"><div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a>J · Mobile Table · tap a row to expand</div><div class="dv-card" style="width:390px"><dc-import name="EditionWorkspace" bp="mobile" tab="table" hint-size="390px,1300px"></dc-import></div></div>
+
+<div class="dv-opt" id="2g"><div class="dv-olabel"><a class="dv-oid" href="#2g">2g</a>States · section-level, desktop workspace</div>
+<div class="dv-card" style="width:2200px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
+  <div class="st"><b>B · LIMITED DATA · standings absent, context pending, fixtures present</b><dc-import name="EditionWorkspace" frame="panel" tab="overview" state="limited" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>F · STANDINGS LOADING</b><dc-import name="EditionWorkspace" frame="panel" tab="table" state="standingsLoading" hint-size="100%,560px"></dc-import></div>
+  <div class="st"><b>G · STANDINGS UNAVAILABLE</b><dc-import name="EditionWorkspace" frame="panel" tab="table" state="standingsEmpty" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>STANDINGS FAILED</b><dc-import name="EditionWorkspace" frame="panel" tab="table" state="standingsFailed" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>H · EMPTY FIXTURES</b><dc-import name="EditionWorkspace" frame="panel" tab="fixtures" state="fixturesEmpty" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>FIXTURES FAILED</b><dc-import name="EditionWorkspace" frame="panel" tab="fixtures" state="fixturesFailed" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>I · EDITION NOT FOUND</b><dc-import name="EditionWorkspace" frame="panel" state="notFound" hint-size="100%,320px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="2h"><div class="dv-olabel"><a class="dv-oid" href="#2h">2h</a>Phase D spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>Phase D · Competition / Edition · spec</h2>
+<p style="color:#6b6f76">Payloads used: competition-28, country-BR, edition-18, edition-18-fixtures (286), edition-18-standings (TOTAL, as of 2026-08-11). Added this turn: observations, temporal-performance, table-context, position-trajectory. <span class="v">VERIFIED</span> payload / system · <span class="p">PROPOSED</span> · <span class="d">PENDING</span></p>
+
+<h3>1–2 · Header and edition identity</h3>
+<table>
+<tr><th>Element</th><th>Source</th></tr>
+<tr><td>Breadcrumb Competitions / Brazil / Brasileirão Betano</td><td><code>competition.countryCode</code> → <code>country.name</code>; <code>competition.name</code></td></tr>
+<tr><td>Monogram "BB" (amber initials)</td><td>Phase A CompetitionMonogram; no logo field exists</td></tr>
+<tr><td>Eyebrow "Brazil · Competition", h1 "Brasileirão Betano"</td><td><code>country.name</code>, <code>competition.name</code></td></tr>
+<tr><td>Season selector "Brasileiro Serie A 2026 ▾"</td><td><code>edition.seasonLabel</code>, options from <code>competition.editions[]</code> (1 today)</td></tr>
+<tr><td>Fixtures 286</td><td><code>editions[].fixtureCount</code></td></tr>
+<tr><td>Results through 7 Sep 2026</td><td><code>observations.current.throughKickoffAt</code></td></tr>
+<tr><td>Table as of 11 Aug 2026</td><td><code>standings.tables[TOTAL].asOf</code>; shows — when standings are absent</td></tr>
+</table>
+<p>The season is shown exactly as <code>seasonLabel</code>. "2026" is not parsed out of it. Team count, "current edition" and round are not shown: no payload provides them. The edition id is never displayed.</p>
+
+<h3>3 · Workspace navigation</h3>
+<p>Tabs: Overview · Fixtures · Table · Performance. Performance is justified now that three payloads back it (observations, temporal-performance, position-trajectory). Inside it, a 3-way switch: Season · Last 5 vs previous 5 · Positions. Goals, Teams, Players and Venues still have no dedicated payload, so they get no tabs.</p>
+
+<h3>4 · Overview</h3>
+<ul>
+<li><b>Season so far</b> (observations.current): Played 250 of 286 · Goals 653 (2.61 per match) · Home wins 46.4% (116) · Draws 28% (70) · Away wins 25.6% (64) · Clean sheets 120 (74 home · 46 away), plus a labelled home/draw/away split bar. All values come from the API; none are computed in the UI.</li>
+<li><b>Table · top 5</b> → Table tab, and <b>Latest results / Next scheduled</b> → Fixtures tab (unchanged).</li>
+<li><b>Last 5 vs previous 5</b> (rail, temporal-performance.results): goals, goals per match, home wins, draws, away wins and clean sheets, with prev / last / change and windows 5–6 Sep and 6–7 Sep. The full metric comparison lives in Performance, so it isn't duplicated here.</li>
+</ul>
+
+<h3>Performance tab</h3>
+<table>
+<tr><th>View</th><th>Content</th><th>Source fields</th></tr>
+<tr><td>Season <a class="dv-oid" href="#2i">2i</a></td><td>Goals-per-match line over matches completed (11 points, with a data-table toggle); match-statistic totals with coverage (Red cards flagged PARTIAL, 57 of 250); results split; goals and clean sheets home/away</td><td><code>series[].goals.perMatch</code>, <code>results.*Pct</code>; <code>current.statTier</code>; <code>coverage.statMetrics[]</code>; <code>current.results / goals / cleanSheets</code></td></tr>
+<tr><td>Last 5 vs previous 5 <a class="dv-oid" href="#2j">2j</a></td><td>8 statistics: prev 5 · last 5 · change · % · direction (▲ up / ▼ down in words). A note appears where a window has fewer than 5 recordings (red cards 1 / 2)</td><td><code>comparisons[]</code>, <code>windows.last5/previous5</code></td></tr>
+<tr><td>Positions <a class="dv-oid" href="#2k">2k</a></td><td>A grid of 20 team sparklines ordered by the official table, showing each team's latest reconstructed position. Choosing one draws its full line (1–20 inverted) with current, highest, lowest, average, moves up and moves down</td><td><code>teams[].trajectory[].positionAfter</code>, <code>teams[].summary</code>, <code>positionMethod</code></td></tr>
+</table>
+<p><b>Method disclosure:</b> the trajectory is a reconstruction from results (points → goal difference → goals for), not the official order. The panel says so in plain words, including that early ties can be arbitrary. Because of that, reconstructed positions (through 7 Sep) can differ from the official table (as of 11 Aug); the grid shows both orders explicitly.</p>
+<p>No rankings or "best/worst" labels. "Direction" describes the change, not quality. Provider and provenance fields are never shown.</p>
+
+<h3>5 · Fixtures tab (edition-first)</h3>
+<ul>
+<li>Filter: Results · Scheduled · Postponed (radiogroup). No counts, to avoid client-side calculation.</li>
+<li>Grouped by kickoff date (UTC, same as Phase C). There is no round field, so no matchday grouping.</li>
+<li>Results newest first (5–7 Sep shown), then "Load earlier results". Scheduled in kickoff order. Postponed at their original kickoff.</li>
+<li>Status is shown as supplied. Some SCHEDULED kickoffs (30 Aug) are earlier than later results. The UI doesn't relabel them.</li>
+<li>Rows are identical to Phase C, and each row links to the Match workspace (F).</li>
+</ul>
+
+<h3>6 · Table tab</h3>
+<ul>
+<li>Header: Standings · "Overall" static chip (only TOTAL exists; becomes a selector if HOME/AWAY appear) · As of 11 Aug 2026.</li>
+<li>Columns # · Team · P · W · D · L · GF · GA · GD · Pts · <b>Gap</b>, each with a title attribute giving its full name. Gap = <code>table-context.teams[].adjacent.above.pointsGap</code> (points behind the team directly above; — for 1st; mobile shows it in the row expansion). <code>change</code> is null in the payload, so no movement arrows. Numbers are mono and tabular, right-aligned; Pts bold; GD signed (+/−/0) with --edge/--risk/--faint as a secondary cue.</li>
+<li>Rows: thin separators + subtle zebra (raised 30%, as specified here) + hover --raised. The team name is a --cool link → Team workspace (E).</li>
+<li>No zones, form or streaks. Footer note: "Results after 11 Aug aren't reflected in this table yet." (asOf is older than the latest result, 7 Sep.)</li>
+</ul>
+
+<h3>7–8 · Context and trajectory</h3>
+<p>All four endpoints are now used: observations (Overview "Season so far" and Performance · Season), temporal-performance (Overview rail and Performance · Last 5 vs previous 5), table-context (Table · Gap column), and position-trajectory (Performance · Positions). Every chart carries a text alternative (aria-label with the values) and, where it helps, a data-table toggle.</p>
+
+<h3>9–11 · Loading, empty and failure (<a class="dv-oid" href="#2g">2g</a>)</h3>
+<table>
+<tr><th>Case</th><th>Scope</th><th>Treatment</th></tr>
+<tr><td>Standings loading</td><td>Table panel</td><td>Row skeletons on the real grid; aria-busy + "Loading standings"</td></tr>
+<tr><td>Standings unavailable</td><td>Table panel + Overview top-5</td><td>ABSENT tag, "No standings have been published for this season yet." Header as-of shows —</td></tr>
+<tr><td>Standings failed</td><td>Table panel</td><td>role="alert" + Try again; other tabs unaffected</td></tr>
+<tr><td>No fixtures</td><td>Fixtures tab + Overview strips</td><td>"There are no fixtures recorded for this season."</td></tr>
+<tr><td>Fixtures failed</td><td>Fixtures tab</td><td>role="alert" + Try again</td></tr>
+<tr><td>Advanced section failed</td><td>One Performance view, the Overview rail or the Gap column</td><td>That panel alone shows "Unable to load · Try again"; a failed table-context payload hides only the Gap column <span class="p">PROPOSED</span></td></tr>
+<tr><td>Edition not found</td><td>Page</td><td>404 panel, "Competition season not found", Browse fixtures</td></tr>
+<tr><td>Edition request failed</td><td>Page</td><td>Phase A ErrorState with Retry (the header can't render without the edition)</td></tr>
+</table>
+
+<h3>12–14 · Layouts</h3>
+<ul>
+<li><b>Desktop</b>: 1152 rail; header panel with meta on the right; Overview 8 / 4 (content | context rail); Fixtures and Table full width.</li>
+<li><b>Tablet</b>: meta wraps under identity; Overview stacks (rail below); Table keeps all 10 columns at 46px each.</li>
+<li><b>Mobile</b>: 44px tabs scroll; Overview single column with results and scheduled stacked; Table shows # · Team (short name) · P · GD · Pts and a tap to expand W D L GF GA. Nothing is dropped: all 10 values stay reachable. Fixtures use Phase C stacked rows.</li>
+</ul>
+
+<h3>15 · Accessibility</h3>
+<ul>
+<li>h1 competition → h2 panels → h3 date groups. Tabs use role=tab with aria-selected; filters use a radiogroup.</li>
+<li>Standings use role="table" with column headers carrying full-name titles, and the aria-label states "overall, as of 11 August 2026". A mobile expand toggle belongs to each row.</li>
+<li>GD is always signed; status chips are words + glyphs; the season selector's aria-label says only one season is available.</li>
+<li>Section errors use role="alert"; loading uses aria-busy plus a status message.</li>
+</ul>
+
+<h3>16 · Navigation relationships</h3>
+<pre>Phase C Fixtures ── competition name ──► D Overview
+D Table / Overview ── team name ──► E Team workspace
+D Fixtures / Overview ── fixture row ──► F Match workspace
+D breadcrumb ── Brazil / Competitions ──► (index pages, later)</pre>
+
+<h3>Supersedes</h3>
+<p>The earlier pre-Phase-A Competition wireframes (turns 1–2 of the older Competition Edition Workspace file) are superseded by this design. Its CompetitionHeader and FT-colour differences are resolved here in favour of Phase A–C.</p>
+<p>Scope: Phase D only.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "put the positions chart on Overview" · "move Latest results above Table top 5" · "approve D and start Phase E Teams"</p>
+</section>
+</x-dc>
+</body>
+</html>

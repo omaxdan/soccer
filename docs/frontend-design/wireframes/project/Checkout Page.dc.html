@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp pre{font:12px/1.5 ui-monospace,Menlo,monospace;background:#f6f5f2;padding:12px 14px;border-radius:4px;margin:0}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">B6</a><span class="dv-tname">Phase B6 · Checkout · provider-neutral, all commercial values pending · follows <a href="Pricing%20Page.dc.html">B3</a> + <a href="Sign%20Up%20Page.dc.html">B5</a></span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440 · interactive: fill fields → Complete purchase (1st try fails, 2nd succeeds)</div><div class="dv-card" style="width:1440px"><dc-import name="CheckoutPage" bp="desktop" hint-size="1440px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Tablet 834 · Elite, filled</div><div class="dv-card" style="width:834px"><dc-import name="CheckoutPage" bp="tablet" plan="Elite" state="filled" hint-size="834px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Mobile 390 · vertical flow</div><div class="dv-card" style="width:390px"><dc-import name="CheckoutPage" bp="mobile" hint-size="390px,1200px"></dc-import></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>States · desktop workspace</div>
+<div class="dv-card" style="width:2100px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+  <div class="st"><b>DEFAULT · INCOMPLETE (CTA unavailable)</b><dc-import name="CheckoutPage" frame="panel" state="incomplete" annot="{{ false }}" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>FIELD FOCUS</b><dc-import name="CheckoutPage" frame="panel" state="focus" annot="{{ false }}" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>VALIDATION ERROR</b><dc-import name="CheckoutPage" frame="panel" state="invalid" annot="{{ false }}" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>READY (filled)</b><dc-import name="CheckoutPage" frame="panel" state="filled" annot="{{ false }}" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>PROCESSING</b><dc-import name="CheckoutPage" frame="panel" state="processing" annot="{{ false }}" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>PAYMENT FAILURE</b><dc-import name="CheckoutPage" frame="panel" state="failure" annot="{{ false }}" hint-size="100%,820px"></dc-import></div>
+  <div class="st"><b>SUCCESS · transition to B7</b><dc-import name="CheckoutPage" frame="panel" state="success" annot="{{ true }}" hint-size="100%,400px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Checkout spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>B6 · Checkout · spec</h2>
+<p style="color:#6b6f76"><span class="v">VERIFIED DESIGN SYSTEM</span> · <span class="p">PROPOSED UX</span> · <span class="d">PENDING</span> commercial, payment or legal source needed</p>
+
+<h3>1–2 · Compositions</h3>
+<p>Desktop <a class="dv-oid" href="#1a">1a</a>: a 1008px workspace in a 7 / 5 split (the Phase A 7+5 primitive), with a sticky summary on the right. Tablet <a class="dv-oid" href="#1b">1b</a> keeps the split. Mobile <a class="dv-oid" href="#1c">1c</a> is one column: heading → plan → payment → billing-terms slot → summary with CTA last, so the amount and the action sit together at the end.</p>
+
+<h3>Shell</h3>
+<p>This is the AuthShell from B4/B5 with the right side swapped: "Signed in · email" instead of "Back to PitchTerminal", which confirms the account from B5 without showing any auth UI. Above the workspace are "← Change plan" (→ B3) and a 3-step progress list: Plan ✓ · Payment · Confirmation (= B7).</p>
+
+<h3>3 · Selected-plan context</h3>
+<p>Panel "1 · Your plan": plan name, LEVEL n, the same 4-segment depth meter and intent line as the Pricing cards, and a "Change" link. Only Pro and Elite reach checkout. There is no price here; the price lives only in the summary.</p>
+
+<h3>4 · Payment form</h3>
+<ul>
+<li>A provider-neutral slot: "Payment field A / B / C" in the standard FormField (44px, --raised, amber focus, reserved 18px error line). Label meta: "set by payment method".</li>
+<li>When a provider is chosen, its fields replace A–C inside the same panel. Labels, formats, autocomplete tokens and how many fields there are all come from that integration <span class="d">PENDING</span>.</li>
+<li>No card-brand logos, provider names, wallets or security claims.</li>
+<li>Below it, a dashed "Billing terms · PENDING" slot reserves space for the renewal, cancellation and payment disclosure and the Terms link (B8). No consent checkbox is invented.</li>
+</ul>
+
+<h3>5 · Order summary</h3>
+<table>
+<tr><th>Row</th><th>Value now</th><th>Source</th></tr>
+<tr><td>Plan</td><td>Pro / Elite</td><td><span class="v">VERIFIED</span> tier names</td></tr>
+<tr><td>Billing period</td><td>Not yet specified</td><td><span class="d">PENDING</span> B3</td></tr>
+<tr><td>Subtotal</td><td>TBD</td><td><span class="d">PENDING</span></td></tr>
+<tr><td>Taxes and fees</td><td>Pending (row hidden if none apply)</td><td><span class="d">PENDING</span></td></tr>
+<tr><td>Amount due</td><td>TBD · "shown once pricing is set"</td><td><span class="d">PENDING</span></td></tr>
+</table>
+<p>Unknown values use --faint mono, the same placeholder voice as Pricing, so the panel reads as intentionally empty rather than broken.</p>
+
+<h3>6–10 · States</h3>
+<table>
+<tr><th>State</th><th>Treatment</th></tr>
+<tr><td>Default / incomplete</td><td>CTA shown on --raised with --faint text and a not-allowed cursor; helper "Complete payment details to continue." linked by aria-describedby. It's a real disabled button, so the reason is always visible.</td></tr>
+<tr><td>Focus</td><td>--amber border + 2px ring (identical to B4/B5).</td></tr>
+<tr><td>Validation error</td><td>--risk border, "!" + "Check this detail." in the reserved line; aria-invalid. The CTA stays unavailable.</td></tr>
+<tr><td>Ready</td><td>CTA becomes amber "Complete purchase", 48px.</td></tr>
+<tr><td>Processing</td><td>"Processing…" with pulse-dot, disabled, progress cursor; fields lock on --panel; helper "Don't close this page."; aria-busy + polite status. A repeat submit is ignored.</td></tr>
+<tr><td>Payment failure</td><td>role="alert" banner at the top of the main column: "The payment didn't go through." + "Your plan and details are kept." Fields stay filled; the CTA becomes "Try again". Specific decline reasons are not shown <span class="d">PENDING</span>.</td></tr>
+<tr><td>Success</td><td>The workspace is replaced by a centred 480px panel: ✓ tile, "Payment complete", "Setting up your Pro access", Continue → B7. The progress list advances to Confirmation. Whether this panel is skipped by an automatic redirect is <span class="d">PENDING</span>.</td></tr>
+</table>
+
+<h3>11 · Responsive</h3>
+<ul>
+<li>Desktop 1008 max, 7/5, sticky summary at top 16.</li>
+<li>Tablet: same split with 24px margins; the summary stays sticky.</li>
+<li>Mobile: single column, summary static and last, CTA 48px full width, 12px margins. The progress list wraps under "Change plan". The header drops the "Signed in" label and keeps the email (truncated).</li>
+</ul>
+
+<h3>12 · Accessibility</h3>
+<ul>
+<li>h1 "Review and pay"; sections are labelled by h2 "1 · Your plan", "2 · Payment details", "3 · Order summary"; the summary is an aside with a dl.</li>
+<li>Progress list: ol with aria-current="step" on the active step; ✓ and numbers as well as colour.</li>
+<li>Every field has a visible label; errors are tied with aria-describedby.</li>
+<li>Disabled CTA reason in text via aria-describedby. Processing and failure are announced (status / alert).</li>
+<li>Tab order: Change plan → plan Change → fields → CTA → Change plan (secondary).</li>
+<li>No colour-only meaning: TBD, Pending and "!" are all text.</li>
+</ul>
+
+<h3>13 · Relationship to Pricing and Sign Up</h3>
+<pre>B3 Pricing ─ Choose Pro/Elite ─► B5 Sign up (if needed) ─► B6 Checkout ─ Continue ─► B7
+     ▲                                                        │
+     └──────────────────── Change plan ───────────────────────┘</pre>
+<ul>
+<li>From Pricing: tier name, LEVEL label, depth meter, intent line, TBD/Pending placeholder voice.</li>
+<li>From Sign Up/Login: AuthShell, FormField, PrimaryButton with its "…ing" state, alert banner, ✓ transition panel, Terms · Privacy footer.</li>
+<li>New: CheckoutLayout (7/5), ProgressSteps, PlanContext, PaymentSlot, OrderSummary, BillingTermsSlot.</li>
+</ul>
+
+<h3>Open decisions</h3>
+<ol>
+<li>Payment provider and method(s), which define the PaymentSlot fields.</li>
+<li>Price, currency, billing period, taxes, and whether a period selector is needed here.</li>
+<li>Recurring-billing disclosure and whether explicit acceptance is required.</li>
+<li>Whether checkout is on-page or hands off to a hosted step.</li>
+<li>What failure detail may be shown to users.</li>
+<li>Whether success auto-redirects to B7.</li>
+<li>Whether switching between Pro and Elite is allowed inside checkout.</li>
+</ol>
+
+<h3>Scope</h3>
+<p>Only B6 was designed. B7 Subscription Success, B8 Legal, Account, Billing history and all Phase C–L pages were not. Next: B7 Subscription Success.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "move the summary above payment on mobile" · "allow a Pro ↔ Elite switch inside checkout" · "approve B6 and start B7"</p>
+</section>
+</x-dc>
+</body>
+</html>

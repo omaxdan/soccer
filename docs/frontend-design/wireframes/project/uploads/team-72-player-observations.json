@@ -1,0 +1,2771 @@
+﻿{
+    "team":  {
+                 "id":  "72",
+                 "name":  "Palmeiras",
+                 "slug":  "palmeiras-1963"
+             },
+    "scope":  {
+                  "competition":  "all",
+                  "editionId":  null,
+                  "label":  "all competitions"
+              },
+    "asOf":  "2026-09-26T18:40:33.453Z",
+    "playerCount":  41,
+    "players":  [
+                    {
+                        "player":  {
+                                       "id":  "730",
+                                       "fullName":  "Marcelo Lomba",
+                                       "slug":  "marcelo-lomba-34141"
+                                   },
+                        "observationCount":  28,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  1,
+                                              "bench":  27,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  90,
+                                            "present":  1,
+                                            "totalObservations":  28
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  28
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  28
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  28,
+                                            "totalObservations":  28
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "720",
+                                       "fullName":  "Andreas Pereira",
+                                       "slug":  "andreas-pereira-285949"
+                                   },
+                        "observationCount":  27,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.2506
+                                              },
+                        "participation":  {
+                                              "started":  26,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  2140,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  1,
+                                            "present":  1,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  2.2746999999999997,
+                                            "present":  18,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  37,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "714",
+                                       "fullName":  "Carlos Miguel",
+                                       "slug":  "carlos-miguel-973738"
+                                   },
+                        "observationCount":  27,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  27,
+                                              "bench":  0,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  2430,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "727",
+                                       "fullName":  "Lucas Evangelista",
+                                       "slug":  "lucas-evangelista-331397"
+                                   },
+                        "observationCount":  27,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.1417
+                                              },
+                        "participation":  {
+                                              "started":  4,
+                                              "bench":  23,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  585,
+                                            "present":  23,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.7622,
+                                            "present":  6,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  10,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "719",
+                                       "fullName":  "Marlon Freitas",
+                                       "slug":  "marlon-freitas-840202"
+                                   },
+                        "observationCount":  27,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.0361
+                                              },
+                        "participation":  {
+                                              "started":  27,
+                                              "bench":  0,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  2301,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  2,
+                                            "present":  1,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  1.0709,
+                                            "present":  10,
+                                            "totalObservations":  27
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  20,
+                                            "present":  27,
+                                            "totalObservations":  27
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "715",
+                                       "fullName":  "Agustín Giay",
+                                       "slug":  "agustin-giay-1106603"
+                                   },
+                        "observationCount":  26,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.0119
+                                              },
+                        "participation":  {
+                                              "started":  16,
+                                              "bench":  10,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1430,
+                                            "present":  21,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.20159999999999997,
+                                            "present":  6,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  7,
+                                            "present":  26,
+                                            "totalObservations":  26
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "729",
+                                       "fullName":  "Emiliano Martínez",
+                                       "slug":  "emiliano-martinez-973533"
+                                   },
+                        "observationCount":  26,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  6,
+                                              "bench":  20,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  659,
+                                            "present":  16,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.11250000000000002,
+                                            "present":  4,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  5,
+                                            "present":  26,
+                                            "totalObservations":  26
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "726",
+                                       "fullName":  "Mauricio",
+                                       "slug":  "mauricio-986233"
+                                   },
+                        "observationCount":  26,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.5851
+                                              },
+                        "participation":  {
+                                              "started":  18,
+                                              "bench":  8,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1442,
+                                            "present":  23,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  7,
+                                            "present":  6,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  4.814799999999999,
+                                            "present":  22,
+                                            "totalObservations":  26
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  41,
+                                            "present":  26,
+                                            "totalObservations":  26
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "723",
+                                       "fullName":  "José Manuel López",
+                                       "slug":  "jose-manuel-lopez-1094179"
+                                   },
+                        "observationCount":  25,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.0716
+                                              },
+                        "participation":  {
+                                              "started":  22,
+                                              "bench":  3,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1857,
+                                            "present":  25,
+                                            "totalObservations":  25
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  11,
+                                            "present":  10,
+                                            "totalObservations":  25
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  4.5615,
+                                            "present":  23,
+                                            "totalObservations":  25
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  53,
+                                            "present":  25,
+                                            "totalObservations":  25
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1108",
+                                       "fullName":  "Murilo",
+                                       "slug":  "murilo-874729"
+                                   },
+                        "observationCount":  25,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  23,
+                                              "bench":  2,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  2072,
+                                            "present":  24,
+                                            "totalObservations":  25
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  2,
+                                            "present":  2,
+                                            "totalObservations":  25
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  1.6280000000000001,
+                                            "present":  9,
+                                            "totalObservations":  25
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  17,
+                                            "present":  25,
+                                            "totalObservations":  25
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "721",
+                                       "fullName":  "Allan",
+                                       "slug":  "allan-1835889"
+                                   },
+                        "observationCount":  24,
+                        "latestObservation":  {
+                                                  "fixtureId":  "292",
+                                                  "fixturePartitionOn":  "2026-08-23",
+                                                  "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "58",
+                                                                   "name":  "Vasco da Gama",
+                                                                   "slug":  "vasco-da-gama-1974"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "STARTED",
+                                                  "result":  "W",
+                                                  "goalsFor":  4,
+                                                  "goalsAgainst":  1,
+                                                  "goalMargin":  3,
+                                                  "points":  3,
+                                                  "cleanSheet":  false,
+                                                  "xg":  0.0241
+                                              },
+                        "participation":  {
+                                              "started":  21,
+                                              "bench":  3,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1715,
+                                            "present":  24,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  4,
+                                            "present":  4,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  2.8070999999999997,
+                                            "present":  19,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  45,
+                                            "present":  24,
+                                            "totalObservations":  24
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "718",
+                                       "fullName":  "Arthur Gabriel",
+                                       "slug":  "arthur-gabriel-1633501"
+                                   },
+                        "observationCount":  24,
+                        "latestObservation":  {
+                                                  "fixtureId":  "292",
+                                                  "fixturePartitionOn":  "2026-08-23",
+                                                  "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "58",
+                                                                   "name":  "Vasco da Gama",
+                                                                   "slug":  "vasco-da-gama-1974"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "STARTED",
+                                                  "result":  "W",
+                                                  "goalsFor":  4,
+                                                  "goalsAgainst":  1,
+                                                  "goalMargin":  3,
+                                                  "points":  3,
+                                                  "cleanSheet":  false,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  11,
+                                              "bench":  13,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1089,
+                                            "present":  19,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.7430000000000001,
+                                            "present":  7,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  10,
+                                            "present":  24,
+                                            "totalObservations":  24
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "725",
+                                       "fullName":  "Felipe Anderson",
+                                       "slug":  "felipe-anderson-152276"
+                                   },
+                        "observationCount":  24,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.0154
+                                              },
+                        "participation":  {
+                                              "started":  5,
+                                              "bench":  19,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  652,
+                                            "present":  21,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  2,
+                                            "present":  2,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.6476,
+                                            "present":  11,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  16,
+                                            "present":  24,
+                                            "totalObservations":  24
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "717",
+                                       "fullName":  "Gustavo Gómez",
+                                       "slug":  "gustavo-gomez-220833"
+                                   },
+                        "observationCount":  24,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  22,
+                                              "bench":  2,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1936,
+                                            "present":  23,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  4,
+                                            "present":  4,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  1.5679,
+                                            "present":  12,
+                                            "totalObservations":  24
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  18,
+                                            "present":  24,
+                                            "totalObservations":  24
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "722",
+                                       "fullName":  "Jhon Arias",
+                                       "slug":  "jhon-arias-844096"
+                                   },
+                        "observationCount":  23,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  19,
+                                              "bench":  4,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1668,
+                                            "present":  23,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  5,
+                                            "present":  5,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  3.0215,
+                                            "present":  17,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  41,
+                                            "present":  23,
+                                            "totalObservations":  23
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "728",
+                                       "fullName":  "Khellven",
+                                       "slug":  "khellven-984896"
+                                   },
+                        "observationCount":  23,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  9,
+                                              "bench":  14,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  841,
+                                            "present":  17,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.1347,
+                                            "present":  3,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  4,
+                                            "present":  23,
+                                            "totalObservations":  23
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "734",
+                                       "fullName":  "Larson",
+                                       "slug":  "larson-2057364"
+                                   },
+                        "observationCount":  23,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  23,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  62,
+                                            "present":  5,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.4119,
+                                            "present":  1,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  2,
+                                            "present":  23,
+                                            "totalObservations":  23
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "724",
+                                       "fullName":  "Ramón Sosa",
+                                       "slug":  "ramon-sosa-1015733"
+                                   },
+                        "observationCount":  23,
+                        "latestObservation":  {
+                                                  "fixtureId":  "239",
+                                                  "fixturePartitionOn":  "2026-08-15",
+                                                  "kickoffAt":  "2026-08-15T19:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "67",
+                                                                   "name":  "Fluminense",
+                                                                   "slug":  "fluminense-1961"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "L",
+                                                  "goalsFor":  2,
+                                                  "goalsAgainst":  3,
+                                                  "goalMargin":  -1,
+                                                  "points":  0,
+                                                  "cleanSheet":  false,
+                                                  "xg":  0.1084
+                                              },
+                        "participation":  {
+                                              "started":  11,
+                                              "bench":  12,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1072,
+                                            "present":  22,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  4,
+                                            "present":  4,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  1.8691,
+                                            "present":  14,
+                                            "totalObservations":  23
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  26,
+                                            "present":  23,
+                                            "totalObservations":  23
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1126",
+                                       "fullName":  "Luis Pacheco",
+                                       "slug":  "luis-pacheco-1884646"
+                                   },
+                        "observationCount":  22,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  1,
+                                              "bench":  21,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  66,
+                                            "present":  3,
+                                            "totalObservations":  22
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  22
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.0119,
+                                            "present":  1,
+                                            "totalObservations":  22
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  1,
+                                            "present":  22,
+                                            "totalObservations":  22
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "716",
+                                       "fullName":  "Bruno Fuchs",
+                                       "slug":  "bruno-fuchs-973737"
+                                   },
+                        "observationCount":  20,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  5,
+                                              "bench":  15,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  505,
+                                            "present":  7,
+                                            "totalObservations":  20
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  20
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  20
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  20,
+                                            "totalObservations":  20
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "735",
+                                       "fullName":  "Luighi Hanri",
+                                       "slug":  "luighi-hanri-1597267"
+                                   },
+                        "observationCount":  18,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "STARTED",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.3373
+                                              },
+                        "participation":  {
+                                              "started":  1,
+                                              "bench":  17,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  167,
+                                            "present":  7,
+                                            "totalObservations":  18
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  18
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.37739999999999996,
+                                            "present":  3,
+                                            "totalObservations":  18
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  6,
+                                            "present":  18,
+                                            "totalObservations":  18
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1109",
+                                       "fullName":  "Joaquín Piquerez",
+                                       "slug":  "joaquin-piquerez-881110"
+                                   },
+                        "observationCount":  17,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  13,
+                                              "bench":  4,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  1105,
+                                            "present":  14,
+                                            "totalObservations":  17
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  17
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.4414,
+                                            "present":  8,
+                                            "totalObservations":  17
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  10,
+                                            "present":  17,
+                                            "totalObservations":  17
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1119",
+                                       "fullName":  "Riquelme Fillipi",
+                                       "slug":  "riquelme-fillipi-1485294"
+                                   },
+                        "observationCount":  16,
+                        "latestObservation":  {
+                                                  "fixtureId":  "292",
+                                                  "fixturePartitionOn":  "2026-08-23",
+                                                  "kickoffAt":  "2026-08-23T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "58",
+                                                                   "name":  "Vasco da Gama",
+                                                                   "slug":  "vasco-da-gama-1974"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  4,
+                                                  "goalsAgainst":  1,
+                                                  "goalMargin":  3,
+                                                  "points":  3,
+                                                  "cleanSheet":  false,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  1,
+                                              "bench":  15,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  125,
+                                            "present":  4,
+                                            "totalObservations":  16
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  16
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.0201,
+                                            "present":  1,
+                                            "totalObservations":  16
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  1,
+                                            "present":  16,
+                                            "totalObservations":  16
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1116",
+                                       "fullName":  "Vitor Roque",
+                                       "slug":  "vitor-roque-1150391"
+                                   },
+                        "observationCount":  16,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.021
+                                              },
+                        "participation":  {
+                                              "started":  7,
+                                              "bench":  9,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  661,
+                                            "present":  16,
+                                            "totalObservations":  16
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  4,
+                                            "present":  4,
+                                            "totalObservations":  16
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  3.5866999999999996,
+                                            "present":  13,
+                                            "totalObservations":  16
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  26,
+                                            "present":  16,
+                                            "totalObservations":  16
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "733",
+                                       "fullName":  "Jefté",
+                                       "slug":  "jefte-1116665"
+                                   },
+                        "observationCount":  15,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  3,
+                                              "bench":  12,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  252,
+                                            "present":  7,
+                                            "totalObservations":  15
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  15
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.0481,
+                                            "present":  1,
+                                            "totalObservations":  15
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  1,
+                                            "present":  15,
+                                            "totalObservations":  15
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "732",
+                                       "fullName":  "Luis Benedetti",
+                                       "slug":  "luis-benedetti-1485284"
+                                   },
+                        "observationCount":  15,
+                        "latestObservation":  {
+                                                  "fixtureId":  "239",
+                                                  "fixturePartitionOn":  "2026-08-15",
+                                                  "kickoffAt":  "2026-08-15T19:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "67",
+                                                                   "name":  "Fluminense",
+                                                                   "slug":  "fluminense-1961"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "L",
+                                                  "goalsFor":  2,
+                                                  "goalsAgainst":  3,
+                                                  "goalMargin":  -1,
+                                                  "points":  0,
+                                                  "cleanSheet":  false,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  1,
+                                              "bench":  14,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  120,
+                                            "present":  3,
+                                            "totalObservations":  15
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  15
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.0246,
+                                            "present":  1,
+                                            "totalObservations":  15
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  1,
+                                            "present":  15,
+                                            "totalObservations":  15
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1233",
+                                       "fullName":  "Erick Belé",
+                                       "slug":  "erick-bele-1633503"
+                                   },
+                        "observationCount":  9,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  9,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  9
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  9
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  9
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  9,
+                                            "totalObservations":  9
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1241",
+                                       "fullName":  "Alexander Barboza",
+                                       "slug":  "alexander-barboza-801044"
+                                   },
+                        "observationCount":  7,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "STARTED",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  0.0278
+                                              },
+                        "participation":  {
+                                              "started":  7,
+                                              "bench":  0,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  560,
+                                            "present":  7,
+                                            "totalObservations":  7
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  7
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.0816,
+                                            "present":  3,
+                                            "totalObservations":  7
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  3,
+                                            "present":  7,
+                                            "totalObservations":  7
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1222",
+                                       "fullName":  "Paulinho",
+                                       "slug":  "paulinho-885179"
+                                   },
+                        "observationCount":  7,
+                        "latestObservation":  {
+                                                  "fixtureId":  "235",
+                                                  "fixturePartitionOn":  "2026-08-02",
+                                                  "kickoffAt":  "2026-08-02T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "36",
+                                                                  "seasonLabel":  "Copa do Brasil 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "46",
+                                                                      "name":  "Copa Betano do Brasil",
+                                                                      "slug":  "copa-betano-do-brasil"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "183",
+                                                                   "name":  "Fortaleza",
+                                                                   "slug":  "fortaleza"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  3,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  3,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  1,
+                                              "bench":  6,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  144,
+                                            "present":  6,
+                                            "totalObservations":  7
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  2,
+                                            "present":  2,
+                                            "totalObservations":  7
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  0.7787000000000001,
+                                            "present":  5,
+                                            "totalObservations":  7
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  6,
+                                            "present":  7,
+                                            "totalObservations":  7
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "2067",
+                                       "fullName":  "Kaique",
+                                       "slug":  "kaique-1167067"
+                                   },
+                        "observationCount":  6,
+                        "latestObservation":  {
+                                                  "fixtureId":  "239",
+                                                  "fixturePartitionOn":  "2026-08-15",
+                                                  "kickoffAt":  "2026-08-15T19:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "67",
+                                                                   "name":  "Fluminense",
+                                                                   "slug":  "fluminense-1961"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "L",
+                                                  "goalsFor":  2,
+                                                  "goalsAgainst":  3,
+                                                  "goalMargin":  -1,
+                                                  "points":  0,
+                                                  "cleanSheet":  false,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  6,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  6
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  6
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  6
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  6,
+                                            "totalObservations":  6
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1224",
+                                       "fullName":  "Heittor",
+                                       "slug":  "heittor-1884619"
+                                   },
+                        "observationCount":  5,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  5,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  26,
+                                            "present":  2,
+                                            "totalObservations":  5
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  5
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  5
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  5,
+                                            "totalObservations":  5
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "731",
+                                       "fullName":  "Aranha",
+                                       "slug":  "aranha-1587799"
+                                   },
+                        "observationCount":  4,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  4,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  4
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  4
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  4
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  4,
+                                            "totalObservations":  4
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1225",
+                                       "fullName":  "Miguel Cinoncelli Bilong",
+                                       "slug":  "miguel-cinoncelli-bilong-2551774"
+                                   },
+                        "observationCount":  3,
+                        "latestObservation":  {
+                                                  "fixtureId":  "48",
+                                                  "fixturePartitionOn":  "2026-08-09",
+                                                  "kickoffAt":  "2026-08-09T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "55",
+                                                                   "name":  "Internacional",
+                                                                   "slug":  "internacional-1966"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  3,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  3
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  3
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  3
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  3,
+                                            "totalObservations":  3
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "748",
+                                       "fullName":  "Bruno Rodrigues",
+                                       "slug":  "bruno-rodrigues-817650"
+                                   },
+                        "observationCount":  2,
+                        "latestObservation":  {
+                                                  "fixtureId":  "1916",
+                                                  "fixturePartitionOn":  "2026-02-13",
+                                                  "kickoffAt":  "2026-02-13T00:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "55",
+                                                                   "name":  "Internacional",
+                                                                   "slug":  "internacional-1966"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  3,
+                                                  "goalsAgainst":  1,
+                                                  "goalMargin":  2,
+                                                  "points":  3,
+                                                  "cleanSheet":  false,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  2,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  5,
+                                            "present":  1,
+                                            "totalObservations":  2
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  2
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  2
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  2,
+                                            "totalObservations":  2
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1248",
+                                       "fullName":  "Bruno Bertinato",
+                                       "slug":  "bruno-bertinato-977079"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "352",
+                                                  "fixturePartitionOn":  "2026-09-06",
+                                                  "kickoffAt":  "2026-09-06T21:30:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "61",
+                                                                   "name":  "Botafogo",
+                                                                   "slug":  "botafogo-1958"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  0,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "2003",
+                                       "fullName":  "Eduardo Conceição Silva",
+                                       "slug":  "eduardo-conceicao-silva-1884603"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1999",
+                                       "fullName":  "Kauan Lima",
+                                       "slug":  "kauan-lima-1884635"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "2004",
+                                       "fullName":  "Rafael Coutinho",
+                                       "slug":  "rafael-coutinho-1634976"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "1127",
+                                       "fullName":  "Raphael Veiga",
+                                       "slug":  "raphael-veiga-840020"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "1945",
+                                                  "fixturePartitionOn":  "2026-01-28",
+                                                  "kickoffAt":  "2026-01-28T22:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "73",
+                                                                   "name":  "Atlético Mineiro",
+                                                                   "slug":  "atletico-mineiro-1977"
+                                                               },
+                                                  "venueSide":  "away",
+                                                  "participation":  "BENCH",
+                                                  "result":  "D",
+                                                  "goalsFor":  2,
+                                                  "goalsAgainst":  2,
+                                                  "goalMargin":  0,
+                                                  "points":  1,
+                                                  "cleanSheet":  false,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "2005",
+                                       "fullName":  "Victor Gabriel",
+                                       "slug":  "victor-gabriel-2171161"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    },
+                    {
+                        "player":  {
+                                       "id":  "2001",
+                                       "fullName":  "Zié Koné",
+                                       "slug":  "zie-kone-2479177"
+                                   },
+                        "observationCount":  1,
+                        "latestObservation":  {
+                                                  "fixtureId":  "54",
+                                                  "fixturePartitionOn":  "2026-05-31",
+                                                  "kickoffAt":  "2026-05-31T19:00:00.000Z",
+                                                  "edition":  {
+                                                                  "id":  "18",
+                                                                  "seasonLabel":  "Brasileiro Serie A 2026"
+                                                              },
+                                                  "competition":  {
+                                                                      "id":  "28",
+                                                                      "name":  "Brasileirão Betano",
+                                                                      "slug":  "brasileirao-betano-325"
+                                                                  },
+                                                  "opponent":  {
+                                                                   "id":  "57",
+                                                                   "name":  "Chapecoense",
+                                                                   "slug":  "chapecoense-21845"
+                                                               },
+                                                  "venueSide":  "home",
+                                                  "participation":  "BENCH",
+                                                  "result":  "W",
+                                                  "goalsFor":  1,
+                                                  "goalsAgainst":  0,
+                                                  "goalMargin":  1,
+                                                  "points":  3,
+                                                  "cleanSheet":  true,
+                                                  "xg":  null
+                                              },
+                        "participation":  {
+                                              "started":  0,
+                                              "bench":  1,
+                                              "unknown":  0
+                                          },
+                        "summary":  [
+                                        {
+                                            "key":  "minutesPlayed",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "goals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "expectedGoals",
+                                            "total":  null,
+                                            "present":  0,
+                                            "totalObservations":  1
+                                        },
+                                        {
+                                            "key":  "totalShots",
+                                            "total":  0,
+                                            "present":  1,
+                                            "totalObservations":  1
+                                        }
+                                    ]
+                    }
+                ],
+    "provenance":  {
+                       "source":  "player_match_statistic",
+                       "readModel":  "team-player-observation-index-1",
+                       "asOf":  "2026-09-26T18:40:33.453Z",
+                       "teamId":  "72",
+                       "scope":  "all",
+                       "editionId":  null
+                   }
+}

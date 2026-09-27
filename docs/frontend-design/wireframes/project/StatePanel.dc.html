@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}</style></helmet>
+<section aria-label="{{ title }}" style="background:#121821;border:1px solid #1d2633;border-radius:4px;font-family:Inter,sans-serif;color:#f4f6f9;height:100%;box-sizing:border-box;display:flex;flex-direction:column">
+  <h3 style="margin:0;padding:12px 16px;border-bottom:1px solid #1d2633;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#90a0b4">{{ title }}</h3>
+  <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px"><span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading</span><span style="height:9px;width:64%;background:#1a222e;border-radius:2px"></span><span style="height:9px;width:48%;background:#1a222e;border-radius:2px"></span><span style="height:9px;width:56%;background:#1a222e;border-radius:2px"></span></div></sc-if>
+  <sc-if value="{{ isMsg }}" hint-placeholder-val="{{ true }}"><div role="{{ role }}" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+    <span style="display:inline-flex;align-items:center;gap:6px;font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ tagC }};border:1px {{ tagS }} {{ tagC }};border-radius:4px;padding:1px 6px"><span aria-hidden="true">{{ glyph }}</span>{{ tag }}</span>
+    <span style="font:500 14px/1.45 Inter,sans-serif;color:#f4f6f9">{{ line }}</span>
+    <sc-if value="{{ sub }}"><span style="font:400 13px/1.5 Inter,sans-serif;color:#90a0b4">{{ sub }}</span></sc-if>
+    <sc-if value="{{ action }}"><button style="margin-top:2px;min-height:36px;padding:0 12px;background:#1a222e;border:1px solid #1d2633;border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#f4f6f9;cursor:pointer">{{ action }}</button></sc-if>
+  </div></sc-if>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:360,&quot;height&quot;:220},&quot;kind&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;loading&quot;,&quot;noData&quot;,&quot;noMatch&quot;,&quot;notAvailable&quot;,&quot;error&quot;,&quot;gated&quot;],&quot;default&quot;:&quot;noData&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Section&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;line&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;sub&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;action&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const k = this.props.kind ?? 'noData';
+    const K = {
+      loading: {},
+      noData: ['NO DATA', '#7e8aa0', 'solid', '', 'status', 'No fixtures for this date.', 'The request succeeded and returned nothing.', ''],
+      noMatch: ['NO MATCHES', '#7e8aa0', 'solid', '', 'status', 'Nothing matches this filter.', '', 'Clear filter'],
+      notAvailable: ['NOT AVAILABLE', '#7e8aa0', 'dashed', '◌', 'status', 'Statistics are not available for this match.', 'PitchTerminal doesn’t currently provide this.', ''],
+      error: ['COULDN’T LOAD', '#f0544f', 'solid', '!', 'alert', 'This section couldn’t be loaded.', 'The rest of the page is unaffected.', 'Try again'],
+      gated: ['ACCESS RESTRICTED', '#ffb020', 'solid', '◇', 'status', 'This section isn’t included in your current access.', 'Plans and what each includes are listed on the Pricing page.', 'See plans']
+    }[k];
+    const m = Array.isArray(K);
+    return { title: this.props.title ?? 'Section', isLoading: k === 'loading', isMsg: m, tag: m ? K[0] : '', tagC: m ? K[1] : '', tagS: m ? K[2] : '', glyph: m ? K[3] : '', role: m ? K[4] : 'status', line: this.props.line ?? (m ? K[5] : ''), sub: this.props.sub ?? (m ? K[6] : ''), action: this.props.action ?? (m ? K[7] : '') };
+  }
+}
+</script>
+</body>
+</html>

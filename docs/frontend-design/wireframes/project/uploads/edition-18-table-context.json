@@ -1,0 +1,831 @@
+﻿{
+    "edition":  {
+                    "id":  "18",
+                    "seasonLabel":  "Brasileiro Serie A 2026"
+                },
+    "competition":  {
+                        "id":  "28",
+                        "name":  "Brasileirão Betano",
+                        "slug":  "brasileirao-betano-325"
+                    },
+    "scope":  {
+                  "editionId":  "18",
+                  "asOf":  null,
+                  "mode":  "CURRENT_PROVIDER"
+              },
+    "team":  null,
+    "teams":  [
+                  {
+                      "team":  {
+                                   "id":  "72",
+                                   "name":  "Palmeiras",
+                                   "slug":  "palmeiras-1963"
+                               },
+                      "table":  {
+                                    "position":  1,
+                                    "played":  22,
+                                    "points":  48,
+                                    "wins":  14,
+                                    "draws":  6,
+                                    "losses":  2,
+                                    "goalsFor":  38,
+                                    "goalsAgainst":  16,
+                                    "goalDifference":  22
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  null,
+                                       "below":  {
+                                                     "position":  2,
+                                                     "team":  {
+                                                                  "id":  "68",
+                                                                  "name":  "Flamengo",
+                                                                  "slug":  "flamengo-5981"
+                                                              },
+                                                     "points":  42,
+                                                     "pointsGap":  6
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "68",
+                                   "name":  "Flamengo",
+                                   "slug":  "flamengo-5981"
+                               },
+                      "table":  {
+                                    "position":  2,
+                                    "played":  21,
+                                    "points":  42,
+                                    "wins":  12,
+                                    "draws":  6,
+                                    "losses":  3,
+                                    "goalsFor":  39,
+                                    "goalsAgainst":  18,
+                                    "goalDifference":  21
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  1,
+                                                     "team":  {
+                                                                  "id":  "72",
+                                                                  "name":  "Palmeiras",
+                                                                  "slug":  "palmeiras-1963"
+                                                              },
+                                                     "points":  48,
+                                                     "pointsGap":  6
+                                                 },
+                                       "below":  {
+                                                     "position":  3,
+                                                     "team":  {
+                                                                  "id":  "54",
+                                                                  "name":  "Athletico",
+                                                                  "slug":  "athletico-1967"
+                                                              },
+                                                     "points":  40,
+                                                     "pointsGap":  2
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "54",
+                                   "name":  "Athletico",
+                                   "slug":  "athletico-1967"
+                               },
+                      "table":  {
+                                    "position":  3,
+                                    "played":  22,
+                                    "points":  40,
+                                    "wins":  12,
+                                    "draws":  4,
+                                    "losses":  6,
+                                    "goalsFor":  30,
+                                    "goalsAgainst":  19,
+                                    "goalDifference":  11
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  2,
+                                                     "team":  {
+                                                                  "id":  "68",
+                                                                  "name":  "Flamengo",
+                                                                  "slug":  "flamengo-5981"
+                                                              },
+                                                     "points":  42,
+                                                     "pointsGap":  2
+                                                 },
+                                       "below":  {
+                                                     "position":  4,
+                                                     "team":  {
+                                                                  "id":  "67",
+                                                                  "name":  "Fluminense",
+                                                                  "slug":  "fluminense-1961"
+                                                              },
+                                                     "points":  35,
+                                                     "pointsGap":  5
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "67",
+                                   "name":  "Fluminense",
+                                   "slug":  "fluminense-1961"
+                               },
+                      "table":  {
+                                    "position":  4,
+                                    "played":  22,
+                                    "points":  35,
+                                    "wins":  9,
+                                    "draws":  8,
+                                    "losses":  5,
+                                    "goalsFor":  31,
+                                    "goalsAgainst":  26,
+                                    "goalDifference":  5
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  3,
+                                                     "team":  {
+                                                                  "id":  "54",
+                                                                  "name":  "Athletico",
+                                                                  "slug":  "athletico-1967"
+                                                              },
+                                                     "points":  40,
+                                                     "pointsGap":  5
+                                                 },
+                                       "below":  {
+                                                     "position":  5,
+                                                     "team":  {
+                                                                  "id":  "60",
+                                                                  "name":  "Cruzeiro",
+                                                                  "slug":  "cruzeiro-1954"
+                                                              },
+                                                     "points":  33,
+                                                     "pointsGap":  2
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "60",
+                                   "name":  "Cruzeiro",
+                                   "slug":  "cruzeiro-1954"
+                               },
+                      "table":  {
+                                    "position":  5,
+                                    "played":  22,
+                                    "points":  33,
+                                    "wins":  9,
+                                    "draws":  6,
+                                    "losses":  7,
+                                    "goalsFor":  30,
+                                    "goalsAgainst":  31,
+                                    "goalDifference":  -1
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  4,
+                                                     "team":  {
+                                                                  "id":  "67",
+                                                                  "name":  "Fluminense",
+                                                                  "slug":  "fluminense-1961"
+                                                              },
+                                                     "points":  35,
+                                                     "pointsGap":  2
+                                                 },
+                                       "below":  {
+                                                     "position":  6,
+                                                     "team":  {
+                                                                  "id":  "62",
+                                                                  "name":  "Bahia",
+                                                                  "slug":  "bahia-1955"
+                                                              },
+                                                     "points":  33,
+                                                     "pointsGap":  0
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "62",
+                                   "name":  "Bahia",
+                                   "slug":  "bahia-1955"
+                               },
+                      "table":  {
+                                    "position":  6,
+                                    "played":  22,
+                                    "points":  33,
+                                    "wins":  8,
+                                    "draws":  9,
+                                    "losses":  5,
+                                    "goalsFor":  29,
+                                    "goalsAgainst":  25,
+                                    "goalDifference":  4
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  5,
+                                                     "team":  {
+                                                                  "id":  "60",
+                                                                  "name":  "Cruzeiro",
+                                                                  "slug":  "cruzeiro-1954"
+                                                              },
+                                                     "points":  33,
+                                                     "pointsGap":  0
+                                                 },
+                                       "below":  {
+                                                     "position":  7,
+                                                     "team":  {
+                                                                  "id":  "63",
+                                                                  "name":  "Corinthians",
+                                                                  "slug":  "corinthians-1957"
+                                                              },
+                                                     "points":  32,
+                                                     "pointsGap":  1
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "63",
+                                   "name":  "Corinthians",
+                                   "slug":  "corinthians-1957"
+                               },
+                      "table":  {
+                                    "position":  7,
+                                    "played":  22,
+                                    "points":  32,
+                                    "wins":  8,
+                                    "draws":  8,
+                                    "losses":  6,
+                                    "goalsFor":  24,
+                                    "goalsAgainst":  20,
+                                    "goalDifference":  4
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  6,
+                                                     "team":  {
+                                                                  "id":  "62",
+                                                                  "name":  "Bahia",
+                                                                  "slug":  "bahia-1955"
+                                                              },
+                                                     "points":  33,
+                                                     "pointsGap":  1
+                                                 },
+                                       "below":  {
+                                                     "position":  8,
+                                                     "team":  {
+                                                                  "id":  "64",
+                                                                  "name":  "Red Bull Bragantino",
+                                                                  "slug":  "red-bull-bragantino-1999"
+                                                              },
+                                                     "points":  31,
+                                                     "pointsGap":  1
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "64",
+                                   "name":  "Red Bull Bragantino",
+                                   "slug":  "red-bull-bragantino-1999"
+                               },
+                      "table":  {
+                                    "position":  8,
+                                    "played":  21,
+                                    "points":  31,
+                                    "wins":  9,
+                                    "draws":  4,
+                                    "losses":  8,
+                                    "goalsFor":  26,
+                                    "goalsAgainst":  22,
+                                    "goalDifference":  4
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  7,
+                                                     "team":  {
+                                                                  "id":  "63",
+                                                                  "name":  "Corinthians",
+                                                                  "slug":  "corinthians-1957"
+                                                              },
+                                                     "points":  32,
+                                                     "pointsGap":  1
+                                                 },
+                                       "below":  {
+                                                     "position":  9,
+                                                     "team":  {
+                                                                  "id":  "61",
+                                                                  "name":  "Botafogo",
+                                                                  "slug":  "botafogo-1958"
+                                                              },
+                                                     "points":  30,
+                                                     "pointsGap":  1
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "61",
+                                   "name":  "Botafogo",
+                                   "slug":  "botafogo-1958"
+                               },
+                      "table":  {
+                                    "position":  9,
+                                    "played":  21,
+                                    "points":  30,
+                                    "wins":  8,
+                                    "draws":  6,
+                                    "losses":  7,
+                                    "goalsFor":  35,
+                                    "goalsAgainst":  33,
+                                    "goalDifference":  2
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  8,
+                                                     "team":  {
+                                                                  "id":  "64",
+                                                                  "name":  "Red Bull Bragantino",
+                                                                  "slug":  "red-bull-bragantino-1999"
+                                                              },
+                                                     "points":  31,
+                                                     "pointsGap":  1
+                                                 },
+                                       "below":  {
+                                                     "position":  10,
+                                                     "team":  {
+                                                                  "id":  "65",
+                                                                  "name":  "Coritiba",
+                                                                  "slug":  "coritiba-1982"
+                                                              },
+                                                     "points":  30,
+                                                     "pointsGap":  0
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "65",
+                                   "name":  "Coritiba",
+                                   "slug":  "coritiba-1982"
+                               },
+                      "table":  {
+                                    "position":  10,
+                                    "played":  22,
+                                    "points":  30,
+                                    "wins":  8,
+                                    "draws":  6,
+                                    "losses":  8,
+                                    "goalsFor":  27,
+                                    "goalsAgainst":  29,
+                                    "goalDifference":  -2
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  9,
+                                                     "team":  {
+                                                                  "id":  "61",
+                                                                  "name":  "Botafogo",
+                                                                  "slug":  "botafogo-1958"
+                                                              },
+                                                     "points":  30,
+                                                     "pointsGap":  0
+                                                 },
+                                       "below":  {
+                                                     "position":  11,
+                                                     "team":  {
+                                                                  "id":  "73",
+                                                                  "name":  "Atlético Mineiro",
+                                                                  "slug":  "atletico-mineiro-1977"
+                                                              },
+                                                     "points":  29,
+                                                     "pointsGap":  1
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "73",
+                                   "name":  "Atlético Mineiro",
+                                   "slug":  "atletico-mineiro-1977"
+                               },
+                      "table":  {
+                                    "position":  11,
+                                    "played":  21,
+                                    "points":  29,
+                                    "wins":  8,
+                                    "draws":  5,
+                                    "losses":  8,
+                                    "goalsFor":  27,
+                                    "goalsAgainst":  27,
+                                    "goalDifference":  0
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  10,
+                                                     "team":  {
+                                                                  "id":  "65",
+                                                                  "name":  "Coritiba",
+                                                                  "slug":  "coritiba-1982"
+                                                              },
+                                                     "points":  30,
+                                                     "pointsGap":  1
+                                                 },
+                                       "below":  {
+                                                     "position":  12,
+                                                     "team":  {
+                                                                  "id":  "69",
+                                                                  "name":  "São Paulo",
+                                                                  "slug":  "sao-paulo-1981"
+                                                              },
+                                                     "points":  26,
+                                                     "pointsGap":  3
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "69",
+                                   "name":  "São Paulo",
+                                   "slug":  "sao-paulo-1981"
+                               },
+                      "table":  {
+                                    "position":  12,
+                                    "played":  21,
+                                    "points":  26,
+                                    "wins":  7,
+                                    "draws":  5,
+                                    "losses":  9,
+                                    "goalsFor":  26,
+                                    "goalsAgainst":  25,
+                                    "goalDifference":  1
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  11,
+                                                     "team":  {
+                                                                  "id":  "73",
+                                                                  "name":  "Atlético Mineiro",
+                                                                  "slug":  "atletico-mineiro-1977"
+                                                              },
+                                                     "points":  29,
+                                                     "pointsGap":  3
+                                                 },
+                                       "below":  {
+                                                     "position":  13,
+                                                     "team":  {
+                                                                  "id":  "71",
+                                                                  "name":  "Vitória",
+                                                                  "slug":  "vitoria-1962"
+                                                              },
+                                                     "points":  26,
+                                                     "pointsGap":  0
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "71",
+                                   "name":  "Vitória",
+                                   "slug":  "vitoria-1962"
+                               },
+                      "table":  {
+                                    "position":  13,
+                                    "played":  22,
+                                    "points":  26,
+                                    "wins":  7,
+                                    "draws":  5,
+                                    "losses":  10,
+                                    "goalsFor":  22,
+                                    "goalsAgainst":  33,
+                                    "goalDifference":  -11
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  12,
+                                                     "team":  {
+                                                                  "id":  "69",
+                                                                  "name":  "São Paulo",
+                                                                  "slug":  "sao-paulo-1981"
+                                                              },
+                                                     "points":  26,
+                                                     "pointsGap":  0
+                                                 },
+                                       "below":  {
+                                                     "position":  14,
+                                                     "team":  {
+                                                                  "id":  "66",
+                                                                  "name":  "Grêmio",
+                                                                  "slug":  "gremio-5926"
+                                                              },
+                                                     "points":  25,
+                                                     "pointsGap":  1
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "66",
+                                   "name":  "Grêmio",
+                                   "slug":  "gremio-5926"
+                               },
+                      "table":  {
+                                    "position":  14,
+                                    "played":  21,
+                                    "points":  25,
+                                    "wins":  6,
+                                    "draws":  7,
+                                    "losses":  8,
+                                    "goalsFor":  24,
+                                    "goalsAgainst":  27,
+                                    "goalDifference":  -3
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  13,
+                                                     "team":  {
+                                                                  "id":  "71",
+                                                                  "name":  "Vitória",
+                                                                  "slug":  "vitoria-1962"
+                                                              },
+                                                     "points":  26,
+                                                     "pointsGap":  1
+                                                 },
+                                       "below":  {
+                                                     "position":  15,
+                                                     "team":  {
+                                                                  "id":  "59",
+                                                                  "name":  "Mirassol",
+                                                                  "slug":  "mirassol-21982"
+                                                              },
+                                                     "points":  23,
+                                                     "pointsGap":  2
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "59",
+                                   "name":  "Mirassol",
+                                   "slug":  "mirassol-21982"
+                               },
+                      "table":  {
+                                    "position":  15,
+                                    "played":  21,
+                                    "points":  23,
+                                    "wins":  6,
+                                    "draws":  5,
+                                    "losses":  10,
+                                    "goalsFor":  24,
+                                    "goalsAgainst":  30,
+                                    "goalDifference":  -6
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  14,
+                                                     "team":  {
+                                                                  "id":  "66",
+                                                                  "name":  "Grêmio",
+                                                                  "slug":  "gremio-5926"
+                                                              },
+                                                     "points":  25,
+                                                     "pointsGap":  2
+                                                 },
+                                       "below":  {
+                                                     "position":  16,
+                                                     "team":  {
+                                                                  "id":  "55",
+                                                                  "name":  "Internacional",
+                                                                  "slug":  "internacional-1966"
+                                                              },
+                                                     "points":  23,
+                                                     "pointsGap":  0
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "55",
+                                   "name":  "Internacional",
+                                   "slug":  "internacional-1966"
+                               },
+                      "table":  {
+                                    "position":  16,
+                                    "played":  22,
+                                    "points":  23,
+                                    "wins":  5,
+                                    "draws":  8,
+                                    "losses":  9,
+                                    "goalsFor":  23,
+                                    "goalsAgainst":  27,
+                                    "goalDifference":  -4
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  15,
+                                                     "team":  {
+                                                                  "id":  "59",
+                                                                  "name":  "Mirassol",
+                                                                  "slug":  "mirassol-21982"
+                                                              },
+                                                     "points":  23,
+                                                     "pointsGap":  0
+                                                 },
+                                       "below":  {
+                                                     "position":  17,
+                                                     "team":  {
+                                                                  "id":  "56",
+                                                                  "name":  "Santos",
+                                                                  "slug":  "santos-1968"
+                                                              },
+                                                     "points":  22,
+                                                     "pointsGap":  1
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "56",
+                                   "name":  "Santos",
+                                   "slug":  "santos-1968"
+                               },
+                      "table":  {
+                                    "position":  17,
+                                    "played":  21,
+                                    "points":  22,
+                                    "wins":  5,
+                                    "draws":  7,
+                                    "losses":  9,
+                                    "goalsFor":  29,
+                                    "goalsAgainst":  35,
+                                    "goalDifference":  -6
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  16,
+                                                     "team":  {
+                                                                  "id":  "55",
+                                                                  "name":  "Internacional",
+                                                                  "slug":  "internacional-1966"
+                                                              },
+                                                     "points":  23,
+                                                     "pointsGap":  1
+                                                 },
+                                       "below":  {
+                                                     "position":  18,
+                                                     "team":  {
+                                                                  "id":  "58",
+                                                                  "name":  "Vasco da Gama",
+                                                                  "slug":  "vasco-da-gama-1974"
+                                                              },
+                                                     "points":  22,
+                                                     "pointsGap":  0
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "58",
+                                   "name":  "Vasco da Gama",
+                                   "slug":  "vasco-da-gama-1974"
+                               },
+                      "table":  {
+                                    "position":  18,
+                                    "played":  21,
+                                    "points":  22,
+                                    "wins":  5,
+                                    "draws":  7,
+                                    "losses":  9,
+                                    "goalsFor":  23,
+                                    "goalsAgainst":  31,
+                                    "goalDifference":  -8
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  17,
+                                                     "team":  {
+                                                                  "id":  "56",
+                                                                  "name":  "Santos",
+                                                                  "slug":  "santos-1968"
+                                                              },
+                                                     "points":  22,
+                                                     "pointsGap":  0
+                                                 },
+                                       "below":  {
+                                                     "position":  19,
+                                                     "team":  {
+                                                                  "id":  "70",
+                                                                  "name":  "Remo",
+                                                                  "slug":  "remo-2012"
+                                                              },
+                                                     "points":  22,
+                                                     "pointsGap":  0
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "70",
+                                   "name":  "Remo",
+                                   "slug":  "remo-2012"
+                               },
+                      "table":  {
+                                    "position":  19,
+                                    "played":  22,
+                                    "points":  22,
+                                    "wins":  5,
+                                    "draws":  7,
+                                    "losses":  10,
+                                    "goalsFor":  26,
+                                    "goalsAgainst":  36,
+                                    "goalDifference":  -10
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  18,
+                                                     "team":  {
+                                                                  "id":  "58",
+                                                                  "name":  "Vasco da Gama",
+                                                                  "slug":  "vasco-da-gama-1974"
+                                                              },
+                                                     "points":  22,
+                                                     "pointsGap":  0
+                                                 },
+                                       "below":  {
+                                                     "position":  20,
+                                                     "team":  {
+                                                                  "id":  "57",
+                                                                  "name":  "Chapecoense",
+                                                                  "slug":  "chapecoense-21845"
+                                                              },
+                                                     "points":  10,
+                                                     "pointsGap":  12
+                                                 }
+                                   }
+                  },
+                  {
+                      "team":  {
+                                   "id":  "57",
+                                   "name":  "Chapecoense",
+                                   "slug":  "chapecoense-21845"
+                               },
+                      "table":  {
+                                    "position":  20,
+                                    "played":  21,
+                                    "points":  10,
+                                    "wins":  1,
+                                    "draws":  7,
+                                    "losses":  13,
+                                    "goalsFor":  20,
+                                    "goalsAgainst":  43,
+                                    "goalDifference":  -23
+                                },
+                      "change":  null,
+                      "adjacent":  {
+                                       "above":  {
+                                                     "position":  19,
+                                                     "team":  {
+                                                                  "id":  "70",
+                                                                  "name":  "Remo",
+                                                                  "slug":  "remo-2012"
+                                                              },
+                                                     "points":  22,
+                                                     "pointsGap":  12
+                                                 },
+                                       "below":  null
+                                   }
+                  }
+              ],
+    "method":  {
+                   "mode":  "CURRENT_PROVIDER",
+                   "note":  "Current provider standings snapshot; positions and order are provider-supplied."
+               },
+    "provenance":  {
+                       "source":  "editionStandings",
+                       "mode":  "CURRENT_PROVIDER",
+                       "asOf":  null,
+                       "standingsAsOf":  "2026-08-11"
+                   }
+}

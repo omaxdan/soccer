@@ -1,0 +1,87 @@
+﻿{
+    "team":  {
+                 "id":  "72",
+                 "name":  "Palmeiras",
+                 "slug":  "palmeiras-1963",
+                 "shortName":  "Palmeiras",
+                 "countryCode":  "BR"
+             },
+    "homeAwaySplit":  [
+                          {
+                              "moduleKey":  "home_away_split",
+                              "status":  "NEUTRAL",
+                              "strength":  null,
+                              "confidence":  null,
+                              "sample":  {
+                                             "matches":  3,
+                                             "meetsThreshold":  true
+                                         },
+                              "verdictText":  "Balanced home and away record: home minus away win rate is -16.67 points.",
+                              "inactiveReason":  null,
+                              "asOf":  "2026-09-06T21:30:00.000Z",
+                              "scope":  {
+                                            "kind":  "COMPETITION_SCOPED",
+                                            "competitionEditionId":  "18"
+                                        },
+                              "evidence":  {
+                                               "declaredInputCount":  2,
+                                               "presentInputCount":  2,
+                                               "belowThresholdInputCount":  0,
+                                               "estimatedInputCount":  0,
+                                               "items":  [
+                                                             {
+                                                                 "featureKey":  "team.away_win_rate",
+                                                                 "displayName":  "Away win rate",
+                                                                 "value":  66.67,
+                                                                 "asOf":  "2026-09-06T21:30:00.000Z",
+                                                                 "contributionDirection":  "NEUTRAL"
+                                                             },
+                                                             {
+                                                                 "featureKey":  "team.home_win_rate",
+                                                                 "displayName":  "Home win rate",
+                                                                 "value":  50,
+                                                                 "asOf":  "2026-09-06T21:30:00.000Z",
+                                                                 "contributionDirection":  "NEUTRAL"
+                                                             }
+                                                         ]
+                                           }
+                          }
+                      ],
+    "consistency":  {
+                        "moduleKey":  "consistency_index",
+                        "status":  "MEASURED",
+                        "strength":  1.89,
+                        "confidence":  null,
+                        "sample":  {
+                                       "matches":  10,
+                                       "meetsThreshold":  true
+                                   },
+                        "verdictText":  "Goal-margin volatility 1.89 — sample standard deviation of signed goal margin over the 730-day window. Higher is less consistent.",
+                        "inactiveReason":  null,
+                        "asOf":  "2026-09-06T21:30:00.000Z",
+                        "scope":  {
+                                      "kind":  "ALL_COMPETITIONS",
+                                      "competitionEditionId":  null
+                                  },
+                        "evidence":  {
+                                         "declaredInputCount":  1,
+                                         "presentInputCount":  1,
+                                         "belowThresholdInputCount":  0,
+                                         "estimatedInputCount":  0,
+                                         "items":  [
+                                                       {
+                                                           "featureKey":  "team.goal_margin_volatility",
+                                                           "displayName":  "Goal margin volatility",
+                                                           "value":  1.89,
+                                                           "asOf":  "2026-09-06T21:30:00.000Z",
+                                                           "contributionDirection":  "NEUTRAL"
+                                                       }
+                                                   ]
+                                     }
+                    },
+    "coverage":  {
+                     "homeAwaySplit":  "present",
+                     "consistency":  "present",
+                     "isGoverned":  true
+                 }
+}

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">B8</a><span class="dv-tname">Phase B8 · Legal · structure only, no legal text supplied · completes Phase B</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440 · click Terms / Privacy</div><div class="dv-card" style="width:1440px"><dc-import name="LegalPage" bp="desktop" hint-size="1440px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Tablet 834 · Privacy</div><div class="dv-card" style="width:834px"><dc-import name="LegalPage" bp="tablet" doc="Privacy" hint-size="834px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Mobile 390</div><div class="dv-card" style="width:390px"><dc-import name="LegalPage" bp="mobile" hint-size="390px,900px"></dc-import></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Content states · desktop workspace</div>
+<div class="dv-card" style="width:2000px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
+  <div class="st"><b>AWAITING APPROVED TEXT (current)</b><dc-import name="LegalPage" frame="panel" state="awaiting" annot="{{ false }}" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>SUPPLIED DOCUMENT · layout specimen (bars, not text)</b><dc-import name="LegalPage" frame="panel" state="specimen" annot="{{ false }}" hint-size="100%,640px"></dc-import></div>
+  <div class="st"><b>FAILED TO LOAD</b><dc-import name="LegalPage" frame="panel" state="failed" annot="{{ false }}" hint-size="100%,440px"></dc-import></div>
+  <div class="st"><b>DOCUMENT NOT FOUND</b><dc-import name="LegalPage" frame="panel" state="missing" annot="{{ false }}" hint-size="100%,480px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Legal spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>B8 · Legal · spec</h2>
+<p style="color:#6b6f76"><span class="v">VERIFIED DESIGN SYSTEM</span> · <span class="p">PROPOSED UX</span> · <span class="d">PENDING</span> legal source needed</p>
+
+<h3>Documents shown</h3>
+<p>Only <b>Terms</b> and <b>Privacy</b> appear, because those are the only legal destinations the approved pages already link to (every public footer, the auth footers, and the B6 billing-terms slot pointing at Terms). No legal document text, titles, dates or versions were supplied, so:</p>
+<ul>
+<li>Titles stay "Terms" and "Privacy" as used in the footers. Final names (e.g. "Terms of Service") are <span class="d">PENDING</span>.</li>
+<li>Cookie, billing/subscription and refund documents aren't shown. Each can be added as another navigation item with no layout change.</li>
+<li>No intro sentence under the h1, no dates, no version history.</li>
+</ul>
+
+<h3>1–3 · Compositions</h3>
+<ul>
+<li><b>Desktop</b> <a class="dv-oid" href="#1a">1a</a>: 1152 rail; eyebrow + h1 "Legal"; 220px sticky document nav | 48px gap | article capped at 720px (about 70 characters per line at 15px).</li>
+<li><b>Tablet</b> <a class="dv-oid" href="#1b">1b</a>: nav 180px, gap 32; article fills the rest up to 720.</li>
+<li><b>Mobile</b> <a class="dv-oid" href="#1c">1c</a>: the nav becomes a 2-segment selector (44px) above the article; 12px margins. With more than 3 documents it becomes a native select <span class="p">PROPOSED</span>.</li>
+</ul>
+
+<h3>4–5 · Navigation and active document</h3>
+<p>Side nav items are 40px links. The active item has a --raised fill, a --line border, weight 600, --text colour, an amber "›" marker and aria-current="page": four cues, none of them colour alone. On mobile the active segment uses the Phase A tab grammar (raised + 2px amber underline + weight). Each document has its own URL <span class="p">PROPOSED</span>; the footer Legal group also marks the current document.</p>
+
+<h3>6–7 · Long-form reading layout</h3>
+<p>Shown in <a class="dv-oid" href="#1d">1d</a> as a specimen made of bars only (it contains no words, so it can't be mistaken for policy):</p>
+<ul>
+<li>h2 document title (22/700), then the metadata line slot, which appears only for dates actually supplied.</li>
+<li>Numbered sections: mono section number (--muted) + h3 heading (16/600). Sub-sections are indented 24px with n.1 numbering, but only when the source is numbered.</li>
+<li>Body: Inter 15px / 1.7, --text-secondary, 16px paragraph spacing, 28px between sections, max 720px.</li>
+<li>Lists keep the source's markers; defined terms use --text weight 500; links are --cool and always underlined.</li>
+<li>A table of contents is added only if a document has more than about 6 sections <span class="p">PROPOSED</span>.</li>
+<li>Supplied text is reproduced exactly: no rewording, shortening or reordering.</li>
+</ul>
+
+<h3>8 · Unavailable states</h3>
+<table>
+<tr><th>State</th><th>Treatment</th></tr>
+<tr><td>Awaiting approved text</td><td>Panel with the ◌ AWAITING APPROVED TEXT chip and one sentence. role="status". This is the current state for both documents.</td></tr>
+<tr><td>Failed to load</td><td>role="alert" panel: "!" tile, "This document couldn't be loaded", Retry (secondary). The nav stays usable.</td></tr>
+<tr><td>Not found</td><td>404 tile, "That legal document doesn't exist", a list of available documents as underlined links. No nav item is marked current.</td></tr>
+</table>
+
+<h3>9 · Footer integration</h3>
+<p>The full public footer from Landing, Features and Pricing (brand · Product · Explore · Account · Legal), with the current document marked in the Legal group. The header is the focused shell from B4–B8 ("← Back to PitchTerminal"), so the page adds no Phase C+ navigation of its own. The footer's Explore links are the ones already established on the public pages.</p>
+
+<h3>10 · Responsive</h3>
+<ul>
+<li>Side nav → segmented selector below 768; the article is always one column.</li>
+<li>Headings wrap naturally (no nowrap); long words break inside the 720 column.</li>
+<li>No horizontal overflow; all targets at least 40px (44 on mobile).</li>
+<li>Type size is fixed across breakpoints (Phase A rule); only margins change.</li>
+</ul>
+
+<h3>11 · Accessibility</h3>
+<ul>
+<li>h1 "Legal" → h2 document title → h3 sections → h4 sub-sections.</li>
+<li>nav aria-label="Legal documents" with aria-current on the active link; keyboard order: back link → documents → article.</li>
+<li>Links inside documents are underlined as well as --cool.</li>
+<li>Line length about 70 characters, line-height 1.7, contrast from the Phase A tiers (--text-secondary is 10.9:1).</li>
+<li>The specimen is aria-hidden; placeholder states are real text announced via status/alert.</li>
+</ul>
+
+<h3>12 · Relationship to the public shell</h3>
+<table>
+<tr><th>Element</th><th>Source</th></tr>
+<tr><td>Header: wordmark + "← Back to PitchTerminal"</td><td>B4 / B5 AuthShell</td></tr>
+<tr><td>Eyebrow + h1 pattern, 1152 rail, 16px gutter</td><td>Phase A PageContainer</td></tr>
+<tr><td>Nav active state</td><td>Phase A selected row / tab grammar</td></tr>
+<tr><td>Placeholder chip</td><td>Phase A PENDING chip, as on Pricing</td></tr>
+<tr><td>Error / not-found panels</td><td>Phase A ErrorState / Not found</td></tr>
+<tr><td>Footer</td><td>B1–B3 public footer</td></tr>
+</table>
+
+<h3>Open decisions</h3>
+<ol>
+<li>Which legal documents exist, and their exact titles.</li>
+<li>Approved text for each.</li>
+<li>Whether effective or updated dates are published.</li>
+<li>Whether billing/subscription terms are a separate document or part of Terms (B6 links to them).</li>
+<li>Whether a cookie notice or consent mechanism is required (not designed here).</li>
+<li>Company or contact details, if the documents need them.</li>
+</ol>
+
+<h3>Scope</h3>
+<p>Only B8 was designed. No consent banner, account or billing management, and no Phase C page. <b>Phase B (Public) is complete</b>; next is Phase C: Fixtures by Date.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "add a Cookies document slot" · "use a select instead of segments on mobile" · "approve B8 and start Phase C Fixtures by Date"</p>
+</section>
+</x-dc>
+</body>
+</html>

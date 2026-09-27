@@ -1,0 +1,494 @@
+﻿{
+    "teams":  [
+                  {
+                      "id":  "607",
+                      "name":  "1. FC Köln",
+                      "slug":  "1-fc-koln-2671",
+                      "shortName":  "Köln",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "609",
+                      "name":  "1. FC Union Berlin",
+                      "slug":  "1-fc-union-berlin-2547",
+                      "shortName":  "Union Berlin",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "605",
+                      "name":  "1. FSV Mainz 05",
+                      "slug":  "1-fsv-mainz-05-2556",
+                      "shortName":  "Mainz 05",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "519",
+                      "name":  "Arsenal",
+                      "slug":  "arsenal-42",
+                      "shortName":  "Arsenal",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "532",
+                      "name":  "Aston Villa",
+                      "slug":  "aston-villa-40",
+                      "shortName":  "Aston Villa",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "54",
+                      "name":  "Athletico",
+                      "slug":  "athletico-1967",
+                      "shortName":  "Athletico",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "73",
+                      "name":  "Atlético Mineiro",
+                      "slug":  "atletico-mineiro-1977",
+                      "shortName":  "Atlético-MG",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "62",
+                      "name":  "Bahia",
+                      "slug":  "bahia-1955",
+                      "shortName":  "Bahia",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "614",
+                      "name":  "Bayer 04 Leverkusen",
+                      "slug":  "bayer-04-leverkusen-2681",
+                      "shortName":  "Leverkusen",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "615",
+                      "name":  "Borussia Dortmund",
+                      "slug":  "borussia-dortmund-2673",
+                      "shortName":  "Dortmund",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "612",
+                      "name":  "Borussia M\u0027gladbach",
+                      "slug":  "borussia-m-gladbach-2527",
+                      "shortName":  "M\u0027gladbach",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "61",
+                      "name":  "Botafogo",
+                      "slug":  "botafogo-1958",
+                      "shortName":  "Botafogo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "534",
+                      "name":  "Bournemouth",
+                      "slug":  "bournemouth-60",
+                      "shortName":  "Bournemouth",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "529",
+                      "name":  "Brentford",
+                      "slug":  "brentford-50",
+                      "shortName":  "Brentford",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "531",
+                      "name":  "Brighton \u0026 Hove Albion",
+                      "slug":  "brighton-hove-albion-30",
+                      "shortName":  "Brighton",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "57",
+                      "name":  "Chapecoense",
+                      "slug":  "chapecoense-21845",
+                      "shortName":  "Chapecoense",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "538",
+                      "name":  "Chelsea",
+                      "slug":  "chelsea-38",
+                      "shortName":  "Chelsea",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "63",
+                      "name":  "Corinthians",
+                      "slug":  "corinthians-1957",
+                      "shortName":  "Corinthians",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "65",
+                      "name":  "Coritiba",
+                      "slug":  "coritiba-1982",
+                      "shortName":  "Coritiba",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "520",
+                      "name":  "Coventry City",
+                      "slug":  "coventry-city-11",
+                      "shortName":  "Coventry",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "60",
+                      "name":  "Cruzeiro",
+                      "slug":  "cruzeiro-1954",
+                      "shortName":  "Cruzeiro",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "528",
+                      "name":  "Crystal Palace",
+                      "slug":  "crystal-palace-7",
+                      "shortName":  "Crystal Palace",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "610",
+                      "name":  "Eintracht Frankfurt",
+                      "slug":  "eintracht-frankfurt-2674",
+                      "shortName":  "Frankfurt",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "527",
+                      "name":  "Everton",
+                      "slug":  "everton-48",
+                      "shortName":  "Everton",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "619",
+                      "name":  "FC Augsburg",
+                      "slug":  "fc-augsburg-2600",
+                      "shortName":  "Augsburg",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "603",
+                      "name":  "FC Bayern München",
+                      "slug":  "fc-bayern-munchen-2672",
+                      "shortName":  "Bayern",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "620",
+                      "name":  "FC Schalke 04",
+                      "slug":  "fc-schalke-04-2530",
+                      "shortName":  "Schalke",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "594",
+                      "name":  "FK Austria Wien",
+                      "slug":  "fk-austria-wien-2203",
+                      "shortName":  "Austria Wien",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "68",
+                      "name":  "Flamengo",
+                      "slug":  "flamengo-5981",
+                      "shortName":  "Flamengo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "67",
+                      "name":  "Fluminense",
+                      "slug":  "fluminense-1961",
+                      "shortName":  "Fluminense",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "537",
+                      "name":  "Fulham",
+                      "slug":  "fulham-43",
+                      "shortName":  "Fulham",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "598",
+                      "name":  "Grazer AK 1902",
+                      "slug":  "grazer-ak-1902-2052",
+                      "shortName":  "GAK",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "66",
+                      "name":  "Grêmio",
+                      "slug":  "gremio-5926",
+                      "shortName":  "Grêmio",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "616",
+                      "name":  "Hamburger SV",
+                      "slug":  "hamburger-sv-2676",
+                      "shortName":  "HSV",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "521",
+                      "name":  "Hull City",
+                      "slug":  "hull-city-96",
+                      "shortName":  "Hull",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "55",
+                      "name":  "Internacional",
+                      "slug":  "internacional-1966",
+                      "shortName":  "Internacional",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "523",
+                      "name":  "Ipswich Town",
+                      "slug":  "ipswich-town-32",
+                      "shortName":  "Ipswich",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "602",
+                      "name":  "LASK",
+                      "slug":  "lask-2058",
+                      "shortName":  "LASK",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "526",
+                      "name":  "Leeds United",
+                      "slug":  "leeds-united-34",
+                      "shortName":  "Leeds",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "536",
+                      "name":  "Liverpool FC",
+                      "slug":  "liverpool-fc-44",
+                      "shortName":  "Liverpool",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "533",
+                      "name":  "Manchester City",
+                      "slug":  "manchester-city-17",
+                      "shortName":  "Man City",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "522",
+                      "name":  "Manchester United",
+                      "slug":  "manchester-united-35",
+                      "shortName":  "Man Utd",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "59",
+                      "name":  "Mirassol",
+                      "slug":  "mirassol-21982",
+                      "shortName":  "Mirassol",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "535",
+                      "name":  "Newcastle United",
+                      "slug":  "newcastle-united-39",
+                      "shortName":  "Newcastle",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "525",
+                      "name":  "Nottingham Forest",
+                      "slug":  "nottingham-forest-14",
+                      "shortName":  "Forest",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "72",
+                      "name":  "Palmeiras",
+                      "slug":  "palmeiras-1963",
+                      "shortName":  "Palmeiras",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "611",
+                      "name":  "RB Leipzig",
+                      "slug":  "rb-leipzig-36360",
+                      "shortName":  "Leipzig",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "64",
+                      "name":  "Red Bull Bragantino",
+                      "slug":  "red-bull-bragantino-1999",
+                      "shortName":  "RB Bragantino",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "601",
+                      "name":  "Red Bull Salzburg",
+                      "slug":  "red-bull-salzburg-2046",
+                      "shortName":  "RB Salzburg",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "70",
+                      "name":  "Remo",
+                      "slug":  "remo-2012",
+                      "shortName":  "Remo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "56",
+                      "name":  "Santos",
+                      "slug":  "santos-1968",
+                      "shortName":  "Santos",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "69",
+                      "name":  "São Paulo",
+                      "slug":  "sao-paulo-1981",
+                      "shortName":  "São Paulo",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "591",
+                      "name":  "SC Austria Lustenau",
+                      "slug":  "sc-austria-lustenau-2062",
+                      "shortName":  "A. Lustenau",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "617",
+                      "name":  "SC Freiburg",
+                      "slug":  "sc-freiburg-2538",
+                      "shortName":  "Freiburg",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "606",
+                      "name":  "SC Paderborn 07",
+                      "slug":  "sc-paderborn-07-2561",
+                      "shortName":  "Paderborn",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "596",
+                      "name":  "SCR Altach",
+                      "slug":  "scr-altach-4856",
+                      "shortName":  "Altach",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "595",
+                      "name":  "SK Rapid Wien",
+                      "slug":  "sk-rapid-wien-2055",
+                      "shortName":  "Rapid",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "600",
+                      "name":  "SK Sturm Graz",
+                      "slug":  "sk-sturm-graz-2051",
+                      "shortName":  "Sturm",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "524",
+                      "name":  "Sunderland",
+                      "slug":  "sunderland-41",
+                      "shortName":  "Sunderland",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "613",
+                      "name":  "SV 07 Elversberg",
+                      "slug":  "sv-07-elversberg-2598",
+                      "shortName":  "Elversberg",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "592",
+                      "name":  "SV Ried",
+                      "slug":  "sv-ried-2049",
+                      "shortName":  "Ried",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "618",
+                      "name":  "SV Werder Bremen",
+                      "slug":  "sv-werder-bremen-2534",
+                      "shortName":  "Bremen",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "530",
+                      "name":  "Tottenham Hotspur",
+                      "slug":  "tottenham-hotspur-33",
+                      "shortName":  "Tottenham",
+                      "countryCode":  "GB"
+                  },
+                  {
+                      "id":  "608",
+                      "name":  "TSG Hoffenheim",
+                      "slug":  "tsg-hoffenheim-2569",
+                      "shortName":  "Hoffenheim",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "599",
+                      "name":  "TSV Hartberg",
+                      "slug":  "tsv-hartberg-2075",
+                      "shortName":  "Hartberg",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "58",
+                      "name":  "Vasco da Gama",
+                      "slug":  "vasco-da-gama-1974",
+                      "shortName":  "Vasco",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "604",
+                      "name":  "VfB Stuttgart",
+                      "slug":  "vfb-stuttgart-2677",
+                      "shortName":  "Stuttgart",
+                      "countryCode":  "DE"
+                  },
+                  {
+                      "id":  "71",
+                      "name":  "Vitória",
+                      "slug":  "vitoria-1962",
+                      "shortName":  "Vitória",
+                      "countryCode":  "BR"
+                  },
+                  {
+                      "id":  "593",
+                      "name":  "Wolfsberger AC",
+                      "slug":  "wolfsberger-ac-2076",
+                      "shortName":  "WAC",
+                      "countryCode":  "AT"
+                  },
+                  {
+                      "id":  "597",
+                      "name":  "WSG Tirol",
+                      "slug":  "wsg-tirol-5405",
+                      "shortName":  "Tirol",
+                      "countryCode":  "AT"
+                  }
+              ]
+}

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}</style></helmet>
+<div style="background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text);min-height:{{ minH }};display:flex;flex-direction:column">
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><dc-import name="AppHeader" layout="{{ bp }}" auth="anon" hint-size="100%,56px"></dc-import></sc-if>
+<main style="flex:1;max-width:1152px;width:100%;margin:0 auto;padding:{{ mainPad }};box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+<sc-if value="{{ notFound }}" hint-placeholder-val="{{ false }}"><div role="alert" style="margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span aria-hidden="true" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:600 10px 'JetBrains Mono',monospace;color:var(--muted)">404</span><h1 style="margin:0;font:600 17px Inter,sans-serif">Venue not found</h1><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted)">The requested venue could not be located.</p><a style="margin-top:4px;display:inline-flex;align-items:center;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none">Go back</a></div></sc-if>
+<sc-if value="{{ found }}" hint-placeholder-val="{{ true }}">
+  <sc-if value="{{ structural }}"><div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px dashed var(--warn);border-radius:4px"><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--warn)">STRUCTURAL EXAMPLE</span><span style="font:400 12px Inter,sans-serif;color:var(--muted)">{{ structNote }}</span></div></sc-if>
+  <nav aria-label="breadcrumb" style="display:flex;flex-wrap:wrap;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><a style="color:var(--cool);text-decoration:none;cursor:pointer">{{ crumbParent }}</a><span style="color:var(--faint)">/</span><span aria-current="page" style="color:var(--muted)">{{ name }}</span></nav>
+  <header style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px">
+    <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Venue</span>
+      <h1 style="margin:0;font:700 22px/1.2 Inter,sans-serif;text-wrap:balance">{{ name }}</h1>
+      <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary)">{{ placeLine }}</span>
+    </div>
+    <dl style="margin:0 0 0 {{ metaMargin }};display:flex;gap:24px"><sc-for list="{{ headMeta }}" as="m" hint-placeholder-count="1"><div style="display:flex;flex-direction:column;gap:4px;align-items:{{ metaAlign }}"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ m.k }}</dt><dd style="margin:0;font:600 16px 'JetBrains Mono',monospace;color:var(--text)">{{ m.v }}</dd></div></sc-for></dl>
+  </header>
+  <nav role="tablist" aria-label="Venue sections" style="display:flex;gap:4px;border-bottom:1px solid var(--line)"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="2"><button role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="min-height:{{ tabH }};padding:0 12px;background:transparent;border:0;border-bottom:2px solid {{ t.under }};margin-bottom:-1px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ t.color }};cursor:pointer">{{ t.label }}</button></sc-for></nav>
+
+  <sc-if value="{{ tOverview }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;grid-template-columns:{{ splitCols }};gap:16px;align-items:start">
+      <section aria-labelledby="{{ uid }}lc" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <h2 id="{{ uid }}lc" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Location</h2>
+        <sc-if value="{{ locOk }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:{{ locCols }};gap:16px;padding:16px">
+            <dl style="margin:0;display:flex;flex-direction:column"><sc-for list="{{ locRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:38px;border-bottom:1px solid var(--line)"><dt style="font:400 12px Inter,sans-serif;color:var(--muted)">{{ r.k }}</dt><dd style="margin:0;font:500 13px 'JetBrains Mono',monospace;color:var(--text);text-align:right">{{ r.v }}</dd></div></sc-for></dl>
+            <figure style="margin:0;display:flex;flex-direction:column;gap:6px">
+              <div role="img" aria-label="{{ locAria }}" style="position:relative;height:160px;border:1px solid var(--line);border-radius:4px;background:var(--ink);background-image:linear-gradient(to right,#1d2633 1px,transparent 1px),linear-gradient(to bottom,#1d2633 1px,transparent 1px);background-size:32px 32px;background-position:center"><span style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)"></span><span style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--line)"></span><span style="position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid var(--amber);border-radius:50%"></span></div>
+              <figcaption style="display:flex;justify-content:space-between;font:400 10px 'JetBrains Mono',monospace;color:var(--faint)"><span>{{ coordText }}</span><span>Location marker · no map layer</span></figcaption>
+            </figure>
+          </div>
+        </sc-if>
+        <sc-if value="{{ locNone }}"><div style="padding:16px;display:flex;gap:10px;align-items:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">Location details aren’t recorded for this venue.</span></div></sc-if>
+      </section>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <section aria-labelledby="{{ uid }}md" style="background:var(--panel);border:1px solid var(--line);border-radius:4px"><h2 id="{{ uid }}md" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Venue details</h2>
+          <sc-if value="{{ metaOk }}" hint-placeholder-val="{{ true }}"><dl style="margin:0;padding:4px 16px 8px"><sc-for list="{{ metaRows }}" as="r" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:38px;border-bottom:1px solid var(--line)"><dt style="font:400 12px Inter,sans-serif;color:var(--muted)">{{ r.k }}</dt><dd style="margin:0;font:500 13px 'JetBrains Mono',monospace;color:var(--text)">{{ r.v }}</dd></div></sc-for></dl></sc-if>
+          <p style="margin:0;padding:8px 16px 12px;font:400 11px/1.5 Inter,sans-serif;color:var(--faint)">{{ metaNote }}</p>
+        </section>
+        <section aria-labelledby="{{ uid }}tm" style="background:var(--panel);border:1px solid var(--line);border-radius:4px"><h2 id="{{ uid }}tm" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Home teams</h2>
+          <sc-if value="{{ teamsOk }}"><ul style="list-style:none;margin:0;padding:4px 16px 8px"><sc-for list="{{ teams }}" as="t" hint-placeholder-count="1"><li style="display:flex;justify-content:space-between;align-items:center;min-height:40px;border-bottom:1px solid var(--line)"><a style="font:500 14px Inter,sans-serif;color:var(--cool);text-decoration:none;cursor:pointer">{{ t }}</a><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">HOME VENUE</span></li></sc-for></ul></sc-if>
+          <sc-if value="{{ teamsNone }}" hint-placeholder-val="{{ true }}"><p style="margin:0;padding:12px 16px 14px;font:400 13px/1.5 Inter,sans-serif;color:var(--text-secondary)">No home team is recorded for this venue.</p></sc-if>
+        </section>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tMatches }}" hint-placeholder-val="{{ false }}">
+    <sc-if value="{{ mLoading }}"><div aria-busy="true" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px 0"><span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading matches</span><sc-for list="{{ skelRows }}" as="w" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:72px minmax(0,1fr) 64px minmax(0,1fr) 48px;gap:14px;align-items:center;height:44px;padding:0 16px;border-top:1px solid var(--line)"><span style="height:8px;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:{{ w }};justify-self:end;background:var(--raised);border-radius:2px"></span><span style="height:18px;background:var(--raised);border-radius:3px"></span><span style="height:9px;width:{{ w }};background:var(--raised);border-radius:2px"></span><span style="height:14px;background:var(--raised);border-radius:3px"></span></div></sc-for></div></sc-if>
+    <sc-if value="{{ mFailed }}"><div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span aria-hidden="true" style="font:700 13px 'JetBrains Mono',monospace;color:var(--risk)">!</span><h2 style="margin:0;font:600 15px Inter,sans-serif">Unable to load matches</h2><button style="height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Try again</button></div></sc-if>
+    <sc-if value="{{ mNone }}"><div role="status" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><h2 style="margin:0;font:600 15px Inter,sans-serif">No associated matches available</h2><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted);max-width:440px">No match records currently reference this venue. This doesn’t mean no matches were played here.</p></div></sc-if>
+    <sc-if value="{{ mOk }}"><section aria-labelledby="{{ uid }}ml" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}ml" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Matches recorded at this venue</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">From match records · not a complete list · times UTC</span></div>
+      <ul style="list-style:none;margin:0;padding:0"><sc-for list="{{ matches }}" as="r" hint-placeholder-count="1"><li><sc-if value="{{ wide }}"><a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:120px minmax(0,1fr) 72px minmax(0,1fr) 56px 14px;gap:14px;align-items:center;min-height:52px;padding:4px 16px;text-decoration:none;cursor:pointer" style-hover="background:var(--raised)"><span style="display:flex;flex-direction:column;gap:2px"><time style="font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.date }}</time><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)">{{ r.comp }}</span></span><span style="font:600 14px Inter,sans-serif;text-align:right;color:var(--text)">{{ r.home }}</span><span style="justify-self:center;min-width:60px;text-align:center;padding:3px 8px;border-radius:4px;background:var(--ink);border:1px solid var(--line);font:600 14px 'JetBrains Mono',monospace">{{ r.score }}</span><span style="font:500 14px Inter,sans-serif;color:var(--text-secondary)">{{ r.away }}</span><span style="justify-self:end;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--edge);border:1px solid var(--edge);border-radius:4px;padding:1px 6px">■ FT</span><span aria-hidden="true" style="color:var(--faint);font:400 13px 'JetBrains Mono',monospace">›</span></a></sc-if><sc-if value="{{ narrow }}"><a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:72px minmax(0,1fr) 24px;gap:10px;align-items:center;min-height:64px;padding:8px 12px;text-decoration:none"><span style="display:flex;flex-direction:column;gap:4px"><time style="font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.dateShort }}</time><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.06em;color:var(--edge)">■ FT</span></span><span style="display:flex;flex-direction:column;gap:4px"><span style="font:600 15px Inter,sans-serif;color:var(--text)">{{ r.home }}</span><span style="font:500 15px Inter,sans-serif;color:var(--text-secondary)">{{ r.away }}</span></span><span style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;font:600 15px 'JetBrains Mono',monospace"><span>{{ r.hs }}</span><span>{{ r.as }}</span></span></a></sc-if></li></sc-for></ul>
+    </section></sc-if>
+  </sc-if>
+</sc-if>
+</main>
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><footer style="max-width:1152px;width:100%;margin:40px auto 0;padding:24px 16px;box-sizing:border-box;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span style="font:700 13px Inter,sans-serif;color:var(--text-secondary)">Pitch<span style="color:var(--amber)">Terminal</span></span><div style="display:flex;flex-wrap:wrap;gap:8px 18px"><a style="color:var(--faint);text-decoration:none">Features</a><a style="color:var(--faint);text-decoration:none">Pricing</a><a style="color:var(--faint);text-decoration:none">Terms</a><a style="color:var(--faint);text-decoration:none">Privacy</a><span>© PitchTerminal</span></div></footer></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:800},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;panel&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;venue&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;309&quot;,&quot;30&quot;],&quot;default&quot;:&quot;309&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;matches&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;default&quot;,&quot;limited&quot;,&quot;teams&quot;,&quot;noLocation&quot;,&quot;matchesLoading&quot;,&quot;matchesFailed&quot;,&quot;notFound&quot;],&quot;default&quot;:&quot;default&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { tab: null };
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop', frame = this.props.frame ?? 'full', s = this.props.state ?? 'default';
+    const vid = this.props.venue ?? '309';
+    const tab = this.state.tab ?? this.props.tab ?? 'overview';
+    const M = bp === 'mobile', D = bp === 'desktop';
+    const uid = this.uid || (this.uid = 'vw' + Math.random().toString(36).slice(2, 7));
+    const V = {
+      '309': { name: 'Estádio Doutor Oswaldo Teixeira Duarte', city: 'Sao Paulo', country: 'Brazil', lat: -23.520523, lon: -46.618704, cap: 21004, crumb: 'Venues', matches: [] },
+      '30': { name: 'Estádio Manoel Barradas', city: 'Salvador', country: 'Brazil', lat: -12.919096, lon: -38.427132, cap: 34535, crumb: 'Vitória v Grêmio', matches: [{ date: 'Mon 7 Sep 2026 · 23:00', dateShort: '7 Sep', comp: 'Brasileirão Betano', home: 'Vitória', away: 'Grêmio', hs: 1, as: 0 }] }
+    }[vid];
+    const limited = s === 'limited', noLoc = s === 'noLocation' || limited, teamsS = s === 'teams';
+    const tabs = [['overview', 'Overview'], ['matches', 'Matches']].map(([k, label]) => ({ label, on: k === tab, pick: () => this.setState({ tab: k }), under: k === tab ? 'var(--amber)' : 'transparent', color: k === tab ? 'var(--text)' : 'var(--muted)' }));
+    const f = (n, h) => Math.abs(n).toFixed(4) + '° ' + h;
+    const coord = f(V.lat, V.lat < 0 ? 'S' : 'N') + ', ' + f(V.lon, V.lon < 0 ? 'W' : 'E');
+    return {
+      uid, bp, full: frame === 'full', found: s !== 'notFound', notFound: s === 'notFound', wide: !M, narrow: M, tabs,
+      structural: teamsS, structNote: 'Home-team association shown with a generic name; no supplied venue has a recorded home team.',
+      minH: frame === 'full' ? (M ? '844px' : '800px') : 'auto', mainPad: M ? '12px 12px 24px' : bp === 'tablet' ? '20px 24px' : '20px 16px',
+      metaMargin: D ? 'auto' : '0', metaAlign: D ? 'flex-end' : 'flex-start', tabH: M ? '44px' : '32px',
+      crumbParent: V.crumb, name: V.name, placeLine: noLoc ? 'Location not recorded' : V.city + ' · ' + V.country,
+      headMeta: limited ? [] : [{ k: 'Capacity', v: V.cap.toLocaleString('en-GB') }],
+      tOverview: tab === 'overview', tMatches: tab === 'matches',
+      splitCols: D ? 'minmax(0,7fr) minmax(0,5fr)' : '1fr', locCols: M ? '1fr' : 'minmax(0,1fr) minmax(0,1fr)',
+      locOk: !noLoc, locNone: noLoc,
+      locRows: [['City', V.city], ['Country', V.country], ['Latitude', V.lat.toFixed(6)], ['Longitude', V.lon.toFixed(6)]].map(([k, v]) => ({ k, v })),
+      coordText: coord, locAria: 'Location marker at ' + coord + '. City and country are listed alongside.',
+      metaOk: !limited, metaRows: [['Capacity', V.cap.toLocaleString('en-GB')]].map(([k, v]) => ({ k, v })),
+      metaNote: limited ? 'No additional venue metadata is available.' : 'Surface, elevation and time zone aren’t recorded for this venue.',
+      teamsOk: teamsS, teamsNone: !teamsS, teams: ['Team name'],
+      mLoading: s === 'matchesLoading', mFailed: s === 'matchesFailed', mNone: !['matchesLoading', 'matchesFailed'].includes(s) && V.matches.length === 0, mOk: !['matchesLoading', 'matchesFailed'].includes(s) && V.matches.length > 0,
+      skelRows: ['60%', '48%', '55%', '42%', '58%', '50%'],
+      matches: V.matches.map(m => ({ ...m, score: m.hs + ' – ' + m.as, aria: m.home + ' ' + m.hs + ' ' + m.as + ' ' + m.away + ', full time, ' + m.date + ' UTC, ' + m.comp + '. Open match.' }))
+    };
+  }
+}
+</script>
+</body>
+</html>

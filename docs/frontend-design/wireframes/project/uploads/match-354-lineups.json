@@ -1,0 +1,558 @@
+﻿{
+    "match":  {
+                  "fixtureId":  "354",
+                  "kickoffAt":  "2026-09-07T23:00:00.000Z",
+                  "status":  "COMPLETED",
+                  "competition":  {
+                                      "id":  "28",
+                                      "name":  "Brasileirão Betano",
+                                      "slug":  "brasileirao-betano-325"
+                                  },
+                  "homeTeam":  {
+                                   "id":  "71",
+                                   "name":  "Vitória",
+                                   "slug":  "vitoria-1962"
+                               },
+                  "awayTeam":  {
+                                   "id":  "66",
+                                   "name":  "Grêmio",
+                                   "slug":  "gremio-5926"
+                               }
+              },
+    "lineups":  {
+                    "home":  {
+                                 "team":  {
+                                              "id":  "71",
+                                              "name":  "Vitória",
+                                              "slug":  "vitoria-1962"
+                                          },
+                                 "formation":  "4-2-3-1",
+                                 "starting":  [
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "442",
+                                                                     "fullName":  "Lucas Arcanjo",
+                                                                     "slug":  "lucas-arcanjo-982558"
+                                                                 },
+                                                      "positionCode":  "GK",
+                                                      "positionName":  "Goalkeeper",
+                                                      "positionGroup":  "GOALKEEPER",
+                                                      "shirtNumber":  1
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "2213",
+                                                                     "fullName":  "Emanuel Brítez",
+                                                                     "slug":  "emanuel-britez-789395"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  2
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "452",
+                                                                     "fullName":  "Matheuzinho",
+                                                                     "slug":  "matheuzinho-795266"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  10
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "454",
+                                                                     "fullName":  "Diego Tarzia",
+                                                                     "slug":  "diego-tarzia-1650040"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  12
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "450",
+                                                                     "fullName":  "Erick",
+                                                                     "slug":  "erick-895650"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  33
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "901",
+                                                                     "fullName":  "Luan Cândido",
+                                                                     "slug":  "luan-candido-905459"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  36
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "446",
+                                                                     "fullName":  "Jamerson",
+                                                                     "slug":  "jamerson-972373"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  83
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "448",
+                                                                     "fullName":  "Zé Vitor",
+                                                                     "slug":  "ze-vitor-1188028"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  88
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "451",
+                                                                     "fullName":  "Renê Sousa",
+                                                                     "slug":  "rene-sousa-1644830"
+                                                                 },
+                                                      "positionCode":  "CF",
+                                                      "positionName":  "Centre-forward",
+                                                      "positionGroup":  "ATTACK",
+                                                      "shirtNumber":  91
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "444",
+                                                                     "fullName":  "Caique Gonçalves",
+                                                                     "slug":  "caique-goncalves-871032"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  95
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1162",
+                                                                     "fullName":  "Mateusinho",
+                                                                     "slug":  "mateusinho-1107069"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  98
+                                                  }
+                                              ],
+                                 "substitutes":  [
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "463",
+                                                                        "fullName":  "Marinho",
+                                                                        "slug":  "marinho-798127"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  7
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "2223",
+                                                                        "fullName":  "Tomás Pochettino",
+                                                                        "slug":  "tomas-pochettino-824626"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  8
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "11807",
+                                                                        "fullName":  "Alex Bruno",
+                                                                        "slug":  "alex-bruno-1468444"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  9
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "462",
+                                                                        "fullName":  "Osvaldo",
+                                                                        "slug":  "osvaldo-90468"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  11
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "7042",
+                                                                        "fullName":  "Kauan",
+                                                                        "slug":  "kauan-2025518"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  18
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "456",
+                                                                        "fullName":  "Fabrício Santos",
+                                                                        "slug":  "fabricio-santos-975351"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  23
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "443",
+                                                                        "fullName":  "Edenilson",
+                                                                        "slug":  "edenilson-1652651"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  26
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "464",
+                                                                        "fullName":  "Wendell dos Santos Sacramento",
+                                                                        "slug":  "wendell-dos-santos-sacramento-1835894"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  41
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "12678",
+                                                                        "fullName":  "Wanderson Estrela Oliveira",
+                                                                        "slug":  "wanderson-estrela-oliveira-2537139"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  69
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "2211",
+                                                                        "fullName":  "Fabiano Souza",
+                                                                        "slug":  "fabiano-souza-1130513"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  70
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "913",
+                                                                        "fullName":  "Yuri Sena",
+                                                                        "slug":  "yuri-sena-905464"
+                                                                    },
+                                                         "positionCode":  "GK",
+                                                         "positionName":  "Goalkeeper",
+                                                         "positionGroup":  "GOALKEEPER",
+                                                         "shirtNumber":  71
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "906",
+                                                                        "fullName":  "Renato Kayzer",
+                                                                        "slug":  "renato-kayzer-814723"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  79
+                                                     }
+                                                 ]
+                             },
+                    "away":  {
+                                 "team":  {
+                                              "id":  "66",
+                                              "name":  "Grêmio",
+                                              "slug":  "gremio-5926"
+                                          },
+                                 "formation":  "4-1-4-1",
+                                 "starting":  [
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1547",
+                                                                     "fullName":  "Weverton",
+                                                                     "slug":  "weverton-243529"
+                                                                 },
+                                                      "positionCode":  "GK",
+                                                      "positionName":  "Goalkeeper",
+                                                      "positionGroup":  "GOALKEEPER",
+                                                      "shirtNumber":  1
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1549",
+                                                                     "fullName":  "Gustavo Martins",
+                                                                     "slug":  "gustavo-martins-1105796"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  6
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1548",
+                                                                     "fullName":  "Cristian Pavón",
+                                                                     "slug":  "cristian-pavon-358956"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  7
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1552",
+                                                                     "fullName":  "Erick Noriega",
+                                                                     "slug":  "erick-noriega-1020375"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  8
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "11408",
+                                                                     "fullName":  "Filip Krovinović",
+                                                                     "slug":  "filip-krovinovic-322417"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  10
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1553",
+                                                                     "fullName":  "Tetê",
+                                                                     "slug":  "tete-980327"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  11
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "9243",
+                                                                     "fullName":  "Mathias Villasanti",
+                                                                     "slug":  "mathias-villasanti-1139775"
+                                                                 },
+                                                      "positionCode":  "CM",
+                                                      "positionName":  "Central midfielder",
+                                                      "positionGroup":  "MIDFIELD",
+                                                      "shirtNumber":  20
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "10464",
+                                                                     "fullName":  "Diego Caito",
+                                                                     "slug":  "diego-caito-1468270"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  27
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1551",
+                                                                     "fullName":  "Pedro Gabriel",
+                                                                     "slug":  "pedro-gabriel-1907755"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  54
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "10824",
+                                                                     "fullName":  "Wallace",
+                                                                     "slug":  "wallace-1843731"
+                                                                 },
+                                                      "positionCode":  "CB",
+                                                      "positionName":  "Centre-back",
+                                                      "positionGroup":  "DEFENCE",
+                                                      "shirtNumber":  82
+                                                  },
+                                                  {
+                                                      "player":  {
+                                                                     "id":  "1557",
+                                                                     "fullName":  "Carlos Vinícius",
+                                                                     "slug":  "carlos-vinicius-891920"
+                                                                 },
+                                                      "positionCode":  "CF",
+                                                      "positionName":  "Centre-forward",
+                                                      "positionGroup":  "ATTACK",
+                                                      "shirtNumber":  95
+                                                  }
+                                              ],
+                                 "substitutes":  [
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "3405",
+                                                                        "fullName":  "Fabián Balbuena",
+                                                                        "slug":  "fabian-balbuena-339447"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  2
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1564",
+                                                                        "fullName":  "Wagner Leonardo",
+                                                                        "slug":  "wagner-leonardo-976235"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  3
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1554",
+                                                                        "fullName":  "Juan Nardoni",
+                                                                        "slug":  "juan-nardoni-989862"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  5
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1563",
+                                                                        "fullName":  "Gabriel Grando",
+                                                                        "slug":  "gabriel-grando-1111770"
+                                                                    },
+                                                         "positionCode":  "GK",
+                                                         "positionName":  "Goalkeeper",
+                                                         "positionGroup":  "GOALKEEPER",
+                                                         "shirtNumber":  12
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "11870",
+                                                                        "fullName":  "Danilo Barbosa",
+                                                                        "slug":  "danilo-barbosa-330063"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  15
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "2967",
+                                                                        "fullName":  "João Pedro",
+                                                                        "slug":  "joao-pedro-605528"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  18
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1561",
+                                                                        "fullName":  "Martin Braithwaite",
+                                                                        "slug":  "martin-braithwaite-66471"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  22
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "10475",
+                                                                        "fullName":  "Matheus Nascimento",
+                                                                        "slug":  "matheus-nascimento-1047683"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  30
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "2983",
+                                                                        "fullName":  "Caio Paulista",
+                                                                        "slug":  "caio-paulista-931591"
+                                                                    },
+                                                         "positionCode":  "CB",
+                                                         "positionName":  "Centre-back",
+                                                         "positionGroup":  "DEFENCE",
+                                                         "shirtNumber":  38
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1562",
+                                                                        "fullName":  "Zortéa",
+                                                                        "slug":  "zortea-1907762"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  50
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1568",
+                                                                        "fullName":  "Riquelme Freitas",
+                                                                        "slug":  "riquelme-freitas-1634619"
+                                                                    },
+                                                         "positionCode":  "CM",
+                                                         "positionName":  "Central midfielder",
+                                                         "positionGroup":  "MIDFIELD",
+                                                         "shirtNumber":  65
+                                                     },
+                                                     {
+                                                         "player":  {
+                                                                        "id":  "1556",
+                                                                        "fullName":  "José Enamorado",
+                                                                        "slug":  "jose-enamorado-974558"
+                                                                    },
+                                                         "positionCode":  "CF",
+                                                         "positionName":  "Centre-forward",
+                                                         "positionGroup":  "ATTACK",
+                                                         "shirtNumber":  99
+                                                     }
+                                                 ]
+                             },
+                    "coverage":  {
+                                     "lineups":  "present",
+                                     "lineupsAreObserved":  true
+                                 }
+                }
+}

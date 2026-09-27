@@ -1,0 +1,39 @@
+﻿{
+    "match":  {
+                  "fixtureId":  "354",
+                  "kickoffAt":  "2026-09-07T23:00:00.000Z",
+                  "status":  "COMPLETED",
+                  "competition":  {
+                                      "id":  "28",
+                                      "name":  "Brasileirão Betano",
+                                      "slug":  "brasileirao-betano-325"
+                                  },
+                  "homeTeam":  {
+                                   "id":  "71",
+                                   "name":  "Vitória",
+                                   "slug":  "vitoria-1962"
+                               },
+                  "awayTeam":  {
+                                   "id":  "66",
+                                   "name":  "Grêmio",
+                                   "slug":  "gremio-5926"
+                               }
+              },
+    "venue":  {
+                  "id":  "30",
+                  "name":  "Estádio Manoel Barradas",
+                  "city":  "Salvador",
+                  "countryCode":  "BR",
+                  "latitude":  -12.919096,
+                  "longitude":  -38.427132,
+                  "elevationMetres":  null,
+                  "timezoneName":  null,
+                  "capacity":  34535,
+                  "surface":  null
+              },
+    "isNeutralVenue":  false,
+    "coverage":  {
+                     "venue":  "present",
+                     "venueIsObserved":  true
+                 }
+}

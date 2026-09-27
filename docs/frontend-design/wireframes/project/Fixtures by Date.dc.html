@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp code{font:12px ui-monospace,Menlo,monospace;background:#f2f0ec;padding:1px 4px;border-radius:3px}.sp pre{font:12px/1.5 ui-monospace,Menlo,monospace;background:#f6f5f2;padding:12px 14px;border-radius:4px;margin:0}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">C</a><span class="dv-tname">Phase C · Fixtures by Date · data: fixtures-2026-08-15.json (4 fixtures) and fixtures-2026-09-26.json (empty)</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440 · Sat 15 Aug 2026 · real payload</div><div class="dv-card" style="width:1440px"><dc-import name="FixturesPage" bp="desktop" state="aug15" hint-size="1440px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Tablet 834 · real payload</div><div class="dv-card" style="width:834px"><dc-import name="FixturesPage" bp="tablet" state="aug15" hint-size="834px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Mobile 390 · stacked rows</div><div class="dv-card" style="width:390px"><dc-import name="FixturesPage" bp="mobile" state="aug15" hint-size="390px,900px"></dc-import></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Status system · structural examples (not in payload)</div>
+<div class="dv-card" style="width:1240px;background:#0b0f14"><dc-import name="FixturesPage" frame="panel" state="statuses" hint-size="1240px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Status system · mobile</div>
+<div class="dv-card" style="width:390px;background:#0b0f14"><dc-import name="FixturesPage" frame="panel" bp="mobile" state="statuses" hint-size="390px,1000px"></dc-import></div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Page states</div>
+<div class="dv-card" style="width:2100px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px">
+  <div class="st"><b>EMPTY · Sat 26 Sep 2026 · real payload (fixtureCount 0)</b><dc-import name="FixturesPage" frame="panel" state="empty" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>UPCOMING-ONLY DATE · structural example</b><dc-import name="FixturesPage" frame="panel" state="upcoming" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>LOADING</b><dc-import name="FixturesPage" frame="panel" state="loading" hint-size="100%,520px"></dc-import></div>
+  <div class="st"><b>FAILED LOAD</b><dc-import name="FixturesPage" frame="panel" state="failed" hint-size="100%,420px"></dc-import></div>
+  <div class="st"><b>INVALID DATE (400)</b><dc-import name="FixturesPage" frame="panel" state="invalid" hint-size="100%,380px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Fixtures spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>Phase C · Fixtures by Date · spec</h2>
+<p style="color:#6b6f76"><span class="v">VERIFIED</span> payload or design system · <span class="p">PROPOSED</span> · <span class="d">DECISION</span></p>
+
+<h3>1–3 · Layouts</h3>
+<p>Desktop <a class="dv-oid" href="#1a">1a</a>: 1152 rail, full width, no right rail. Tablet <a class="dv-oid" href="#1b">1b</a>: same grammar, narrower columns. Mobile <a class="dv-oid" href="#1c">1c</a>: stacked rows, 5-day strip, 44px date buttons. The page identity is always the date. Countries and competitions are sections under it, never the page title.</p>
+
+<h3>4 · Date navigation</h3>
+<ul>
+<li>‹ TODAY › group (verified DateNav language) + a "Date" picker that opens the native date input. The picker is secondary.</li>
+<li>Below it, a nearby-days strip (7 days on desktop and tablet, 5 on mobile) centred on the selected date; the selected day uses the Phase A tab grammar (amber underline, --text) with aria-current="date"; today carries an amber TODAY tag.</li>
+<li>TODAY is highlighted (amber-dim fill) when the selected date is today; otherwise it's a plain button.</li>
+<li>The strip shows no per-day counts: the endpoint is single-date, and counts for other days would need extra requests <span class="d">DECISION</span>.</li>
+<li>Each date is its own URL (<code>/fixtures/YYYY-MM-DD</code>) <span class="p">PROPOSED</span>.</li>
+</ul>
+
+<h3>Header</h3>
+<p>Eyebrow FIXTURES → h1 full date from <code>date</code> → meta: <code>fixtureCount</code> ("4 fixtures") · "Times in UTC" · TODAY tag when applicable. No other metrics.</p>
+
+<h3>Time policy</h3>
+<p>The endpoint's day is a UTC window, so kickoffs are shown in <b>UTC</b>, and every row visibly belongs to the date in the h1. Showing the viewer's local time would move some fixtures across midnight <span class="d">DECISION</span>. Earlier public mock-ups used BRT for illustration only.</p>
+
+<h3>5 · Grouping</h3>
+<pre>date
+└─ country (h2 · code chip + name, label-cap)          ← countries[].country
+   └─ competition panel (h3 · name + seasonLabel + count) ← competitions[].name / edition.seasonLabel
+      └─ fixture rows                                   ← fixtures[]</pre>
+<p>Order follows the payload. A null <code>country</code> renders "Country not specified" with a dashed "—" chip; its fixtures are still shown. The competition name links to Phase D, a transition only. No standings, tabs or competition stats.</p>
+
+<h3>6 · Fixture row</h3>
+<table>
+<tr><th>Column</th><th>Desktop</th><th>Source</th></tr>
+<tr><td>Kickoff</td><td>64px, mono, &lt;time datetime&gt;</td><td><code>kickoffAt</code></td></tr>
+<tr><td>Home</td><td>right-aligned, ellipsis; winner 600</td><td><code>homeTeam.name</code></td></tr>
+<tr><td>Score</td><td>88px box on --ink, mono 14/600</td><td><code>result.final</code> (else <code>score</code>)</td></tr>
+<tr><td>Away</td><td>left-aligned</td><td><code>awayTeam.name</code></td></tr>
+<tr><td>Status</td><td>chip: text + glyph + colour</td><td><code>status</code> (+ <code>result.extraTime</code> / <code>penalties</code>)</td></tr>
+<tr><td>›</td><td>affordance</td><td>—</td></tr>
+</table>
+<p>The whole row is one link to the Match workspace (Phase F), with a single tab stop and an aria-label such as "Fluminense 3 2 Palmeiras, full time, 19:30 UTC. Open match." Rows are border-separated with 44px height, hover --raised and no zebra (the DataTable pattern). No crests: the payload has no image fields, and teams are text only. Team names are not separate links, to keep one tab stop per row <span class="p">PROPOSED</span>.</p>
+
+<h3>7 · Status system (<a class="dv-oid" href="#1d">1d</a>)</h3>
+<table>
+<tr><th>API status</th><th>Shown</th><th>Colour</th><th>Glyph</th><th>Score slot</th></tr>
+<tr><td>SCHEDULED</td><td>UPCOMING</td><td>--cool</td><td>○</td><td>– (faint)</td></tr>
+<tr><td>IN_PROGRESS</td><td>LIVE</td><td>--amber</td><td>● pulse</td><td>current score if present</td></tr>
+<tr><td>COMPLETED</td><td>FT</td><td>--edge</td><td>■</td><td>final</td></tr>
+<tr><td>COMPLETED + extraTime</td><td>AET</td><td>--edge</td><td>■</td><td>final</td></tr>
+<tr><td>COMPLETED + penalties</td><td>PEN</td><td>--edge</td><td>■</td><td>final</td></tr>
+<tr><td>POSTPONED</td><td>POSTPONED</td><td>--warn</td><td>▲</td><td>–</td></tr>
+<tr><td>ABANDONED</td><td>ABANDONED</td><td>--warn</td><td>▲</td><td>–</td></tr>
+<tr><td>CANCELLED</td><td>CANCELLED</td><td>--risk</td><td>✕</td><td>–</td></tr>
+<tr><td>UNKNOWN</td><td>STATUS UNKNOWN</td><td>--faint, dashed border</td><td>?</td><td>–</td></tr>
+</table>
+<p>Colours follow this brief. The Phase A board had recommended --muted for FT; this brief sets --edge, and Phase C follows it (the Phase A note is superseded). AET and PEN appear only when those result objects are non-null; all 4 real fixtures have both null, so they show FT.</p>
+
+<h3>8 · Score rules</h3>
+<ul>
+<li>Confirmed 0–0 renders "0 – 0" + FT (see the 4th example row).</li>
+<li>COMPLETED with no result renders "—" + FT, with aria "no score".</li>
+<li>Unplayed renders "–" in --faint and is never "0 – 0".</li>
+<li>Half-time, extra-time values, penalties and confirmedAt are not shown in the list (Match page).</li>
+</ul>
+
+<h3>9 · Live</h3>
+<p>LIVE chip in amber with the verified pulse-dot (off under reduced-motion) and the score from the payload. No minute, events or stats; none are in the payload.</p>
+
+<h3>10 · Postponed / abandoned / cancelled</h3>
+<p>These stay in place on the date the endpoint returns, keeping their original kickoff time; the score slot shows "–". No replacement date is shown.</p>
+
+<h3>11–14 · Page states (<a class="dv-oid" href="#1f">1f</a>)</h3>
+<ul>
+<li><b>Empty</b> (real, 26 Sep): header with "0 fixtures", then a panel reading "No fixtures · There are no fixtures recorded for this date." plus a browsing hint. No reason is given.</li>
+<li><b>Invalid date</b> (400): h1 "Date not recognised", count "—", no strip; panel "Invalid date · The selected date is not valid." + "Go to today".</li>
+<li><b>Loading</b>: real header and date strip, count "Loading…"; skeleton country label → competition band → rows on the real column grid; aria-busy on main + status "Loading fixtures".</li>
+<li><b>Failed</b>: role="alert", "Unable to load fixtures for this date", Try again. Date navigation stays usable.</li>
+</ul>
+
+<h3>15 · Responsive</h3>
+<ul>
+<li>≥1024: 6-column row (64 · 1fr · 88 · 1fr · 132 · 14).</li>
+<li>768–1023: the same row, narrower (52 · 1fr · 76 · 1fr · 112 · 12).</li>
+<li>&lt;768: stacked row: time + status on the left (72px), home and away on two lines, scores right-aligned; 60px rows; 5-day strip filling the width; ‹ Today › at 44px; "Date" label collapses to an icon.</li>
+</ul>
+
+<h3>16 · Accessibility</h3>
+<ul>
+<li>h1 date → h2 country → h3 competition; each country is a labelled section and rows are a ul.</li>
+<li>‹ › have aria-labels naming the target day; the strip is a nav with aria-current="date"; the date input has a label.</li>
+<li>Status is always a word + glyph; winners use weight as well as colour.</li>
+<li>Row links: one per row, with a full spoken summary; focus is the amber ring.</li>
+<li>Loading, failed and empty states are announced via status or alert.</li>
+</ul>
+
+<h3>17 · Relationship to the shell</h3>
+<p>This is the first page on the full AppHeader (Phase A) rather than the focused auth shell, with Fixtures active. It follows the 1152 PageContainer, DataTable pattern, StatusChip grammar and Empty/Error/Loading primitives, with a compact footer (Features · Pricing · Terms · Privacy). The Phase A decision about the header nav items still applies.</p>
+
+<h3>Data provenance</h3>
+<p>Real: the 4 fixtures, teams, scores, statuses, kickoffs, countries, competitions and season labels of 15 Aug; the empty 26 Sep response. Structural examples (clearly bannered): the status board and the upcoming-only date.</p>
+<p>Scope: Phase C only. No Competition, Team, Match, Player, Venue, Search or Account design.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "show kickoff times in local time" · "add per-day counts to the date strip" · "approve C and start Phase D"</p>
+</section>
+</x-dc>
+</body>
+</html>

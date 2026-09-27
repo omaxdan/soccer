@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">B3</a><span class="dv-tname">Phase B3 · Pricing · structure only, all commercial values pending · follows <a href="Features%20Page.dc.html">B2</a></span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440 · click group headers and FAQ rows</div><div class="dv-card" style="width:1440px"><dc-import name="PricingPage" bp="desktop" hint-size="1440px,3600px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Tablet 834</div><div class="dv-card" style="width:834px"><dc-import name="PricingPage" bp="tablet" hint-size="834px,4400px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Mobile 390 · plan switcher + expandable groups</div><div class="dv-card" style="width:390px"><dc-import name="PricingPage" bp="mobile" hint-size="390px,6200px"></dc-import></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Pricing spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>B3 · Pricing · spec</h2>
+<p style="color:#6b6f76"><span class="v">VERIFIED</span> established in project context · <span class="p">PROPOSED</span> structure or copy · <span class="d">DECISION</span> commercial call still open.</p>
+
+<h3>1 · Page structure</h3>
+<ol>
+<li>Hero: H1, one sentence, BillingToggle slot (hidden until periods exist).</li>
+<li>Plan cards: Guest · Free · Pro · Elite.</li>
+<li>Comparison: capability matrix, 5 groups, all cells TBD.</li>
+<li>Levels explained: one ruled line per level.</li>
+<li>Commercial details: 5 policy slots.</li>
+<li>FAQ: 6 questions, answers pending.</li>
+<li>CTA, then the shared public footer.</li>
+</ol>
+
+<h3>2 · Plan-card system</h3>
+<ul>
+<li>All four cards use the same --panel surface, border and CTA (secondary button). No card is larger, brighter or badged.</li>
+<li>Increasing depth is shown by a 4-segment <b>depth meter</b> (--muted fill on --line), plus "LEVEL n" text and aria-label "Access depth n of 4". It describes breadth, not quality.</li>
+<li>Price block: the value slot reads "Price TBD" in --faint mono with "Billing period not yet specified". Guest reads "No account" because it is the anonymous state from Phase A, not a price.</li>
+<li>Feature list mirrors the five matrix groups, each with a ◌ TBD chip, so card and matrix can't disagree.</li>
+<li><b>Recommended treatment (reserved)</b>: if a plan is chosen, it gets a --amber-dim border, a "RECOMMENDED" label-cap chip in --amber, and the primary amber CTA; aria-describedby points at the label. Not applied, because no plan has been chosen.</li>
+</ul>
+
+<h3>3 · Comparison-matrix system</h3>
+<ul>
+<li>Border-separated DataTable pattern from Phase A: .panel wrapper, .label-cap head, --raised group bands, 1px row rules, hover --raised.</li>
+<li>Built as role="table" / row / columnheader / rowheader / cell, so the collapsible groups work reliably; the accessible name states that all entitlements are to be confirmed.</li>
+<li>Cell vocabulary: ✓ Included (--text) · — Not included (--faint) · ◌ TBD (dashed --faint). The legend sits above the table, and every symbol has a text label.</li>
+<li>Groups collapse with a button (aria-expanded) in the band. Desktop starts with all groups open.</li>
+</ul>
+
+<h3>4 · Capability grouping</h3>
+<table>
+<tr><th>Group</th><th>Capabilities (product concepts only)</th></tr>
+<tr><td>Football discovery</td><td>Fixtures &amp; results · Competitions &amp; tables · Teams</td></tr>
+<tr><td>Team &amp; player analysis</td><td>Team form &amp; performance · Readiness · Statistical attributes · Player data</td></tr>
+<tr><td>Match intelligence</td><td>Match context · Match intelligence readings</td></tr>
+<tr><td>Historical intelligence</td><td>Historical patterns · Head-to-head</td></tr>
+<tr><td>Advanced access</td><td>Advanced analysis · API access (FUTURE, per Phase A)</td></tr>
+</table>
+
+<h3>5 · Commercial placeholder strategy</h3>
+<ul>
+<li>One placeholder vocabulary everywhere: <b>◌ TBD</b> (entitlements), <b>Price TBD</b> (money), <b>◌ PENDING · Not yet specified</b> (policies), <b>◌ COMMERCIALLY PENDING</b> (FAQ answers). All use the Phase A PENDING chip (dashed --faint).</li>
+<li>BillingToggle is drawn dashed, disabled and labelled "Period A / Period B". In production it isn't rendered until at least two periods exist.</li>
+<li>Replacing a placeholder with a real value needs no layout change: every slot is sized for a short value plus a one-line note.</li>
+<li>No trial, discount, limit, refund, provider or urgency language appears anywhere.</li>
+</ul>
+
+<h3>6 · CTA flow (transition points only)</h3>
+<table>
+<tr><th>Level</th><th>Button</th><th>Goes to</th></tr>
+<tr><td>Guest</td><td>Explore</td><td>Fixtures (Phase C), no account</td></tr>
+<tr><td>Free</td><td>Create account</td><td>Sign up (B5)</td></tr>
+<tr><td>Pro</td><td>Choose Pro</td><td>Sign up (B5) → Checkout (B6), plan carried as a parameter</td></tr>
+<tr><td>Elite</td><td>Choose Elite</td><td>Sign up (B5) → Checkout (B6)</td></tr>
+<tr><td>Final CTA</td><td>Explore fixtures · How it works</td><td>Fixtures · Features (B2)</td></tr>
+</table>
+<p>Signed-in visitors skip Sign up and go straight to Checkout <span class="d">DECISION</span> B5/B6.</p>
+
+<h3>7 · Responsive</h3>
+<ul>
+<li><b>Desktop</b>: 4 cards across; full matrix (capability column 34%); explanations, details and FAQ in a 4/8 split.</li>
+<li><b>Tablet</b>: cards 2 × 2; full matrix still fits (min-width 680, scrolls inside its panel if narrower); splits stack.</li>
+<li><b>Mobile</b>: cards stack; the matrix is replaced by a <b>PlanSelector</b> (4-segment tab list, 44px) plus expandable CapabilityGroups for the selected level. No tiny 4-column table. CTAs are full-width.</li>
+</ul>
+
+<h3>8 · Accessibility</h3>
+<ul>
+<li>One h1; each section has an h2 (the plans h2 is visually hidden); card names and FAQ questions are h3.</li>
+<li>Cards are list items in a ul. The depth meter is role="img" with a text label. CTAs are links because they navigate.</li>
+<li>The matrix uses table roles with row and column headers; TBD cells have aria-label "To be confirmed".</li>
+<li>Plan switcher: role="tablist", aria-selected, amber underline and weight change. Groups and FAQ rows are buttons with aria-expanded.</li>
+<li>BillingToggle: role="radiogroup" with aria-disabled while pending.</li>
+<li>A future recommended state would be announced by text, not only by the amber border.</li>
+</ul>
+
+<h3>9 · Component inventory</h3>
+<p>PricingHeader · BillingToggle · PlanCard · PlanPrice · DepthMeter (new) · PlanFeatureList · FeatureComparison · CapabilityGroup · PlanSelector · PolicyList (new) · FAQ · PricingCTA · PublicFooter. Reused from Phase A: AppHeader, CTAButton, DataTable, PENDING chip, final CTA band.</p>
+
+<h3>10 · Token usage</h3>
+<p>--panel cards, matrix, details band and CTA band · --raised group bands, selected tab, CTA fills · --line rules and meter track · --muted meter fill and labels · --faint every placeholder · --amber only for the primary "Explore fixtures" CTA and the selected mobile tab · --amber-dim for the CTA band rule. --edge, --warn, --risk and --cool are not used, so no plan reads as positive or negative.</p>
+
+<h3>11 · Verified vs proposed</h3>
+<table>
+<tr><th>Content</th><th>Status</th></tr>
+<tr><td>Level names Guest · Free · Pro · Elite and their order</td><td><span class="v">VERIFIED</span> project context</td></tr>
+<tr><td>Guest = no account (anonymous header state)</td><td><span class="v">VERIFIED</span> Phase A</td></tr>
+<tr><td>Capability names</td><td><span class="v">VERIFIED</span> product concepts from B1/B2</td></tr>
+<tr><td>Group names, level intent lines</td><td><span class="p">PROPOSED</span> structural placeholders from the brief</td></tr>
+<tr><td>H1, hero line, CTA copy, FAQ questions</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Prices, periods, entitlements, limits, policies, FAQ answers</td><td><span class="d">DECISION</span> all pending</td></tr>
+</table>
+
+<h3>12 · Open commercial decisions</h3>
+<ol>
+<li>Price and currency per level; whether Free is truly free of charge.</li>
+<li>Billing periods (and whether more than one exists).</li>
+<li>The entitlement matrix: which capability each level includes.</li>
+<li>Whether any usage limits exist, and how they're expressed.</li>
+<li>Whether a level is recommended.</li>
+<li>Renewal, cancellation, payment method and access-change policies.</li>
+<li>Whether API access is sold, and at which level.</li>
+<li>Whether Guest appears as a plan card or only as "explore without an account".</li>
+</ol>
+
+<h3>Scope</h3>
+<p>Only B3 was designed. Login, Sign Up, Checkout, Subscription Success, Legal and every Phase C–L page were not. Next: B4 Login / Sign Up.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "show Guest as a line above the cards instead of a card" · "preview the reserved Recommended treatment on Pro" · "approve B3 and start B4"</p>
+</section>
+</x-dc>
+</body>
+</html>

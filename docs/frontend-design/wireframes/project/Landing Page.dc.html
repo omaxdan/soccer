@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08)}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}.sp{background:#fff;padding:40px 48px;color:#1c1f24;font:14px/1.55 system-ui,sans-serif}.sp h2{font:600 22px/1.2 system-ui,sans-serif;margin:0 0 6px}.sp h3{font:600 12px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;margin:32px 0 10px;padding-top:16px;border-top:1px solid #e3e1dc}.sp p,.sp li{text-wrap:pretty;margin:0 0 6px}.sp ul,.sp ol{padding-left:20px;margin:0}.sp table{border-collapse:collapse;width:100%;font-size:13px}.sp td,.sp th{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #eeece8;vertical-align:top}.sp th{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#6b6f76}.sp code{font:12px ui-monospace,Menlo,monospace;background:#f2f0ec;padding:1px 4px;border-radius:3px}.sp .v,.sp .p,.sp .d{font:600 9px ui-monospace,Menlo,monospace;letter-spacing:.08em;padding:1px 5px;border-radius:3px;white-space:nowrap}.sp .v{background:#e4f4ec;color:#1d6b4b}.sp .p{background:#eceef2;color:#4a5160;border:1px dashed #a0a6b2}.sp .d{background:#fff0cf;color:#8a5a00}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">B1</a><span class="dv-tname">Phase B1 · Landing · built on Phase A system (<a href="PitchTerminal%20Design%20System.dc.html">design system</a>)</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Desktop 1440</div><div class="dv-card" style="width:1440px"><dc-import name="LandingPage" bp="desktop" hint-size="1440px,4200px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Tablet 834</div><div class="dv-card" style="width:834px"><dc-import name="LandingPage" bp="tablet" hint-size="834px,5600px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Mobile 390</div><div class="dv-card" style="width:390px"><dc-import name="LandingPage" bp="mobile" hint-size="390px,7600px"></dc-import></div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Landing spec</div>
+<div class="dv-card sp" style="width:1000px;box-sizing:border-box">
+<h2>B1 · Landing · spec</h2>
+<p style="color:#6b6f76"><span class="v">VERIFIED</span> supported capability or real data · <span class="p">PROPOSED</span> marketing copy or layout · <span class="d">DECISION</span> needs a product call.</p>
+
+<h3>1 · Concept</h3>
+<p>The page reads like the product: calm dark canvas, one amber action, real PitchTerminal UI in the hero. It moves from <i>what it is</i> (hero) to <i>what you can read</i> (capabilities) to <i>how it's built</i> (flow) to <i>why you can trust it</i> (evidence), then who it serves, how access works, and one final push into the fixtures. Section surfaces alternate canvas → panel band → canvas to create rhythm without new colours.</p>
+
+<h3>2–4 · Wireframes</h3>
+<p>Desktop <a class="dv-oid" href="#1a">1a</a> · Tablet <a class="dv-oid" href="#1b">1b</a> · Mobile <a class="dv-oid" href="#1c">1c</a>. The same component set is used at all three widths.</p>
+
+<h3>5–6 · Information hierarchy and rationale</h3>
+<table>
+<tr><th>#</th><th>Section</th><th>Answers</th><th>Treatment</th></tr>
+<tr><td>1</td><td>Hero</td><td>What is it · how do I start</td><td>Canvas, 5/7 split, H1 + one paragraph + two CTAs + a three-item proof line</td></tr>
+<tr><td>2</td><td>Product preview</td><td>What does it look like</td><td>Real match header, the verified match tabs, last-5 form, a fixture board with the match selected. Breadcrumb shows Country → Competition → Fixture</td></tr>
+<tr><td>3</td><td>Capabilities</td><td>What does it give me</td><td>Three primary panels with a live-UI snippet each, then four supporting capabilities as ruled rows. Not a 2×3 card grid</td></tr>
+<tr><td>4</td><td>Intelligence model</td><td>Why is it more than scores</td><td>Full-bleed --panel band, five numbered steps; the last step raised with an amber-dim edge</td></tr>
+<tr><td>5</td><td>Evidence</td><td>Why trust it</td><td>Editorial: large statement + a reading shown with its evidence area; four principles as a definition list. No numbers claimed</td></tr>
+<tr><td>6</td><td>Audience</td><td>Is it for me</td><td>One ruled strip of four cells, one line each</td></tr>
+<tr><td>7</td><td>Pricing bridge</td><td>How does access work</td><td>Intro + two tier cards with no prices or limits; "View pricing"</td></tr>
+<tr><td>8</td><td>Final CTA</td><td>What now</td><td>--panel band with an amber-dim top rule, the largest type after the hero, 48px CTAs</td></tr>
+<tr><td>9</td><td>Footer</td><td>Where else</td><td>Brand + four link groups, all on the roadmap</td></tr>
+</table>
+
+<h3>7 · Component inventory</h3>
+<table>
+<tr><th>Component</th><th>Built from (Phase A)</th></tr>
+<tr><td>PublicHeader</td><td>AppHeader, anonymous state (Sign in + Get access). No second header <span class="d">DECISION</span> whether to add Features · Pricing links on public pages</td></tr>
+<tr><td>Hero</td><td>Display type, .eyebrow, CTAButton ×2, proof line in mono --faint</td></tr>
+<tr><td>CTAButton</td><td>Primary (amber, 44/48px) and Secondary (raised) from the button matrix</td></tr>
+<tr><td>ProductPreview</td><td>Panel + Breadcrumbs + comparison row (1fr auto 1fr) + StatusChip FT + WorkspaceTabs + FormBadge + DataTable group header + selected row</td></tr>
+<tr><td>CapabilitySection</td><td>Primary panel ×3 with snippets + ruled supporting rows</td></tr>
+<tr><td>IntelligenceFlow</td><td>Ordered list of compact panels on a --panel band</td></tr>
+<tr><td>EvidenceSection</td><td>.panel-raised reading anatomy + definition list with --line rules</td></tr>
+<tr><td>AudienceSection</td><td>1px-gap grid on --line (reads as ruled cells, not cards)</td></tr>
+<tr><td>PricingBridge</td><td>Primary panels + OPEN / LOCKED chip grammar</td></tr>
+<tr><td>FinalCTA</td><td>--panel band, display type, CTAButton ×2</td></tr>
+<tr><td>PublicFooter</td><td>Phase A Footer with the link groups filled in</td></tr>
+</table>
+
+<h3>8 · Token usage</h3>
+<ul>
+<li><b>--ink</b> page canvas, audience cells · <b>--panel</b> preview, capability panels, flow band, final CTA band · <b>--raised</b> secondary CTA, selected row, final flow step, group header · <b>--line</b> section rules, row rules.</li>
+<li><b>--text</b> headings and values · <b>--text-secondary</b> body · <b>--muted</b> eyebrows, labels, FT · <b>--faint</b> captions, proof line, footer meta.</li>
+<li><b>--amber</b> primary CTAs, capability numbers, active tab, logo · <b>--amber-dim</b> selected row edge, final step edge, CTA band rule, subscriber chip.</li>
+<li><b>--edge / --risk</b> only inside real product UI (W/L badges, SUPPORTS/CONTRADICTS). <b>--cool</b> breadcrumb links and the OPEN chip. <b>--warn</b> not used on this page.</li>
+</ul>
+
+<h3>9 · Content hierarchy</h3>
+<p>H1 (1) → H2 per section (7) → H3 for capability, step, tier (13). Body copy is at most two sentences per block. Section eyebrows: Football intelligence · What you get · How it works · Evidence first · Access.</p>
+
+<h3>10 · CTA flow</h3>
+<ol>
+<li><b>Explore fixtures</b> (primary, hero + final) → Fixtures index. Phase C, open to anonymous users.</li>
+<li><b>How it works</b> (secondary) → scrolls to the in-page flow section. It doesn't link to the unbuilt Features page; it can be pointed at B2 once that exists.</li>
+<li><b>View pricing</b> (bridge + final secondary) → Pricing, B3.</li>
+<li><b>Get access / Sign in</b> (header) → B5 / B4.</li>
+</ol>
+<p>Only one amber button per viewport, except in the final CTA band.</p>
+
+<h3>11 · Responsive rules</h3>
+<ul>
+<li><b>Desktop</b>: 1152 rail; hero 5/7; capabilities 3-up; flow 5 across with → arrows; evidence 5/7; audience 4-up; pricing 1.3/1/1; footer brand + 4 columns.</li>
+<li><b>Tablet</b>: hero stacks with the full-width preview under the CTAs; capabilities stack one per row; supporting rows keep a 200px title column; flow becomes a vertical list with ↓; audience and pricing 2-up; footer 4 columns under the brand.</li>
+<li><b>Mobile</b>: header gets the nav as a second row; the preview keeps 3 fixture rows around the selected match; CTAs fill the width; every grid becomes one column; final CTA is left-aligned with full-width buttons; footer 2-up.</li>
+<li>Type steps down through fixed min/max bounds (H1 54 → 34, H2 32 → 24); body stays 14–16 at every width.</li>
+</ul>
+
+<h3>12 · Accessibility</h3>
+<ul>
+<li>One h1; each section has an h2 and aria-labelledby; capabilities, steps and tiers use h3; principles use a dl; steps use an ol.</li>
+<li>CTAs are links (they navigate), with a 2px amber focus ring from Phase A; 44px minimum, 48px in the final band.</li>
+<li>Form badges carry the full word in aria-label; FT uses text and a glyph; SUPPORTS/CONTRADICTS are words, not colours; the selected preview row adds weight and an edge, not colour alone.</li>
+<li>The preview is a figure with a figcaption that says it shows real recorded data; monograms are aria-hidden.</li>
+<li>Arrows in the flow are aria-hidden; the order comes from the ol.</li>
+<li>Contrast follows the verified text tiers; no text is placed on amber except --ink.</li>
+</ul>
+
+<h3>13 · Verified vs proposed content</h3>
+<table>
+<tr><th>Content</th><th>Status</th></tr>
+<tr><td>Fixture rows, scores, FT status, kickoff times (6 Sep 2026, BRT), competition and country</td><td><span class="v">VERIFIED</span> edition-18-fixtures.json · country-BR.json</td></tr>
+<tr><td>Last-5 form (Botafogo W D L L D · Palmeiras W D L W D)</td><td><span class="v">VERIFIED</span> derived from completed fixtures up to 6 Sep</td></tr>
+<tr><td>Match tabs Overview · Comparison · Form · Lineups · H2H · Statistics · Venue · Intelligence</td><td><span class="v">VERIFIED</span> MatchTabNav</td></tr>
+<tr><td>SUPPORTS / NEUTRAL / CONTRADICTS, "Not enough data yet", sample N, missing = —</td><td><span class="v">VERIFIED</span> ReadingCard vocabulary and rules</td></tr>
+<tr><td>Capabilities: fixtures &amp; results, form, readiness, context, H2H/historical, comparison/performance, statistical attributes, match intelligence</td><td><span class="v">VERIFIED</span> concepts supplied in the brief</td></tr>
+<tr><td>Headline "The evidence behind every fixture."</td><td><span class="p">PROPOSED</span> from the brief's starting direction</td></tr>
+<tr><td>All other headlines, body copy, principles, audience lines, step descriptions</td><td><span class="p">PROPOSED</span></td></tr>
+<tr><td>Proof line "No odds, no picks" and footer "Not betting advice"</td><td><span class="p">PROPOSED</span> · <span class="d">DECISION</span> legal review</td></tr>
+<tr><td>Tier names "Explore" / "Go deeper", and the claim that fixtures are open</td><td><span class="d">DECISION</span> B3</td></tr>
+<tr><td>Footer links Terms / Privacy</td><td><span class="d">DECISION</span> B8 scope</td></tr>
+</table>
+<p>Alternative headlines to test: "Read the match from the evidence up." · "Football, read as evidence." · "Context before conclusions."</p>
+
+<h3>14 · Carry into B2 Features</h3>
+<ul>
+<li>The five-step flow becomes the Features page's spine: one section per step, each with deeper product UI.</li>
+<li>The seven capabilities (3 primary + 4 supporting) and their "where it appears" tags are the Features index.</li>
+<li>The evidence principles expand into a "How readings work" section, using real ReadingCard examples once an intelligence payload is available.</li>
+<li>"How it works" switches from the in-page anchor to the B2 route.</li>
+<li>Decide whether public pages add Features · Pricing to the header nav.</li>
+</ul>
+
+<h3>15 · Scope confirmation</h3>
+<p>Only the Landing page was designed. The Features, Pricing, Login, Sign Up, Checkout, Fixtures, Competition, Team, Match, Player, Venue, Search, Account and Admin pages were not. The product preview reuses Phase A components with real data as an illustration; it is not a Match page design.</p>
+</div></div>
+</div>
+<p class="dv-next">Try next: "try the alternative headline" · "make the hero preview a standings view instead" · "approve B1 and move to B2"</p>
+</section>
+</x-dc>
+</body>
+</html>

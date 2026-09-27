@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>body{margin:0;background:#e9e7e2;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1a1a1a}.dv-turn{padding:40px 44px 32px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.6)}.dv-card{max-width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.st{display:flex;flex-direction:column;gap:6px}.st b{font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#c3cbd6}</style></helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">J</a><span class="dv-tname">Phase J · Account workspace · no account / subscription / billing payload supplied, so every value is a marked EXAMPLE</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>A · Overview · nav clickable · try Sign out</div><div class="dv-card" style="width:1440px"><dc-import name="AccountWorkspace" bp="desktop" tab="overview" hint-size="1440px,1000px"></dc-import></div></div>
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>C / G · Subscription · active example · billing not available</div><div class="dv-card" style="width:1440px"><dc-import name="AccountWorkspace" bp="desktop" tab="subscription" hint-size="1440px,1000px"></dc-import></div></div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>H · Security</div><div class="dv-card" style="width:1440px"><dc-import name="AccountWorkspace" bp="desktop" tab="security" hint-size="1440px,900px"></dc-import></div></div>
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Header account menu (Phase A shell, unchanged)</div><div class="dv-card" style="width:1440px"><dc-import name="AccountWorkspace" bp="desktop" menu-open="{{ true }}" hint-size="1440px,700px"></dc-import></div></div>
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Tablet 834 · Subscription</div><div class="dv-card" style="width:834px"><dc-import name="AccountWorkspace" bp="tablet" tab="subscription" hint-size="834px,1100px"></dc-import></div></div>
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>N · Mobile · Overview</div><div class="dv-card" style="width:390px"><dc-import name="AccountWorkspace" bp="mobile" tab="overview" hint-size="390px,1300px"></dc-import></div></div>
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>N · Mobile · Subscription</div><div class="dv-card" style="width:390px"><dc-import name="AccountWorkspace" bp="mobile" tab="subscription" hint-size="390px,1400px"></dc-import></div></div>
+
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Data states · section-level</div>
+<div class="dv-card" style="width:2200px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px">
+  <div class="st"><b>B · LIMITED USER DATA</b><dc-import name="AccountWorkspace" frame="panel" state="limited" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>NEW USER · NO SUBSCRIPTION RETURNED</b><dc-import name="AccountWorkspace" frame="panel" state="newUser" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>I · ACCOUNT LOADING</b><dc-import name="AccountWorkspace" frame="panel" state="loading" hint-size="100%,560px"></dc-import></div>
+  <div class="st"><b>J · ACCOUNT / SESSION FAILURE</b><dc-import name="AccountWorkspace" frame="panel" state="accountFailed" hint-size="100%,360px"></dc-import></div>
+  <div class="st"><b>D · PENDING (only if the contract reports it)</b><dc-import name="AccountWorkspace" frame="panel" tab="subscription" state="subPending" hint-size="100%,860px"></dc-import></div>
+  <div class="st"><b>E · SUBSCRIPTION UNAVAILABLE (error)</b><dc-import name="AccountWorkspace" frame="panel" tab="subscription" state="subUnavailable" hint-size="100%,760px"></dc-import></div>
+  <div class="st"><b>F · BILLING AVAILABLE · layout only, no records</b><dc-import name="AccountWorkspace" frame="panel" tab="subscription" state="billingAvailable" hint-size="100%,900px"></dc-import></div>
+  <div class="st"><b>BILLING · NO DATA (empty returned)</b><dc-import name="AccountWorkspace" frame="panel" tab="subscription" state="billingEmpty" hint-size="100%,800px"></dc-import></div>
+  <div class="st"><b>G · BILLING UNAVAILABLE (error)</b><dc-import name="AccountWorkspace" frame="panel" tab="subscription" state="billingUnavailable" hint-size="100%,800px"></dc-import></div>
+  <div class="st"><b>SECURITY UNAVAILABLE</b><dc-import name="AccountWorkspace" frame="panel" tab="security" state="securityUnavailable" hint-size="100%,560px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>K / L / M · Action states (sign-out: the one action with a processing step)</div>
+<div class="dv-card" style="width:2200px;background:#0b0f14;padding:24px;box-sizing:border-box;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px">
+  <div class="st"><b>K · PROCESSING</b><dc-import name="AccountWorkspace" frame="panel" tab="security" state="signoutProcessing" annot="{{ false }}" hint-size="100%,520px"></dc-import></div>
+  <div class="st"><b>L · SUCCESS</b><dc-import name="AccountWorkspace" frame="panel" state="signoutSuccess" annot="{{ false }}" hint-size="100%,360px"></dc-import></div>
+  <div class="st"><b>M · FAILURE</b><dc-import name="AccountWorkspace" frame="panel" tab="security" state="signoutFailed" annot="{{ false }}" hint-size="100%,580px"></dc-import></div>
+</div></div>
+
+<div class="dv-opt" id="1j"><div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>Phase J spec</div>
+<div class="dv-card" style="width:980px;background:#fff;padding:36px 44px;box-sizing:border-box;color:#1c1f24;font:14px/1.55 system-ui,sans-serif">
+<h2 style="font:600 22px system-ui,sans-serif;margin:0 0 6px">Phase J · Account workspace · spec</h2>
+<p style="margin:0 0 14px;color:#6b6f76">Source check: the project has no account, user, session, subscription, billing or entitlement payloads. The only established facts are: sign-up collects email + password (B5), sign-in has a "Forgot password?" entry (B4), the plan names are Guest / Free / Pro / Elite, Subscription Success can show confirmed or pending (B7), and the Phase A header has a signed-in account menu. Everything else here is structure with its dependency named.</p>
+<table style="border-collapse:collapse;width:100%;font-size:13px">
+<tr><th style="text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid #e3e1dc;font:600 10px ui-monospace,Menlo,monospace;color:#6b6f76">Area</th><th style="text-align:left;padding:6px 0;border-bottom:1px solid #e3e1dc;font:600 10px ui-monospace,Menlo,monospace;color:#6b6f76">Shown · depends on</th></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">1–2 Shell and header</td><td style="padding:6px 0;border-bottom:1px solid #eee">Phase A header in its signed-in state, with Account reached from the account menu (<a class="dv-oid" href="#1d">1d</a>). Workspace header: eyebrow ACCOUNT, h1 Account, "Signed in as {email}". No avatar or profile banner.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">3 Overview</td><td style="padding:6px 0;border-bottom:1px solid #eee">Account details (Email only), a subscription summary (Plan and Subscription status as two separate facts), next steps (links, not actions), and Session / Sign out.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">4 Subscription</td><td style="padding:6px 0;border-bottom:1px solid #eee">Current plan: Plan · Subscription status (a word + glyph, as reported, never inferred from the plan) · Renewal / end date ("Not supplied" until the contract provides it). Then Billing, then Plans → Pricing. No history section, because no history source exists.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">5 Billing</td><td style="padding:6px 0;border-bottom:1px solid #eee">Default is <b>◌ NOT AVAILABLE</b> (the product doesn't expose it). Also designed: <b>NO BILLING RECORDS</b> (empty returned) and <b>error + Try again</b>. "Available" is a layout of unlabelled slots only: no amounts, cards, invoices or provider. There's no payment-method section.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">6 Security</td><td style="padding:6px 0;border-bottom:1px solid #eee">Password: a "Reset password" link that hands off to the B4 reset entry. No password rules, no change-password form, no verification, no MFA. Session: Sign out.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">7–8 Actions</td><td style="padding:6px 0;border-bottom:1px solid #eee">Sign out (a quiet secondary button, in its own Session panel, never styled as destructive). "See plans" is plain navigation to Pricing. There are no Change plan, Cancel, Resume or Delete account controls: none is supported.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">9–13 States</td><td style="padding:6px 0;border-bottom:1px solid #eee">Loading uses panel skeletons under a live header. Account/session failure is a page-level panel with Try again · Sign in. Everything else fails per section (<a class="dv-oid" href="#1h">1h</a>). Sign-out has processing, success and failure (<a class="dv-oid" href="#1i">1i</a>). Pending renders only when the contract reports it, with the B7 wording.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">20 Three meanings</td><td style="padding:6px 0;border-bottom:1px solid #eee">NO DATA = solid tag + "There's no … on this account." NOT AVAILABLE = dashed ◌ tag + "aren't shown in your account yet." ERROR = "!" + "couldn't be loaded" + Try again.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">14–16 Layout</td><td style="padding:6px 0;border-bottom:1px solid #eee">Desktop: 200px vertical section nav (amber left rule) + a content column capped at 720. Tablet: 168px nav. Mobile: a 3-way segmented nav (44px), stacked panels, key/value rows stacked, and Sign out last on the page, away from other controls.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">17 Accessibility</td><td style="padding:6px 0;border-bottom:1px solid #eee">nav with aria-current; h1 → h2 per panel; dl for facts; status as text + glyph; errors role=alert; sign-out aria-busy with a live region; amber focus rings; 44px targets.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;border-bottom:1px solid #eee;vertical-align:top">18–20 Flow</td><td style="padding:6px 0;border-bottom:1px solid #eee">Pricing → Checkout (B6) → Subscription Success (B7) → Account / Subscription. B7's Continue should land here. Account → Pricing via "See plans"; Checkout is only reached from Pricing and isn't duplicated here.</td></tr>
+<tr><td style="padding:6px 10px 6px 0;vertical-align:top">21 Admin</td><td style="padding:6px 0">No admin, provider, pipeline, registry or user-management concepts. The header menu's existing items are unchanged.</td></tr>
+</table>
+<p style="margin:14px 0 6px"><b>Backend dependencies (PENDING):</b> an account contract (identity fields), a subscription contract (plan, status vocabulary, dates), a billing contract, the session / sign-out contract, the password-reset flow, and whether any subscription change or cancellation is offered. When each lands, its section switches from EXAMPLE or NOT AVAILABLE to real values without layout changes.</p>
+<p style="margin:0">Scope: Phase J only. Next: Phase K · Global Polish.</p>
+</div></div>
+</div>
+</section>
+</x-dc>
+</body>
+</html>

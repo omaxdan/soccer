@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}</style></helmet>
+<div style="background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text);min-height:{{ minH }};display:flex;flex-direction:column">
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}"><dc-import name="AppHeader" layout="{{ bp }}" auth="anon" active="Competitions" hint-size="100%,56px"></dc-import></sc-if>
+<main style="flex:1;max-width:1152px;width:100%;margin:0 auto;padding:{{ mainPad }};box-sizing:border-box;display:flex;flex-direction:column;gap:16px">
+
+<sc-if value="{{ notFound }}" hint-placeholder-val="{{ false }}">
+  <div role="alert" style="margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+    <span aria-hidden="true" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:600 10px 'JetBrains Mono',monospace;color:var(--muted)">404</span>
+    <h1 style="margin:0;font:600 17px Inter,sans-serif">Competition season not found</h1>
+    <p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted)">This season doesn’t exist or is no longer available.</p>
+    <a style="margin-top:4px;display:inline-flex;align-items:center;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;cursor:pointer">Browse fixtures</a>
+  </div>
+</sc-if>
+
+<sc-if value="{{ found }}" hint-placeholder-val="{{ true }}">
+  <nav aria-label="breadcrumb" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase"><a style="color:var(--cool);text-decoration:none;cursor:pointer">Competitions</a><span style="color:var(--faint)">/</span><a style="color:var(--cool);text-decoration:none;cursor:pointer">Brazil</a><span style="color:var(--faint)">/</span><span aria-current="page" style="color:var(--muted)">Brasileirão Betano</span></nav>
+
+  <header style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;display:flex;flex-wrap:wrap;align-items:center;gap:16px 24px">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <span aria-hidden="true" style="width:{{ monoSize }};height:{{ monoSize }};flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:4px;font:700 14px 'JetBrains Mono',monospace;color:var(--amber)">BB</span>
+      <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+        <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Brazil · Competition</span>
+        <h1 style="margin:0;font:700 22px/1.15 Inter,sans-serif;color:var(--text)">Brasileirão Betano</h1>
+        <button aria-label="Season: Brasileiro Serie A 2026. Only season available." style="align-self:flex-start;display:flex;align-items:center;gap:8px;min-height:28px;padding:0 8px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary);cursor:pointer">Brasileiro Serie A 2026<span aria-hidden="true" style="color:var(--faint)">▾</span></button>
+      </div>
+    </div>
+    <dl style="margin:0 0 0 {{ metaMargin }};display:flex;gap:24px">
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:{{ metaAlign }}"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Fixtures</dt><dd style="margin:0;font:600 16px 'JetBrains Mono',monospace;color:var(--text)">286</dd></div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:{{ metaAlign }}"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Results through</dt><dd style="margin:0;font:600 16px 'JetBrains Mono',monospace;color:var(--text)">7 Sep 2026</dd></div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:{{ metaAlign }}"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">Table as of</dt><dd style="margin:0;font:600 16px 'JetBrains Mono',monospace;color:{{ asOfColor }}">{{ asOf }}</dd></div>
+    </dl>
+  </header>
+
+  <nav role="tablist" aria-label="Competition sections" style="display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><button role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="flex:none;min-height:{{ tabH }};padding:0 12px;background:transparent;border:0;border-bottom:2px solid {{ t.under }};margin-bottom:-1px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ t.color }};cursor:pointer" style-hover="color:var(--text)">{{ t.label }}</button></sc-for>
+  </nav>
+
+  <sc-if value="{{ tOverview }}" hint-placeholder-val="{{ true }}">
+    <section aria-labelledby="{{ uid }}sum" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}sum" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Season so far</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">All 250 completed matches · through 7 Sep 2026</span></div>
+      <dl style="margin:0;display:grid;grid-template-columns:{{ sumCols }}">
+        <sc-for list="{{ summary }}" as="m" hint-placeholder-count="6"><div style="padding:14px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:4px"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ m.k }}</dt><dd style="margin:0;font:600 22px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;color:var(--text)">{{ m.v }}</dd><dd style="margin:0;font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ m.sub }}</dd></div></sc-for>
+      </dl>
+      <div style="padding:12px 16px 14px;display:flex;flex-direction:column;gap:8px">
+        <div role="img" aria-label="Results split: home wins 46.4%, draws 28%, away wins 25.6%" style="display:flex;height:8px;border-radius:2px;overflow:hidden;gap:2px"><sc-for list="{{ split }}" as="b" hint-placeholder-count="3"><span style="width:{{ b.w }};background:{{ b.c }}"></span></sc-for></div>
+        <div aria-hidden="true" style="display:flex;justify-content:space-between;font:400 11px 'JetBrains Mono',monospace;color:var(--muted)"><sc-for list="{{ split }}" as="b" hint-placeholder-count="3"><span>{{ b.label }}</span></sc-for></div>
+      </div>
+    </section>
+    <div style="display:grid;grid-template-columns:{{ ovCols }};gap:16px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section aria-labelledby="{{ uid }}top" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}top" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Table · top 5</h2><button onClick="{{ goTable }}" style="background:transparent;border:0;padding:0;font:500 12px Inter,sans-serif;color:var(--cool);cursor:pointer" style-hover="text-decoration:underline">Full table →</button></div>
+          <sc-if value="{{ standOk }}" hint-placeholder-val="{{ true }}">
+            <div role="table" aria-label="Top five of the table">
+              <div role="row" style="display:grid;grid-template-columns:{{ topCols }};gap:8px;padding:8px 16px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader">#</span><span role="columnheader">Team</span><span role="columnheader" style="text-align:right">P</span><span role="columnheader" style="text-align:right">GD</span><span role="columnheader" style="text-align:right">Pts</span></div>
+              <sc-for list="{{ top5 }}" as="r" hint-placeholder-count="5"><div role="row" style="display:grid;grid-template-columns:{{ topCols }};gap:8px;align-items:center;min-height:38px;padding:0 16px;border-top:1px solid var(--line);background:{{ r.bg }}" style-hover="background:var(--raised)"><span role="cell" style="font:400 12px 'JetBrains Mono',monospace;color:var(--faint)">{{ r.pos }}</span><a role="cell" style="font:500 14px Inter,sans-serif;color:var(--text);text-decoration:none;cursor:pointer" style-hover="color:var(--cool)">{{ r.name }}</a><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.p }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:{{ r.gdc }}">{{ r.gd }}</span><span role="cell" style="text-align:right;font:700 12px 'JetBrains Mono',monospace;color:var(--text)">{{ r.pts }}</span></div></sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ standNo }}" hint-placeholder-val="{{ false }}"><div style="padding:24px 16px;display:flex;flex-direction:column;gap:6px;align-items:flex-start"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">Standings aren’t available for this season yet.</span></div></sc-if>
+        </section>
+
+        <section aria-label="Recent and next fixtures" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;display:grid;grid-template-columns:{{ stripCols }}">
+          <sc-for list="{{ strips }}" as="s" hint-placeholder-count="2">
+            <div style="padding:12px 8px 8px;border-right:{{ s.br }};border-bottom:{{ s.bb }};min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:0 8px 8px"><h2 style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">{{ s.title }}</h2><button onClick="{{ goFixtures }}" style="background:transparent;border:0;padding:0;font:500 12px Inter,sans-serif;color:var(--cool);cursor:pointer">All →</button></div>
+              <sc-for list="{{ s.rows }}" as="r" hint-placeholder-count="5">
+                <a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:52px minmax(0,1fr) 36px;gap:10px;align-items:center;padding:6px 8px;border-radius:4px;text-decoration:none;cursor:pointer" style-hover="background:var(--raised)">
+                  <span style="display:flex;flex-direction:column;gap:2px;font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.date }}<span style="font-size:9px;letter-spacing:.08em;color:{{ r.sc }}">{{ r.label }}</span></span>
+                  <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-family:Inter,sans-serif;font-size:13px;font-weight:{{ r.hw }};color:{{ r.hc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span><span style="font-family:Inter,sans-serif;font-size:13px;font-weight:{{ r.aw }};color:{{ r.ac }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span></span>
+                  <span style="display:flex;flex-direction:column;gap:2px;align-items:flex-end;font:600 13px 'JetBrains Mono',monospace;color:{{ r.scoreColor }}"><span>{{ r.hs }}</span><span>{{ r.as }}</span></span>
+                </a>
+              </sc-for>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+
+      <aside aria-labelledby="{{ uid }}ctx" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}ctx" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Last 5 vs previous 5</h2><button onClick="{{ goToPerf }}" style="background:transparent;border:0;padding:0;font:500 12px Inter,sans-serif;color:var(--cool);cursor:pointer">Performance →</button></div>
+        <div role="table" aria-label="Last five matches compared with the five before" style="padding:4px 16px 8px">
+          <div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 48px 48px 48px;gap:6px;padding:6px 0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader"></span><span role="columnheader" style="text-align:right">Prev 5</span><span role="columnheader" style="text-align:right">Last 5</span><span role="columnheader" style="text-align:right">Change</span></div>
+          <sc-for list="{{ recent5 }}" as="r" hint-placeholder-count="6"><div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 48px 48px 48px;gap:6px;align-items:center;min-height:34px;border-top:1px solid var(--line)"><span role="rowheader" style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ r.k }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.a }}</span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ r.b }}</span><span role="cell" style="text-align:right;font:500 12px 'JetBrains Mono',monospace;color:{{ r.cc }}">{{ r.c }}</span></div></sc-for>
+        </div>
+        <p style="margin:0;padding:8px 16px 14px;font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Last 5 = the five most recent completed matches (6–7 Sep); previous 5 = the five before them (5–6 Sep). Small samples, so treat changes as descriptive.</p>
+      </aside>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tFixtures }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px">
+        <div role="radiogroup" aria-label="Fixture status" style="display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden">
+          <sc-for list="{{ fxFilters }}" as="f" hint-placeholder-count="3"><button role="radio" aria-checked="{{ f.on }}" onClick="{{ f.pick }}" style="min-height:{{ tabH }};padding:0 14px;background:{{ f.bg }};border:0;border-right:1px solid var(--line);border-bottom:2px solid {{ f.under }};font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ f.color }};cursor:pointer">{{ f.label }}</button></sc-for>
+        </div>
+        <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Times in UTC · status as supplied</span>
+      </div>
+      <sc-if value="{{ fxOk }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ fxGroups }}" as="g" hint-placeholder-count="3">
+          <section aria-label="{{ g.label }}" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+            <h3 style="margin:0;display:flex;justify-content:space-between;padding:8px 14px;background:var(--raised);border-bottom:1px solid var(--line);font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">{{ g.label }}<span style="color:var(--faint)">{{ g.count }}</span></h3>
+            <ul style="list-style:none;margin:0;padding:0">
+              <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                <li style="border-top:{{ r.rule }}">
+                  <sc-if value="{{ wide }}" hint-placeholder-val="{{ true }}"><a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:{{ fxCols }};gap:14px;align-items:center;min-height:44px;padding:0 14px;text-decoration:none;cursor:pointer" style-hover="background:var(--raised)"><time style="font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.time }}</time><span style="font-family:Inter,sans-serif;font-size:14px;text-align:right;font-weight:{{ r.hw }};color:{{ r.hc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.home }}</span><span style="justify-self:center;min-width:64px;text-align:center;padding:3px 8px;border-radius:4px;background:var(--ink);border:1px solid var(--line);font:600 14px 'JetBrains Mono',monospace;color:{{ r.scoreColor }}">{{ r.score }}</span><span style="font-family:Inter,sans-serif;font-size:14px;font-weight:{{ r.aw }};color:{{ r.ac }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.away }}</span><span style="justify-self:end;display:inline-flex;gap:5px;align-items:center;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:{{ r.sc }};border:1px solid {{ r.sc }};border-radius:4px;padding:1px 6px"><span aria-hidden="true" style="font-size:8px">{{ r.glyph }}</span>{{ r.label }}</span><span aria-hidden="true" style="font:400 13px 'JetBrains Mono',monospace;color:var(--faint);text-align:right">›</span></a></sc-if>
+                  <sc-if value="{{ narrow }}" hint-placeholder-val="{{ false }}"><a aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:72px minmax(0,1fr) 28px;gap:10px;align-items:center;min-height:60px;padding:8px 12px;text-decoration:none"><span style="display:flex;flex-direction:column;gap:5px"><time style="font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.time }}</time><span style="font:600 9px 'JetBrains Mono',monospace;letter-spacing:.06em;color:{{ r.sc }}">{{ r.glyph }} {{ r.label }}</span></span><span style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-family:Inter,sans-serif;font-size:15px;font-weight:{{ r.hw }};color:{{ r.hc }}">{{ r.home }}</span><span style="font-family:Inter,sans-serif;font-size:15px;font-weight:{{ r.aw }};color:{{ r.ac }}">{{ r.away }}</span></span><span style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;font:600 15px 'JetBrains Mono',monospace;color:{{ r.scoreColor }}"><span>{{ r.hs }}</span><span>{{ r.as }}</span></span></a></sc-if>
+                </li>
+              </sc-for>
+            </ul>
+          </section>
+        </sc-for>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ fxNote }}</span><sc-if value="{{ fxMore }}"><button style="min-height:36px;padding:0 14px;background:var(--panel);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer" style-hover="background:var(--raised)">Load earlier results</button></sc-if></div>
+      </sc-if>
+      <sc-if value="{{ fxEmpty }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span aria-hidden="true" style="font:400 14px 'JetBrains Mono',monospace;color:var(--faint)">○</span><h3 style="margin:0;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">No fixtures</h3><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--text-secondary)">There are no fixtures recorded for this season.</p></div></sc-if>
+      <sc-if value="{{ fxFailed }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span aria-hidden="true" style="font:700 13px 'JetBrains Mono',monospace;color:var(--risk)">!</span><h3 style="margin:0;font:600 15px Inter,sans-serif">Unable to load fixtures</h3><button style="margin-top:4px;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Try again</button></div></sc-if>
+    </div>
+  </sc-if>
+
+
+  <sc-if value="{{ tPerf }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div role="radiogroup" aria-label="Performance view" style="align-self:flex-start;display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;max-width:100%;overflow-x:auto">
+        <sc-for list="{{ perfTabs }}" as="f" hint-placeholder-count="3"><button role="radio" aria-checked="{{ f.on }}" onClick="{{ f.pick }}" style="flex:none;min-height:{{ tabH }};padding:0 14px;background:{{ f.bg }};border:0;border-right:1px solid var(--line);border-bottom:2px solid {{ f.under }};font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ f.color }};cursor:pointer">{{ f.label }}</button></sc-for>
+      </div>
+
+      <sc-if value="{{ pSeason }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:{{ perfCols }};gap:16px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+            <section aria-labelledby="{{ uid }}gpm" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+              <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}gpm" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Goals per match · season to date</h2><button onClick="{{ toggleData }}" aria-expanded="{{ showTable }}" style="background:transparent;border:0;padding:0;font:500 12px Inter,sans-serif;color:var(--cool);cursor:pointer">{{ dataLabel }}</button></div>
+              <figure style="margin:0;padding:16px 16px 12px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px">
+                  <div aria-hidden="true" style="display:flex;flex-direction:column;justify-content:space-between;height:{{ BH }}px;font:400 10px 'JetBrains Mono',monospace;color:var(--faint);text-align:right"><span>4.0</span><span>2.25</span><span>0.5</span></div>
+                  <svg role="img" aria-label="Cumulative goals per match after each block of matches: starts at 1.0 after match 1, 3.28 after 25, settles between 2.59 and 2.74 from match 50 onwards, 2.61 after 250." viewBox="{{ chartView }}" preserveAspectRatio="none" style="width:100%;height:{{ BH }}px;overflow:visible"><line x1="0" y1="0" x2="{{ BW }}" y2="0" stroke="#1d2633"></line><line x1="0" y1="90" x2="{{ BW }}" y2="90" stroke="#1d2633"></line><line x1="0" y1="{{ BH }}" x2="{{ BW }}" y2="{{ BH }}" stroke="#1d2633"></line><polyline points="{{ gpmPts }}" fill="none" stroke="#c3cbd6" stroke-width="1.5" vector-effect="non-scaling-stroke"></polyline><sc-for list="{{ gpmDots }}" as="d" hint-placeholder-count="11"><circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.5" fill="#f4f6f9"></circle></sc-for></svg>
+                </div>
+                <figcaption style="display:flex;justify-content:space-between;padding-left:36px;font:400 10px 'JetBrains Mono',monospace;color:var(--faint)"><span>Match 1 · 28 Jan</span><span>Matches completed →</span><span>250 · 7 Sep</span></figcaption>
+              </figure>
+              <sc-if value="{{ showTable }}" hint-placeholder-val="{{ false }}">
+                <div role="table" aria-label="Season to date by matches completed" style="padding:0 16px 12px">
+                  <div role="row" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;padding:6px 0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader">Matches</span><span role="columnheader" style="text-align:right">Goals/match</span><span role="columnheader" style="text-align:right">Home</span><span role="columnheader" style="text-align:right">Draw</span><span role="columnheader" style="text-align:right">Away</span></div>
+                  <sc-for list="{{ serRows }}" as="r" hint-placeholder-count="11"><div role="row" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;min-height:30px;align-items:center;border-top:1px solid var(--line);font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)"><span role="rowheader">{{ r.n }}</span><span role="cell" style="text-align:right;color:var(--text)">{{ r.g }}</span><span role="cell" style="text-align:right">{{ r.h }}</span><span role="cell" style="text-align:right">{{ r.d }}</span><span role="cell" style="text-align:right">{{ r.a }}</span></div></sc-for>
+                </div>
+              </sc-if>
+            </section>
+
+            <section aria-labelledby="{{ uid }}ms" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+              <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}ms" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Match statistics · season totals</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Coverage = matches with the statistic recorded</span></div>
+              <div role="table" aria-label="Season match statistic totals with coverage" style="padding:4px 16px 10px">
+                <div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 96px 80px 56px;gap:8px;padding:6px 0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader">Statistic</span><span role="columnheader" style="text-align:right">Total</span><span role="columnheader" style="text-align:right">Matches</span><span role="columnheader" style="text-align:right">Cover</span></div>
+                <sc-for list="{{ stats }}" as="r" hint-placeholder-count="8"><div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 96px 80px 56px;gap:8px;align-items:center;min-height:36px;border-top:1px solid var(--line)"><span role="rowheader" style="display:flex;gap:8px;align-items:center;font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ r.k }}<sc-if value="{{ r.partial }}"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 4px">PARTIAL</span></sc-if></span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ r.v }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.cov }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:{{ r.pc }}">{{ r.pct }}</span></div></sc-for>
+              </div>
+              <p style="margin:0;padding:0 16px 14px;font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Totals only count matches where the statistic was recorded. Red cards are recorded for 57 of 250 matches, so that total is incomplete.</p>
+            </section>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <section aria-labelledby="{{ uid }}res" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+              <h2 id="{{ uid }}res" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Results · 250 matches</h2>
+              <dl style="margin:0;padding:4px 16px 10px"><sc-for list="{{ resultRows }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:minmax(0,1fr) 56px 64px;gap:8px;align-items:center;min-height:38px;border-bottom:1px solid var(--line)"><dt style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ r.k }}</dt><dd style="margin:0;text-align:right;font:600 13px 'JetBrains Mono',monospace;color:var(--text)">{{ r.n }}</dd><dd style="margin:0;text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.p }}</dd></div></sc-for></dl>
+            </section>
+            <section aria-labelledby="{{ uid }}gl" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+              <h2 id="{{ uid }}gl" style="margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Goals and clean sheets</h2>
+              <div role="table" aria-label="Goals and clean sheets, home and away" style="padding:4px 16px 10px">
+                <div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 52px;gap:6px;padding:6px 0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><span role="columnheader"></span><span role="columnheader" style="text-align:right">Total</span><span role="columnheader" style="text-align:right">Home</span><span role="columnheader" style="text-align:right">Away</span></div>
+                <sc-for list="{{ goalsRows }}" as="r" hint-placeholder-count="2"><div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 52px;gap:6px;align-items:center;min-height:38px;border-top:1px solid var(--line)"><span role="rowheader" style="font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ r.k }}</span><span role="cell" style="text-align:right;font:600 13px 'JetBrains Mono',monospace;color:var(--text)">{{ r.t }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.h }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.a }}</span></div></sc-for>
+              </div>
+              <p style="margin:0;padding:0 16px 14px;font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Home clean sheets: matches where the home side conceded none.</p>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ pRecent }}" hint-placeholder-val="{{ false }}">
+        <section aria-labelledby="{{ uid }}cmp" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}cmp" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Last 5 matches vs previous 5</h2><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Previous 5: 5–6 Sep · Last 5: 6–7 Sep · competition-wide totals</span></div>
+          <div role="table" aria-label="Competition totals, last five matches compared with previous five" style="padding:4px 16px 10px;overflow-x:auto">
+            <div role="row" style="display:grid;grid-template-columns:minmax(160px,1fr) 80px 80px 72px 72px 80px;gap:8px;padding:6px 0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);min-width:560px"><span role="columnheader">Statistic</span><span role="columnheader" style="text-align:right">Prev 5</span><span role="columnheader" style="text-align:right">Last 5</span><span role="columnheader" style="text-align:right">Change</span><span role="columnheader" style="text-align:right">%</span><span role="columnheader" style="text-align:right">Direction</span></div>
+            <sc-for list="{{ cmp }}" as="r" hint-placeholder-count="8"><div role="row" style="display:grid;grid-template-columns:minmax(160px,1fr) 80px 80px 72px 72px 80px;gap:8px;align-items:center;min-height:40px;border-top:1px solid var(--line);min-width:560px"><span role="rowheader" style="display:flex;flex-direction:column;gap:2px;font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ r.k }}<span style="font:400 10px 'JetBrains Mono',monospace;color:var(--warn)">{{ r.note }}</span></span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.a }}</span><span role="cell" style="text-align:right;font:600 12px 'JetBrains Mono',monospace;color:var(--text)">{{ r.b }}</span><span role="cell" style="text-align:right;font:500 12px 'JetBrains Mono',monospace;color:var(--text-secondary)">{{ r.c }}</span><span role="cell" style="text-align:right;font:400 12px 'JetBrains Mono',monospace;color:var(--muted)">{{ r.pct }}</span><span role="cell" style="text-align:right;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">{{ r.dir }}</span></div></sc-for>
+          </div>
+          <p style="margin:0;padding:0 16px 14px;font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Direction says whether the total rose or fell; it isn't a judgement of good or bad. Each window is only five matches.</p>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ pPos }}" hint-placeholder-val="{{ false }}">
+        <section aria-labelledby="{{ uid }}pos" style="background:var(--panel);border:1px solid var(--line);border-radius:4px">
+          <div style="display:flex;flex-direction:column;gap:6px;padding:12px 16px;border-bottom:1px solid var(--line)"><h2 id="{{ uid }}pos" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Position after each match</h2><span style="font:400 12px/1.5 Inter,sans-serif;color:var(--faint)">Positions rebuilt from recorded results in order (points, then goal difference, then goals for). This isn’t the official table, and early-season ties can be arbitrary.</span></div>
+          <div style="display:grid;grid-template-columns:{{ perfCols }};gap:16px;padding:16px">
+            <figure style="margin:0;display:flex;flex-direction:column;gap:10px;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font:600 16px Inter,sans-serif;color:var(--text)">{{ sel.name }}</span><span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ selCount }} matches</span></div>
+              <div style="display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px">
+                <div aria-hidden="true" style="display:flex;flex-direction:column;justify-content:space-between;height:{{ BH }}px;font:400 10px 'JetBrains Mono',monospace;color:var(--faint);text-align:right"><span>1</span><span>10</span><span>20</span></div>
+                <svg role="img" aria-label="{{ sel.aria }}" viewBox="{{ chartView }}" preserveAspectRatio="none" style="width:100%;height:{{ BH }}px;overflow:visible"><line x1="0" y1="0" x2="{{ BW }}" y2="0" stroke="#1d2633"></line><line x1="0" y1="85" x2="{{ BW }}" y2="85" stroke="#1d2633"></line><line x1="0" y1="{{ BH }}" x2="{{ BW }}" y2="{{ BH }}" stroke="#1d2633"></line><polyline points="{{ selPts }}" fill="none" stroke="#ffb020" stroke-width="1.5" vector-effect="non-scaling-stroke"></polyline><sc-for list="{{ selDots }}" as="d" hint-placeholder-count="25"><circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.2" fill="#ffb020"></circle></sc-for></svg>
+              </div>
+              <figcaption style="padding-left:32px;display:flex;justify-content:space-between;font:400 10px 'JetBrains Mono',monospace;color:var(--faint)"><span>Match 1</span><span>Team’s matches in order →</span><span>Latest</span></figcaption>
+              <dl style="margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden"><sc-for list="{{ selSummary }}" as="m" hint-placeholder-count="6"><div style="background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:3px"><dt style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ m.k }}</dt><dd style="margin:0;font:600 15px 'JetBrains Mono',monospace;color:var(--text)">{{ m.v }}</dd></div></sc-for></dl>
+            </figure>
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+              <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">All teams · ordered by the official table · choose one</span>
+              <div role="radiogroup" aria-label="Choose a team" style="display:grid;grid-template-columns:{{ trjCols }};gap:6px">
+                <sc-for list="{{ trj }}" as="t" hint-placeholder-count="20"><button role="radio" aria-checked="{{ t.on }}" aria-label="{{ t.aria }}" onClick="{{ t.pick }}" style="display:flex;flex-direction:column;gap:4px;padding:6px 8px;background:{{ t.bg }};border:1px solid {{ t.border }};border-radius:4px;cursor:pointer;text-align:left" style-hover="background:var(--raised)"><span style="display:flex;justify-content:space-between;gap:4px;font:500 11px Inter,sans-serif;color:var(--text-secondary);white-space:nowrap;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis">{{ t.short }}</span><span style="font-family:'JetBrains Mono',monospace;color:var(--muted)">{{ t.cur }}</span></span><svg aria-hidden="true" viewBox="0 0 120 36" preserveAspectRatio="none" style="width:100%;height:22px"><polyline points="{{ t.pts }}" fill="none" stroke="#90a0b4" stroke-width="1.2" vector-effect="non-scaling-stroke"></polyline></svg></button></sc-for>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+    </div>
+  </sc-if>
+  <sc-if value="{{ tTable }}" hint-placeholder-val="{{ false }}">
+    <section aria-labelledby="{{ uid }}st" style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:10px"><h2 id="{{ uid }}st" style="margin:0;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Standings</h2><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:4px;padding:1px 7px">Overall</span></div>
+        <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--muted)">As of <time dateTime="2026-08-11" style="color:var(--text-secondary)">11 Aug 2026</time></span>
+      </div>
+      <sc-if value="{{ standOk }}" hint-placeholder-val="{{ true }}">
+        <div role="table" aria-label="Standings, overall, as of 11 August 2026" style="padding:4px 6px 6px">
+          <div role="row" style="display:grid;grid-template-columns:{{ stCols }};gap:4px;align-items:center;height:32px;padding:0 10px;border-bottom:1px solid var(--line);font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)"><sc-for list="{{ stHead }}" as="h" hint-placeholder-count="10"><span role="columnheader" title="{{ h.title }}" style="text-align:{{ h.align }}">{{ h.label }}</span></sc-for></div>
+          <sc-for list="{{ table }}" as="r" hint-placeholder-count="20">
+            <div role="rowgroup" style="border-top:{{ r.rule }}">
+              <div role="row" onClick="{{ r.toggle }}" style="display:grid;grid-template-columns:{{ stCols }};gap:4px;align-items:center;min-height:{{ stRowH }};padding:0 10px;border-radius:4px;background:{{ r.bg }};cursor:pointer" style-hover="background:var(--raised)">
+                <span role="cell" style="font:400 12px 'JetBrains Mono',monospace;color:var(--faint)">{{ r.pos }}</span>
+                <a role="rowheader" style="font:500 14px Inter,sans-serif;color:var(--cool);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer" style-hover="text-decoration:underline">{{ r.label }}</a>
+                <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="8"><span role="cell" style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-variant-numeric:tabular-nums;font-weight:{{ c.w }};color:{{ c.c }}">{{ c.v }}</span></sc-for>
+              </div>
+              <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}"><div style="margin:2px 4px 6px;padding:10px 12px;background:var(--raised);border:1px solid var(--line);border-radius:4px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px"><sc-for list="{{ r.more }}" as="m" hint-placeholder-count="5"><div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">{{ m.k }}</span><span style="font:500 13px 'JetBrains Mono',monospace;color:var(--text)">{{ m.v }}</span></div></sc-for></div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;padding:10px 16px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>GD: +n above zero · −n below · 0 level · Gap: points behind the team directly above</span><span>Results after 11 Aug aren’t reflected in this table yet.</span></div>
+      </sc-if>
+      <sc-if value="{{ standLoading }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="padding:4px 6px 6px"><span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Loading standings</span><sc-for list="{{ skel }}" as="w" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:{{ stSkel }};gap:8px;align-items:center;height:38px;padding:0 10px;border-top:1px solid var(--line)"><span style="height:8px;width:14px;background:var(--raised);border-radius:2px"></span><span style="height:9px;width:{{ w }};background:var(--raised);border-radius:2px"></span><span style="height:8px;background:var(--raised);border-radius:2px"></span></div></sc-for></div></sc-if>
+      <sc-if value="{{ standNo }}" hint-placeholder-val="{{ false }}"><div role="status" style="padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px solid var(--faint);border-radius:4px;padding:0 5px">NO DATA</span><h3 style="margin:0;font:600 15px Inter,sans-serif">Standings unavailable</h3><p style="margin:0;font:400 14px Inter,sans-serif;color:var(--muted)">No standings have been published for this season yet.</p></div></sc-if>
+      <sc-if value="{{ standFailed }}" hint-placeholder-val="{{ false }}"><div role="alert" style="padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"><span aria-hidden="true" style="font:700 13px 'JetBrains Mono',monospace;color:var(--risk)">!</span><h3 style="margin:0;font:600 15px Inter,sans-serif">Unable to load standings</h3><button style="margin-top:4px;height:36px;padding:0 14px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Try again</button></div></sc-if>
+    </section>
+  </sc-if>
+</sc-if>
+</main>
+<sc-if value="{{ full }}" hint-placeholder-val="{{ true }}">
+  <footer style="max-width:1152px;width:100%;margin:40px auto 0;padding:24px 16px;box-sizing:border-box;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span style="font:700 13px Inter,sans-serif;color:var(--text-secondary)">Pitch<span style="color:var(--amber)">Terminal</span></span><div style="display:flex;flex-wrap:wrap;gap:8px 18px"><a style="color:var(--faint);text-decoration:none">Features</a><a style="color:var(--faint);text-decoration:none">Pricing</a><a style="color:var(--faint);text-decoration:none">Terms</a><a style="color:var(--faint);text-decoration:none">Privacy</a><span>© PitchTerminal</span></div></footer>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;panel&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;fixtures&quot;,&quot;table&quot;,&quot;performance&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;perf&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;season&quot;,&quot;recent&quot;,&quot;positions&quot;],&quot;default&quot;:&quot;season&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;default&quot;,&quot;limited&quot;,&quot;standingsLoading&quot;,&quot;standingsEmpty&quot;,&quot;standingsFailed&quot;,&quot;fixturesEmpty&quot;,&quot;fixturesFailed&quot;,&quot;notFound&quot;],&quot;default&quot;:&quot;default&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { tab: null, fx: 'C', open: '1' };
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop';
+    const frame = this.props.frame ?? 'full';
+    const s = this.props.state ?? 'default';
+    const tab = this.state.tab ?? this.props.tab ?? 'overview';
+    const M = bp === 'mobile', D = bp === 'desktop';
+    const uid = this.uid || (this.uid = 'ew' + Math.random().toString(36).slice(2, 7));
+    const ST = [[1,'Palmeiras',22,14,6,2,38,16,22,48],[2,'Flamengo',21,12,6,3,39,18,21,42],[3,'Athletico',22,12,4,6,30,19,11,40],[4,'Fluminense',22,9,8,5,31,26,5,35],[5,'Cruzeiro',22,9,6,7,30,31,-1,33],[6,'Bahia',22,8,9,5,29,25,4,33],[7,'Corinthians',22,8,8,6,24,20,4,32],[8,'Red Bull Bragantino',21,9,4,8,26,22,4,31],[9,'Botafogo',21,8,6,7,35,33,2,30],[10,'Coritiba',22,8,6,8,27,29,-2,30],[11,'Atlético Mineiro',21,8,5,8,27,27,0,29],[12,'São Paulo',21,7,5,9,26,25,1,26],[13,'Vitória',22,7,5,10,22,33,-11,26],[14,'Grêmio',21,6,7,8,24,27,-3,25],[15,'Mirassol',21,6,5,10,24,30,-6,23],[16,'Internacional',22,5,8,9,23,27,-4,23],[17,'Santos',21,5,7,9,29,35,-6,22],[18,'Vasco da Gama',21,5,7,9,23,31,-8,22],[19,'Remo',22,5,7,10,26,36,-10,22],[20,'Chapecoense',21,1,7,13,20,43,-23,10]];
+    const SHORT = { 'Atlético Mineiro': 'Atlético-MG', 'Red Bull Bragantino': 'RB Bragantino', 'Vasco da Gama': 'Vasco' };
+    const Z = 'color-mix(in srgb, var(--raised) 30%, transparent)';
+    const gdS = g => g > 0 ? '+' + g : g < 0 ? '−' + Math.abs(g) : '0';
+    const gdC = g => g > 0 ? 'var(--edge)' : g < 0 ? 'var(--risk)' : 'var(--faint)';
+    const FX = [["345","2026-09-05T19:00","C","Red Bull Bragantino","Bahia",2,3],["346","2026-09-05T21:30","C","São Paulo","Atlético Mineiro",2,0],["347","2026-09-06T00:00","C","Fluminense","Vasco da Gama",1,0],["348","2026-09-06T14:00","C","Coritiba","Mirassol",1,2],["349","2026-09-06T19:00","C","Remo","Flamengo",0,1],["350","2026-09-06T19:00","C","Internacional","Santos",2,3],["351","2026-09-06T19:00","C","Cruzeiro","Athletico",3,1],["352","2026-09-06T21:30","C","Botafogo","Palmeiras",0,0],["353","2026-09-06T22:30","C","Corinthians","Chapecoense",1,2],["354","2026-09-07T23:00","C","Vitória","Grêmio",1,0],["337","2026-08-30T14:00","S","Athletico","Fluminense"],["338","2026-08-30T19:00","S","Flamengo","Botafogo"],["339","2026-08-30T19:00","S","Corinthians","Santos"],["340","2026-08-30T21:30","S","Mirassol","Palmeiras"],["341","2026-08-30T21:30","S","Grêmio","Chapecoense"],["342","2026-08-30T22:30","S","Bahia","Internacional"],["478","2026-09-12T00:00","S","Coritiba","Athletico"],["479","2026-09-12T19:00","S","Grêmio","Vasco da Gama"],["480","2026-09-12T19:00","S","Atlético Mineiro","Fluminense"],["481","2026-09-12T20:00","S","Chapecoense","Internacional"],["482","2026-09-12T21:30","S","Palmeiras","São Paulo"],["483","2026-09-12T23:30","S","Botafogo","Red Bull Bragantino"],["1952","2026-02-04T18:00","P","Athletico","Corinthians"],["1918","2026-02-25T18:00","P","Bahia","Chapecoense"],["1919","2026-02-25T18:00","P","Botafogo","Vitória"],["1920","2026-02-25T18:00","P","Flamengo","Mirassol"],["1929","2026-03-11T22:00","P","Athletico","Botafogo"],["36","2026-07-30T18:00","P","Atlético Mineiro","Red Bull Bragantino"],["37","2026-07-30T18:00","P","Chapecoense","Vasco da Gama"],["38","2026-07-30T18:00","P","Botafogo","Grêmio"],["39","2026-07-30T18:00","P","São Paulo","Santos"]];
+    const SS = { C: ['FT', 'var(--edge)', '■', 'full time'], S: ['UPCOMING', 'var(--cool)', '○', 'upcoming'], P: ['POSTPONED', 'var(--warn)', '▲', 'postponed'] };
+    const dlab = d => new Date(d + 'Z').toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(',', '');
+    const dshort = d => new Date(d + 'Z').toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+    const row = ([id, k, st, home, away, hs, as], i) => {
+      const done = st === 'C'; const [label, sc, glyph, word] = SS[st];
+      return { time: k.slice(11, 16), date: dshort(k), home, away, label, sc, glyph, rule: i === 0 ? '0' : '1px solid var(--line)',
+        score: done ? hs + ' – ' + as : '–', scoreColor: done ? 'var(--text)' : 'var(--faint)', hs: done ? hs : '', as: done ? as : '',
+        hw: done && hs > as ? 600 : 500, aw: done && as > hs ? 600 : 500,
+        hc: done && hs < as ? 'var(--text-secondary)' : 'var(--text)', ac: done && as < hs ? 'var(--text-secondary)' : 'var(--text)',
+        aria: home + (done ? ' ' + hs + ' ' + as + ' ' : ' v ') + away + ', ' + word + ', ' + dlab(k) + ' ' + k.slice(11, 16) + ' UTC. Open match.' };
+    };
+    const byS = st => { const l = FX.filter(f => f[2] === st); return st === 'C' ? l.slice().sort((a, b) => a[1] < b[1] ? 1 : -1) : l; };
+    const group = list => { const g = []; list.forEach(f => { const key = f[1].slice(0, 10); let last = g[g.length - 1]; if (!last || last.key !== key) { last = { key, label: dlab(f[1]), items: [] }; g.push(last); } last.items.push(f); }); return g.map(x => ({ label: x.label, count: x.items.length + (x.items.length === 1 ? ' fixture' : ' fixtures'), rows: x.items.map(row) })); };
+    const GAP = [null, 6, 2, 5, 2, 0, 1, 1, 1, 0, 1, 3, 0, 1, 2, 0, 1, 0, 0, 12];
+    const standOk = !['limited', 'standingsLoading', 'standingsEmpty', 'standingsFailed'].includes(s);
+    const standNo = s === 'limited' || s === 'standingsEmpty';
+    const open = this.state.open;
+    const table = ST.map(([pos, name, p, w, d, l, gf, ga, gd, pts], i) => {
+      const gap = GAP[i] == null ? '—' : GAP[i];
+      const cells = M ? [{ v: p }, { v: gdS(gd), c: gdC(gd) }, { v: pts, w: 700, c: 'var(--text)' }] : [{ v: p }, { v: w }, { v: d }, { v: l }, { v: gf }, { v: ga }, { v: gdS(gd), c: gdC(gd) }, { v: pts, w: 700, c: 'var(--text)' }, { v: gap, c: 'var(--muted)' }];
+      if (M) cells.push({ v: open === String(pos) ? '−' : '+', c: 'var(--faint)' });
+      return { pos, label: M ? (SHORT[name] || name) : name, rule: i === 0 ? '0' : '1px solid var(--line)', bg: i % 2 === 0 ? Z : 'transparent',
+        cells: cells.map(c => ({ v: c.v, c: c.c || 'var(--text-secondary)', w: c.w || 400 })),
+        open: M && open === String(pos), more: [['W', w], ['D', d], ['L', l], ['GF', gf], ['GA', ga], ['GAP', gap]].map(([k, v]) => ({ k, v })),
+        toggle: M ? () => this.setState(st => ({ open: st.open === String(pos) ? null : String(pos) })) : undefined };
+    });
+    const head = M ? [['#', 'Position'], ['Team', 'Team'], ['P', 'Played'], ['GD', 'Goal difference'], ['Pts', 'Points'], ['', 'Expand']] : [['#', 'Position'], ['Team', 'Team'], ['P', 'Played'], ['W', 'Won'], ['D', 'Drawn'], ['L', 'Lost'], ['GF', 'Goals for'], ['GA', 'Goals against'], ['GD', 'Goal difference'], ['Pts', 'Points'], ['Gap', 'Points behind the team directly above']];
+    const fxs = this.state.fx;
+    const fxEmpty = s === 'fixturesEmpty', fxFailed = s === 'fixturesFailed';
+    const tabs = [['overview', 'Overview'], ['fixtures', 'Fixtures'], ['table', 'Table'], ['performance', 'Performance']].map(([k, label]) => ({ label, on: k === tab, pick: () => this.setState({ tab: k }), under: k === tab ? 'var(--amber)' : 'transparent', color: k === tab ? 'var(--text)' : 'var(--muted)' }));
+    const recent = byS('C').slice(0, 5).map(row), next = byS('S').slice(0, 5).map(row);
+    const CUR = { played: 250, scheduled: 286, homeWins: 116, draws: 70, awayWins: 64, homePct: 46.4, drawPct: 28, awayPct: 25.6, goals: 653, goalsHome: 370, goalsAway: 283, gpm: 2.61, csHome: 74, csAway: 46, cs: 120 };
+    const STATS = [['Expected goals (xG)', '644.43', 250, 250, 100], ['Shots', '4,983', 250, 250, 100], ['Shots on target', '2,204', 250, 250, 100], ['Yellow cards', '1,165', 245, 250, 98], ['Red cards', '68', 57, 250, 22.8], ['Fouls', '6,630', 250, 250, 100], ['Distance covered (km)', '43,975.94', 236, 250, 94.4], ['Sprints', '58,137', 236, 250, 94.4]];
+    const CMP = [['Expected goals (xG)', 16.73, 13.93, -2.8, -16.7, 'DOWN', 5, 5], ['Shots', 109, 111, 2, 1.8, 'UP', 5, 5], ['Shots on target', 47, 53, 6, 12.8, 'UP', 5, 5], ['Yellow cards', 24, 29, 5, 20.8, 'UP', 5, 5], ['Red cards', 1, 2, 1, 100, 'UP', 1, 2], ['Fouls', 136, 145, 9, 6.6, 'UP', 5, 5], ['Distance covered (km)', 970.47, 974.37, 3.9, 0.4, 'UP', 5, 5], ['Sprints', 915, 933, 18, 2, 'UP', 5, 5]];
+    const RES5 = [['Goals', 12, 13, 1], ['Goals per match', 2.4, 2.6, 0.2], ['Home wins', 2, 2, 0], ['Draws', 0, 1, 1], ['Away wins', 3, 2, -1], ['Clean sheets', 3, 3, 0]];
+    const SER = [[1, 1, 0, 0, 100], [25, 3.28, 40, 36, 24], [50, 2.74, 42, 32, 26], [75, 2.61, 49.3, 26.7, 24], [100, 2.65, 49, 27, 24], [125, 2.59, 49.6, 26.4, 24], [150, 2.66, 48, 28, 24], [175, 2.67, 49.1, 26.3, 24.6], [200, 2.62, 47.5, 28, 24.5], [225, 2.6, 45.3, 29.8, 24.9], [250, 2.61, 46.4, 28, 25.6]];
+    const TRJ = [["Palmeiras","4.2.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1",1,4,1,1.16,7,0],["Flamengo","16.11.8.4.3.4.4.6.4.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1",1,16,1,3.64,12,1],["Athletico","2.3.6.5.10.7.6.2.5.5.5.6.5.5.5.5.4.3.3.3.3.2.3.3.3",2,10,3,4.36,12,3],["Fluminense","2.5.3.5.3.2.4.3.2.3.4.2.2.3.3.3.3.3.3.4.4.4.4.4.4",2,5,4,3.28,10,1],["Cruzeiro","20.20.19.18.19.19.19.20.18.18.17.16.11.14.10.12.9.11.7.9.7.5.5.5.5.5",5,20,5,13,15,4],["Bahia","3.4.2.3.2.2.4.2.5.4.5.4.6.6.6.8.6.6.6.5.5.5.5.6.5",2,8,5,4.6,15,1],["Corinthians","15.12.5.3.7.6.9.10.10.16.16.16.13.17.14.17.15.8.7.8.8.7.9.10.11",3,17,11,10.76,11,7],["Red Bull Bragantino","1.1.5.6.5.8.9.12.11.9.9.8.9.7.8.8.5.5.4.5.8.7.7.8.9",1,12,9,6.96,14,3],["Botafogo","1.4.11.17.17.16.18.12.9.15.8.9.9.12.9.9.11.9.8.7.7.11.11.12",1,18,12,10.5,11,2],["Coritiba","20.11.8.11.4.6.5.7.7.6.7.7.7.7.8.6.6.6.7.9.11.7.9.8.7.7",4,20,7,7.85,13,4],["Atlético Mineiro","5.11.14.16.11.15.10.11.10.8.8.11.17.12.13.7.14.9.10.9.10.9.7.7.8",5,17,8,10.48,15,3],["São Paulo","5.3.1.1.1.1.2.2.2.2.3.4.4.4.4.4.4.8.9.11.12.12.13.11.10",1,13,10,5.32,12,2],["Vitória","1.11.13.15.11.13.10.11.13.10.10.14.8.9.14.9.12.9.10.12.13.13.12.12.12.12",1,15,12,11.12,14,2],["Grêmio","17.7.12.8.9.7.6.8.10.10.11.15.11.11.17.15.13.15.16.15.14.14.16.17",6,17,17,12.25,13,6],["Mirassol","3.2.3.8.12.13.17.18.19.20.18.18.18.18.18.18.18.18.18.14.15.17.17.18.14",2,20,14,14.88,10,2],["Internacional","18.13.19.17.18.19.17.12.12.10.13.15.14.10.9.7.11.13.14.15.16.15.16.15.16",7,19,16,14.16,14,5],["Santos","19.14.18.13.11.13.16.14.11.15.12.15.15.15.13.16.17.15.16.14.17.14.14.13",11,19,13,14.58,13,7],["Vasco da Gama","13.12.18.20.15.15.10.9.8.8.10.9.10.11.7.11.16.17.17.17.18.19.19.17.17",7,20,17,13.72,12,5],["Remo","20.14.15.14.17.18.20.18.20.18.18.19.19.18.19.18.19.18.19.18.19.18.17.18.19.19",14,20,19,18.04,11,4],["Chapecoense","1.3.2.12.12.13.15.18.17.18.19.20.20.20.20.20.20.20.20.20.20.20.20.20",1,20,20,16.25,5,3]];
+    const poly = (vals, w, h, n) => vals.map((v, i) => ((i / Math.max(n - 1, 1)) * w).toFixed(1) + ',' + (((v - 1) / 19) * h).toFixed(1)).join(' ');
+    const selTeam = this.state.team ?? 'Palmeiras';
+    const trj = TRJ.map(([name, ps, hi, lo, cur, avg, up, down]) => {
+      const vals = ps.split('.').map(Number); const on = name === selTeam;
+      return { name, short: SHORT[name] || name, cur, pts: poly(vals, 120, 36, 26), on, border: on ? 'var(--amber)' : 'var(--line)', bg: on ? 'var(--raised)' : 'var(--panel)',
+        pick: () => this.setState({ team: name }), aria: name + ': position ' + cur + ' after ' + vals.length + ' matches, highest ' + hi + ', lowest ' + lo, vals, hi, lo, avg, up, down };
+    });
+    const sel = trj.find(t => t.on) || trj[0];
+    const BW = D ? 680 : M ? 320 : 560, BH = 180;
+    const pf = this.state.perf ?? this.props.perf ?? 'season';
+    const pChip = (v, digits) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(digits ?? (Number.isInteger(v) ? 0 : 1)).replace(/\.0$/, '');
+    const P = 'PAYLOAD PENDING';
+    return {
+      uid, bp, full: frame === 'full', found: s !== 'notFound', notFound: s === 'notFound',
+      minH: frame === 'full' ? (M ? '844px' : '900px') : 'auto',
+      mainPad: M ? '12px 12px 24px' : bp === 'tablet' ? '20px 24px' : '20px 16px',
+      monoSize: M ? '40px' : '48px', metaMargin: D ? 'auto' : '0', metaAlign: D ? 'flex-end' : 'flex-start', tabH: M ? '44px' : '36px',
+      asOf: standOk ? '11 Aug 2026' : '—', asOfColor: standOk ? 'var(--text)' : 'var(--faint)',
+      tabs, tOverview: tab === 'overview', tFixtures: tab === 'fixtures', tTable: tab === 'table',
+      goTable: () => this.setState({ tab: 'table' }), goFixtures: () => this.setState({ tab: 'fixtures' }),
+      ovCols: D ? 'minmax(0,8fr) minmax(0,4fr)' : '1fr', stripCols: M ? '1fr' : 'repeat(2,minmax(0,1fr))',
+      topCols: '28px minmax(0,1fr) 40px 44px 44px',
+      top5: table.slice(0, 5).map((r, i) => ({ pos: r.pos, name: ST[i][1], p: ST[i][2], gd: gdS(ST[i][8]), gdc: gdC(ST[i][8]), pts: ST[i][9], bg: i % 2 === 0 ? Z : 'transparent' })),
+      strips: [{ title: 'Latest results', rows: fxEmpty ? [] : recent, br: M ? '0' : '1px solid var(--line)', bb: M ? '1px solid var(--line)' : '0' }, { title: 'Next scheduled', rows: fxEmpty ? [] : next, br: '0', bb: '0' }],
+      context: [
+        { name: 'Edition metrics', what: 'Goals, results and completion for the season', tag: P, color: 'var(--faint)' },
+        { name: 'Position over time', what: 'How table positions changed through the season', tag: P, color: 'var(--faint)' },
+        { name: 'Performance over time', what: 'Competition performance across the season', tag: P, color: 'var(--faint)' },
+        { name: 'Table context', what: 'Context around the current standings', tag: P, color: 'var(--faint)' }
+      ],
+      fxFilters: [['C', 'Results'], ['S', 'Scheduled'], ['P', 'Postponed']].map(([k, label]) => ({ label, on: k === fxs, pick: () => this.setState({ fx: k }), bg: k === fxs ? 'var(--raised)' : 'var(--panel)', color: k === fxs ? 'var(--text)' : 'var(--muted)', under: k === fxs ? 'var(--amber)' : 'transparent' })),
+      fxOk: !fxEmpty && !fxFailed, fxEmpty, fxFailed,
+      fxGroups: fxEmpty ? [] : group(byS(fxs)),
+      fxNote: { C: 'Latest results first · earlier results load on request', S: 'Scheduled fixtures in kickoff order', P: 'Postponed fixtures at their original kickoff' }[fxs], fxMore: fxs === 'C',
+      wide: !M, narrow: M, fxCols: D ? '64px minmax(0,1fr) 88px minmax(0,1fr) 120px 14px' : '52px minmax(0,1fr) 76px minmax(0,1fr) 108px 12px',
+      standOk, standNo, standLoading: s === 'standingsLoading', standFailed: s === 'standingsFailed',
+      table, stHead: head.map(([label, title], i) => ({ label, title, align: i < 2 ? 'left' : 'right' })),
+      stCols: M ? '26px minmax(0,1fr) 30px 40px 36px 18px' : D ? '44px minmax(0,1fr) repeat(9,60px)' : '32px minmax(0,1fr) repeat(9,42px)',
+      tPerf: tab === 'performance',
+      summary: [['Played', CUR.played, 'of ' + CUR.scheduled], ['Goals', CUR.goals, CUR.gpm + ' per match'], ['Home wins', CUR.homePct + '%', CUR.homeWins + ' matches'], ['Draws', CUR.drawPct + '%', CUR.draws + ' matches'], ['Away wins', CUR.awayPct + '%', CUR.awayWins + ' matches'], ['Clean sheets', CUR.cs, CUR.csHome + ' home · ' + CUR.csAway + ' away']].map(([k, v, sub]) => ({ k, v, sub })),
+      split: [['Home', CUR.homePct, 'var(--text-secondary)'], ['Draw', CUR.drawPct, 'var(--muted)'], ['Away', CUR.awayPct, 'var(--faint)']].map(([k, v, c]) => ({ k, w: v + '%', c, label: k + ' ' + v + '%' })),
+      sumCols: D ? 'repeat(6,minmax(0,1fr))' : M ? 'repeat(2,minmax(0,1fr))' : 'repeat(3,minmax(0,1fr))',
+      recent5: RES5.map(([k, a, b, c]) => ({ k, a, b, c: pChip(c), cc: c === 0 ? 'var(--faint)' : 'var(--text-secondary)' })),
+      goToPerf: () => this.setState({ tab: 'performance' }),
+      perfTabs: [['season', 'Season'], ['recent', 'Last 5 vs previous 5'], ['positions', 'Positions']].map(([k, label]) => ({ label, on: k === pf, pick: () => this.setState({ perf: k }), bg: k === pf ? 'var(--raised)' : 'var(--panel)', color: k === pf ? 'var(--text)' : 'var(--muted)', under: k === pf ? 'var(--amber)' : 'transparent' })),
+      pSeason: pf === 'season', pRecent: pf === 'recent', pPos: pf === 'positions',
+      goalsRows: [['Goals', CUR.goals, CUR.goalsHome, CUR.goalsAway], ['Clean sheets', CUR.cs, CUR.csHome, CUR.csAway]].map(([k, t, h, a]) => ({ k, t, h, a })),
+      resultRows: [['Home wins', CUR.homeWins, CUR.homePct], ['Draws', CUR.draws, CUR.drawPct], ['Away wins', CUR.awayWins, CUR.awayPct]].map(([k, n, p]) => ({ k, n, p: p + '%' })),
+      stats: STATS.map(([k, v, has, of, pct]) => ({ k, v, cov: has + ' / ' + of, pct: pct + '%', partial: pct < 90, pc: pct < 90 ? 'var(--warn)' : 'var(--faint)', note: pct < 90 ? 'partial' : '' })),
+      gpmPts: SER.map(([n, g]) => ((n - 1) / 249 * BW).toFixed(1) + ',' + ((1 - (g - 0.5) / 3.5) * BH).toFixed(1)).join(' '),
+      gpmDots: SER.map(([n, g]) => ({ x: ((n - 1) / 249 * BW).toFixed(1), y: ((1 - (g - 0.5) / 3.5) * BH).toFixed(1) })),
+      serRows: SER.map(([n, g, h, d, a]) => ({ n, g, h: h + '%', d: d + '%', a: a + '%' })),
+      BW, BH, chartView: '0 0 ' + BW + ' ' + BH,
+      cmp: CMP.map(([k, a, b, c, pct, dir, na, nb]) => ({ k, a, b, c: pChip(c, Number.isInteger(c) ? 0 : 1), pct: pChip(pct) + '%', dir: dir === 'UP' ? '▲ up' : '▼ down', note: na < 5 || nb < 5 ? 'recorded in ' + na + ' / ' + nb + ' of 5 matches' : '' })),
+      trj, sel, selPts: poly(sel.vals, BW, BH, sel.vals.length), selDots: sel.vals.map((v, i) => ({ x: (i / (sel.vals.length - 1) * BW).toFixed(1), y: ((v - 1) / 19 * BH).toFixed(1) })),
+      selCount: sel.vals.length,
+      selSummary: [['Current', sel.cur], ['Highest', sel.hi], ['Lowest', sel.lo], ['Average', sel.avg], ['Moves up', sel.up], ['Moves down', sel.down]].map(([k, v]) => ({ k, v })),
+      trjCols: D ? 'repeat(5,minmax(0,1fr))' : M ? 'repeat(2,minmax(0,1fr))' : 'repeat(4,minmax(0,1fr))',
+      perfCols: D ? 'minmax(0,7fr) minmax(0,5fr)' : '1fr',
+      showTable: this.state.showData ? true : false, toggleData: () => this.setState(st => ({ showData: !st.showData })), dataLabel: this.state.showData ? 'Hide data table' : 'Show data table',
+      stRowH: M ? '44px' : '38px', stSkel: '28px minmax(0,1fr) 40%',
+      skel: ['40%', '52%', '36%', '48%', '44%', '58%', '38%', '46%']
+    };
+  }
+}
+</script>
+</body>
+</html>

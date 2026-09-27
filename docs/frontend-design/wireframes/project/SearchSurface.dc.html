@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}input::placeholder{color:#7e8aa0}</style></helmet>
+<div style="position:relative;background:var(--ink);font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text);height:{{ H }};overflow:hidden">
+  <sc-if value="{{ overlay }}" hint-placeholder-val="{{ true }}">
+    <dc-import name="AppHeader" layout="{{ bp }}" auth="anon" hint-size="100%,56px"></dc-import>
+    <div aria-hidden="true" style="max-width:1152px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:12px;opacity:.5"><span style="height:10px;width:180px;background:var(--raised);border-radius:2px"></span><div style="height:120px;background:var(--panel);border:1px solid var(--line);border-radius:4px"></div><div style="height:260px;background:var(--panel);border:1px solid var(--line);border-radius:4px"></div></div>
+    <div aria-hidden="true" style="position:absolute;inset:0;background:rgba(11,15,20,.72)"></div>
+  </sc-if>
+  <div role="dialog" aria-modal="true" aria-label="Search PitchTerminal" style="position:{{ dlgPos }};top:{{ dlgTop }};left:50%;transform:translateX(-50%);width:{{ dlgW }};max-width:100%;height:{{ dlgH }};background:var(--panel);border:{{ dlgBorder }};border-radius:{{ dlgRadius }};box-shadow:{{ dlgShadow }};display:flex;flex-direction:column;box-sizing:border-box">
+    <form role="search" onSubmit="{{ noSubmit }}" style="display:flex;flex-direction:column;gap:8px;padding:{{ fPad }};border-bottom:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:center"><label for="{{ uid }}q" style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Search PitchTerminal</label><sc-if value="{{ mobile }}"><button aria-label="Close search" style="height:44px;padding:0 4px;background:transparent;border:0;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Close</button></sc-if><sc-if value="{{ notMobile }}"><span style="font:500 10px 'JetBrains Mono',monospace;color:var(--faint);border:1px solid var(--line);border-radius:3px;padding:0 5px">esc</span></sc-if></div>
+      <div style="position:relative;display:flex;align-items:center">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="#90a0b4" stroke-width="1.5" style="position:absolute;left:14px"><circle cx="5" cy="5" r="3.8"></circle><line x1="8" y1="8" x2="11" y2="11"></line></svg>
+        <input id="{{ uid }}q" type="search" autocomplete="off" role="combobox" aria-expanded="{{ hasResults }}" aria-controls="{{ uid }}r" aria-describedby="{{ uid }}hint" value="{{ q }}" onChange="{{ onQ }}" placeholder="Team, player, competition, season, venue or country" style="width:100%;height:48px;padding:0 {{ inputPadR }} 0 38px;background:var(--raised);border:1px solid {{ inputBorder }};border-radius:4px;outline:{{ inputOutline }};outline-offset:2px;font:400 16px Inter,sans-serif;color:var(--text);box-sizing:border-box"></input>
+        <sc-if value="{{ busy }}"><span aria-hidden="true" style="position:absolute;right:{{ dotRight }};width:6px;height:6px;border-radius:50%;background:var(--muted);animation:pulse-dot 1.8s ease-in-out infinite"></span></sc-if>
+        <sc-if value="{{ hasQuery }}"><button type="button" onClick="{{ clear }}" aria-label="Clear search" style="position:absolute;right:4px;height:40px;padding:0 10px;background:transparent;border:0;border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer" style-hover="background:var(--panel);color:var(--text)">Clear ×</button></sc-if>
+      </div>
+      <div role="radiogroup" aria-label="Limit to" style="display:flex;gap:4px;overflow-x:auto;scrollbar-width:none"><sc-for list="{{ scopes }}" as="s" hint-placeholder-count="7"><button type="button" role="radio" aria-checked="{{ s.on }}" onClick="{{ s.pick }}" style="flex:none;min-height:{{ chipH }};padding:0 10px;background:{{ s.bg }};border:1px solid {{ s.border }};border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:{{ s.color }};cursor:pointer">{{ s.label }}</button></sc-for></div>
+    </form>
+
+    <div id="{{ uid }}r" role="listbox" aria-label="Search results" aria-busy="{{ busy }}" style="flex:1;overflow-y:auto;padding:{{ rPad }};min-height:0">
+      <span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">{{ live }}</span>
+      <sc-if value="{{ sIdle }}" hint-placeholder-val="{{ true }}"><div style="padding:20px 8px;display:flex;flex-direction:column;gap:6px"><span style="font:400 14px/1.5 Inter,sans-serif;color:var(--text-secondary)">Search teams, players, competitions, seasons, venues and countries.</span><span style="font:400 12px Inter,sans-serif;color:var(--faint)">Choose a result to open its page.</span></div></sc-if>
+      <sc-if value="{{ sLoading }}"><div style="display:flex;flex-direction:column;gap:2px;padding:4px 0"><sc-for list="{{ skel }}" as="w" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px;align-items:center;min-height:48px;padding:0 8px"><span style="height:16px;width:64px;background:var(--raised);border-radius:3px"></span><span style="display:flex;flex-direction:column;gap:6px"><span style="height:9px;width:{{ w }};background:var(--raised);border-radius:2px"></span><span style="height:7px;width:30%;background:var(--raised);border-radius:2px"></span></span></div></sc-for></div></sc-if>
+      <sc-if value="{{ sNone }}"><div role="status" style="padding:28px 8px;display:flex;flex-direction:column;align-items:flex-start;gap:8px"><span style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">No results</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">No matching football entities were found for “{{ q }}”.</span><button type="button" onClick="{{ clear }}" style="height:36px;padding:0 12px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Clear search</button></div></sc-if>
+      <sc-if value="{{ sFail }}"><div role="alert" style="padding:28px 8px;display:flex;flex-direction:column;align-items:flex-start;gap:8px"><span style="display:flex;gap:8px;align-items:center;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--risk)"><span aria-hidden="true">!</span>Search unavailable</span><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">The search could not be completed. Your query is kept.</span><button type="button" style="height:36px;padding:0 12px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);cursor:pointer">Try again</button></div></sc-if>
+      <sc-if value="{{ sResults }}"><sc-for list="{{ groups }}" as="g" hint-placeholder-count="3"><div role="group" aria-label="{{ g.aria }}" style="padding:8px 0 4px"><div style="display:flex;justify-content:space-between;padding:4px 8px 6px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">{{ g.name }}<span style="color:var(--faint)">{{ g.count }}</span></div>
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2"><a role="option" aria-selected="{{ r.sel }}" aria-label="{{ r.aria }}" style="display:grid;grid-template-columns:{{ rowCols }};gap:12px;align-items:center;min-height:{{ rowH }};padding:0 8px;border-radius:4px;background:{{ r.bg }};border:1px solid {{ r.border }};text-decoration:none;cursor:pointer" style-hover="background:var(--raised)"><span style="justify-self:start;font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 5px">{{ r.type }}</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:500 14px Inter,sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="font:400 12px Inter,sans-serif;color:{{ r.ctxC }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.ctx }}</span></span><span aria-hidden="true" style="font:400 13px 'JetBrains Mono',monospace;color:var(--faint)">{{ r.arrow }}</span></a></sc-for>
+      </div></sc-for></sc-if>
+    </div>
+    <sc-if value="{{ notMobile }}"><div id="{{ uid }}hint" style="display:flex;flex-wrap:wrap;gap:6px 16px;padding:10px 16px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>↑ ↓ move</span><span>Enter open</span><span>Esc close</span><span style="margin-left:auto">{{ footNote }}</span></div></sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:720},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;query&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;focused&quot;,&quot;typing&quot;,&quot;results&quot;,&quot;loading&quot;,&quot;failed&quot;],&quot;default&quot;:&quot;idle&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { q: null, scope: 'all', phase: null };
+  componentWillUnmount() { clearTimeout(this.t); }
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop', forced = this.props.state ?? 'idle';
+    const M = bp === 'mobile', D = bp === 'desktop';
+    const uid = this.uid || (this.uid = 'sr' + Math.random().toString(36).slice(2, 7));
+    const q = this.state.q ?? (this.props.query ?? '');
+    const phase = this.state.phase ?? ({ loading: 'loading', failed: 'failed' }[forced] || (q ? 'done' : 'idle'));
+    const DATA = {
+      bra: [['Teams', 'TEAM', 'Red Bull Bragantino', 'RB Bragantino · Brazil'], ['Players', 'PLAYER', 'Marcelinho Braz', 'Red Bull Bragantino'], ['Competitions', 'COMPETITION', 'Brasileirão Betano', 'Brazil'], ['Seasons', 'SEASON', 'Brasileiro Serie A 2026', 'Brasileirão Betano'], ['Countries', 'COUNTRY', 'Brazil', 'BR']],
+      bundesliga: [['Competitions', 'COMPETITION', 'Austrian Bundesliga', ''], ['Competitions', 'COMPETITION', 'Bundesliga', ''], ['Seasons', 'SEASON', 'Bundesliga 26/27', 'Austrian Bundesliga'], ['Seasons', 'SEASON', 'Bundesliga 26/27', 'Bundesliga']],
+      palmeiras: [['Teams', 'TEAM', 'Palmeiras', 'Brazil']],
+      gabriel: [['Players', 'PLAYER', 'Arthur Gabriel', 'Palmeiras'], ['Players', 'PLAYER', 'Gabriel Girotto', 'Red Bull Bragantino'], ['Players', 'PLAYER', 'Gabriel Novaes', 'Red Bull Bragantino']]
+    };
+    const SCOPES = [['all', 'All'], ['Teams', 'Teams'], ['Players', 'Players'], ['Competitions', 'Competitions'], ['Seasons', 'Seasons'], ['Venues', 'Venues'], ['Countries', 'Countries']];
+    const scope = this.state.scope;
+    let rows = (DATA[q.trim().toLowerCase()] || []).filter(r => scope === 'all' || r[0] === scope);
+    const order = ['Teams', 'Players', 'Competitions', 'Seasons', 'Venues', 'Countries'];
+    let idx = 0;
+    const groups = order.map(name => { const rs = rows.filter(r => r[0] === name); return { name, count: rs.length, aria: name + ', ' + rs.length + ' results', rows: rs.map(r => { const sel = idx++ === 0 && forced === 'results'; return { type: r[1], name: r[2], ctx: r[3] || 'No further context recorded', ctxC: r[3] ? 'var(--muted)' : 'var(--faint)', sel: sel ? 'true' : 'false', bg: sel ? 'var(--raised)' : 'transparent', border: sel ? 'var(--amber-dim)' : 'transparent', arrow: '›', aria: r[1].toLowerCase() + ', ' + r[2] + (r[3] ? ', ' + r[3] : '') }; }) }; }).filter(g => g.count);
+    const n = rows.length;
+    const focused = forced !== 'idle' || this.state.q !== null;
+    const typing = forced === 'typing';
+    return {
+      uid, bp, mobile: M, notMobile: !M, overlay: !M, q,
+      H: M ? '760px' : D ? '720px' : '760px',
+      dlgPos: M ? 'relative' : 'absolute', dlgTop: M ? '0' : '72px', dlgW: M ? '100%' : D ? '680px' : 'calc(100% - 48px)', dlgH: M ? '100%' : 'auto',
+      dlgBorder: M ? '0' : '1px solid var(--line)', dlgRadius: M ? '0' : '4px', dlgShadow: M ? 'none' : '0 1px 0 0 rgba(255,255,255,.02) inset,0 8px 24px -12px rgba(0,0,0,.6)',
+      fPad: M ? '12px 12px 10px' : '14px 16px 12px', rPad: M ? '4px 8px 16px' : '4px 8px 8px', chipH: M ? '36px' : '28px', rowH: M ? '56px' : '48px', rowCols: '92px minmax(0,1fr) 12px',
+      inputBorder: focused ? 'var(--amber)' : 'var(--line)', inputOutline: focused ? '2px solid var(--amber)' : 'none', inputPadR: q ? '96px' : '14px', dotRight: q ? '100px' : '16px',
+      hasQuery: !!q, hasResults: phase === 'done' && n > 0,
+      busy: phase === 'loading' || typing,
+      sIdle: !q && phase !== 'failed', sLoading: !!q && (phase === 'loading' || typing), sFail: phase === 'failed', sNone: !!q && phase === 'done' && !typing && n === 0, sResults: !!q && phase === 'done' && !typing && n > 0,
+      groups, skel: ['52%', '40%', '60%', '46%'],
+      live: (phase === 'loading' || typing) && q ? 'Searching' : phase === 'failed' ? 'Search unavailable' : q && phase === 'done' && n ? n + ' results in ' + groups.length + (groups.length === 1 ? ' group' : ' groups') : q && phase === 'done' ? 'No results' : '',
+      footNote: q && phase === 'done' && n ? 'Order as returned' : '',
+      scopes: SCOPES.map(([k, label]) => { const on = k === scope; return { label, on, pick: () => this.setState({ scope: k }), bg: on ? 'var(--raised)' : 'transparent', border: on ? 'var(--amber)' : 'var(--line)', color: on ? 'var(--text)' : 'var(--muted)' }; }),
+      onQ: e => { const v = e.target.value; this.setState({ q: v, phase: v ? 'loading' : 'idle' }); clearTimeout(this.t); if (v) this.t = setTimeout(() => this.setState({ phase: 'done' }), 450); },
+      clear: () => { clearTimeout(this.t); this.setState({ q: '', phase: 'idle', scope: 'all' }); },
+      noSubmit: e => e.preventDefault()
+    };
+  }
+}
+</script>
+</body>
+</html>

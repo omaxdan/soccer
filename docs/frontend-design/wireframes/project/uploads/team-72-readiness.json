@@ -1,0 +1,41 @@
+﻿{
+    "team":  {
+                 "id":  "72",
+                 "name":  "Palmeiras",
+                 "slug":  "palmeiras-1963",
+                 "shortName":  "Palmeiras",
+                 "countryCode":  "BR"
+             },
+    "readiness":  {
+                      "moduleKey":  "readiness_tracker",
+                      "status":  "NEUTRAL",
+                      "strength":  null,
+                      "confidence":  null,
+                      "sample":  {
+                                     "matches":  10,
+                                     "meetsThreshold":  true
+                                 },
+                      "verdictText":  "Steady form: last-five points minus prior-five is -7.",
+                      "inactiveReason":  null,
+                      "asOf":  "2026-09-06T21:30:00.000Z",
+                      "evidence":  {
+                                       "declaredInputCount":  1,
+                                       "presentInputCount":  1,
+                                       "belowThresholdInputCount":  0,
+                                       "estimatedInputCount":  0,
+                                       "items":  [
+                                                     {
+                                                         "featureKey":  "team.momentum",
+                                                         "displayName":  "Momentum",
+                                                         "value":  -7,
+                                                         "asOf":  "2026-09-06T21:30:00.000Z",
+                                                         "contributionDirection":  "NEUTRAL"
+                                                     }
+                                                 ]
+                                   }
+                  },
+    "coverage":  {
+                     "readiness":  "present",
+                     "readinessIsGoverned":  true
+                 }
+}

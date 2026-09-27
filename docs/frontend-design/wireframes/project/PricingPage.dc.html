@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap"><style>@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}:focus-visible{outline:2px solid #ffb020;outline-offset:2px}:root{--ink:#0b0f14;--panel:#121821;--raised:#1a222e;--line:#1d2633;--text:#f4f6f9;--text-secondary:#c3cbd6;--muted:#90a0b4;--faint:#7e8aa0;--amber:#ffb020;--amber-dim:rgba(255,176,32,.22);--edge:#2fbf87;--risk:#f0544f;--warn:#f5b301;--cool:#4c8dff}</style></helmet>
+<div style="container-type:inline-size;background:var(--ink);background-image:linear-gradient(to right,rgba(255,255,255,.014) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.014) 1px,transparent 1px);background-size:40px 40px;font-family:Inter,-apple-system,'Segoe UI',sans-serif;color:var(--text)">
+<dc-import name="AppHeader" layout="{{ headerLayout }}" auth="anon" hint-size="100%,56px"></dc-import>
+<main>
+
+<section aria-labelledby="p-hero" data-screen-label="Hero" style="max-width:1152px;margin:0 auto;padding:clamp(40px,5cqi,72px) 16px 28px;box-sizing:border-box;display:flex;flex-direction:column;align-items:{{ heroAlign }};text-align:{{ heroText }};gap:16px">
+  <span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Pricing · access levels</span>
+  <h1 id="p-hero" style="margin:0;font-weight:700;font-size:clamp(32px,3.8cqi,50px);line-height:1.05;letter-spacing:-.025em;text-wrap:balance;max-width:760px">Choose how deeply you explore the game.</h1>
+  <p style="margin:0;font:400 16px/1.6 Inter,sans-serif;color:var(--text-secondary);max-width:560px;text-wrap:pretty">Four access levels, from a first look to the full depth of match intelligence. Each one is described in the same terms, so the differences are easy to see.</p>
+  <div style="display:flex;flex-direction:column;align-items:{{ heroAlign }};gap:8px;padding-top:8px">
+    <div role="radiogroup" aria-label="Billing period" aria-disabled="true" style="display:flex;border:1px dashed var(--line);border-radius:4px;overflow:hidden;opacity:.7">
+      <span role="radio" aria-checked="true" style="padding:7px 14px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);background:var(--panel)">Period A</span>
+      <span role="radio" aria-checked="false" style="padding:7px 14px;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border-left:1px dashed var(--line)">Period B</span>
+    </div>
+    <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">BillingToggle · shown only once billing periods are specified</span>
+  </div>
+</section>
+
+<section aria-labelledby="p-plans" data-screen-label="Plans" style="max-width:1152px;margin:0 auto;padding:0 16px clamp(40px,5cqi,64px);box-sizing:border-box">
+  <h2 id="p-plans" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Plans</h2>
+  <ul style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:{{ cardCols }};gap:12px">
+    <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
+      <li style="background:{{ p.bg }};border:1px solid var(--line);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font:700 18px Inter,sans-serif;color:var(--text)">{{ p.name }}</h3><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">{{ p.level }}</span></div>
+        <div role="img" aria-label="{{ p.depthLabel }}" style="display:flex;gap:3px"><sc-for list="{{ p.depth }}" as="d" hint-placeholder-count="4"><span style="flex:1;height:4px;border-radius:1px;background:{{ d }}"></span></sc-for></div>
+        <div style="display:flex;flex-direction:column;gap:4px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+          <span style="font:600 22px 'JetBrains Mono',monospace;color:var(--faint)">{{ p.price }}</span>
+          <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">{{ p.priceNote }}</span>
+        </div>
+        <p style="margin:0;font:400 14px/1.5 Inter,sans-serif;color:var(--text-secondary);min-height:42px">{{ p.intent }}</p>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ groupNames }}" as="g" hint-placeholder-count="5"><li style="display:flex;justify-content:space-between;align-items:center;gap:8px;font:400 13px Inter,sans-serif;color:var(--text-secondary)">{{ g }}<span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--faint);border-radius:4px;padding:0 5px">◌ TBD</span></li></sc-for>
+        </ul>
+        <a style="margin-top:auto;display:flex;align-items:center;justify-content:center;min-height:44px;background:var(--raised);border:1px solid var(--line);border-radius:4px;font:500 11px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;cursor:pointer" style-hover="border-color:var(--muted);color:var(--text)">{{ p.cta }}</a>
+        <span style="font:400 10px 'JetBrains Mono',monospace;color:var(--faint);text-align:center">{{ p.route }}</span>
+      </li>
+    </sc-for>
+  </ul>
+</section>
+
+<section aria-labelledby="p-cmp" data-screen-label="Comparison" style="max-width:1152px;margin:0 auto;padding:clamp(40px,5cqi,64px) 16px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;border-top:1px solid var(--line)">
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Compare</span><h2 id="p-cmp" style="margin:0;font-weight:700;font-size:clamp(24px,2.3cqi,32px);letter-spacing:-.015em">What each level includes</h2></div>
+    <div aria-label="Legend" style="display:flex;flex-wrap:wrap;gap:14px;font:400 12px Inter,sans-serif;color:var(--muted)"><span style="display:flex;gap:6px;align-items:center"><span style="font:600 12px 'JetBrains Mono',monospace;color:var(--text)">✓</span>Included</span><span style="display:flex;gap:6px;align-items:center"><span style="font:600 12px 'JetBrains Mono',monospace;color:var(--faint)">—</span>Not included</span><span style="display:flex;gap:6px;align-items:center"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--faint);border-radius:4px;padding:0 5px">◌ TBD</span>To be confirmed</span></div>
+  </div>
+
+  <sc-if value="{{ showTable }}" hint-placeholder-val="{{ true }}">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow-x:auto">
+    <div role="table" aria-label="Capabilities by access level. All entitlements to be confirmed." style="min-width:680px">
+      <div role="row" style="display:grid;grid-template-columns:{{ matrixCols }};align-items:center;border-bottom:1px solid var(--line)">
+        <span role="columnheader" style="padding:12px 16px;font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Capability</span>
+        <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4"><span role="columnheader" style="text-align:center;padding:12px 8px;font:600 13px Inter,sans-serif;color:var(--text)">{{ p.name }}</span></sc-for>
+      </div>
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+        <div role="rowgroup">
+          <div role="row" style="border-top:1px solid var(--line);background:var(--raised)"><span role="rowheader" style="display:block"><button onClick="{{ g.toggle }}" aria-expanded="{{ g.open }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:8px 16px;background:transparent;border:0;cursor:pointer;text-align:left;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)" style-hover="color:var(--text)"><span style="width:10px;color:var(--faint)">{{ g.caret }}</span>{{ g.name }}<span style="color:var(--faint)">{{ g.count }}</span></button></span></div>
+          <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+              <div role="row" style="display:grid;grid-template-columns:{{ matrixCols }};align-items:center;border-top:1px solid var(--line)" style-hover="background:var(--raised)">
+                <span role="rowheader" style="padding:11px 16px;font:400 14px Inter,sans-serif;color:var(--text-secondary)">{{ r.cap }}<sc-if value="{{ r.future }}"><span style="margin-left:8px;font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint)">FUTURE</span></sc-if></span>
+                <sc-for list="{{ tbd4 }}" as="c" hint-placeholder-count="4"><span role="cell" style="text-align:center;padding:11px 8px"><span aria-label="To be confirmed" style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--faint);border-radius:4px;padding:1px 5px">◌ TBD</span></span></sc-for>
+              </div>
+            </sc-for>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ showSwitcher }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div role="tablist" aria-label="Choose a level to compare" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:4px;overflow:hidden">
+      <sc-for list="{{ planTabs }}" as="t" hint-placeholder-count="4"><button role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="min-height:44px;border:0;border-left:1px solid var(--line);border-bottom:2px solid {{ t.border }};background:{{ t.bg }};font:600 13px Inter,sans-serif;color:{{ t.color }};cursor:pointer">{{ t.name }}</button></sc-for>
+    </div>
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+        <div style="border-top:1px solid var(--line)">
+          <button onClick="{{ g.toggle }}" aria-expanded="{{ g.open }}" style="width:100%;min-height:44px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--raised);border:0;text-align:left;font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);cursor:pointer"><span style="width:10px;color:var(--faint)">{{ g.caret }}</span>{{ g.name }}<span style="margin-left:auto;color:var(--faint)">{{ g.count }}</span></button>
+          <sc-if value="{{ g.open }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;padding:0 14px;border-top:1px solid var(--line)"><span style="font:400 14px Inter,sans-serif;color:var(--text-secondary)">{{ r.cap }}</span><span aria-label="{{ mobilePlan }}: to be confirmed" style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--faint);border-radius:4px;padding:1px 5px">◌ TBD</span></div>
+          </sc-for></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <span style="font:400 11px 'JetBrains Mono',monospace;color:var(--faint)">Showing {{ mobilePlan }} · switch level above</span>
+  </div>
+  </sc-if>
+</section>
+
+<section aria-labelledby="p-exp" data-screen-label="Plan explanations" style="max-width:1152px;margin:0 auto;padding:clamp(24px,3cqi,40px) 16px clamp(40px,5cqi,64px);box-sizing:border-box;display:grid;grid-template-columns:{{ expCols }};gap:24px 48px">
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Levels explained</span><h2 id="p-exp" style="margin:0;font-weight:700;font-size:clamp(22px,2cqi,28px);letter-spacing:-.01em">Which level fits how you use it</h2></div>
+  <dl style="margin:0;display:flex;flex-direction:column">
+    <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
+      <div style="display:grid;grid-template-columns:{{ expInner }};gap:4px 20px;padding:16px 0;border-top:1px solid var(--line)"><dt style="display:flex;flex-direction:column;gap:6px"><span style="font:600 15px Inter,sans-serif;color:var(--text)">{{ p.name }}</span><span role="img" aria-label="{{ p.depthLabel }}" style="display:flex;gap:2px;width:48px"><sc-for list="{{ p.depth }}" as="d" hint-placeholder-count="4"><span style="flex:1;height:3px;background:{{ d }}"></span></sc-for></span></dt><dd style="margin:0;font:400 14px/1.55 Inter,sans-serif;color:var(--text-secondary)">{{ p.intent }}</dd></div>
+    </sc-for>
+  </dl>
+</section>
+
+<section aria-labelledby="p-terms" data-screen-label="Commercial details" style="background:var(--panel);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div style="max-width:1152px;margin:0 auto;padding:clamp(40px,5cqi,64px) 16px;box-sizing:border-box;display:grid;grid-template-columns:{{ expCols }};gap:24px 48px">
+    <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">The details</span><h2 id="p-terms" style="margin:0;font-weight:700;font-size:clamp(22px,2cqi,28px);letter-spacing:-.01em">Billing and access, in plain terms</h2><p style="margin:0;font:400 14px/1.6 Inter,sans-serif;color:var(--muted)">Each policy will be stated here in one or two sentences, with a link to the full terms.</p></div>
+    <dl style="margin:0;display:grid;grid-template-columns:{{ termCols }};gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden">
+      <sc-for list="{{ terms }}" as="t" hint-placeholder-count="5">
+        <div style="background:var(--ink);padding:16px;display:flex;flex-direction:column;gap:8px"><dt style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text)">{{ t }}</dt><dd style="margin:0;display:flex;align-items:center;gap:8px;font:400 13px Inter,sans-serif;color:var(--faint)"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;border:1px dashed var(--faint);border-radius:4px;padding:0 5px">◌ PENDING</span>Not yet specified</dd></div>
+      </sc-for>
+    </dl>
+  </div>
+</section>
+
+<section aria-labelledby="p-faq" data-screen-label="FAQ" style="max-width:1152px;margin:0 auto;padding:clamp(40px,5cqi,64px) 16px;box-sizing:border-box;display:grid;grid-template-columns:{{ expCols }};gap:24px 48px">
+  <div style="display:flex;flex-direction:column;gap:8px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Questions</span><h2 id="p-faq" style="margin:0;font-weight:700;font-size:clamp(22px,2cqi,28px);letter-spacing:-.01em">Pricing questions</h2></div>
+  <div style="display:flex;flex-direction:column;border-bottom:1px solid var(--line)">
+    <sc-for list="{{ faq }}" as="q" hint-placeholder-count="6">
+      <div style="border-top:1px solid var(--line)">
+        <h3 style="margin:0"><button onClick="{{ q.toggle }}" aria-expanded="{{ q.open }}" style="width:100%;min-height:52px;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:0 4px;background:transparent;border:0;text-align:left;font:500 15px Inter,sans-serif;color:var(--text);cursor:pointer" style-hover="color:var(--amber)">{{ q.q }}<span aria-hidden="true" style="font:400 16px 'JetBrains Mono',monospace;color:var(--faint)">{{ q.caret }}</span></button></h3>
+        <sc-if value="{{ q.open }}" hint-placeholder-val="{{ false }}"><div style="padding:0 4px 16px;display:flex;align-items:center;gap:10px"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--faint);border-radius:4px;padding:1px 6px">◌ COMMERCIALLY PENDING</span><span style="font:400 13px Inter,sans-serif;color:var(--faint)">Answer written once the policy is set.</span></div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section aria-labelledby="p-cta" data-screen-label="CTA" style="background:var(--panel);border-top:1px solid var(--amber-dim);border-bottom:1px solid var(--line)">
+  <div style="max-width:1152px;margin:0 auto;padding:clamp(48px,6cqi,88px) 16px;box-sizing:border-box;display:flex;flex-direction:column;align-items:{{ ctaAlign }};text-align:{{ ctaText }};gap:16px">
+    <h2 id="p-cta" style="margin:0;font-weight:700;font-size:clamp(28px,3.2cqi,44px);line-height:1.1;letter-spacing:-.02em;text-wrap:balance">Not sure yet? Start with the fixtures.</h2>
+    <p style="margin:0;font:400 16px/1.6 Inter,sans-serif;color:var(--text-secondary);max-width:520px">Look around first, then choose the level that fits.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:{{ ctaAlign }};width:{{ ctaWidth }}">
+      <a style="display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;background:var(--amber);border:1px solid var(--amber);border-radius:4px;font:600 12px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:none;cursor:pointer;flex:{{ ctaFlex }}" style-hover="box-shadow:0 0 0 1px var(--amber-dim),0 0 24px -8px var(--amber);color:var(--ink)">Explore fixtures</a>
+      <a style="display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 24px;background:transparent;border:1px solid var(--line);border-radius:4px;font:500 12px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;cursor:pointer;flex:{{ ctaFlex }}" style-hover="background:var(--raised);color:var(--text)">How it works</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer data-screen-label="Footer" style="max-width:1152px;margin:0 auto;padding:40px 16px 32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px">
+  <div style="display:grid;grid-template-columns:{{ footCols }};gap:28px 24px">
+    <div style="display:flex;flex-direction:column;gap:8px;grid-column:{{ brandSpan }}"><span style="font:700 15px Inter,sans-serif;color:var(--text)">Pitch<span style="color:var(--amber)">Terminal</span></span><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Football Intelligence</span></div>
+    <sc-for list="{{ footer }}" as="g" hint-placeholder-count="4">
+      <nav aria-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:10px"><span style="font:400 10px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)">{{ g.title }}</span>
+        <sc-for list="{{ g.links }}" as="l" hint-placeholder-count="3"><a style="font:400 13px Inter,sans-serif;color:{{ l.c }};text-decoration:none;cursor:pointer" style-hover="color:var(--text)">{{ l.t }}</a></sc-for>
+      </nav>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding-top:16px;border-top:1px solid var(--line);font:400 11px 'JetBrains Mono',monospace;color:var(--faint)"><span>© PitchTerminal</span><span>Football intelligence. Not betting advice.</span></div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;bp&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { closed: {}, plan: 'Pro', faq: 0, mOpen: { 'Football discovery': true } };
+  renderVals() {
+    const bp = this.props.bp ?? 'desktop';
+    const D = bp === 'desktop', M = bp === 'mobile';
+    const one = '1fr';
+    const P = [
+      ['Guest', 'LEVEL 1', 'Look around PitchTerminal and its public football information without an account.', 'Explore', '→ Fixtures · no account', 'var(--panel)'],
+      ['Free', 'LEVEL 2', 'A broader set of football information with a free account.', 'Create account', '→ Sign up (B5)', 'var(--panel)'],
+      ['Pro', 'LEVEL 3', 'Deeper analytical and intelligence access.', 'Choose Pro', '→ Sign up → Checkout (B5 → B6)', 'var(--panel)'],
+      ['Elite', 'LEVEL 4', 'The highest level of product access.', 'Choose Elite', '→ Sign up → Checkout (B5 → B6)', 'var(--panel)']
+    ];
+    const plans = P.map(([name, level, intent, cta, route, bg], i) => ({
+      name, level, intent, cta, route, bg,
+      price: i === 0 ? 'No account' : 'Price TBD', priceNote: i === 0 ? 'Access without signing up' : 'Billing period not yet specified',
+      depth: [0, 1, 2, 3].map(k => k <= i ? 'var(--muted)' : 'var(--line)'),
+      depthLabel: 'Access depth ' + (i + 1) + ' of 4'
+    }));
+    const G = [
+      ['Football discovery', [['Fixtures & results'], ['Competitions & tables'], ['Teams']]],
+      ['Team & player analysis', [['Team form & performance'], ['Readiness'], ['Statistical attributes'], ['Player data']]],
+      ['Match intelligence', [['Match context'], ['Match intelligence readings']]],
+      ['Historical intelligence', [['Historical patterns'], ['Head-to-head']]],
+      ['Advanced access', [['Advanced analysis'], ['API access', true]]]
+    ];
+    const groups = G.map(([name, rows]) => {
+      const open = M ? !!this.state.mOpen[name] : !this.state.closed[name];
+      return { name, count: rows.length, open, caret: open ? '−' : '+',
+        rows: rows.map(([cap, future]) => ({ cap, future: !!future })),
+        toggle: () => M ? this.setState(s => ({ mOpen: { ...s.mOpen, [name]: !s.mOpen[name] } })) : this.setState(s => ({ closed: { ...s.closed, [name]: !s.closed[name] } })) };
+    });
+    const faqQ = ['What is included in each level?', 'Is there a free option?', 'Can I change level later?', 'When does access change after I switch?', 'How does billing work?', 'Is API access included?'];
+    return {
+      headerLayout: bp,
+      heroAlign: M ? 'flex-start' : 'center', heroText: M ? 'left' : 'center',
+      cardCols: D ? 'repeat(4,minmax(0,1fr))' : M ? one : 'repeat(2,minmax(0,1fr))',
+      showTable: !M, showSwitcher: M, matrixCols: D ? 'minmax(0,34fr) repeat(4,minmax(0,16.5fr))' : 'minmax(0,38fr) repeat(4,minmax(0,15.5fr))',
+      expCols: D ? 'minmax(0,4fr) minmax(0,8fr)' : one, expInner: M ? one : '140px minmax(0,1fr)',
+      termCols: M ? one : 'repeat(2,minmax(0,1fr))',
+      footCols: D ? 'minmax(0,2fr) repeat(4,minmax(0,1fr))' : M ? 'repeat(2,minmax(0,1fr))' : 'repeat(4,minmax(0,1fr))',
+      brandSpan: D ? 'auto' : '1 / -1',
+      ctaAlign: M ? 'stretch' : 'center', ctaText: M ? 'left' : 'center', ctaWidth: M ? '100%' : 'auto', ctaFlex: M ? '1 1 100%' : '0 0 auto',
+      plans, groups, tbd4: [1, 2, 3, 4],
+      groupNames: G.map(g => g[0]),
+      mobilePlan: this.state.plan,
+      planTabs: P.map(([name]) => { const on = name === this.state.plan; return { name, on, pick: () => this.setState({ plan: name }), bg: on ? 'var(--raised)' : 'var(--panel)', color: on ? 'var(--text)' : 'var(--muted)', border: on ? 'var(--amber)' : 'transparent' }; }),
+      terms: ['Billing frequency', 'Renewal', 'Cancellation', 'Payment', 'Access changes'],
+      faq: faqQ.map((q, i) => { const open = this.state.faq === i; return { q, open, caret: open ? '−' : '+', toggle: () => this.setState(s => ({ faq: s.faq === i ? -1 : i })) }; }),
+      footer: [
+        { title: 'Product', links: [{ t: 'Features', c: 'var(--text-secondary)' }, { t: 'Pricing', c: 'var(--text)' }] },
+        { title: 'Explore', links: ['Fixtures', 'Competitions', 'Teams', 'Players'].map(t => ({ t, c: 'var(--text-secondary)' })) },
+        { title: 'Account', links: ['Log in', 'Sign up'].map(t => ({ t, c: 'var(--text-secondary)' })) },
+        { title: 'Legal', links: ['Terms', 'Privacy'].map(t => ({ t, c: 'var(--text-secondary)' })) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

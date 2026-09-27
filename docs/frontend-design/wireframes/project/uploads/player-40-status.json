@@ -1,0 +1,30 @@
+﻿{
+    "player":  {
+                   "id":  "40",
+                   "fullName":  "Agustín Canobbio",
+                   "slug":  "agustin-canobbio-846413"
+               },
+    "asOf":  "2026-09-26T18:43:53.604Z",
+    "status":  {
+                   "code":  "NO_EXPLICIT_ABSENCE_RECORDED",
+                   "kinds":  [
+
+                             ]
+               },
+    "spells":  [
+
+               ],
+    "coverage":  {
+                     "type":  "RECORDED_ABSENCE",
+                     "complete":  false,
+                     "note":  "Recorded absence evidence only. \"NO_EXPLICIT_ABSENCE_RECORDED\" means no covering spell is on record — it does NOT prove the player is available."
+                 },
+    "provenance":  {
+                       "source":  "football.player_availability",
+                       "recordedVia":  "squad_ingestion",
+                       "spellsAreMutable":  true,
+                       "hasProviderAudit":  false,
+                       "asOf":  "2026-09-26T18:43:53.604Z",
+                       "note":  "Spells are accumulated by squad ingestion and mutated in place (closed/corrected); the substrate carries no provider_code/retrieved_at, so this is current best knowledge of stored spells, not an immutable provider audit trail."
+                   }
+}
