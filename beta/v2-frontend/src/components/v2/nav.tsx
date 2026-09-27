@@ -79,6 +79,60 @@ export function PrimaryNav({ variant = 'desktop' }: { variant?: 'desktop' | 'mob
   );
 }
 
+// ── mobile bottom navigation ─────────────────────────────────────────────────────
+
+// Simple inline SVG icons (no icon library). Decorative — each item also has a
+// visible text label, so the icon is aria-hidden.
+const ICON: Record<string, React.ReactNode> = {
+  Fixtures: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <rect x="3" y="4" width="14" height="13" rx="1.5" /><line x1="3" y1="8" x2="17" y2="8" /><line x1="7" y1="2.5" x2="7" y2="5" /><line x1="13" y1="2.5" x2="13" y2="5" />
+    </svg>
+  ),
+  Competitions: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path d="M6 3h8v3a4 4 0 0 1-8 0V3z" /><path d="M6 4.5H4v1a2 2 0 0 0 2 2" /><path d="M14 4.5h2v1a2 2 0 0 1-2 2" /><line x1="10" y1="10" x2="10" y2="14" /><line x1="7" y1="16.5" x2="13" y2="16.5" />
+    </svg>
+  ),
+  Teams: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <path d="M10 2.5l6 2v4.5c0 4-3 6-6 7-3-1-6-3-6-7V4.5l6-2z" />
+    </svg>
+  ),
+  Players: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <circle cx="10" cy="6.5" r="3" /><path d="M4 17c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5" />
+    </svg>
+  ),
+};
+
+/** The persistent mobile bottom navigation — the primary product navigation on
+ *  mobile (the top bar keeps only brand + Search + access). Fixed to the bottom with
+ *  a safe-area inset; active item uses the amber colour AND a top border + bolder
+ *  label (never colour alone). Hidden from `md` up (desktop uses the header nav). */
+export function BottomNav() {
+  const pathname = usePathname() ?? '';
+  return (
+    <nav aria-label="primary" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-panel md:hidden"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        {PRIMARY_NAV.map((it) => {
+          const on = it.isActive(pathname);
+          return (
+            <li key={it.href}>
+              <Link href={it.href} aria-current={on ? 'page' : undefined}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 56, textDecoration: 'none', color: on ? 'var(--amber)' : 'var(--muted)', borderTop: `2px solid ${on ? 'var(--amber)' : 'transparent'}`, marginTop: -1 }}>
+                {ICON[it.label]}
+                <span className="mono" style={{ fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', fontWeight: on ? 600 : 400 }}>{it.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
 // ── breadcrumb (current location) ────────────────────────────────────────────────
 
 export interface Crumb {

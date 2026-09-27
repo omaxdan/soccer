@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
-import { PrimaryNav } from "@/components/v2/nav";
+import { PrimaryNav, BottomNav } from "@/components/v2/nav";
 import { routes } from "@/lib/v2/routes";
 
 // PitchTerminal V2 shell.
@@ -104,24 +104,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href={routes.pricing()} className={AMBER_BTN}>Get access</Link>
               </div>
 
-              {/* Mobile: compact search + primary access */}
+              {/* Mobile: compact search + access entry points. The primary
+                  navigation lives in the fixed bottom bar (BottomNav), so there is no
+                  second header row on mobile. */}
               <div className="ml-auto flex items-center gap-2 md:hidden">
                 <SearchControl compact />
+                <Link href={routes.login()} className={GHOST_BTN}>Sign in</Link>
                 <Link href={routes.pricing()} className={AMBER_BTN}>Get access</Link>
               </div>
-            </div>
-
-            {/* Row 2 (mobile only): the primary nav, horizontally scrollable */}
-            <div className="-mx-4 border-t border-line px-4 md:hidden">
-              <PrimaryNav variant="mobile" />
             </div>
           </div>
         </header>
 
         {/* The shell provides the header/nav only; each page owns its own <main>
             landmark and content container, so this wrapper is a plain div (never a
-            second <main>). */}
-        <div className="min-w-0">{children}</div>
+            second <main>). On mobile the fixed bottom navigation overlaps content, so
+            reserve its height (plus the safe-area inset) below every page. */}
+        <div className="min-w-0 pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0">{children}</div>
+
+        {/* Persistent mobile primary navigation (hidden on desktop). */}
+        <BottomNav />
       </body>
     </html>
   );

@@ -165,6 +165,14 @@ body {
   scrollbar-width: none;
 }
 
+/* Live-status indicator pulse (Fixtures workspace). Colour comes from the caller
+   (currentColor / --amber); this only animates opacity, so it carries no palette.
+   The reduced-motion rule below neutralises it. */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
