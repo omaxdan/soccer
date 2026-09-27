@@ -104,4 +104,11 @@ export const routes = {
    *  subscription — it renders an honest "no subscription to confirm" state and never
    *  fabricates a confirmed subscription, plan, account or transaction. */
   subscriptionSuccess: (): string => '/subscription-success',
+  /** The public Terms document (B8 Legal). The approved legal copy is not published
+   *  yet, so the page renders an honest "awaiting approved text" state — no legal
+   *  policy is invented. */
+  terms: (): string => '/terms',
+  /** The public Privacy document (B8 Legal). Awaiting approved text — no policy is
+   *  invented. */
+  privacy: (): string => '/privacy',
 } as const;

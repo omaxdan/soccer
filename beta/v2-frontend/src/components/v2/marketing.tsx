@@ -86,8 +86,8 @@ export function MarketingFooter() {
         </nav>
         <nav aria-label="Legal" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span style={FOOT_GROUP_LABEL}>Legal</span>
-          <SoonText>Terms</SoonText>
-          <SoonText>Privacy</SoonText>
+          <Link href={routes.terms()} style={FOOT_LINK}>Terms</Link>
+          <Link href={routes.privacy()} style={FOOT_LINK}>Privacy</Link>
         </nav>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, paddingTop: 16, borderTop: '1px solid var(--line)', font: "400 11px 'JetBrains Mono',monospace", color: 'var(--faint)' }}>
