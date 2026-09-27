@@ -85,4 +85,6 @@ export const routes = {
   home: (): string => '/',
   /** The public Features / Intelligence page (B2). */
   features: (): string => '/features',
+  /** The public Pricing page (B3). */
+  pricing: (): string => '/pricing',
 } as const;

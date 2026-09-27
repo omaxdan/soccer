@@ -70,7 +70,7 @@ export function MarketingFooter() {
         <nav aria-label="Product" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span style={FOOT_GROUP_LABEL}>Product</span>
           <Link href={routes.features()} style={FOOT_LINK}>Features</Link>
-          <SoonText>Pricing</SoonText>
+          <Link href={routes.pricing()} style={FOOT_LINK}>Pricing</Link>
         </nav>
         <nav aria-label="Explore" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span style={FOOT_GROUP_LABEL}>Explore</span>
