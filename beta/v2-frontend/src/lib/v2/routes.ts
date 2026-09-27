@@ -99,4 +99,9 @@ export const routes = {
    *  payment provider or billing backend, so nothing is charged — the CTA is an honest
    *  unavailable state. An optional `plan` selects which level's summary to show. */
   checkout: (plan?: 'pro' | 'elite'): string => (plan ? `/checkout?plan=${plan}` : '/checkout'),
+  /** The public Subscription Success page (B7). There is no billing/subscription
+   *  backend and no verified payment confirmation, so this route is NOT proof of a
+   *  subscription — it renders an honest "no subscription to confirm" state and never
+   *  fabricates a confirmed subscription, plan, account or transaction. */
+  subscriptionSuccess: (): string => '/subscription-success',
 } as const;
