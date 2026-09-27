@@ -95,4 +95,8 @@ export const routes = {
    *  but there is no account-creation backend, so submitting is an honest unavailable
    *  state (no fake account or session). */
   signup: (): string => '/signup',
+  /** The public Checkout page (B6). A truthful checkout surface only: there is no
+   *  payment provider or billing backend, so nothing is charged — the CTA is an honest
+   *  unavailable state. An optional `plan` selects which level's summary to show. */
+  checkout: (plan?: 'pro' | 'elite'): string => (plan ? `/checkout?plan=${plan}` : '/checkout'),
 } as const;
