@@ -47,8 +47,13 @@ export function v2Path(base: string, path: string): string {
 
 /** Canonical internal V2 routes. Add future surfaces here, never as inline strings. */
 export const routes = {
-  /** Leagues index — the current V2 landing (the base itself). */
+  /** Leagues / Competitions index — the base itself (lists competition editions). */
   leagues: (): string => v2Path(V2_BASE, '/'),
+  /** The Fixtures collection/calendar. `/fixtures` is the clean current-date URL; a
+   *  `date` (YYYY-MM-DD, UTC) makes a directly-addressable date page. This is the
+   *  fixtures COLLECTION — an individual match uses `match()` / `/matches/{slug}`.
+   *  The date-specific page is built in Phase C; only the root exists today. */
+  fixtures: (date?: string): string => (date ? `/fixtures/${encodeURIComponent(date)}` : '/fixtures'),
   /** One competition edition's fixtures (match discovery). Accepts either a bare id
    *  (back-compatible; resolves the same) or an edition ref to build the readable
    *  `{competition}-{season}-{id}` slug. The API always receives the numeric id. */

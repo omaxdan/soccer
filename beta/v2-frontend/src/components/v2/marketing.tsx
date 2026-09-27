@@ -74,7 +74,7 @@ export function MarketingFooter() {
         </nav>
         <nav aria-label="Explore" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span style={FOOT_GROUP_LABEL}>Explore</span>
-          <Link href={routes.leagues()} style={FOOT_LINK}>Fixtures</Link>
+          <Link href={routes.fixtures()} style={FOOT_LINK}>Fixtures</Link>
           <Link href={routes.leagues()} style={FOOT_LINK}>Competitions</Link>
           <Link href={routes.teams()} style={FOOT_LINK}>Teams</Link>
           <Link href={routes.players()} style={FOOT_LINK}>Players</Link>

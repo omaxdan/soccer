@@ -18,23 +18,41 @@ import type { ApiEditionFixture } from '@/lib/v2/types';
 
 // ── primary navigation (in the shell header) ────────────────────────────────────
 
-/** The primary nav. Only surfaces that ACTUALLY exist as pages are listed — no
- *  placeholder items (the AppHeader design also carries Fixtures + a Search control,
- *  which stay out until Phase C / Phase I ship real pages, so the nav never links to
- *  a route that 404s). "Competitions" is the leagues/editions index. The active
- *  section is marked with the design's amber underline. Rendered in the shell header. */
+/** The primary application navigation — the four major exploration surfaces, shared
+ *  by the whole product (the header is global, never page-specific). Each item owns a
+ *  route FAMILY, so the active state is derived from the route hierarchy, not a single
+ *  path. The active section is marked with the design's amber underline.
+ *
+ *  Route model: Fixtures is the collection/calendar (/fixtures, /fixtures/YYYY-MM-DD);
+ *  an individual match (/v2/matches/{slug}) is reached FROM Fixtures/Competitions/
+ *  Teams/Search and shows Fixtures as its active section (matches belong to the
+ *  fixtures domain). Competitions is the leagues/editions index (/v2 + edition/
+ *  competition/country/venue surfaces). '/' is the public landing (home) and
+ *  activates NO section. */
 const PRIMARY_NAV: readonly { label: string; href: string; isActive: (p: string) => boolean }[] = [
-  // '/' is the public landing (home), NOT the Competitions section, so it is not
-  // matched here — no nav item is marked active on the landing.
-  { label: 'Competitions', href: routes.leagues(), isActive: (p) => p === '/v2' || p.startsWith('/v2/editions') || p.startsWith('/v2/competitions') || p.startsWith('/v2/countries') },
+  { label: 'Fixtures', href: routes.fixtures(), isActive: (p) => p === '/fixtures' || p.startsWith('/fixtures/') || p.startsWith('/v2/matches') },
+  { label: 'Competitions', href: routes.leagues(), isActive: (p) => p === '/v2' || p.startsWith('/v2/editions') || p.startsWith('/v2/competitions') || p.startsWith('/v2/countries') || p.startsWith('/v2/venues') },
   { label: 'Teams', href: routes.teams(), isActive: (p) => p.startsWith('/v2/teams') },
   { label: 'Players', href: routes.players(), isActive: (p) => p.startsWith('/v2/players') },
 ];
 
-export function PrimaryNav() {
+/** The primary nav. `desktop` is the inline header bar; `mobile` is the compact
+ *  horizontally-scrollable second row. Both share the active-state logic. */
+export function PrimaryNav({ variant = 'desktop' }: { variant?: 'desktop' | 'mobile' }) {
   const pathname = usePathname() ?? '';
+  const mobile = variant === 'mobile';
   return (
-    <nav aria-label="primary" style={{ marginLeft: 'auto', alignSelf: 'stretch', display: 'flex', gap: 20 }}>
+    <nav
+      aria-label="primary"
+      className={mobile ? 'no-scrollbar' : undefined}
+      style={{
+        display: 'flex',
+        gap: mobile ? 22 : 20,
+        alignSelf: mobile ? undefined : 'stretch',
+        height: mobile ? 40 : undefined,
+        overflowX: mobile ? 'auto' : undefined,
+      }}
+    >
       {PRIMARY_NAV.map((it) => {
         const on = it.isActive(pathname);
         return (
@@ -44,6 +62,7 @@ export function PrimaryNav() {
             aria-current={on ? 'page' : undefined}
             className="label-cap"
             style={{
+              flex: mobile ? 'none' : undefined,
               display: 'flex',
               alignItems: 'center',
               color: on ? 'var(--text)' : 'var(--muted)',
