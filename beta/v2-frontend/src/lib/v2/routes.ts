@@ -91,4 +91,8 @@ export const routes = {
    *  authentication backend is not implemented yet, so sign-in itself is an honest
    *  unavailable state (no fake session). */
   login: (): string => '/login',
+  /** The public Sign Up page (B5). Like Login, the UI + client validation are real,
+   *  but there is no account-creation backend, so submitting is an honest unavailable
+   *  state (no fake account or session). */
+  signup: (): string => '/signup',
 } as const;
