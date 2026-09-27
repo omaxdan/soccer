@@ -8,13 +8,13 @@ import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { resolveMatchTab } from '@/lib/v2/matchTabs';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
-import { RecentVenueForm, TeamIntelligencePanel, ReadingCard, FormStrip } from '@/components/v2/ui';
+import { RecentVenueForm, TeamIntelligencePanel, ReadingCard, EmptyState } from '@/components/v2/ui';
 import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
-import { MatchLineupsPanel, MatchVenuePanel, MatchLifecyclePanel } from '@/components/v2/match';
+import { MatchLineupsPanel, MatchLifecyclePanel } from '@/components/v2/match';
 import { MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
 import {
   MatchHeader, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
-  CompactForm, CompactVenue, AvailabilityFooter, HeadToHeadUnavailable, MatchStatisticsFull,
+  CompactForm, CompactVenue, AvailabilityFooter, MatchStatisticsFull,
   LineupsUnavailable, MatchGovernedSignals,
 } from '@/components/v2/matchOverview';
 import type {
@@ -91,7 +91,10 @@ export default async function V2MatchPage({ params, searchParams }: {
       <MatchTabNav slug={slug} active={tab} />
 
       <div className="space-y-4" style={{ minWidth: 0 }}>
-        {/* OVERVIEW — "what matters about this match?" */}
+        {/* OVERVIEW — "what matters about this match?" The design consolidates the
+            former Comparison / Form / H2H / Venue tabs here: the team comparison,
+            a compact recent-form summary and a compact venue card all live in the
+            Overview landing, with venue also in the match header. */}
         {tab === 'overview' && (
           <div className="space-y-4">
             <IntelligenceBoard detail={detail} />
@@ -104,36 +107,16 @@ export default async function V2MatchPage({ params, searchParams }: {
                 <MatchProgression stats={stats} result={result} />
               </div>
             )}
+            {/* Team comparison — folded in from the former Comparison tab. */}
+            <section className="space-y-2">
+              <p className="eyebrow">Team comparison</p>
+              <TeamIntelligencePanel home={detail.teamFeatures.home} away={detail.teamFeatures.away} homeName={homeName} awayName={awayName} />
+            </section>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <CompactForm detail={detail} slug={slug} />
-              <CompactVenue venue={venue} slug={slug} />
+              <CompactForm detail={detail} />
+              <CompactVenue venue={venue} />
             </div>
             <AvailabilityFooter flags={coverage} />
-          </div>
-        )}
-
-        {/* COMPARISON — "how do the two teams compare?" */}
-        {tab === 'comparison' && (
-          <section className="space-y-2">
-            <p className="eyebrow">Team comparison</p>
-            <TeamIntelligencePanel home={detail.teamFeatures.home} away={detail.teamFeatures.away} homeName={homeName} awayName={awayName} />
-          </section>
-        )}
-
-        {/* FORM — "what has each team done recently?" */}
-        {tab === 'form' && (
-          <div className="space-y-4">
-            <section className="space-y-2">
-              <p className="eyebrow">Recent results</p>
-              <div className="panel" style={{ padding: 12, display: 'grid', gap: 10 }}>
-                <div><p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>{homeName}</p><FormStrip fixtures={detail.form.home} /></div>
-                <div><p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>{awayName}</p><FormStrip fixtures={detail.form.away} /></div>
-              </div>
-            </section>
-            <section className="space-y-2">
-              <p className="eyebrow">Recent venue form</p>
-              <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
-            </section>
           </div>
         )}
 
@@ -141,22 +124,12 @@ export default async function V2MatchPage({ params, searchParams }: {
             itself is unavailable (MatchLineupsPanel handles absent/partial coverage). */}
         {tab === 'lineups' && (lineupsRes ? <MatchLineupsPanel lineups={lineupsRes.lineups} /> : <LineupsUnavailable />)}
 
-        {/* H2H — "what has happened between these teams historically?" */}
-        {tab === 'h2h' && <HeadToHeadUnavailable />}
-
-        {/* STATISTICS — "what actually happened on the pitch?" */}
+        {/* STATISTICS — "what actually happened on the pitch?" Uses the observed
+            team-statistics read (ALL / 1ST / 2ND, grouped home vs away). */}
         {tab === 'statistics' && (
           stats
             ? <MatchStatisticsFull stats={stats} homeName={homeName} awayName={awayName} />
             : <MatchStatePanel detail={detail} result={result} />
-        )}
-
-        {/* VENUE — "what venue / location context surrounds this fixture?" */}
-        {tab === 'venue' && (
-          <div className="space-y-4">
-            {venueRes && <MatchVenuePanel matchVenue={{ venue: venueRes.venue, isNeutralVenue: venueRes.isNeutralVenue, coverage: venueRes.coverage }} />}
-            {lifecycleRes && <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />}
-          </div>
         )}
 
         {/* INTELLIGENCE — "why does PitchTerminal see it that way?" */}
@@ -193,6 +166,21 @@ export default async function V2MatchPage({ params, searchParams }: {
               <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
             </section>
             {!sealed && <IntelligenceUnavailable />}
+          </div>
+        )}
+
+        {/* TIMELINE — "how did this fixture's state progress?" The observed status
+            history (lifecycle transitions). Minute-by-minute match events are not part
+            of the payload, so that surface is an honest unavailable state, never faked. */}
+        {tab === 'timeline' && (
+          <div className="space-y-4">
+            {lifecycleRes
+              ? <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />
+              : <EmptyState message="No status history is available for this fixture yet." />}
+            <section className="space-y-2">
+              <p className="eyebrow">Match events</p>
+              <EmptyState message="Minute-by-minute match events are not available for this fixture." />
+            </section>
           </div>
         )}
       </div>

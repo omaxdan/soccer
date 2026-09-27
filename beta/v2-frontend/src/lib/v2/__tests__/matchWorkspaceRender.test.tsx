@@ -88,15 +88,18 @@ describe('MatchBrief — scheduled (no fabricated score)', () => {
 
 describe('MatchTabNav', () => {
   const markup = html(<MatchTabNav slug="flamengo-vs-mirassol-344" active="statistics" />);
-  test('renders eight tabs; default (overview) is the clean URL; active marked', () => {
+  test('renders the five consolidated tabs; default (overview) is the clean URL; active marked', () => {
     assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344"/);           // overview = clean
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=comparison"/);
-    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=form"/);
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=lineups"/);
     assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=statistics"/);
     assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=intelligence"/);
+    assert.match(markup, /href="\/v2\/matches\/flamengo-vs-mirassol-344\?tab=timeline"/);
     assert.match(markup, /aria-current="page"/);
-    assert.equal(MATCH_TABS.length, 8);
+    assert.equal(MATCH_TABS.length, 5);
     assert.equal(MATCH_TABS[0].key, 'overview');
+    // The former Comparison/Form/H2H/Venue tabs are consolidated away, not linked.
+    assert.equal(markup.includes('?tab=comparison'), false);
+    assert.equal(markup.includes('?tab=venue'), false);
   });
 });
 
@@ -108,12 +111,17 @@ describe('Collapsible', () => {
 });
 
 describe('match tab helpers (pure)', () => {
-  test('resolveMatchTab defaults to overview; accepts known tabs', () => {
+  test('resolveMatchTab defaults to overview; accepts known tabs; folds legacy tabs to overview', () => {
     assert.equal(resolveMatchTab(undefined), 'overview');
     assert.equal(resolveMatchTab('nope'), 'overview');
-    assert.equal(resolveMatchTab('comparison'), 'comparison');
     assert.equal(resolveMatchTab('statistics'), 'statistics');
     assert.equal(resolveMatchTab('intelligence'), 'intelligence');
+    assert.equal(resolveMatchTab('timeline'), 'timeline');
+    // Legacy links to consolidated tabs land on Overview, where that content now lives.
+    assert.equal(resolveMatchTab('comparison'), 'overview');
+    assert.equal(resolveMatchTab('form'), 'overview');
+    assert.equal(resolveMatchTab('h2h'), 'overview');
+    assert.equal(resolveMatchTab('venue'), 'overview');
   });
   test('matchTabHref: default tab clean, others carry ?tab=', () => {
     assert.equal(matchTabHref('x-1', 'overview'), '/v2/matches/x-1');

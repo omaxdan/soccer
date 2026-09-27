@@ -1,22 +1,25 @@
 // MATCH HUB tabs — server-rendered via ?tab=, mirroring the edition tab pattern.
-// Each tab answers a DIFFERENT question about the fixture (Overview = "what matters?",
-// Comparison = "how do they compare?", Form = "what have they done recently?", …).
-// The default is Overview — the intelligence-first landing, never a raw comparison.
+// Reconciled to the Claude Design Match workspace: five tabs, each answering a
+// DIFFERENT question about the fixture. The design intentionally CONSOLIDATES the
+// former Comparison / Form / H2H tabs into the Overview landing, folds Venue into the
+// match header + Overview, and adds Timeline (the fixture's status history + the
+// reading/context as of kickoff). The default is Overview — the intelligence-first
+// landing, never a raw comparison.
+//
+// Legacy links to a removed tab (?tab=comparison|form|h2h|venue) resolve to Overview,
+// where that content now lives — see resolveMatchTab.
 
 import { routes } from './routes';
 
 export type MatchTab =
-  | 'overview' | 'comparison' | 'form' | 'lineups' | 'h2h' | 'statistics' | 'venue' | 'intelligence';
+  | 'overview' | 'lineups' | 'statistics' | 'intelligence' | 'timeline';
 
 export const MATCH_TABS: readonly { readonly key: MatchTab; readonly label: string }[] = [
   { key: 'overview', label: 'Overview' },
-  { key: 'comparison', label: 'Comparison' },
-  { key: 'form', label: 'Form' },
   { key: 'lineups', label: 'Lineups' },
-  { key: 'h2h', label: 'H2H' },
   { key: 'statistics', label: 'Statistics' },
-  { key: 'venue', label: 'Venue' },
   { key: 'intelligence', label: 'Intelligence' },
+  { key: 'timeline', label: 'Timeline' },
 ];
 
 const TAB_KEYS = new Set<string>(MATCH_TABS.map((t) => t.key));

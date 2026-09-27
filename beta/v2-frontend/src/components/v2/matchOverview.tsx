@@ -409,13 +409,12 @@ export function MatchProgression({ stats, result }: { stats: MatchTeamStatistics
 
 // ═══ COMPACT PREVIEWS (Overview → link to canonical tab) ═════════════════════════════
 
-export function CompactForm({ detail, slug }: { detail: MatchDetailResponse; slug: string }) {
+export function CompactForm({ detail }: { detail: MatchDetailResponse }) {
+  // Recent form is folded into Overview (the design consolidates the former Form tab),
+  // so this is the canonical form surface — no "view full form" link to a removed tab.
   return (
     <section className="space-y-2">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <SectionTitle>Recent form</SectionTitle>
-        <DeeperLink href={matchTabHref(slug, 'form')}>View full form</DeeperLink>
-      </div>
+      <SectionTitle>Recent form</SectionTitle>
       <div className="panel" style={{ padding: 12, display: 'grid', gap: 10 }}>
         <div>
           <p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>{detail.match.homeTeam.name}</p>
@@ -430,13 +429,12 @@ export function CompactForm({ detail, slug }: { detail: MatchDetailResponse; slu
   );
 }
 
-export function CompactVenue({ venue, slug }: { venue: MatchVenueInfo | null; slug: string }) {
+export function CompactVenue({ venue }: { venue: MatchVenueInfo | null }) {
+  // Venue is folded into the match header + Overview (the design drops the standalone
+  // Venue tab). The venue name links to the full venue page, so no extra tab link.
   return (
     <section className="space-y-2">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <SectionTitle>Venue</SectionTitle>
-        <DeeperLink href={matchTabHref(slug, 'venue')}>View venue</DeeperLink>
-      </div>
+      <SectionTitle>Venue</SectionTitle>
       {!venue ? <EmptyState message="No venue recorded for this fixture." /> : (
         <div className="panel" style={{ padding: 12 }}>
           <p style={{ color: 'var(--text)', fontWeight: 600 }}><Link href={routes.venue(venue)} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{venue.name}</Link></p>

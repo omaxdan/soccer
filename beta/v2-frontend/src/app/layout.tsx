@@ -46,17 +46,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <span className="mono text-base font-bold tracking-tight text-text">
                 Pitch<span className="text-amber">Terminal</span>
               </span>
-              <span className="mono hidden text-[0.55rem] tracking-widest text-faint sm:inline">
-                v2
+              <span className="mono hidden rounded-term border border-line px-1 text-[0.5rem] font-medium tracking-[0.1em] text-faint sm:inline">
+                V2
               </span>
             </Link>
             <span className="hidden h-4 w-px bg-line sm:block" />
-            <span className="mono hidden text-[0.6rem] tracking-wide text-muted sm:block">
+            <span className="eyebrow hidden sm:block">
               Football Intelligence
             </span>
-            <div className="ml-auto">
-              <PrimaryNav />
-            </div>
+            <PrimaryNav />
           </div>
         </header>
 

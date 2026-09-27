@@ -1,31 +1,59 @@
-// V2 SHELL NAVIGATION — presentational continuity components (read-only, SSR).
+'use client';
+// V2 SHELL NAVIGATION — presentational continuity components (read-only, SSR-safe).
 //
 // The stable navigation primitives the V2 shell and pages share: primary nav,
 // breadcrumb (current location), and match prev/next. They render links exclusively
 // through the centralized route helpers, so they carry no hardcoded /v2 (or /pitch)
 // and flatten cleanly at the root-domain cutover. No data fetching, no calculation.
+//
+// This module is a client component only so PrimaryNav can mark the active section
+// from the current pathname (the AppHeader design's amber-underline active state).
+// `usePathname()` returns null outside a router (e.g. static-markup unit tests), in
+// which case no item is marked active and every link still renders.
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { routes } from '@/lib/v2/routes';
 import type { ApiEditionFixture } from '@/lib/v2/types';
 
 // ── primary navigation (in the shell header) ────────────────────────────────────
 
-/** The primary nav. Only surfaces that actually exist as pages are listed — no
- *  placeholder items. Rendered in the app shell header. */
+/** The primary nav. Only surfaces that ACTUALLY exist as pages are listed — no
+ *  placeholder items (the AppHeader design also carries Fixtures + a Search control,
+ *  which stay out until Phase C / Phase I ship real pages, so the nav never links to
+ *  a route that 404s). "Competitions" is the leagues/editions index. The active
+ *  section is marked with the design's amber underline. Rendered in the shell header. */
+const PRIMARY_NAV: readonly { label: string; href: string; isActive: (p: string) => boolean }[] = [
+  { label: 'Competitions', href: routes.leagues(), isActive: (p) => p === '/v2' || p === '/' || p.startsWith('/v2/editions') || p.startsWith('/v2/competitions') || p.startsWith('/v2/countries') },
+  { label: 'Teams', href: routes.teams(), isActive: (p) => p.startsWith('/v2/teams') },
+  { label: 'Players', href: routes.players(), isActive: (p) => p.startsWith('/v2/players') },
+];
+
 export function PrimaryNav() {
-  const items: { label: string; href: string }[] = [
-    { label: 'Leagues', href: routes.leagues() },
-    { label: 'Teams', href: routes.teams() },
-    { label: 'Players', href: routes.players() },
-  ];
+  const pathname = usePathname() ?? '';
   return (
-    <nav aria-label="primary" style={{ display: 'flex', gap: 14 }}>
-      {items.map((it) => (
-        <Link key={it.href} href={it.href} className="label-cap" style={{ color: 'var(--muted)', textDecoration: 'none' }}>
-          {it.label}
-        </Link>
-      ))}
+    <nav aria-label="primary" style={{ marginLeft: 'auto', alignSelf: 'stretch', display: 'flex', gap: 20 }}>
+      {PRIMARY_NAV.map((it) => {
+        const on = it.isActive(pathname);
+        return (
+          <Link
+            key={it.href}
+            href={it.href}
+            aria-current={on ? 'page' : undefined}
+            className="label-cap"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              color: on ? 'var(--text)' : 'var(--muted)',
+              borderBottom: `2px solid ${on ? 'var(--amber)' : 'transparent'}`,
+              marginBottom: -1,
+              textDecoration: 'none',
+            }}
+          >
+            {it.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
