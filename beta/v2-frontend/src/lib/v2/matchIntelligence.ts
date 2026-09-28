@@ -288,3 +288,65 @@ export function moduleStatusDescriptor(status: string): ModuleStatusDescriptor {
     default: return { label: status.toLowerCase(), tone: 'neutral', engaged: status !== 'INACTIVE' };
   }
 }
+
+// ── user-facing helpers for the reconciled Match Intelligence surface ─────────────
+//
+// These translate the read contract into product language WITHOUT exposing internal
+// ids, checksums, versions or the words snapshot/sealed/governed/provenance. They
+// compute no football — only date formatting, subject labelling and code→word maps.
+
+import type { IntelligenceProvenance } from './types';
+
+/** A compact UTC date, e.g. "7 Sep 2026" (no time) for the reading provenance line. */
+export function shortUtcDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/** The three user-facing dates for the reading: when it was taken (kickoff), when it
+ *  was locked, and the date its evidence runs to. No ids/checksums/versions. */
+export function readingDates(
+  provenance: IntelligenceProvenance,
+  modules: readonly IntelligenceModuleReading[],
+  cited: readonly CitedEvidenceItem[],
+): { takenAt: string; lockedAt: string; evidenceAsOf: string | null } {
+  const times: number[] = [];
+  for (const m of modules) { const t = Date.parse(m.asOf); if (!Number.isNaN(t)) times.push(t); }
+  for (const c of cited) { const t = Date.parse(c.citedAsOf); if (!Number.isNaN(t)) times.push(t); }
+  const evidenceAsOf = times.length ? new Date(Math.max(...times)).toISOString() : null;
+  return { takenAt: provenance.snapshotAsOf, lockedAt: provenance.sealedAt, evidenceAsOf };
+}
+
+/** The subject a module/evidence row is about: the home or away team name, or, for a
+ *  fixture-subject reading, "Fixture". Never an internal id. */
+export function subjectLabel(
+  subjectKindCode: string, subjectTeamId: string | null,
+  homeTeamId: string | null, homeName: string, awayTeamId: string | null, awayName: string,
+): string {
+  if (subjectKindCode !== 'TEAM') return 'Fixture';
+  if (subjectTeamId && subjectTeamId === homeTeamId) return homeName;
+  if (subjectTeamId && subjectTeamId === awayTeamId) return awayName;
+  return 'Fixture';
+}
+
+/** Provenance class → a plain word. RECORDED → "Recorded", DERIVED → "Derived". */
+export function evidenceKindLabel(code: string): string {
+  const c = code.toUpperCase();
+  if (c === 'RECORDED') return 'Recorded';
+  if (c === 'DERIVED') return 'Derived';
+  return c.charAt(0) + c.slice(1).toLowerCase();
+}
+
+export interface StatusWord { word: string; color: string; engaged: boolean }
+/** A module consensus status as a plain word + semantic colour. These four words are
+ *  the product's own consensus vocabulary (§17), not backend jargon. */
+export function moduleStatusWord(status: string): StatusWord {
+  switch (status.toUpperCase()) {
+    case 'SUPPORTS': return { word: 'Supports', color: 'var(--edge)', engaged: true };
+    case 'CONTRADICTS': return { word: 'Contradicts', color: 'var(--risk)', engaged: true };
+    case 'NEUTRAL': return { word: 'Neutral', color: 'var(--muted)', engaged: true };
+    case 'INACTIVE': return { word: 'Not enough data', color: 'var(--faint)', engaged: false };
+    default: return { word: status.charAt(0) + status.slice(1).toLowerCase(), color: 'var(--muted)', engaged: status.toUpperCase() !== 'INACTIVE' };
+  }
+}

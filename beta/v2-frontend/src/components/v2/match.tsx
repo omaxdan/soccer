@@ -202,20 +202,23 @@ export function MatchLifecyclePanel({ lifecycle }: { lifecycle: MatchLifecycle }
   const { transitions, coverage } = lifecycle;
   return (
     <section className="space-y-2">
-      <Eyebrow label="Lifecycle" count={transitions.length} />
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <p className="eyebrow">Status history</p>
+        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>{transitions.length}</span>
+      </div>
       {coverage.transitions === 'absent' || transitions.length === 0 ? (
-        <EmptyState message="No lifecycle transitions recorded." />
+        <EmptyState message="No status history recorded for this fixture." />
       ) : (
         <div className="panel" style={{ padding: 8, overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-            <thead><tr><th style={th}>When</th><th style={th}>From</th><th style={th}>To</th><th style={th}>Provider</th></tr></thead>
+            <caption className="sr-only">Fixture status history, in order.</caption>
+            <thead><tr><th scope="col" style={th}>When</th><th scope="col" style={th}>From</th><th scope="col" style={th}>To</th></tr></thead>
             <tbody>
               {transitions.map((t, i) => (
                 <tr key={`${t.transitionedAt}-${i}`}>
                   <td style={tdL} className="tnum"><Kickoff iso={t.transitionedAt} /></td>
                   <td style={tdL}>{orDash(t.fromState?.displayName ?? t.fromState?.code)}</td>
                   <td style={tdL}>{t.toState.displayName ?? t.toState.code}</td>
-                  <td style={tdL}>{orDash(t.providerStatusRaw)}</td>
                 </tr>
               ))}
             </tbody>

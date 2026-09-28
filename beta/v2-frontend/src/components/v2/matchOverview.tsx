@@ -16,10 +16,24 @@ import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
 import { Kickoff, StatusChip, FormStrip, EmptyState, ReadingCard } from '@/components/v2/ui';
 import { matchTabHref } from '@/lib/v2/matchTabs';
+import { statusPresentation } from '@/lib/v2/fixtures';
 import type {
-  MatchDetailResponse, MatchTeamStatistics, MatchResult, MatchVenueInfo,
+  MatchDetailResponse, MatchTeamStatistics, MatchResult, MatchVenueInfo, MatchIntelligence,
   TeamStatLine, ApiTeamFeatures, ApiFeatureValue, ApiModuleReading, PeriodStatistics,
 } from '@/lib/v2/types';
+
+/** Match status chip using the app-wide (Phase C) grammar: COMPLETED → FT (or AET/PEN
+ *  when the result carries extra time / penalties), SCHEDULED → UPCOMING, IN_PROGRESS →
+ *  LIVE, etc. Text + colour, never colour alone. */
+function MatchStatusChip({ status, result }: { status: string; result: MatchResult | null }) {
+  const p = statusPresentation(status, result);
+  return (
+    <span className="mono" aria-label={p.word}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: p.color, border: `1px ${p.dashed ? 'dashed' : 'solid'} ${p.color}`, borderRadius: 4, padding: '1px 7px' }}>
+      <span aria-hidden style={{ fontSize: 8, animation: p.live ? 'pulse-dot 1.8s ease-in-out infinite' : 'none' }}>{p.glyph}</span>{p.label}
+    </span>
+  );
+}
 
 // ── shared helpers ────────────────────────────────────────────────────────────────
 
@@ -71,11 +85,13 @@ function CompareBar({ home, away }: { home: number | null; away: number | null }
 
 // ═══ STATE-AWARE MATCH HEADER (permanent across all tabs) ════════════════════════════
 
-export function MatchHeader({ context, venue }: { context: MatchDetailResponse; venue: MatchVenueInfo | null }) {
+export function MatchHeader({ context, venue, result = null }: { context: MatchDetailResponse; venue: MatchVenueInfo | null; result?: MatchResult | null }) {
   const { match } = context;
   const completed = match.status === 'COMPLETED';
   const score = match.score;
   const place = venue ? [venue.name, venue.city].filter(Boolean).join(' · ') : null;
+  const ht = result?.halfTime ?? null;
+  const scoreLabel = completed && score ? `${match.homeTeam.name} ${score.home}, ${match.awayTeam.name} ${score.away}` : undefined;
   return (
     <header className={`panel${completed ? ' scanlines' : ''}`} style={{ padding: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
@@ -89,9 +105,12 @@ export function MatchHeader({ context, venue }: { context: MatchDetailResponse; 
         </div>
         <div style={{ textAlign: 'center' }}>
           {completed && score
-            ? <div className="mono tnum" style={{ fontSize: 34, fontWeight: 700, color: 'var(--text)', lineHeight: 1 }}>{score.home}<span style={{ color: 'var(--faint)', margin: '0 8px' }}>–</span>{score.away}</div>
-            : <div className="label-cap" style={{ fontSize: 16, color: 'var(--faint)' }}>vs</div>}
-          <div style={{ marginTop: 8 }}><StatusChip status={match.status} /></div>
+            ? <div className="mono tnum" aria-label={scoreLabel} style={{ fontSize: 34, fontWeight: 700, color: 'var(--text)', lineHeight: 1 }}>{score.home}<span style={{ color: 'var(--faint)', margin: '0 8px' }}>–</span>{score.away}</div>
+            : completed
+              ? <div className="mono" aria-label="No score recorded" style={{ fontSize: 30, color: 'var(--faint)', lineHeight: 1 }}>—</div>
+              : <div className="label-cap" style={{ fontSize: 16, color: 'var(--faint)' }}>vs</div>}
+          <div style={{ marginTop: 8 }}><MatchStatusChip status={match.status} result={result} /></div>
+          {ht && <div className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 4 }}>HT {ht.home} – {ht.away}</div>}
         </div>
         <div style={{ textAlign: 'left', minWidth: 0 }}>
           <Link href={routes.team(match.awayTeam)} style={{ fontWeight: 700, fontSize: 20, color: 'var(--text)', textDecoration: 'none' }}>{match.awayTeam.name}</Link>
@@ -103,6 +122,42 @@ export function MatchHeader({ context, venue }: { context: MatchDetailResponse; 
         {place ? <> · {venue ? <Link href={routes.venue(venue)} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{place}</Link> : place}{venue?.countryCode ? <span style={{ color: 'var(--faint)' }}> · {venue.countryCode}</span> : null}</> : null}
       </p>
     </header>
+  );
+}
+
+// ═══ INTELLIGENCE AT KICKOFF — Overview summary of the reading (links to the tab) ════
+//
+// A compact summary of the reading taken at kickoff: the non-directional consensus
+// counts and evidence completeness, with a link into the full Intelligence tab. Values
+// are read verbatim from the reading; nothing is recomputed. Rendered only when a
+// reading exists.
+
+export function IntelligenceAtKickoff({ intelligence, slug }: { intelligence: MatchIntelligence; slug: string }) {
+  const v = intelligence.verdict;
+  const cells: readonly { label: string; value: number; color: string }[] = [
+    { label: 'Supports', value: v.consensusSupportsCount, color: 'var(--edge)' },
+    { label: 'Contradicts', value: v.consensusContradictsCount, color: 'var(--risk)' },
+    { label: 'Neutral', value: v.consensusNeutralCount, color: 'var(--muted)' },
+    { label: 'Not enough data', value: v.consensusInactiveCount, color: 'var(--faint)' },
+  ];
+  return (
+    <section className="space-y-2">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <SectionTitle>Intelligence at kickoff</SectionTitle>
+        <DeeperLink href={matchTabHref(slug, 'intelligence')}>Open intelligence</DeeperLink>
+      </div>
+      <div className="panel" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 12 }}>
+        {cells.map((c) => (
+          <div key={c.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span className="mono tnum" style={{ color: c.color, fontSize: 20, fontWeight: 700 }}>{c.value}</span>
+            <span className="label-cap" style={{ color: 'var(--muted)', fontSize: 9 }}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Module consensus at kickoff · {intelligence.verdict.evidenceCount} with evidence. Descriptive signals — not a forecast.
+      </p>
+    </section>
   );
 }
 
@@ -263,9 +318,9 @@ export function MatchGovernedSignals({ modules }: { modules: readonly ApiModuleR
   const byKey = new Map(modules.map((m) => [m.moduleKey, m]));
   return (
     <section className="space-y-2">
-      <SectionTitle tag="Governed">Match signals</SectionTitle>
+      <SectionTitle>Match signals</SectionTitle>
       {modules.length === 0 ? (
-        <EmptyState message="Governed match signals are not available for this fixture yet." />
+        <EmptyState message="Match signals are not available for this fixture yet." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {MATCH_MODULE_ORDER.map((k) => (
@@ -295,6 +350,7 @@ export function MatchStatePanel({ detail, result }: { detail: MatchDetailRespons
           {result.extraTime ? <><span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Extra time</span><span /><span className="mono tnum" style={{ color: 'var(--text)', textAlign: 'right' }}>{result.extraTime.home} – {result.extraTime.away}</span></> : null}
           {result.penalties ? <><span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Penalties</span><span /><span className="mono tnum" style={{ color: 'var(--text)', textAlign: 'right' }}>{result.penalties.home} – {result.penalties.away}</span></> : null}
         </div>
+        {result.confirmedAt && <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>Confirmed <Kickoff iso={result.confirmedAt} /></p>}
       </section>
     );
   }

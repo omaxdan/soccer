@@ -105,10 +105,13 @@ describe('Venue (context only)', () => {
   });
 });
 
-describe('Lifecycle', () => {
-  test('renders transitions from→to with provider raw', () => {
+describe('Status history', () => {
+  test('renders transitions from→to as status history, without exposing the raw provider status', () => {
     const t = text(<MatchLifecyclePanel lifecycle={LIFECYCLE} />);
-    assert.match(t, /Scheduled/); assert.match(t, /Completed/); assert.match(t, /finished/);
+    assert.match(t, /Status history/);
+    assert.match(t, /Scheduled/); assert.match(t, /Completed/);
+    assert.doesNotMatch(t, /finished/i);   // providerStatusRaw is internal — never shown
+    assert.doesNotMatch(t.toLowerCase(), /provider/);
   });
 });
 

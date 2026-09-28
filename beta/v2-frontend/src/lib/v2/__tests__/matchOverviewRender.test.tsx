@@ -143,16 +143,12 @@ describe('Governed match signals (fixture-subject modules)', () => {
     assert.match(t, /not available for this fixture yet/i);
     assert.doesNotMatch(t, /stronger/i);   // no fabricated verdict
   });
-  test('renders governed verdicts verbatim, badged governed', () => {
-    const markup = html(<MatchGovernedSignals modules={[
-      mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
-      mr('rest_advantage', 'NEUTRAL', 'Even rest: both sides on 4 days.'),
-    ]} />);
-    assert.match(markup, /governed/i);      // SectionTitle governed tag
+  test('renders module verdicts verbatim, without exposing the "governed" label', () => {
     const t = text(<MatchGovernedSignals modules={[
       mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
       mr('rest_advantage', 'NEUTRAL', 'Even rest: both sides on 4 days.'),
     ]} />);
+    assert.doesNotMatch(t.toLowerCase(), /governed/);   // internal term — never surfaced
     assert.match(t, /Recent form edge/); assert.match(t, /Home venue form stronger by 12\.50\./);
     assert.match(t, /Rest/); assert.match(t, /Even rest: both sides on 4 days\./);
   });

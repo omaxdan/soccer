@@ -8,12 +8,15 @@ import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { resolveMatchTab } from '@/lib/v2/matchTabs';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
-import { RecentVenueForm, TeamIntelligencePanel, ReadingCard, EmptyState } from '@/components/v2/ui';
-import { ProvenanceBar, VerdictBand, ModulesBand, PreparednessBand, CitedEvidencePanel, IntelligenceUnavailable } from '@/components/v2/intelligence';
-import { MatchLineupsPanel, MatchLifecyclePanel } from '@/components/v2/match';
-import { MatchTabNav, Collapsible, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
+import { TeamIntelligencePanel, EmptyState } from '@/components/v2/ui';
 import {
-  MatchHeader, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
+  ReadingAtKickoff, ModuleReadings, CitedEvidenceTable, HistoricalResponse, NearFutureNote,
+  IntelligenceUnavailable,
+} from '@/components/v2/intelligence';
+import { MatchLineupsPanel, MatchLifecyclePanel } from '@/components/v2/match';
+import { MatchTabNav, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
+import {
+  MatchHeader, IntelligenceAtKickoff, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
   CompactForm, CompactVenue, AvailabilityFooter, MatchStatisticsFull,
   LineupsUnavailable, MatchGovernedSignals,
 } from '@/components/v2/matchOverview';
@@ -78,8 +81,11 @@ export default async function V2MatchPage({ params, searchParams }: {
     ['Intelligence', sealed ? 'present' : 'absent'],
   ];
 
+  // Breadcrumb: Fixtures (by the match's UTC date, per the Fixtures workspace) →
+  // Competition · Season (the Edition workspace) → this match.
+  const matchDate = match.kickoffAt.slice(0, 10);
   const crumbs = [
-    { label: 'Matches', href: routes.leagues() },
+    { label: 'Fixtures', href: routes.fixtures(matchDate) },
     { label: `${match.competition.name} · ${match.edition.seasonLabel}`, href: editionHref },
     { label: `${homeName} vs ${awayName}` },
   ];
@@ -87,7 +93,7 @@ export default async function V2MatchPage({ params, searchParams }: {
   return (
     <main className={MATCH_MAIN_CLASS}>
       <Breadcrumb items={crumbs} />
-      <MatchHeader context={detail} venue={venue} />
+      <MatchHeader context={detail} venue={venue} result={result} />
       <MatchTabNav slug={slug} active={tab} />
 
       <div className="space-y-4" style={{ minWidth: 0 }}>
@@ -97,10 +103,11 @@ export default async function V2MatchPage({ params, searchParams }: {
             Overview landing, with venue also in the match header. */}
         {tab === 'overview' && (
           <div className="space-y-4">
+            <MatchStatePanel detail={detail} result={result} />
+            {sealed && <IntelligenceAtKickoff intelligence={sealed.intelligence} slug={slug} />}
             <IntelligenceBoard detail={detail} />
             <KeySignals detail={detail} stats={stats} />
             <MatchGovernedSignals modules={detail.matchModules} />
-            <MatchStatePanel detail={detail} result={result} />
             {completed && stats && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <KeyMatchEvidence stats={stats} slug={slug} />
@@ -132,40 +139,26 @@ export default async function V2MatchPage({ params, searchParams }: {
             : <MatchStatePanel detail={detail} result={result} />
         )}
 
-        {/* INTELLIGENCE — "why does PitchTerminal see it that way?" */}
+        {/* INTELLIGENCE — the reading taken at kickoff. Only the locked reading is shown
+            here (never the live-context module readings): the reading at kickoff, the
+            module readings behind it, the evidence it cited, how each side has responded
+            historically, and an honest near-future note. */}
         {tab === 'intelligence' && (
           <div className="space-y-4">
-            {sealed && (
+            {sealed ? (
               <>
-                <ProvenanceBar provenance={sealed.intelligence.provenance} />
-                <VerdictBand verdict={sealed.intelligence.verdict} />
-                <ModulesBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
-                <PreparednessBand intelligence={sealed.intelligence} homeName={homeName} awayName={awayName} />
-                <Collapsible summary="Supporting data">
-                  <CitedEvidencePanel citedEvidence={sealed.intelligence.citedEvidence} />
-                </Collapsible>
+                <ReadingAtKickoff intelligence={sealed.intelligence} />
+                <ModuleReadings modules={sealed.intelligence.modules} homeTeamId={match.homeTeam.id} homeName={homeName} awayTeamId={match.awayTeam.id} awayName={awayName} />
+                <CitedEvidenceTable citedEvidence={sealed.intelligence.citedEvidence} homeTeamId={match.homeTeam.id} homeName={homeName} awayTeamId={match.awayTeam.id} awayName={awayName} />
+                <HistoricalResponse historicalResponse={detail.historicalResponse} homeName={homeName} awayName={awayName} />
+                <NearFutureNote />
+              </>
+            ) : (
+              <>
+                <IntelligenceUnavailable />
+                <HistoricalResponse historicalResponse={detail.historicalResponse} homeName={homeName} awayName={awayName} />
               </>
             )}
-            <section className="space-y-2">
-              <p className="eyebrow">Current signals</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <p className="label-cap" style={{ color: 'var(--muted)' }}>{homeName}</p>
-                  <ReadingCard title="Form momentum / trajectory" reading={detail.intelligence.home.readiness} />
-                  <ReadingCard title="Home / away split" reading={detail.intelligence.home.homeAwaySplit} />
-                </div>
-                <div className="space-y-2">
-                  <p className="label-cap" style={{ color: 'var(--muted)' }}>{awayName}</p>
-                  <ReadingCard title="Form momentum / trajectory" reading={detail.intelligence.away.readiness} />
-                  <ReadingCard title="Home / away split" reading={detail.intelligence.away.homeAwaySplit} />
-                </div>
-              </div>
-            </section>
-            <section className="space-y-2">
-              <p className="eyebrow">Supporting data</p>
-              <RecentVenueForm homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
-            </section>
-            {!sealed && <IntelligenceUnavailable />}
           </div>
         )}
 

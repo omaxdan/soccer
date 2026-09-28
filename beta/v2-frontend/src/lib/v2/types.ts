@@ -108,6 +108,24 @@ export interface MatchDetailResponse {
   // rest_advantage, travel_impact) — read at or before kickoff. Empty when none exist
   // yet; the UI renders an honest unavailable state, never a fabricated comparison.
   matchModules: ApiModuleReading[];
+  // How each side has historically responded after a win / after a loss (read model).
+  // Optional: not every fixture carries it.
+  historicalResponse?: { home: HistoricalResponseSide | null; away: HistoricalResponseSide | null } | null;
+}
+
+/** One trigger's historical response: how the team fared in the N matches after the
+ *  trigger (a win / a loss). `engaged` marks the trigger that applies to this fixture. */
+export interface HistoricalResponseTrigger {
+  engaged: boolean;
+  n: number;
+  response: { wins: number; draws: number; losses: number };
+}
+export interface HistoricalResponseSide {
+  subjectId: string;
+  scope: string;
+  asOf: string;
+  triggers: { POST_WIN: HistoricalResponseTrigger; POST_LOSS: HistoricalResponseTrigger };
+  anyEngaged: boolean;
 }
 
 export interface ApiEditionFixture {

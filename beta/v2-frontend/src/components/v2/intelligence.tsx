@@ -1,390 +1,301 @@
-// MATCH INTELLIGENCE — SEALED SURFACE COMPONENTS (read-only, SSR).
+// MATCH INTELLIGENCE — reading surface (read-only, SSR).
 //
-// Presentational components for the governed, sealed Match Intelligence. They
-// render the /api/v2/matches/:id/intelligence `intelligence` object and NOTHING
-// else — context is rendered by separate, clearly-labelled surfaces on the page so
-// the two can never be confused. These components:
-//   • surface provenance prominently (sealed snapshot, as-of, composition version);
-//   • show governed values, and honest "no governed value" / "not yet calibrated"
-//     states for null graded fields — never a fabricated 0 or percentage;
-//   • distinguish a preparedness component that is PRESENT (show its value, incl. a
-//     real 0) from one that is ABSENT (show "No data") — never zero-filling absence.
-// No data fetching, no calculation.
+// The Match Intelligence tab presents the reading taken at kickoff, in product
+// language. It renders the /matches/:id/intelligence contract WITHOUT exposing any
+// internal vocabulary — no "sealed", "governed", "snapshot", "provenance", version,
+// checksum or feature id ever reaches the page. It computes no football: consensus
+// counts, edges, module verdicts and cited values are shown exactly as supplied, and
+// a null edge / confidence / risk is an honest "not recorded", never a fabricated 0.
+//
+// Structure (per the Match wireframe): the reading at kickoff (dates + consensus +
+// edges), the module readings behind it, the evidence it cited, how each side has
+// responded historically, and an honest near-future note.
 
 import type {
-  MatchIntelligence, IntelligenceProvenance, IntelligenceVerdict,
-  PreparednessSideView, CitedEvidenceItem, IntelligenceModuleReading,
+  MatchIntelligence, IntelligenceVerdict, CitedEvidenceItem, IntelligenceModuleReading,
+  HistoricalResponseSide,
 } from '@/lib/v2/types';
 import {
-  VERDICT_GRADED_FIELDS, verdictFieldDisplay, resolveTeamComponents,
-  preparednessScoreDisplay, formatRatioPercent, formatProvenanceTime,
-  humanizeFeatureKey, trimNumericText, groupModuleReadings, moduleStatusDescriptor,
-  type ResolvedComponent, type GroupedModule, type ModuleTone,
+  formatRatioPercent, trimNumericText, humanizeFeatureKey,
+  shortUtcDate, readingDates, subjectLabel, evidenceKindLabel, moduleStatusWord,
 } from '@/lib/v2/matchIntelligence';
 
-// ── shared bits ──────────────────────────────────────────────────────────────
+// ── shared bits ──────────────────────────────────────────────────────────────────
 
-/** The badge that marks a surface as the governed, sealed calculation (vs context). */
-export function SealedBadge() {
-  return (
-    <span
-      className="label-cap"
-      title="Governed, immutable sealed snapshot — the calculation, not live context"
-      style={{
-        color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 4,
-        padding: '0 5px', fontSize: 9, whiteSpace: 'nowrap',
-      }}
-    >sealed · governed</span>
-  );
-}
-
-/** A value that is not yet governed/calibrated, rendered in the quiet tier so it
- *  never reads as a real value (and never as a zero). */
 function Unavailable({ text }: { text: string }) {
   return <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 11 }}>{text}</span>;
 }
 
-// ── 1. PROVENANCE BAR ──────────────────────────────────────────────────────────
-
-/**
- * Makes the origin of the intelligence obvious: this is a SEALED, governed
- * calculation, as of a point in time, under a named composition version — distinct
- * from the live/contextual information elsewhere on the page.
- */
-export function ProvenanceBar({ provenance }: { provenance: IntelligenceProvenance }) {
-  return (
-    <header
-      className="panel"
-      aria-label="match intelligence provenance"
-      style={{ padding: '12px 14px', borderColor: 'var(--amber)', background: 'color-mix(in srgb, var(--amber) 6%, var(--panel))' }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <p className="eyebrow" style={{ color: 'var(--amber)', letterSpacing: '0.16em' }}>Match Intelligence</p>
-        <SealedBadge />
-      </div>
-      <p className="label-cap tnum" style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 6, letterSpacing: '0.06em' }}>
-        Sealed snapshot · As of {formatProvenanceTime(provenance.snapshotAsOf)} · Composition {provenance.verdictCompositionVersion}
-      </p>
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8 }}>
-        <ProvenanceFact label="Snapshot" value={`#${provenance.matchSnapshotId} · ${provenance.snapshotPointCode.replace(/_/g, ' ')}`} />
-        <ProvenanceFact label="Sealed" value={formatProvenanceTime(provenance.sealedAt)} />
-        <ProvenanceFact label="Integrity" value={`checksum ${provenance.checksumAlgorithmVersion} · immutable`} />
-      </div>
-    </header>
-  );
-}
-
-function ProvenanceFact({ label, value }: { label: string; value: string }) {
-  return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column' }}>
-      <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{label}</span>
-      <span className="mono tnum" style={{ color: 'var(--muted)', fontSize: 11 }}>{value}</span>
-    </span>
-  );
-}
-
-// ── 2. VERDICT / EDGES BAND ──────────────────────────────────────────────────────
+// ── 1. READING AT KICKOFF (the NOW reading) ────────────────────────────────────────
 
 function CountChip({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <div className="panel-raised" style={{ padding: '8px 10px', borderRadius: 6, minWidth: 84, flex: '1 1 84px' }}>
+    <div className="panel-raised" style={{ padding: '8px 10px', borderRadius: 6, minWidth: 80, flex: '1 1 80px' }}>
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>{label}</p>
       <p className="mono tnum" style={{ fontSize: 18, fontWeight: 700, color, marginTop: 2 }}>{count}</p>
     </div>
   );
 }
 
+// The comparative edges the reading recorded, in order. Only non-null edges are shown;
+// the rest are summarised honestly ("not recorded") — never listed as zero.
+const EDGE_FIELDS: readonly { label: string; pick: (v: IntelligenceVerdict) => string | null }[] = [
+  { label: 'Form edge', pick: (v) => v.formEdge },
+  { label: 'Rest edge', pick: (v) => v.restEdge },
+  { label: 'Readiness edge', pick: (v) => v.readinessEdge },
+  { label: 'Travel edge', pick: (v) => v.travelEdge },
+  { label: 'Congestion edge', pick: (v) => v.congestionEdge },
+  { label: 'Availability edge', pick: (v) => v.availabilityEdge },
+];
+
 /**
- * The sealed verdict: non-directional module consensus counts + completeness, then
- * the governed comparative edges and the graded fields — with governed values shown
- * plainly and ungoverned/uncalibrated fields shown as honest unavailable states.
- * Never a forecast, a market figure, or a fabricated confidence.
+ * The reading at kickoff: when it was taken / locked / evidence-dated, the
+ * non-directional consensus across modules, the evidence completeness, and the
+ * comparative edges that were recorded. Edges/risk/confidence that were not recorded
+ * are stated as such, never shown as zero.
  */
-export function VerdictBand({ verdict }: { verdict: IntelligenceVerdict }) {
+export function ReadingAtKickoff({ intelligence }: { intelligence: MatchIntelligence }) {
+  const { verdict, modules, citedEvidence, provenance } = intelligence;
+  const dates = readingDates(provenance, modules, citedEvidence);
+  const edges = EDGE_FIELDS.map((e) => ({ label: e.label, value: e.pick(verdict) })).filter((e) => e.value !== null) as { label: string; value: string }[];
+  const missing = EDGE_FIELDS.filter((e) => e.pick(verdict) === null).map((e) => e.label);
   return (
-    <section className="space-y-3" aria-label="sealed verdict">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <p className="eyebrow" style={{ color: 'var(--amber)' }}>Verdict</p>
-        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>module consensus · non-directional</span>
+    <section className="space-y-3" aria-label="reading at kickoff">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <p className="eyebrow" style={{ color: 'var(--amber)', letterSpacing: '0.16em' }}>Reading at kickoff</p>
       </div>
+      <p className="label-cap tnum" style={{ color: 'var(--text-secondary)', fontSize: 11, letterSpacing: '0.04em' }}>
+        Taken at kickoff {shortUtcDate(dates.takenAt)} · Locked {shortUtcDate(dates.lockedAt)}
+        {dates.evidenceAsOf ? ` · Evidence as of ${shortUtcDate(dates.evidenceAsOf)}` : ''}
+      </p>
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <CountChip label="Supports" count={verdict.consensusSupportsCount} color="var(--edge)" />
         <CountChip label="Contradicts" count={verdict.consensusContradictsCount} color="var(--risk)" />
         <CountChip label="Neutral" count={verdict.consensusNeutralCount} color="var(--muted)" />
-        <CountChip label="Inactive" count={verdict.consensusInactiveCount} color="var(--faint)" />
+        <CountChip label="Not enough data" count={verdict.consensusInactiveCount} color="var(--faint)" />
       </div>
-      <div className="panel" style={{ padding: '10px 12px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-          <span className="label-cap" style={{ color: 'var(--text-secondary)' }}>Evidence completeness</span>
-          <span className="mono tnum" style={{ color: 'var(--text)', fontWeight: 700 }}>
-            {formatRatioPercent(verdict.completenessRatio)}
-            <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginLeft: 6 }}>
-              {verdict.evidenceCount} module{verdict.evidenceCount === 1 ? '' : 's'} with evidence
-            </span>
+
+      <div className="panel" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span className="label-cap" style={{ color: 'var(--text-secondary)' }}>Evidence completeness</span>
+        <span className="mono tnum" style={{ color: 'var(--text)', fontWeight: 700 }}>
+          {formatRatioPercent(verdict.completenessRatio)}
+          <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginLeft: 6 }}>
+            {verdict.evidenceCount} module{verdict.evidenceCount === 1 ? '' : 's'} with evidence
           </span>
-        </div>
+        </span>
       </div>
-      <div>
-        <p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>Governed edges &amp; graded fields</p>
-        <div className="panel" style={{ padding: '4px 12px' }}>
-          {VERDICT_GRADED_FIELDS.map((spec) => {
-            const d = verdictFieldDisplay(spec, verdict);
+
+      {edges.length > 0 && (
+        <div>
+          <p className="label-cap" style={{ color: 'var(--muted)', marginBottom: 4 }}>Comparative edges (home relative)</p>
+          <div className="panel" style={{ padding: '4px 12px' }}>
+            {edges.map((e) => (
+              <div key={e.label} className="hairline" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--line)' }}>
+                <span className="label-cap" style={{ color: 'var(--text-secondary)' }}>{e.label}</span>
+                <span className="mono tnum" style={{ color: 'var(--text)', fontWeight: 700 }}>{trimNumericText(e.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>
+        Edges are descriptive comparisons over the stated window — not forecasts or recommendations.
+        {missing.length > 0 ? ` Not recorded for this match: ${missing.join(', ').toLowerCase()}${verdict.riskScore === null ? ', risk' : ''}${verdict.confidence === null ? ', confidence' : ''}.` : ''}
+      </p>
+    </section>
+  );
+}
+
+// ── 2. MODULE READINGS (flat, in display order) ─────────────────────────────────────
+
+/**
+ * The individual module readings the consensus was tallied from, in the reading's own
+ * display order. Each shows its number, name, subject (a team, or the fixture), status
+ * word, verbatim verdict and sample. No module version or internal id is shown.
+ */
+export function ModuleReadings({ modules, homeTeamId, homeName, awayTeamId, awayName }: {
+  modules: readonly IntelligenceModuleReading[];
+  homeTeamId: string | null; homeName: string; awayTeamId: string | null; awayName: string;
+}) {
+  const ordered = [...modules].sort((a, b) => a.displayNumber - b.displayNumber);
+  return (
+    <section className="space-y-2" aria-label="module readings">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <p className="eyebrow">Module readings</p>
+        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>{ordered.length}</span>
+      </div>
+      {ordered.length === 0 ? (
+        <Unavailable text="No module readings recorded for this match." />
+      ) : (
+        <div className="space-y-2">
+          {ordered.map((m) => {
+            const sw = moduleStatusWord(m.status);
+            const subject = subjectLabel(m.subjectKindCode, m.subjectTeamId, homeTeamId, homeName, awayTeamId, awayName);
             return (
-              <div key={spec.label} className="hairline"
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--line)' }}>
-                <span className="label-cap" style={{ color: 'var(--text-secondary)' }}>{spec.label}</span>
-                {d.present
-                  ? <span className="mono tnum" style={{ color: 'var(--edge)', fontWeight: 700 }}>{d.text}</span>
-                  : <Unavailable text={d.text} />}
+              <div key={`${m.moduleKey}-${m.subjectTeamId ?? 'fixture'}-${m.displayNumber}`} className="panel-raised" style={{ padding: 12, borderRadius: 8 }}
+                aria-label={`${m.displayName} · ${subject} · ${sw.word}`}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span className="mono tnum" style={{ color: 'var(--faint)', fontSize: 11 }}>{String(m.displayNumber).padStart(2, '0')}</span>
+                  <span style={{ color: 'var(--text)', fontWeight: 600, fontSize: 13 }}>{m.displayName}</span>
+                  <span className="label-cap" style={{ color: 'var(--muted)', fontSize: 10 }}>{subject}</span>
+                  <span className="label-cap" style={{ marginLeft: 'auto', color: sw.color, fontWeight: 700 }}>{sw.word}</span>
+                </div>
+                {sw.engaged && m.verdictText && <p style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>{m.verdictText}</p>}
+                <p className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 4 }}>
+                  sample {m.sampleObservationCount}{m.sampleMeetsThreshold ? '' : ' · small sample'}
+                </p>
               </div>
             );
           })}
         </div>
-        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 6 }}>
-          Edges are governed comparative readings — descriptive, not forecasts or recommendations. Fields with no governed
-          value are shown as such, never as zero or a fabricated confidence.
-        </p>
-      </div>
+      )}
     </section>
   );
 }
 
-// ── 3b. INTELLIGENCE MODULES — sealed per-module readings ────────────────────────
+// ── 3. CITED EVIDENCE ───────────────────────────────────────────────────────────────
 
-const MODULE_TONE_COLOR: Record<ModuleTone, string> = {
-  positive: 'var(--edge)', negative: 'var(--risk)', neutral: 'var(--muted)', inactive: 'var(--faint)',
-};
-
-/** One side's sealed reading for a module, or an honest empty state. */
-function ModuleSideCell({ reading }: { reading: IntelligenceModuleReading | null }) {
-  if (!reading) return <Unavailable text="No reading" />;
-  const d = moduleStatusDescriptor(reading.status);
-  return (
-    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
-      <span className="label-cap" style={{ color: MODULE_TONE_COLOR[d.tone], fontWeight: 700 }} aria-label={`status ${reading.status.toLowerCase()}`}>{d.label}</span>
-      {d.engaged && reading.verdictText && <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{reading.verdictText}</span>}
-      <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>
-        sample {reading.sampleObservationCount}{reading.sampleMeetsThreshold ? '' : ' · below threshold'}
-      </span>
-    </span>
-  );
-}
-
-/** One governed module as a HOME-vs-AWAY sealed reading card. */
-function ModuleCard({ group, homeName, awayName }: { group: GroupedModule; homeName: string; awayName: string }) {
-  return (
-    <div className="panel-raised" style={{ padding: 12, borderRadius: 8 }} aria-label={`${group.displayName} module`}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <p className="eyebrow" style={{ color: 'var(--amber)' }}>{group.displayName}</p>
-        <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 9 }}>v{group.moduleVersion}</span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
-        <div>
-          <p className="label-cap" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{homeName}</p>
-          <div style={{ marginTop: 3 }}><ModuleSideCell reading={group.home} /></div>
-        </div>
-        <div>
-          <p className="label-cap" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{awayName}</p>
-          <div style={{ marginTop: 3 }}><ModuleSideCell reading={group.away} /></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * The sealed per-module intelligence the verdict was tallied from (e.g. Home/Away
- * Split), each surfaced as an individual governed component with its module version.
- * This is the SEALED reading (as of the snapshot), distinct from the live module
- * reading shown separately under context. Renders nothing when no module was sealed.
- */
-export function ModulesBand({ intelligence, homeName, awayName }: {
-  intelligence: MatchIntelligence; homeName: string; awayName: string;
+/** The evidence the reading cited: input, team, value, kind (Recorded / Derived) and
+ *  sample. Feature ids, versions and checksums are never shown. */
+export function CitedEvidenceTable({ citedEvidence, homeTeamId, homeName, awayTeamId, awayName }: {
+  citedEvidence: readonly CitedEvidenceItem[];
+  homeTeamId: string | null; homeName: string; awayTeamId: string | null; awayName: string;
 }) {
-  const home = intelligence.preparedness.find((p) => p.side === 'HOME')?.teamId ?? null;
-  const away = intelligence.preparedness.find((p) => p.side === 'AWAY')?.teamId ?? null;
-  const groups = groupModuleReadings(intelligence.modules, home, away);
-  if (groups.length === 0) return null;
-  return (
-    <section className="space-y-2" aria-label="intelligence modules">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <p className="eyebrow" style={{ color: 'var(--amber)' }}>Intelligence modules</p>
-        <SealedBadge />
-      </div>
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>
-        The governed per-module readings the verdict was composed from, sealed as of this snapshot. Analytical signals — not
-        forecasts or recommendations.
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {groups.map((g) => <ModuleCard key={g.moduleKey} group={g} homeName={homeName} awayName={awayName} />)}
-      </div>
-    </section>
-  );
-}
-
-// ── 4/5. TEAM PREPAREDNESS + COMPONENT BREAKDOWN ────────────────────────────────
-
-function ComponentRow({ c }: { c: ResolvedComponent }) {
-  const absent = c.presence === 'absent';
-  return (
-    <div className="hairline"
-      style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8, alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
-      <span style={{ minWidth: 0 }}>
-        <span className="label-cap" style={{ color: absent ? 'var(--faint)' : 'var(--text-secondary)' }}>{c.label}</span>
-        <span className="label-cap" style={{ display: 'block', color: 'var(--faint)', fontSize: 9 }}>{c.note} · {c.declaredPoints} pts</span>
-      </span>
-      <span style={{ textAlign: 'right' }}>
-        {absent
-          ? <Unavailable text="No data" />
-          : (
-            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              {/* A cited zero is a real value and is shown as 0 — not "No data". */}
-              <span className="mono tnum" style={{ color: 'var(--text)', fontWeight: 700, fontSize: 14 }}>{trimNumericText(c.value!)}</span>
-              {c.sampleMeetsThreshold === false && (
-                <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>low sample ({c.sampleObservationCount})</span>
-              )}
-            </span>
-          )}
-      </span>
-    </div>
-  );
-}
-
-/** One side's preparedness: absolute score, coverage, and the per-component
- *  breakdown resolved from cited evidence (present / present-zero / absent). */
-export function PreparednessCard({ side, teamName, view, cited }: {
-  side: 'HOME' | 'AWAY'; teamName: string; view: PreparednessSideView | undefined; cited: readonly CitedEvidenceItem[];
-}) {
-  if (!view) {
-    return (
-      <div className="panel-raised" style={{ padding: 14, borderRadius: 8 }}>
-        <p className="eyebrow">{side} · {teamName}</p>
-        <p style={{ color: 'var(--faint)', marginTop: 6, fontSize: 13 }}>No preparedness recorded</p>
-      </div>
-    );
-  }
-  const score = preparednessScoreDisplay(view.preparednessPoints, view.declaredPoints);
-  const components = resolveTeamComponents(side, view.teamId, cited);
-  return (
-    <div className="panel-raised" style={{ padding: 14, borderRadius: 8 }} aria-label={`${side} preparedness`}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <p className="eyebrow" style={{ color: 'var(--amber)' }}>{side}</p>
-        <span className="label-cap" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teamName}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-        {score.present
-          ? <span className="mono tnum" style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)' }}>{score.text}</span>
-          : <Unavailable text={score.text} />}
-      </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
-        <span style={{ display: 'inline-flex', flexDirection: 'column' }}>
-          <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Available / declared</span>
-          <span className="mono tnum" style={{ color: 'var(--muted)', fontSize: 12 }}>{trimNumericText(view.availablePoints)} / {trimNumericText(view.declaredPoints)}</span>
-        </span>
-        <span style={{ display: 'inline-flex', flexDirection: 'column' }}>
-          <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>Coverage</span>
-          <span className="mono tnum" style={{ color: 'var(--muted)', fontSize: 12 }}>{formatRatioPercent(view.coverageRatio)}</span>
-        </span>
-      </div>
-      <div style={{ marginTop: 10 }}>
-        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginBottom: 2 }}>Components cited</p>
-        {components.map((c) => <ComponentRow key={c.featureKey + c.label} c={c} />)}
-      </div>
-    </div>
-  );
-}
-
-/** HOME and AWAY preparedness side by side (stacked on mobile). */
-export function PreparednessBand({ intelligence, homeName, awayName }: {
-  intelligence: MatchIntelligence; homeName: string; awayName: string;
-}) {
-  const home = intelligence.preparedness.find((p) => p.side === 'HOME');
-  const away = intelligence.preparedness.find((p) => p.side === 'AWAY');
-  return (
-    <section className="space-y-2" aria-label="team preparedness">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <p className="eyebrow" style={{ color: 'var(--amber)' }}>Team preparedness</p>
-        <SealedBadge />
-      </div>
-      <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10 }}>
-        An absolute readiness score per side, composed at seal from present governed components. Absent components are shown as
-        “No data”, never zero; the coverage figure discloses how much of the declared composition was present.
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <PreparednessCard side="HOME" teamName={homeName} view={home} cited={intelligence.citedEvidence} />
-        <PreparednessCard side="AWAY" teamName={awayName} view={away} cited={intelligence.citedEvidence} />
-      </div>
-    </section>
-  );
-}
-
-// ── 6. CITED EVIDENCE — "Cited by calculation" ───────────────────────────────────
-
-function CitedRow({ item }: { item: CitedEvidenceItem }) {
-  return (
-    <div role="listitem" className="hairline"
-      style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-      <span style={{ minWidth: 0 }}>
-        <span className="label-cap" style={{ color: 'var(--text-secondary)' }}>{humanizeFeatureKey(item.featureKey)}</span>
-        <span className="mono" style={{ display: 'block', color: 'var(--faint)', fontSize: 9 }}>
-          {item.featureKey} · v{item.featureVersionId} · {item.provenanceClassCode.toLowerCase()}
-          {item.sampleMeetsThreshold ? '' : ` · below threshold (${item.sampleObservationCount})`}
-        </span>
-      </span>
-      <span className="mono tnum" style={{ color: 'var(--text)', fontWeight: 700, textAlign: 'right' }}>{trimNumericText(item.value)}</span>
-    </div>
-  );
-}
-
-/**
- * The evidence the sealed calculation ACTUALLY cited — labelled unambiguously so it
- * is never mistaken for generic live context. Collapsible for progressive
- * disclosure; the count stays visible on the summary.
- */
-export function CitedEvidencePanel({ citedEvidence }: { citedEvidence: readonly CitedEvidenceItem[] }) {
   const n = citedEvidence.length;
+  const team = (id: string | null) => (id && id === homeTeamId ? homeName : id && id === awayTeamId ? awayName : '—');
   return (
     <details className="panel" style={{ padding: '10px 12px' }}>
       <summary style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, listStyle: 'none' }}>
-        <span className="eyebrow" style={{ color: 'var(--amber)' }}>Cited by calculation</span>
-        <SealedBadge />
+        <span className="eyebrow">Cited evidence</span>
         <span className="label-cap tnum" style={{ color: 'var(--faint)', fontSize: 10, marginLeft: 'auto' }}>{n} input{n === 1 ? '' : 's'}</span>
       </summary>
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 6 }}>
-        The exact feature values the sealed calculation referenced, with lineage. These are the calculation’s inputs — not the
-        contextual information shown separately below.
+        The exact inputs the reading referenced. Values are shown as recorded; nothing is recomputed.
       </p>
-      {n === 0
-        ? <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 11, marginTop: 8 }}>No cited inputs recorded</p>
-        : (
-          <div role="list" aria-label="cited evidence" style={{ marginTop: 6 }}>
-            {citedEvidence.map((it) => <CitedRow key={it.featureValueId} item={it} />)}
-          </div>
-        )}
+      {n === 0 ? (
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 11, marginTop: 8 }}>No cited inputs recorded.</p>
+      ) : (
+        <div style={{ overflowX: 'auto', marginTop: 6 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 420 }}>
+            <caption className="sr-only">Evidence cited by the reading at kickoff.</caption>
+            <thead><tr>
+              <th scope="col" style={thL}>Input</th>
+              <th scope="col" style={thL}>Team</th>
+              <th scope="col" style={thR}>Value</th>
+              <th scope="col" style={thL}>Kind</th>
+              <th scope="col" style={thR}>Sample</th>
+            </tr></thead>
+            <tbody>
+              {citedEvidence.map((it, i) => (
+                <tr key={`${it.featureKey}-${it.subjectTeamId ?? 'x'}-${i}`} style={{ background: i % 2 === 0 ? 'color-mix(in srgb, var(--raised) 30%, transparent)' : 'transparent' }}>
+                  <th scope="row" style={{ ...tdL, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'normal' }}>{humanizeFeatureKey(it.featureKey)}</th>
+                  <td style={tdL}>{team(it.subjectTeamId)}</td>
+                  <td style={tdR} className="mono tnum">{trimNumericText(it.value)}</td>
+                  <td style={tdL}>{evidenceKindLabel(it.provenanceClassCode)}</td>
+                  <td style={tdR} className="tnum">{it.sampleObservationCount}{it.sampleMeetsThreshold ? '' : '*'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginTop: 4 }}>* small sample.</p>
+        </div>
+      )}
     </details>
   );
 }
 
-// ── honest unavailable state (no sealed snapshot) ────────────────────────────────
+// ── 4. HISTORICAL RESPONSE (PAST — not part of the kickoff reading) ─────────────────
 
-/** Shown in place of the sealed surfaces when a fixture has no sealed snapshot yet.
- *  The fixture and its context still render — intelligence is honestly "not sealed",
- *  never fabricated from live data. */
+function TriggerLine({ label, t }: { label: string; t: { engaged: boolean; n: number; response: { wins: number; draws: number; losses: number } } }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, padding: '6px 0', borderTop: '1px solid var(--line)' }}>
+      <span className="label-cap" style={{ color: 'var(--muted)' }}>
+        {label}
+        {t.engaged && <span className="label-cap" style={{ color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 4, padding: '0 5px', fontSize: 8, marginLeft: 6 }}>APPLIES</span>}
+      </span>
+      <span className="mono tnum" style={{ color: 'var(--text)', fontSize: 12 }}>
+        W{t.response.wins} D{t.response.draws} L{t.response.losses}
+        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, marginLeft: 6 }}>n {t.n}</span>
+      </span>
+    </div>
+  );
+}
+
+function HistoricalSide({ name, side }: { name: string; side: HistoricalResponseSide | null }) {
+  return (
+    <div className="panel" style={{ padding: 12 }}>
+      <p className="label-cap" style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{name}</p>
+      {!side ? (
+        <Unavailable text="No historical response recorded." />
+      ) : (
+        <>
+          <TriggerLine label="After a win" t={side.triggers.POST_WIN} />
+          <TriggerLine label="After a loss" t={side.triggers.POST_LOSS} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** How each side has historically responded after a win / after a loss. "APPLIES"
+ *  marks the trigger relevant to this fixture. This is historical context — explicitly
+ *  not part of the kickoff reading, and never linked to this match's result. */
+export function HistoricalResponse({ historicalResponse, homeName, awayName }: {
+  historicalResponse: { home: HistoricalResponseSide | null; away: HistoricalResponseSide | null } | null | undefined;
+  homeName: string; awayName: string;
+}) {
+  if (!historicalResponse) return null;
+  return (
+    <section className="space-y-2" aria-label="historical response">
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <p className="eyebrow">Historical response</p>
+        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>past · not part of the kickoff reading</span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <HistoricalSide name={homeName} side={historicalResponse.home} />
+        <HistoricalSide name={awayName} side={historicalResponse.away} />
+      </div>
+    </section>
+  );
+}
+
+// ── 5. NEAR FUTURE (honest none) ────────────────────────────────────────────────────
+
+export function NearFutureNote() {
+  return (
+    <section className="space-y-2" aria-label="near future">
+      <p className="eyebrow">Near future</p>
+      <div className="panel" style={{ padding: 14 }}>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>No forward-looking reading is recorded for this fixture.</p>
+      </div>
+    </section>
+  );
+}
+
+// ── honest unavailable state (no reading) ────────────────────────────────────────────
+
+/** Shown when a fixture has no kickoff reading yet. The fixture and its context still
+ *  render — intelligence is honestly "not available", never fabricated from live data. */
 export function IntelligenceUnavailable() {
   return (
     <section className="panel" aria-label="match intelligence unavailable"
       style={{ padding: 16, borderColor: 'var(--amber)', background: 'color-mix(in srgb, var(--amber) 5%, var(--panel))' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <p className="eyebrow" style={{ color: 'var(--amber)' }}>Match Intelligence</p>
-        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, border: '1px solid var(--faint)', borderRadius: 4, padding: '0 5px' }}>not yet sealed</span>
+        <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9, border: '1px solid var(--faint)', borderRadius: 4, padding: '0 5px' }}>not available</span>
       </div>
       <p style={{ color: 'var(--text-secondary)', marginTop: 8, fontSize: 13 }}>
-        No sealed intelligence snapshot exists for this fixture yet.
+        Intelligence is not available for this match yet.
       </p>
       <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 10, marginTop: 6 }}>
-        The governed verdict, Team Preparedness and cited evidence appear once a snapshot is sealed. The contextual match
-        information below is available now — it is not part of the sealed calculation.
+        The reading at kickoff — consensus, edges, module readings and the evidence behind them — appears once it is taken. The contextual match information is available now.
       </p>
     </section>
   );
 }
+
+const thL: React.CSSProperties = { textAlign: 'left', padding: '4px 8px', fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' };
+const thR: React.CSSProperties = { ...thL, textAlign: 'right' };
+const tdL: React.CSSProperties = { textAlign: 'left', padding: '4px 8px', fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap' };
+const tdR: React.CSSProperties = { ...tdL, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
