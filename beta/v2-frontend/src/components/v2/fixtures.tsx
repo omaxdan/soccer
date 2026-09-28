@@ -1,8 +1,8 @@
 'use client';
 // FIXTURES-BY-DATE WORKSPACE (Phase C) — the two-column fixtures calendar.
 //
-// Desktop: an 8fr fixture list (grouped country → competition/edition → fixtures)
-// beside a 4fr preview of the SELECTED fixture (built from the calendar payload +
+// Desktop: a compact 4fr fixture list (grouped country → competition/edition →
+// fixtures) beside a wider 8fr preview of the SELECTED fixture (built from the payload +
 // an "Open full match" link — a preview, NOT a second Match page). The first fixture
 // is selected on load; selecting another updates the preview via client state (no
 // refetch — the data is already on the page). Mobile: the list only; tapping a row
@@ -255,7 +255,7 @@ export function FixturesWorkspace({ date, prevDate, nextDate, today, strip, resp
           <span style={{ fontSize: 12, color: 'var(--faint)' }}>Use ‹ › or the date strip to browse nearby days.</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,8fr)_minmax(0,4fr)]" style={{ gap: 16, alignItems: 'start' }}>
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]" style={{ gap: 16, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
             {groups.map((country, ci) => (
               <section key={country.country?.code ?? `c${ci}`} aria-label={`${country.country?.name ?? 'Country not specified'} fixtures`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
