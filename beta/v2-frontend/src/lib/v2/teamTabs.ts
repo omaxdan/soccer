@@ -1,29 +1,43 @@
-// TEAM HUB tabs — server-rendered via ?tab=. Three destinations, each a distinct job:
-// Overview = the current intelligence briefing (summaries + links), Squad = the roster
-// and availability, Performance = the single canonical deep-evidence home (form, governed
-// readings, fixture history, season statistics, last match).
+// TEAM WORKSPACE tabs — server-rendered via ?tab=. Four destinations, each a distinct
+// job matched to the Team Workspace wireframe:
+//   Overview    = current readings (readiness / home-away / consistency) + team attributes
+//                 + recent results, with a rail of competitions this season + unavailable
+//                 players. Fixture context and the deep signal tables live elsewhere.
+//   Squad       = the registered roster joined with per-player observations (minutes,
+//                 started/bench, goals) + valuations + availability.
+//   Performance = descriptive performance indicators, the recent home/away split, and the
+//                 performance-signals table. This is where fixture/venue context sits.
+//   History     = the whole recorded period — season record, match-by-match, match log and
+//                 season statistics (observations + temporal-performance).
 //
-// Intelligence, Fixtures and History were removed after an IA audit: Intelligence only
-// re-showed the evidence behind Overview's briefing (→ folded into Performance), Fixtures
-// duplicated Overview's next fixture + Performance's recent results, and History was a
-// dead-end until a multi-season substrate exists. Unknown ?tab= values resolve to Overview,
-// so any old Intelligence/Fixtures/History links degrade gracefully.
+// There is no Intelligence or Fixtures tab: readings sit in Overview, and fixture context
+// sits in Performance. Unknown ?tab= values (including the old 'intelligence' / 'fixtures')
+// resolve to Overview, so any old links degrade gracefully.
 
 import { routes } from './routes';
 
-export type TeamTab = 'overview' | 'squad' | 'performance';
+export type TeamTab = 'overview' | 'squad' | 'performance' | 'history';
 
 export const TEAM_TABS: readonly { readonly key: TeamTab; readonly label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'squad', label: 'Squad' },
   { key: 'performance', label: 'Performance' },
+  { key: 'history', label: 'History' },
 ];
 
 const TAB_KEYS = new Set<string>(TEAM_TABS.map((t) => t.key));
 
-/** Resolve the ?tab= param to a known tab; unknown/absent → 'overview' (default). */
+// Legacy ?tab= values from before the IA reconciliation fold onto the new grammar.
+const LEGACY_TAB: Record<string, TeamTab> = {
+  intelligence: 'overview',
+  fixtures: 'performance',
+};
+
+/** Resolve the ?tab= param to a known tab; legacy values fold, unknown/absent → overview. */
 export function resolveTeamTab(raw: string | undefined): TeamTab {
-  return raw && TAB_KEYS.has(raw) ? (raw as TeamTab) : 'overview';
+  if (!raw) return 'overview';
+  if (TAB_KEYS.has(raw)) return raw as TeamTab;
+  return LEGACY_TAB[raw] ?? 'overview';
 }
 
 /** Tab href built from the current team slug param (it already carries the trailing id);

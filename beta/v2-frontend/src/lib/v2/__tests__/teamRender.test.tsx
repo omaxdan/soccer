@@ -122,30 +122,35 @@ const PLAYER_STATS: TeamIntelligence['playerStatistics'] = {
 };
 
 function header(over: Partial<React.ComponentProps<typeof TeamIdentityHeader>> = {}) {
-  return <TeamIdentityHeader team={TEAM} competitions={COMPETITIONS} season="Brasileirão Betano · Brasileiro Serie A 2026" standing={STANDING} homeWinRate={HOME_WR} awayWinRate={AWAY_WR} {...over} />;
+  return <TeamIdentityHeader team={TEAM} competitions={COMPETITIONS} latestMatchAt="2026-09-07T20:00:00.000Z" nextFixture={NEXT_FIXTURE} {...over} />;
 }
 function currentForm(over: Partial<React.ComponentProps<typeof TeamCurrentForm>> = {}) {
   return <TeamCurrentForm recent={RECENT} home={HOME_LINES} away={AWAY_LINES} teamName="Flamengo" {...over} />;
 }
 
-describe('Team identity header (identity + season + standings + win rate)', () => {
-  test('links country + edition; shows name/venue, season, standings row and win rates', () => {
+describe('Team identity header (identity + venue + competition link + latest/next line)', () => {
+  test('shows name/venue, links country + edition, and the latest-match / next-fixture line', () => {
     const markup = html(header());
     assert.match(markup, /Flamengo/);
     assert.match(markup, /Estádio do Maracanã/);
-    assert.match(markup, /href="\/v2\/countries\/BR"/);
+    // The country link lives in the page breadcrumb (Teams / Country / Team), not the header.
     assert.match(markup, /href="\/v2\/editions\/brasileirao-betano-325-brasileiro-serie-a-2026-18"/);
     const t = text(header());
-    assert.match(t, /Season/); assert.match(t, /Brasileiro Serie A 2026/);
-    assert.match(t, /#8/); assert.match(t, /27 pts/); assert.match(t, /P25/); assert.match(t, /GD -11/);
-    assert.match(t, /Home win rate/i); assert.match(t, /Away win rate/i);
-    assert.match(t, /\b50\b/); assert.match(t, /n=4/);
+    assert.match(t, /Brasileiro Serie A 2026/);
+    assert.match(t, /Latest match/i);
+    assert.match(t, /Next fixture/i);
+    assert.equal((markup.match(/<h1/g) ?? []).length, 1); // exactly one H1
   });
-  test('absent standing / null win rate render honestly (no fabricated number)', () => {
-    const t = text(header({ standing: null, homeWinRate: null, awayWinRate: null }));
-    assert.doesNotMatch(t, /#\d/);          // no fabricated position
-    assert.match(t, /—/);                    // null win rate → dash
-    assert.match(t, /Flamengo/);             // identity still renders
+  test('does NOT surface table position or win rate (not in this feed)', () => {
+    const t = text(header());
+    assert.doesNotMatch(t, /#\d/);            // no standings position
+    assert.doesNotMatch(t, /win rate/i);      // win rate belongs to Performance, not the header
+  });
+  test('no next fixture → honest "none recorded", identity still renders', () => {
+    const t = text(header({ nextFixture: null, latestMatchAt: null }));
+    assert.match(t, /none recorded/i);
+    assert.match(t, /No completed matches recorded/i);
+    assert.match(t, /Flamengo/);
   });
 });
 

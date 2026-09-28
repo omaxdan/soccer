@@ -29,14 +29,14 @@ const RECENT: TeamFixtureLine[] = [
 ];
 
 describe('team tab helpers (pure)', () => {
-  test('resolveTeamTab defaults to overview; removed tabs degrade to overview', () => {
+  test('resolveTeamTab: four tabs; legacy tabs fold gracefully', () => {
     assert.equal(resolveTeamTab(undefined), 'overview');
     assert.equal(resolveTeamTab('nope'), 'overview');
     assert.equal(resolveTeamTab('performance'), 'performance');
     assert.equal(resolveTeamTab('squad'), 'squad');
-    assert.equal(resolveTeamTab('intelligence'), 'overview'); // removed → graceful fallback
-    assert.equal(resolveTeamTab('fixtures'), 'overview');
-    assert.equal(resolveTeamTab('history'), 'overview');
+    assert.equal(resolveTeamTab('history'), 'history');           // now a shipped tab
+    assert.equal(resolveTeamTab('intelligence'), 'overview');     // legacy → Overview
+    assert.equal(resolveTeamTab('fixtures'), 'performance');      // legacy → Performance
   });
   test('teamTabHref: default tab clean, others carry ?tab=', () => {
     assert.equal(teamTabHref('palmeiras-1963-72', 'overview'), '/v2/teams/palmeiras-1963-72');
@@ -46,14 +46,14 @@ describe('team tab helpers (pure)', () => {
 
 describe('TeamTabNav', () => {
   const markup = html(<TeamTabNav slug="palmeiras-1963-72" active="performance" />);
-  test('renders three tabs; default (overview) is the clean URL; active marked', () => {
-    assert.equal(TEAM_TABS.length, 3);
-    assert.deepEqual(TEAM_TABS.map((t) => t.key), ['overview', 'squad', 'performance']);
+  test('renders four tabs; default (overview) is the clean URL; active marked', () => {
+    assert.equal(TEAM_TABS.length, 4);
+    assert.deepEqual(TEAM_TABS.map((t) => t.key), ['overview', 'squad', 'performance', 'history']);
     assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72"/);
     assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=squad"/);
     assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=performance"/);
+    assert.match(markup, /href="\/v2\/teams\/palmeiras-1963-72\?tab=history"/);
     assert.doesNotMatch(markup, /tab=intelligence/);
-    assert.doesNotMatch(markup, /tab=history/);
     assert.doesNotMatch(markup, /tab=fixtures/);
     assert.match(markup, /aria-current="page"/);
   });

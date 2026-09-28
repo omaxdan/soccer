@@ -8,6 +8,7 @@ import type {
   TeamListResponse, TeamDetailResponse, PlayerListResponse, PlayerDetailResponse,
   CompetitionResponse, CountryResponse, VenueResponse,
   TeamPerformanceResponse, TeamReadinessResponse, TeamGovernedIntelligenceResponse, TeamAttributesResponse, FixturesByDateResponse,
+  TeamObservationsResponse, TeamPlayerObservationsResponse, TeamPerformanceSignalsResponse, TeamTemporalPerformanceResponse,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse,
   MatchLifecycleResponse, MatchVenueResponse,
 } from './types';
@@ -130,6 +131,30 @@ export function fetchTeamGovernedIntelligence(teamId: string): Promise<TeamGover
 
 export function fetchTeamAttributes(teamId: string): Promise<TeamAttributesResponse | null> {
   return getJson<TeamAttributesResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/attributes`);
+}
+
+/** A team's per-fixture match observations (result, goals, xG/xGA, per-match metrics) —
+ *  the History match log / match-by-match substrate. Null when not exposed. Observed. */
+export function fetchTeamObservations(teamId: string): Promise<TeamObservationsResponse | null> {
+  return getJson<TeamObservationsResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/observations`);
+}
+
+/** A team's per-player observation rollup (appearances, started/bench, minutes, goals) —
+ *  the Squad enrichment substrate. Null when not exposed. Observed aggregate. */
+export function fetchTeamPlayerObservations(teamId: string): Promise<TeamPlayerObservationsResponse | null> {
+  return getJson<TeamPlayerObservationsResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/player-observations`);
+}
+
+/** A team's descriptive performance signals across windows (last5/previous5/season/home/
+ *  away) — the Performance signals table. Null when not exposed. Descriptive, not governed. */
+export function fetchTeamPerformanceSignals(teamId: string): Promise<TeamPerformanceSignalsResponse | null> {
+  return getJson<TeamPerformanceSignalsResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/performance-signals`);
+}
+
+/** A team's temporal performance (season totals + last5-vs-previous5 windows) — the
+ *  History season record + season statistics. Null when not exposed. Observed. */
+export function fetchTeamTemporalPerformance(teamId: string): Promise<TeamTemporalPerformanceResponse | null> {
+  return getJson<TeamTemporalPerformanceResponse>(`/api/v2/teams/${encodeURIComponent(teamId)}/temporal-performance`);
 }
 
 /** Players in the governed authorized-active edition(s). Never 404s. */

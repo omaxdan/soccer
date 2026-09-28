@@ -741,10 +741,129 @@ export interface StatisticalAttributesBlock {
   tendencies: StatisticalAttribute[];
 }
 
+// Result-tier team attribute (top-level of the attributes payload): where the team
+// ranks within its edition on a result-based signal (goals per match, clean-sheet rate,
+// …), classified into strengths / weaknesses / style tendencies. `direction` and
+// `qualityOrientation` are the governed contract — the UI never reinterprets them.
+export interface ResultAttribute {
+  key: string;
+  label: string;
+  type: StatAttributeType;
+  level: StatAttributeLevel;
+  direction: string;                 // e.g. HIGHER_IS_MORE / NEUTRAL (governed)
+  qualityOrientation: StatQualityOrientation;
+  evidence: {
+    signalKey: string;
+    signalValue: number;
+    benchmark: { rank: number; teams: number; percentile: number; median: number; q1: number; q3: number };
+    teamFixtures: number;
+  };
+}
+
 export interface TeamAttributesResponse {
   team: { id: string; name: string; slug: string };
-  // Result-tier arrays exist on the wire too; the V2 UI renders only the stat-tier block.
+  scope?: { type: string; editionId: string; label: string };
+  asOf?: string;
+  sample?: { completedFixtures: number; classificationFloor: number };
+  insufficientSample?: boolean;
+  // Result-tier attributes (top level of the payload).
+  strengths?: ResultAttribute[];
+  weaknesses?: ResultAttribute[];
+  tendencies?: ResultAttribute[];
+  // Stat-tier block (nested).
   statistical?: StatisticalAttributesBlock | null;
+}
+
+// ─── TEAM OBSERVATIONS (GET /teams/{id}/observations) — per-fixture match record ─────
+export interface TeamObservationMetric { key: string; value: number | null; display: string | null }
+export interface TeamObservation {
+  fixtureId: string;
+  fixturePartitionOn: string;
+  competition: { id: string; name: string; slug: string };
+  edition: { id: string; seasonLabel: string };
+  kickoffAt: string;
+  sequenceIndex: number;
+  opponent: { id: string; name: string; slug: string };
+  venueSide: string;                 // 'home' | 'away'
+  result: 'W' | 'D' | 'L' | null;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+  goalMargin: number | null;
+  points: number | null;
+  cleanSheet: boolean;
+  xg: number | null;
+  xga: number | null;
+  metrics: TeamObservationMetric[];
+}
+export interface TeamObservationsResponse {
+  team: { id: string; name: string; slug: string };
+  asOf: string;
+  observationCount: number;
+  coverage: { observations: string; metrics: { key: string; state: string; present: number; total: number }[] };
+  observations: TeamObservation[];
+}
+
+// ─── TEAM PLAYER OBSERVATIONS (GET /teams/{id}/player-observations) — per-player rollup ─
+export interface TeamPlayerObservationSummary { key: string; total: number; present: number; totalObservations: number }
+export interface TeamPlayerObservation {
+  player: { id: string; fullName: string; slug: string };
+  observationCount: number;
+  latestObservation: {
+    fixtureId: string; kickoffAt: string;
+    edition: { id: string; seasonLabel: string };
+    competition: { id: string; name: string; slug: string };
+    opponent: { id: string; name: string; slug: string };
+    venueSide: string; participation: string; result: 'W' | 'D' | 'L' | null;
+  } | null;
+  participation: { started: number; bench: number; unknown: number };
+  summary: TeamPlayerObservationSummary[];
+}
+export interface TeamPlayerObservationsResponse {
+  team: { id: string; name: string; slug: string };
+  asOf: string;
+  playerCount: number;
+  players: TeamPlayerObservation[];
+}
+
+// ─── TEAM PERFORMANCE SIGNALS (GET /teams/{id}/performance-signals) — window metrics ──
+export interface SignalMetric { key: string; label: string; value: number | null; displayValue: string | null }
+export interface SignalStreak { key: string; label: string; length: number; fixtureIds: string[] }
+export interface SignalWindow {
+  windowSize: number;
+  fixtureIds: string[];
+  scoring: SignalMetric[];
+  conceding: SignalMetric[];
+  totalGoals: SignalMetric[];
+  btts: SignalMetric[];
+  result: SignalMetric[];
+  margin: SignalMetric[];
+  attack: SignalMetric[];
+  defensiveXg: SignalMetric[];
+  creation: SignalMetric[];
+  streaks: SignalStreak[];
+}
+export interface TeamPerformanceSignalsResponse {
+  team: { id: string; name: string; slug: string };
+  scope: { competition: string; editionId: string | null; label: string };
+  asOf: string;
+  windows: {
+    last5: SignalWindow; previous5: SignalWindow; season: SignalWindow;
+    seasonHome: SignalWindow; seasonAway: SignalWindow;
+  };
+}
+
+// ─── TEAM TEMPORAL PERFORMANCE (GET /teams/{id}/temporal-performance) — season/window ─
+export interface TemporalResults {
+  wins: number; draws: number; losses: number; points: number;
+  goalsFor: number; goalsAgainst: number; goalDifference: number;
+}
+export interface TemporalMetric { metric: string; class: string; value: number; observations: number; total: number }
+export interface TeamTemporalPerformanceResponse {
+  team: { id: string; name: string; slug: string };
+  asOf: string;
+  comparisonStatus: string;
+  results: { last5: TemporalResults; previous5: TemporalResults; change: TemporalResults } | null;
+  season: { observationCount: number; scopeLabel: string; results: TemporalResults; metrics: TemporalMetric[] } | null;
 }
 
 // ── Fixture calendar (GET /api/v2/fixtures/{date}) ──────────────────────────────
