@@ -44,14 +44,6 @@ function StatusChip({ status, result, small = false }: { status: string; result:
   );
 }
 
-function ScoreCell({ f }: { f: CalendarFixture }) {
-  const s = scorePresentation(f);
-  const text = s.show ? `${s.home} – ${s.away}` : s.missing ? '—' : '–';
-  return (
-    <span className="mono tnum" style={{ display: 'flex', justifyContent: 'center', gap: 6, padding: '3px 8px', borderRadius: 4, background: 'var(--ink)', border: '1px solid var(--line)', fontSize: 14, fontWeight: 600, color: s.show ? 'var(--text)' : 'var(--faint)' }}>{text}</span>
-  );
-}
-
 function nameWeight(f: CalendarFixture, side: 'home' | 'away'): React.CSSProperties {
   const s = scorePresentation(f);
   if (!s.show || f.status !== 'COMPLETED' || s.home === null || s.away === null) return { fontWeight: 500, color: 'var(--text)' };
@@ -84,27 +76,30 @@ function FixtureRow({ f, selected, onSelect }: { f: CalendarFixture; selected: b
           borderLeft: `3px solid ${selected ? 'var(--amber)' : 'transparent'}`,
           background: selected ? 'color-mix(in srgb, var(--amber) 5%, transparent)' : 'transparent',
         }}>
-        {/* desktop grid */}
-        <span className="hidden md:grid" style={{ gridTemplateColumns: '64px minmax(0,1fr) 88px minmax(0,1fr) 132px 14px', gap: 14, alignItems: 'center', minHeight: 44, padding: '0 14px' }}>
-          <time dateTime={f.kickoffAt} className="mono tnum" style={{ fontSize: 12, color: 'var(--muted)' }}>{time}</time>
-          <span style={{ textAlign: 'right', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...nameWeight(f, 'home') }}>{f.homeTeam.name}</span>
-          <ScoreCell f={f} />
-          <span style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...nameWeight(f, 'away') }}>{f.awayTeam.name}</span>
-          <span style={{ justifySelf: 'end' }}><StatusChip status={f.status} result={f.result} /></span>
-          <span aria-hidden className="mono" style={{ fontSize: 13, color: 'var(--faint)', textAlign: 'right' }}>›</span>
-        </span>
-        {/* mobile stacked */}
-        <span className="grid md:hidden" style={{ gridTemplateColumns: '68px minmax(0,1fr) 40px', gap: 10, alignItems: 'center', minHeight: 60, padding: '8px 12px' }}>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {/* Unified fixture row — the SAME vertical grammar at every width (the
+            compact 4fr left panel must never collapse the teams). Three areas:
+            TIME/STATUS · vertically-stacked TEAMS (home then away) · stacked SCORES
+            aligned with their team. Names truncate with an ellipsis only when the
+            column is genuinely too narrow; they are never removed. */}
+        <span className="grid" style={{ gridTemplateColumns: '52px minmax(0,1fr) auto', gap: 10, alignItems: 'center', minHeight: 52, padding: '8px 12px' }}>
+          {/* 1. TIME + STATUS */}
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
             <time dateTime={f.kickoffAt} className="mono tnum" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{time}</time>
             <StatusChip status={f.status} result={f.result} small />
           </span>
+          {/* 2. TEAMS — stacked, home first, away second, graceful truncation */}
           <span style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-            <span style={{ fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...nameWeight(f, 'home') }}>{f.homeTeam.name}</span>
-            <span style={{ fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...nameWeight(f, 'away') }}>{f.awayTeam.name}</span>
+            <span style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...nameWeight(f, 'home') }}>
+              {f.homeTeam.name || <span style={{ color: 'var(--faint)' }}>Home team not specified</span>}
+            </span>
+            <span style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...nameWeight(f, 'away') }}>
+              {f.awayTeam.name || <span style={{ color: 'var(--faint)' }}>Away team not specified</span>}
+            </span>
           </span>
-          <span className="mono tnum" style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', fontSize: 15, fontWeight: 600, color: s.show ? 'var(--text)' : 'var(--faint)' }}>
-            <span>{s.show ? s.home : s.missing ? '—' : ''}</span><span>{s.show ? s.away : s.missing ? '—' : ''}</span>
+          {/* 3. SCORE — stacked, aligned with each team; honest dash / blank */}
+          <span className="mono tnum" style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end', fontSize: 15, fontWeight: 600 }}>
+            <span style={{ color: s.show ? 'var(--text)' : 'var(--faint)' }}>{s.show ? s.home : s.missing ? '—' : ''}</span>
+            <span style={{ color: s.show ? 'var(--text)' : 'var(--faint)' }}>{s.show ? s.away : s.missing ? '—' : ''}</span>
           </span>
         </span>
       </Link>
