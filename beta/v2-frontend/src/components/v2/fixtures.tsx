@@ -10,13 +10,27 @@
 // stacked underneath. All data comes from GET /api/v2/fixtures/{date}; nothing is
 // invented (missing results stay a dash, never 0–0).
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { routes } from '@/lib/v2/routes';
-import type { FixturesByDateResponse, CalendarFixture, CalendarCompetitionGroup } from '@/lib/v2/types';
+import type { FixturesByDateResponse, CalendarFixture, CalendarCompetitionGroup, MatchIntelligenceResponse } from '@/lib/v2/types';
 import {
-  type StripDay, statusPresentation, scorePresentation, kickoffHHMM, formatLongUtc,
+  type StripDay, statusPresentation, scorePresentation, kickoffHHMM,
 } from '@/lib/v2/fixtures';
+import { IntelligenceSummary, EdgeGrid, HistoricalResponse } from '@/components/v2/intelligence';
+
+/** One selected fixture's on-demand intelligence, cached per fixture id. */
+type IntelState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'ready'; data: MatchIntelligenceResponse | null };
+
+/** Base-path-aware URL for the frontend intelligence proxy (staging may mount the app
+ *  under NEXT_PUBLIC_BASE_PATH; production serves from root). */
+function intelligenceApiPath(fixtureId: string): string {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH?.trim() || '';
+  return `${base}/api/v2/matches/${encodeURIComponent(fixtureId)}/intelligence`;
+}
 
 // ── small pieces ─────────────────────────────────────────────────────────────────
 
@@ -113,10 +127,55 @@ function CompetitionCard({ c, selectedId, onSelect }: { c: CalendarCompetitionGr
   );
 }
 
-/** The selected-fixture preview (desktop right column). Built from the calendar
- *  payload only — a preview that leads into the full Match workspace, never a
- *  second Match page. */
-function SelectedPreview({ f, competitionName, seasonLabel }: { f: CalendarFixture; competitionName: string; seasonLabel: string }) {
+/** The selected-fixture preview (desktop right column). The score/result block is
+ *  built from the calendar payload; the reading block (module consensus, edges,
+ *  historical patterns) is the on-demand intelligence for THIS fixture — the same
+ *  sealed read the Match page uses, shown here so a fixture can be evaluated before
+ *  opening the full Match workspace. Nothing is invented: an unsealed fixture shows an
+ *  honest "no reading yet", a failed load an honest error, missing results a dash. */
+function PreviewIntelligence({ intel, homeName, awayName }: { intel: IntelState | undefined; homeName: string; awayName: string }) {
+  if (!intel || intel.status === 'loading') {
+    return (
+      <div aria-busy className="panel" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p className="eyebrow" style={{ margin: 0, color: 'var(--faint)' }}>Reading at kickoff</p>
+        <div style={{ height: 8, borderRadius: 2, background: 'var(--raised)', width: '60%' }} />
+        <div style={{ height: 8, borderRadius: 2, background: 'var(--raised)', width: '85%' }} />
+        <div style={{ height: 8, borderRadius: 2, background: 'var(--raised)', width: '40%' }} />
+        <span className="sr-only">Loading the reading for this fixture…</span>
+      </div>
+    );
+  }
+  if (intel.status === 'error') {
+    return (
+      <div role="alert" className="panel" style={{ padding: 14 }}>
+        <p className="label-cap" style={{ color: 'var(--faint)', margin: 0 }}>The reading for this fixture could not be loaded. Open the full match to try again.</p>
+      </div>
+    );
+  }
+  if (intel.data === null) {
+    return (
+      <div className="panel" style={{ padding: 14, borderColor: 'var(--amber)', background: 'color-mix(in srgb, var(--amber) 5%, var(--panel))' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <p className="eyebrow" style={{ margin: 0, color: 'var(--amber)' }}>Reading at kickoff</p>
+          <span className="label-cap" style={{ color: 'var(--faint)', fontSize: 9 }}>not available</span>
+        </div>
+        <p className="label-cap" style={{ color: 'var(--faint)', fontSize: 11, marginTop: 6 }}>The reading appears once it is taken at kickoff. The result and context are shown above.</p>
+      </div>
+    );
+  }
+  const { intelligence, context } = intel.data;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <IntelligenceSummary intelligence={intelligence} />
+      <EdgeGrid verdict={intelligence.verdict} homeName={homeName} awayName={awayName} />
+      <HistoricalResponse historicalResponse={context?.historicalResponse} homeName={homeName} awayName={awayName} />
+    </div>
+  );
+}
+
+function SelectedPreview({ f, competitionName, seasonLabel, intel }: {
+  f: CalendarFixture; competitionName: string; seasonLabel: string; intel: IntelState | undefined;
+}) {
   const s = scorePresentation(f);
   const p = statusPresentation(f.status, f.result);
   const href = routes.match({ fixtureId: f.fixtureId, homeTeam: f.homeTeam, awayTeam: f.awayTeam });
@@ -127,30 +186,35 @@ function SelectedPreview({ f, competitionName, seasonLabel }: { f: CalendarFixtu
   if (r?.extraTime) rows.push({ k: 'After extra time', v: `${r.extraTime.home} – ${r.extraTime.away}` });
   if (r?.penalties) rows.push({ k: 'Penalties', v: `${r.penalties.home} – ${r.penalties.away}` });
   return (
-    <aside aria-label="Selected fixture" className="panel md:sticky md:top-4" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <p className="label-cap" style={{ color: 'var(--cool)', margin: 0 }}>{competitionName} · {seasonLabel}</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', gap: 10, alignItems: 'center' }}>
-        <span style={{ textAlign: 'right', fontSize: 15, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.homeTeam.name}</span>
-        <span className="mono tnum" style={{ fontSize: 22, fontWeight: 700, color: s.show ? 'var(--text)' : 'var(--faint)', whiteSpace: 'nowrap' }}>{s.show ? `${s.home} – ${s.away}` : s.missing ? '—' : '–'}</span>
-        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.awayTeam.name}</span>
+    <aside aria-label="Selected fixture" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p className="label-cap" style={{ color: 'var(--cool)', margin: 0 }}>{competitionName} · {seasonLabel}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', gap: 10, alignItems: 'center' }}>
+          <span style={{ textAlign: 'right', fontSize: 17, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.homeTeam.name}</span>
+          <span className="mono tnum" style={{ fontSize: 26, fontWeight: 700, color: s.show ? 'var(--text)' : 'var(--faint)', whiteSpace: 'nowrap' }}>{s.show ? `${s.home} – ${s.away}` : s.missing ? '—' : '–'}</span>
+          <span style={{ fontSize: 17, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.awayTeam.name}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+          <StatusChip status={f.status} result={f.result} />
+          <span className="mono tnum" style={{ fontSize: 11, color: 'var(--muted)' }}>{kickoffHHMM(f.kickoffAt)} UTC</span>
+        </div>
+        {rows.length > 0 && (
+          <dl style={{ margin: 0, borderTop: '1px solid var(--line)' }}>
+            {rows.map((row) => (
+              <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
+                <dt style={{ fontSize: 13, color: 'var(--muted)' }}>{row.k}</dt>
+                <dd className="mono tnum" style={{ margin: 0, fontSize: 13, color: 'var(--text)' }}>{row.v}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {f.status === 'COMPLETED' && !s.show && (
+          <p className="label-cap" style={{ color: 'var(--faint)', margin: 0 }}>No confirmed result recorded for this fixture.</p>
+        )}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
-        <StatusChip status={f.status} result={f.result} />
-        <span className="mono tnum" style={{ fontSize: 11, color: 'var(--muted)' }}>{kickoffHHMM(f.kickoffAt)} UTC</span>
-      </div>
-      {rows.length > 0 && (
-        <dl style={{ margin: 0, borderTop: '1px solid var(--line)' }}>
-          {rows.map((row) => (
-            <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-              <dt style={{ fontSize: 13, color: 'var(--muted)' }}>{row.k}</dt>
-              <dd className="mono tnum" style={{ margin: 0, fontSize: 13, color: 'var(--text)' }}>{row.v}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {f.status === 'COMPLETED' && !s.show && (
-        <p className="label-cap" style={{ color: 'var(--faint)', margin: 0 }}>No confirmed result recorded for this fixture.</p>
-      )}
+
+      <PreviewIntelligence intel={intel} homeName={f.homeTeam.name} awayName={f.awayTeam.name} />
+
       <Link href={href} className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 44, borderRadius: 4, background: 'var(--raised)', border: '1px solid var(--line)', fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text)', textDecoration: 'none' }}>
         Open full match →
       </Link>
@@ -211,52 +275,116 @@ export interface FixturesWorkspaceProps {
   errored: boolean;
 }
 
+/** Compact short UTC date for the left header, e.g. "Sun 6 Sep 2026". */
+function formatShortUtc(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/** The compact left-column header: title + count, the date, and the date controls +
+ *  strip. Lives INSIDE the left column (per the reference), not full-width above. */
+function LeftHeader({ date, prevDate, nextDate, today, isToday, count, strip }: {
+  date: string; prevDate: string; nextDate: string; today: string; isToday: boolean; count: number; strip: readonly StripDay[];
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <p className="eyebrow" style={{ margin: 0 }}>Fixtures</p>
+        <span className="mono tnum" style={{ fontSize: 11, fontWeight: 600, color: count ? 'var(--text-secondary)' : 'var(--faint)' }}>{count} {count === 1 ? 'fixture' : 'fixtures'}</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px 12px' }}>
+        <h1 style={{ margin: 0, fontWeight: 700, fontSize: 'clamp(18px,2.4vw,22px)', lineHeight: 1.15, letterSpacing: '-.01em', color: 'var(--text)' }}>
+          {formatShortUtc(date)}
+          {isToday && <span className="mono" style={{ fontWeight: 600, fontSize: 8.5, letterSpacing: '.1em', color: 'var(--amber)', background: 'var(--amber-dim)', borderRadius: 4, padding: '1px 6px', marginLeft: 8, verticalAlign: 'middle' }}>TODAY</span>}
+        </h1>
+        <DateControls date={date} prevDate={prevDate} nextDate={nextDate} today={today} isToday={isToday} />
+      </div>
+      <DateStrip strip={strip} />
+      <p className="mono" style={{ margin: 0, fontSize: 10, color: 'var(--faint)' }}>Times in UTC</p>
+    </div>
+  );
+}
+
+/** Breadcrumb for the right column: Fixtures → competition → this fixture. Uses only
+ *  real ids/slugs from the selected fixture's group; no fabricated links. */
+function PreviewBreadcrumb({ date, competition, seasonLabel, homeName, awayName }: {
+  date: string; competition: CalendarCompetitionGroup; seasonLabel: string; homeName: string; awayName: string;
+}) {
+  return (
+    <nav aria-label="Breadcrumb" className="label-cap" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, color: 'var(--muted)' }}>
+      <Link href={routes.fixtures(date)} style={{ color: 'var(--cool)', textDecoration: 'none' }}>Fixtures</Link>
+      <span aria-hidden style={{ color: 'var(--faint)' }}>/</span>
+      <Link href={routes.competition({ id: competition.competitionId, slug: competition.slug })} style={{ color: 'var(--cool)', textDecoration: 'none' }}>{competition.name}</Link>
+      <span aria-hidden style={{ color: 'var(--faint)' }}>·</span>
+      <span style={{ color: 'var(--faint)' }}>{seasonLabel}</span>
+      <span aria-hidden style={{ color: 'var(--faint)' }}>/</span>
+      <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{homeName} v {awayName}</span>
+    </nav>
+  );
+}
+
 export function FixturesWorkspace({ date, prevDate, nextDate, today, strip, response, errored }: FixturesWorkspaceProps) {
   const groups = response?.countries ?? [];
-  const flat: { f: CalendarFixture; competitionName: string; seasonLabel: string }[] = [];
-  for (const country of groups) for (const comp of country.competitions) for (const f of comp.fixtures) flat.push({ f, competitionName: comp.name, seasonLabel: comp.edition.seasonLabel });
+  const flat: { f: CalendarFixture; competition: CalendarCompetitionGroup }[] = [];
+  for (const country of groups) for (const comp of country.competitions) for (const f of comp.fixtures) flat.push({ f, competition: comp });
   const firstId = flat[0]?.f.fixtureId ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(firstId);
   const selected = flat.find((x) => x.f.fixtureId === selectedId) ?? flat[0] ?? null;
   const count = response?.fixtureCount ?? 0;
   const isToday = date === today;
 
-  return (
-    <main aria-busy={false} className="mx-auto w-full max-w-6xl" style={{ padding: 'clamp(16px,3vw,28px) 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* header + date navigation */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px 24px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-            <p className="eyebrow" style={{ margin: 0 }}>Fixtures</p>
-            <h1 style={{ margin: 0, fontWeight: 700, fontSize: 'clamp(22px,3vw,26px)', lineHeight: 1.15, letterSpacing: '-.01em', color: 'var(--text)' }}>{formatLongUtc(date)}</h1>
-            <div className="mono" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', alignItems: 'center', fontSize: 11, color: 'var(--faint)' }}>
-              <span style={{ fontWeight: 600, color: count ? 'var(--text-secondary)' : 'var(--faint)' }}>{count} {count === 1 ? 'fixture' : 'fixtures'}</span>
-              <span>·</span><span>Times in UTC</span>
-              {isToday && <span style={{ fontWeight: 600, fontSize: 9, letterSpacing: '.1em', color: 'var(--amber)', background: 'var(--amber-dim)', borderRadius: 4, padding: '1px 6px' }}>TODAY</span>}
-            </div>
-          </div>
-          <DateControls date={date} prevDate={prevDate} nextDate={nextDate} today={today} isToday={isToday} />
-        </div>
-        <DateStrip strip={strip} />
-      </div>
+  // On-demand intelligence for the SELECTED fixture only, cached per id. The browser
+  // cannot reach the V2 backend directly, so it goes through the frontend proxy route.
+  const [intelById, setIntelById] = useState<Record<string, IntelState>>({});
+  const selectedFixtureId = selected?.f.fixtureId ?? null;
+  useEffect(() => {
+    if (!selectedFixtureId || intelById[selectedFixtureId]) return;
+    let cancelled = false;
+    setIntelById((m) => ({ ...m, [selectedFixtureId]: { status: 'loading' } }));
+    fetch(intelligenceApiPath(selectedFixtureId), { headers: { accept: 'application/json' } })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return (await res.json()) as MatchIntelligenceResponse | null;
+      })
+      .then((data) => { if (!cancelled) setIntelById((m) => ({ ...m, [selectedFixtureId]: { status: 'ready', data } })); })
+      .catch(() => { if (!cancelled) setIntelById((m) => ({ ...m, [selectedFixtureId]: { status: 'error' } })); });
+    return () => { cancelled = true; };
+  }, [selectedFixtureId, intelById]);
 
-      {/* body */}
-      {errored ? (
-        <div role="alert" className="panel" style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
-          <span aria-hidden style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--risk)', borderRadius: 4, font: "700 13px 'JetBrains Mono',monospace", color: 'var(--risk)' }}>!</span>
-          <h2 style={{ margin: 0, font: '600 15px Inter,sans-serif', color: 'var(--text)' }}>Unable to load fixtures for this date</h2>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>The fixtures service could not be reached. Please try again.</p>
-        </div>
-      ) : flat.length === 0 ? (
-        <div role="status" className="panel" style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
-          <span aria-hidden style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--line)', borderRadius: 4, font: "400 14px 'JetBrains Mono',monospace", color: 'var(--faint)' }}>○</span>
-          <h2 className="label-cap" style={{ margin: 0, color: 'var(--muted)' }}>No fixtures</h2>
-          <p style={{ margin: 0, fontSize: 15, color: 'var(--text-secondary)' }}>There are no fixtures recorded for this date.</p>
-          <span style={{ fontSize: 12, color: 'var(--faint)' }}>Use ‹ › or the date strip to browse nearby days.</span>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]" style={{ gap: 16, alignItems: 'start' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+  const header = <LeftHeader date={date} prevDate={prevDate} nextDate={nextDate} today={today} isToday={isToday} count={count} strip={strip} />;
+
+  if (errored || flat.length === 0) {
+    return (
+      <main aria-busy={false} className="mx-auto w-full max-w-6xl" style={{ padding: 'clamp(16px,3vw,28px) 16px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {header}
+        {errored ? (
+          <div role="alert" className="panel" style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+            <span aria-hidden style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--risk)', borderRadius: 4, font: "700 13px 'JetBrains Mono',monospace", color: 'var(--risk)' }}>!</span>
+            <h2 style={{ margin: 0, font: '600 15px Inter,sans-serif', color: 'var(--text)' }}>Unable to load fixtures for this date</h2>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>The fixtures service could not be reached. Please try again.</p>
+          </div>
+        ) : (
+          <div role="status" className="panel" style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+            <span aria-hidden style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--line)', borderRadius: 4, font: "400 14px 'JetBrains Mono',monospace", color: 'var(--faint)' }}>○</span>
+            <h2 className="label-cap" style={{ margin: 0, color: 'var(--muted)' }}>No fixtures</h2>
+            <p style={{ margin: 0, fontSize: 15, color: 'var(--text-secondary)' }}>There are no fixtures recorded for this date.</p>
+            <span style={{ fontSize: 12, color: 'var(--faint)' }}>Use ‹ › or the date strip to browse nearby days.</span>
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  return (
+    <main aria-busy={false} className="mx-auto w-full max-w-6xl" style={{ padding: 'clamp(16px,3vw,28px) 16px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]" style={{ gap: 16, alignItems: 'start' }}>
+        {/* LEFT — compact header + fixture list. Sticky on desktop; the list scrolls
+            inside its own panel when the day is long. On mobile it is the single column
+            (no sticky, natural scroll) and rows navigate straight to the Match page. */}
+        <div className="md:sticky md:top-4" style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          {header}
+          <div className="no-scrollbar md:max-h-[calc(100vh-2rem)] md:overflow-y-auto" style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
             {groups.map((country, ci) => (
               <section key={country.country?.code ?? `c${ci}`} aria-label={`${country.country?.name ?? 'Country not specified'} fixtures`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }} className="label-cap">
@@ -267,12 +395,18 @@ export function FixturesWorkspace({ date, prevDate, nextDate, today, strip, resp
               </section>
             ))}
           </div>
-          {/* right preview — desktop only; mobile taps go straight to /matches/{slug} */}
-          <div className="hidden md:block">
-            {selected && <SelectedPreview f={selected.f} competitionName={selected.competitionName} seasonLabel={selected.seasonLabel} />}
-          </div>
         </div>
-      )}
+        {/* RIGHT — breadcrumb + selected-fixture workspace; scrolls with the page.
+            Desktop only; mobile taps go straight to /matches/{slug}. */}
+        <div className="hidden md:flex" style={{ flexDirection: 'column', gap: 12, minWidth: 0 }}>
+          {selected && (
+            <>
+              <PreviewBreadcrumb date={date} competition={selected.competition} seasonLabel={selected.competition.edition.seasonLabel} homeName={selected.f.homeTeam.name} awayName={selected.f.awayTeam.name} />
+              <SelectedPreview f={selected.f} competitionName={selected.competition.name} seasonLabel={selected.competition.edition.seasonLabel} intel={intelById[selected.f.fixtureId]} />
+            </>
+          )}
+        </div>
+      </div>
     </main>
   );
 }
