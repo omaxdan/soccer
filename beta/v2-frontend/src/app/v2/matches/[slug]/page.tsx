@@ -8,18 +8,15 @@ import { routes } from '@/lib/v2/routes';
 import { findAdjacentFixtures } from '@/lib/v2/matchNav';
 import { resolveMatchTab } from '@/lib/v2/matchTabs';
 import { Breadcrumb, MatchNav } from '@/components/v2/nav';
-import { TeamIntelligencePanel, EmptyState } from '@/components/v2/ui';
+import { EmptyState } from '@/components/v2/ui';
 import {
-  ReadingAtKickoff, ModuleReadings, CitedEvidenceTable, HistoricalResponse, NearFutureNote,
-  IntelligenceUnavailable,
+  IntelligenceSummary, EdgeGrid, ModuleReadingList, PreparednessPanel, EvidenceTable,
+  HistoricalResponse, IntelligenceUnavailable,
 } from '@/components/v2/intelligence';
-import { MatchLineupsPanel, MatchLifecyclePanel } from '@/components/v2/match';
-import { MatchTabNav, MATCH_MAIN_CLASS, type CoverageFlag } from '@/components/v2/matchWorkspace';
-import {
-  MatchHeader, IntelligenceAtKickoff, IntelligenceBoard, KeySignals, MatchStatePanel, KeyMatchEvidence, MatchProgression,
-  CompactForm, CompactVenue, AvailabilityFooter, MatchStatisticsFull,
-  LineupsUnavailable, MatchGovernedSignals,
-} from '@/components/v2/matchOverview';
+import { LifecycleTimeline } from '@/components/v2/match';
+import { MatchTabNav, MATCH_MAIN_CLASS } from '@/components/v2/matchWorkspace';
+import { MatchHeader, TeamFeatureCompare, ResultCard } from '@/components/v2/matchOverview';
+import { StatisticsTab, LineupsTab, RecentFormPanel, MatchFactorList, VenueFormRail } from '@/components/v2/matchClient';
 import type {
   ApiEditionFixture, MatchDetailResponse,
   MatchResultResponse, MatchLineupsResponse, MatchTeamStatisticsResponse, MatchLifecycleResponse, MatchVenueResponse,
@@ -64,7 +61,6 @@ export default async function V2MatchPage({ params, searchParams }: {
   const stats = statsRes?.teamStatistics ?? null;
   const result = resultRes?.result ?? null;
   const venue = venueRes?.venue ?? null;
-  const completed = match.status === 'COMPLETED';
 
   // Prev/next within the same edition — from the existing fixtures read, never fabricated.
   let prev: ApiEditionFixture | null = null;
@@ -72,17 +68,7 @@ export default async function V2MatchPage({ params, searchParams }: {
   const editionData = await fetchEditionFixtures(editionId);
   if (editionData) ({ prev, next } = findAdjacentFixtures(editionData.fixtures, id));
 
-  const coverage: CoverageFlag[] = [
-    ['Result', resultRes?.coverage.result ?? 'absent'],
-    ['Statistics', statsRes?.teamStatistics.coverage.teamStatistics ?? 'absent'],
-    ['Lineups', lineupsRes?.lineups.coverage.lineups ?? 'absent'],
-    ['Venue', venueRes?.coverage.venue ?? 'absent'],
-    ['Recent form', 'present'],
-    ['Intelligence', sealed ? 'present' : 'absent'],
-  ];
-
-  // Breadcrumb: Fixtures (by the match's UTC date, per the Fixtures workspace) →
-  // Competition · Season (the Edition workspace) → this match.
+  // Breadcrumb: Fixtures (by the match's UTC date) → Competition · Season → this match.
   const matchDate = match.kickoffAt.slice(0, 10);
   const crumbs = [
     { label: 'Fixtures', href: routes.fixtures(matchDate) },
@@ -96,85 +82,72 @@ export default async function V2MatchPage({ params, searchParams }: {
       <MatchHeader context={detail} venue={venue} result={result} />
       <MatchTabNav slug={slug} active={tab} />
 
-      <div className="space-y-4" style={{ minWidth: 0 }}>
-        {/* OVERVIEW — "what matters about this match?" The design consolidates the
-            former Comparison / Form / H2H / Venue tabs here: the team comparison,
-            a compact recent-form summary and a compact venue card all live in the
-            Overview landing, with venue also in the match header. */}
+      <div style={{ minWidth: 0 }}>
+        {/* OVERVIEW (8/4) — Recent form → Match factors → Team features → Historical
+            patterns; rail: Result → Venue form. */}
         {tab === 'overview' && (
-          <div className="space-y-4">
-            <MatchStatePanel detail={detail} result={result} />
-            {sealed && <IntelligenceAtKickoff intelligence={sealed.intelligence} slug={slug} />}
-            <IntelligenceBoard detail={detail} />
-            <KeySignals detail={detail} stats={stats} />
-            <MatchGovernedSignals modules={detail.matchModules} />
-            {completed && stats && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <KeyMatchEvidence stats={stats} slug={slug} />
-                <MatchProgression stats={stats} result={result} />
-              </div>
-            )}
-            {/* Team comparison — folded in from the former Comparison tab. */}
-            <section className="space-y-2">
-              <p className="eyebrow">Team comparison</p>
-              <TeamIntelligencePanel home={detail.teamFeatures.home} away={detail.teamFeatures.away} homeName={homeName} awayName={awayName} />
-            </section>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <CompactForm detail={detail} />
-              <CompactVenue venue={venue} />
+          <div className="md:grid md:grid-cols-12 md:gap-4 space-y-4 md:space-y-0">
+            <div className="md:col-span-8 space-y-4" style={{ minWidth: 0 }}>
+              <RecentFormPanel detail={detail} />
+              <MatchFactorList detail={detail} />
+              <TeamFeatureCompare detail={detail} />
+              <HistoricalResponse historicalResponse={detail.historicalResponse} homeName={homeName} awayName={awayName} />
             </div>
-            <AvailabilityFooter flags={coverage} />
+            <div className="md:col-span-4 space-y-4" style={{ minWidth: 0 }}>
+              <ResultCard detail={detail} result={result} />
+              <VenueFormRail homeName={homeName} awayName={awayName} home={detail.recentVenueForm.home} away={detail.recentVenueForm.away} />
+            </div>
           </div>
         )}
 
-        {/* LINEUPS — "who is playing / who played?" — honest empty state when the read
-            itself is unavailable (MatchLineupsPanel handles absent/partial coverage). */}
-        {tab === 'lineups' && (lineupsRes ? <MatchLineupsPanel lineups={lineupsRes.lineups} /> : <LineupsUnavailable />)}
+        {/* LINEUPS (6/6) — per team formation → XI by position group → subs (collapsed);
+            mobile team switcher. */}
+        {tab === 'lineups' && (
+          lineupsRes
+            ? <LineupsTab lineups={lineupsRes.lineups} />
+            : <EmptyState message="Lineup information is not available for this fixture yet." />
+        )}
 
-        {/* STATISTICS — "what actually happened on the pitch?" Uses the observed
-            team-statistics read (ALL / 1ST / 2ND, grouped home vs away). */}
+        {/* STATISTICS — period switch (Full / 1st / 2nd), grouped compare rows. */}
         {tab === 'statistics' && (
-          stats
-            ? <MatchStatisticsFull stats={stats} homeName={homeName} awayName={awayName} />
-            : <MatchStatePanel detail={detail} result={result} />
+          stats && stats.coverage.teamStatistics !== 'absent' && stats.periods.length > 0
+            ? <StatisticsTab stats={stats} homeName={homeName} awayName={awayName} />
+            : <EmptyState message="No team statistics recorded for this fixture." />
         )}
 
-        {/* INTELLIGENCE — the reading taken at kickoff. Only the locked reading is shown
-            here (never the live-context module readings): the reading at kickoff, the
-            module readings behind it, the evidence it cited, how each side has responded
-            historically, and an honest near-future note. */}
+        {/* INTELLIGENCE (7/5) — Locked summary → Edges → Module readings → Preparedness;
+            rail: Cited evidence. Only the locked reading is shown here — never live
+            module readings. */}
         {tab === 'intelligence' && (
-          <div className="space-y-4">
-            {sealed ? (
-              <>
-                <ReadingAtKickoff intelligence={sealed.intelligence} />
-                <ModuleReadings modules={sealed.intelligence.modules} homeTeamId={match.homeTeam.id} homeName={homeName} awayTeamId={match.awayTeam.id} awayName={awayName} />
-                <CitedEvidenceTable citedEvidence={sealed.intelligence.citedEvidence} homeTeamId={match.homeTeam.id} homeName={homeName} awayTeamId={match.awayTeam.id} awayName={awayName} />
-                <HistoricalResponse historicalResponse={detail.historicalResponse} homeName={homeName} awayName={awayName} />
-                <NearFutureNote />
-              </>
-            ) : (
-              <>
-                <IntelligenceUnavailable />
-                <HistoricalResponse historicalResponse={detail.historicalResponse} homeName={homeName} awayName={awayName} />
-              </>
-            )}
-          </div>
+          sealed ? (
+            <div className="md:grid md:grid-cols-12 md:gap-4 space-y-4 md:space-y-0">
+              <div className="md:col-span-7 space-y-4" style={{ minWidth: 0 }}>
+                <IntelligenceSummary intelligence={sealed.intelligence} />
+                <EdgeGrid verdict={sealed.intelligence.verdict} homeName={homeName} awayName={awayName} />
+                <ModuleReadingList modules={sealed.intelligence.modules} homeTeamId={match.homeTeam.id} homeName={homeName} awayTeamId={match.awayTeam.id} awayName={awayName} />
+                <PreparednessPanel preparedness={sealed.intelligence.preparedness} homeName={homeName} awayName={awayName} />
+              </div>
+              <div className="md:col-span-5 space-y-4" style={{ minWidth: 0 }}>
+                <EvidenceTable citedEvidence={sealed.intelligence.citedEvidence} homeTeamId={match.homeTeam.id} homeName={homeName} awayTeamId={match.awayTeam.id} awayName={awayName} />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <IntelligenceUnavailable />
+              <HistoricalResponse historicalResponse={detail.historicalResponse} homeName={homeName} awayName={awayName} />
+            </div>
+          )
         )}
 
-        {/* TIMELINE — "how did this fixture's state progress?" The observed status
-            history (lifecycle transitions). Minute-by-minute match events are not part
-            of the payload, so that surface is an honest unavailable state, never faked. */}
+        {/* TIMELINE — status transitions merged with kickoff, intelligence lock and
+            result confirmation. */}
         {tab === 'timeline' && (
-          <div className="space-y-4">
-            {lifecycleRes
-              ? <MatchLifecyclePanel lifecycle={lifecycleRes.lifecycle} />
-              : <EmptyState message="No status history is available for this fixture yet." />}
-            <section className="space-y-2">
-              <p className="eyebrow">Match events</p>
-              <EmptyState message="Minute-by-minute match events are not available for this fixture." />
-            </section>
-          </div>
+          <LifecycleTimeline
+            lifecycle={lifecycleRes?.lifecycle ?? null}
+            kickoffAt={match.kickoffAt}
+            lockedAt={sealed?.intelligence.provenance.sealedAt ?? null}
+            confirmedAt={result?.confirmedAt ?? null}
+          />
         )}
       </div>
 

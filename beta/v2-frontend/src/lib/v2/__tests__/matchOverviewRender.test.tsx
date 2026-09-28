@@ -1,26 +1,26 @@
-// MATCH OVERVIEW / STATISTICS RENDER TESTS (DB-free; react-dom/server).
+// MATCH OVERVIEW / CLIENT RENDER TESTS (DB-free; react-dom/server).
 //
-// Locks the redesigned fixture-centric IA and its honesty rules:
-//   • the Intelligence board reads INACTIVE readiness as "Not available" (never a
-//     backend code), and shows the VENUE-RELEVANT form (home team's home form, away
-//     team's away form) with an honest low-sample note;
-//   • Key Signals are plain-language, derived only from supplied values, non-predictive,
-//     and surface the xG-vs-result tension (higher xG did not win);
-//   • Key Match Evidence + Statistics render observed values with neutral comparison
-//     bars (never a green/red "winner"), and never leak backend terminology;
-//   • Match Progression derives the 2nd-half score as full − half-time (observed);
-//   • scheduled fixtures never show match statistics; H2H has an honest empty state.
+// Locks the rebuilt Match page composition (authoritative wireframe):
+//   • MatchHeader — identity, score, HT, status chip, "Venue not supplied", confirmation;
+//   • TeamFeatureCompare — mirrored features, stronger side by governed direction, low
+//     sample flagged, no backend codes;
+//   • ResultCard — FT/HT (+ ET/PEN when present) + confirmation; scheduled → honest note;
+//   • RecentFormPanel — recent form for both sides;
+//   • MatchFactorList — the seven factor rows (fixture modules + splits + readiness),
+//     status word chips, plain sentence for missing data (never inactiveReason code);
+//   • StatisticsTab — period switch, grouped compare rows, better-side note;
+//   • LineupsTab — formation, position-group headers, canonical player links, subs;
+//   • VenueFormRail — this-fixture / reversed switch;
+//   • forbidden-language guard (no betting / prediction / backend codes).
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import {
-  IntelligenceBoard, KeySignals, KeyMatchEvidence, MatchProgression, MatchStatePanel,
-  MatchStatisticsFull, HeadToHeadUnavailable, LineupsUnavailable, MatchGovernedSignals,
-} from '@/components/v2/matchOverview';
+import { MatchHeader, TeamFeatureCompare, ResultCard } from '@/components/v2/matchOverview';
+import { RecentFormPanel, MatchFactorList, StatisticsTab, LineupsTab, VenueFormRail } from '@/components/v2/matchClient';
 import type {
-  ApiFeatureValue, ApiModuleReading, MatchDetailResponse, MatchResult, MatchTeamStatistics, TeamStatLine,
+  ApiFeatureValue, ApiModuleReading, MatchDetailResponse, MatchResult, MatchTeamStatistics, MatchLineups, TeamStatLine,
 } from '@/lib/v2/types';
 
 function text(node: React.ReactElement): string {
@@ -69,151 +69,135 @@ const STATS: MatchTeamStatistics = {
     { period: 'ALL', statistics: [
       line('Match overview', 'ballPossession', 'Ball possession', '57', '43', '57%', '43%'),
       line('Match overview', 'expectedGoals', 'Expected goals', '1.74', '2.15'),
-      line('Match overview', 'totalShotsOnGoal', 'Total shots', '13', '12'),
-      line('Match overview', 'passes', 'Passes', '551', '407'),
-      line('Match overview', 'bigChanceCreated', 'Big chances', '3', '3'),
       line('Shots', 'shotsOnGoal', 'Shots on target', '5', '4'),
     ] },
-    { period: '1ST', statistics: [
-      line('Match overview', 'ballPossession', 'Ball possession', '58', '42', '58%', '42%'),
-      line('Match overview', 'expectedGoals', 'Expected goals', '0.2', '0.13', '0.20', '0.13'),
-      line('Match overview', 'totalShotsOnGoal', 'Total shots', '5', '4'),
-    ] },
-    { period: '2ND', statistics: [
-      line('Match overview', 'ballPossession', 'Ball possession', '57', '43', '57%', '43%'),
-      line('Match overview', 'expectedGoals', 'Expected goals', '1.54', '2.02'),
-      line('Match overview', 'totalShotsOnGoal', 'Total shots', '8', '8'),
-    ] },
+    { period: '1ST', statistics: [ line('Match overview', 'ballPossession', 'Ball possession', '58', '42', '58%', '42%') ] },
+    { period: '2ND', statistics: [ line('Match overview', 'ballPossession', 'Ball possession', '57', '43', '57%', '43%') ] },
   ],
   coverage: { teamStatistics: 'present', periodsPresent: ['ALL', '1ST', '2ND'], statisticsAreObserved: true, provider: 'SPORTSAPI_API', retrievedAt: '2026-09-18T11:45:55.877Z' },
 };
 
-describe('Intelligence board (Overview centrepiece)', () => {
-  test('inactive readiness reads "Not available", never a backend code', () => {
-    const t = text(<IntelligenceBoard detail={DETAIL} />);
-    assert.match(t, /Readiness/); assert.match(t, /Not available/);
-    assert.doesNotMatch(t, /FEATURE_ABSENT/i);
-    assert.doesNotMatch(t, /INACTIVE/);
-    assert.doesNotMatch(t, /governed/i);
+const LINEUPS: MatchLineups = {
+  home: {
+    team: { id: '72', name: 'Palmeiras', slug: 'palmeiras-1963' }, formation: '4-2-3-1',
+    starting: [
+      { player: { id: '11', fullName: 'Weverton', slug: 'weverton-1' }, positionCode: 'G', positionName: 'Goalkeeper', positionGroup: 'GOALKEEPER', shirtNumber: 1 },
+      { player: { id: '12', fullName: 'Gustavo Gómez', slug: 'gustavo-gomez-2' }, positionCode: 'D', positionName: 'Defender', positionGroup: 'DEFENDER', shirtNumber: 15 },
+    ],
+    substitutes: [{ player: { id: '19', fullName: 'Bench Player', slug: 'bench-player-777' }, positionCode: 'F', positionName: 'Forward', positionGroup: 'FORWARD', shirtNumber: 19 }],
+  },
+  away: null,
+  coverage: { lineups: 'partial', lineupsAreObserved: true },
+};
+
+describe('MatchHeader', () => {
+  const t = text(<MatchHeader context={DETAIL} venue={null} result={RESULT} />);
+  test('identity, score, HT, status chip, venue-not-supplied, confirmation', () => {
+    assert.match(t, /Palmeiras/); assert.match(t, /Vasco da Gama/);
+    assert.match(t, /4\s*–\s*1/);
+    assert.match(t, /HT 0 – 0/);
+    assert.match(t, /FT/);                              // completed → FT
+    assert.match(t, /Venue not supplied/);
+    assert.match(t, /result confirmed/i);
   });
-  test('shows venue-relevant form: home home-form 45.33 and away away-form 5.67', () => {
-    const t = text(<IntelligenceBoard detail={DETAIL} />);
-    assert.match(t, /45\.33/); assert.match(t, /5\.67/);
-    assert.match(t, /Neutral/);              // home/away context status word
-    assert.match(t, /limited sample/);        // away congestion / form below threshold
+});
+
+describe('TeamFeatureCompare', () => {
+  const t = text(<TeamFeatureCompare detail={DETAIL} />);
+  test('mirrored features with low-sample flag; no backend codes', () => {
+    assert.match(t, /Team features/);
+    assert.match(t, /Home form/); assert.match(t, /45\.33/); assert.match(t, /5\.67/);
     assert.match(t, /Momentum/); assert.match(t, /Rest \(days\)/); assert.match(t, /Congestion/);
+    assert.match(t, /low sample/);
+    assert.doesNotMatch(t.toLowerCase(), /governed/);
+    assert.doesNotMatch(t, /INACTIVE/);
   });
 });
 
-describe('Key signals (derived, non-predictive)', () => {
-  const t = text(<KeySignals detail={DETAIL} stats={STATS} />);
-  test('summarises available signals in plain language', () => {
-    // The ±5 frontend form-gap heuristic was REMOVED — form-gap is now the governed
-    // form_gap_accuracy module (MatchGovernedSignals), not a frontend comparison.
-    assert.doesNotMatch(t, /stronger recent home form/i);
-    assert.doesNotMatch(t, /closely matched/i);
-    assert.match(t, /negative recent momentum/i);            // both negative
-    assert.match(t, /no clear separation/i);                 // both NEUTRAL
-    assert.match(t, /Readiness data is not available/i);
+describe('ResultCard', () => {
+  test('completed → FT + HT + confirmation', () => {
+    const t = text(<ResultCard detail={DETAIL} result={RESULT} />);
+    assert.match(t, /Result/); assert.match(t, /Full time/); assert.match(t, /4 – 1/); assert.match(t, /Half time/); assert.match(t, /Confirmed/);
   });
-  test('surfaces the xG-vs-result tension (higher xG did not win)', () => {
-    assert.match(t, /higher expected goals/i);
-    assert.match(t, /ran against/i);
-  });
-  test('carries no prediction / betting language', () => {
-    const lower = t.toLowerCase();
-    for (const term of ['will win', 'likely', 'probability', 'predicted', 'prediction', 'odds', 'bet', 'favourite', 'favorite', 'tip']) {
-      assert.equal(lower.includes(term), false, `must not contain "${term}"`);
-    }
-  });
-});
-
-// GOVERNED MATCH SIGNALS — the fixture-subject module verdicts (B1 exposure).
-// Locks: verdictText rendered verbatim, governed-badged, honest empty state when no
-// readings, no ±5 frontend heuristic, absent module → "not enough data" (never faked).
-const mr = (moduleKey: string, status: string, verdictText: string | null): ApiModuleReading => ({
-  moduleKey, status, strength: null, confidence: null, sampleObservationCount: 6,
-  sampleMeetsThreshold: true, asOf: '2026-08-23T17:30:00.000Z', verdictText, inactiveReason: null, evidence: null,
-});
-
-describe('Governed match signals (fixture-subject modules)', () => {
-  test('empty → honest unavailable state, no fabricated comparison', () => {
-    const t = text(<MatchGovernedSignals modules={[]} />);
-    assert.match(t, /Match signals/);
-    assert.match(t, /not available for this fixture yet/i);
-    assert.doesNotMatch(t, /stronger/i);   // no fabricated verdict
-  });
-  test('renders module verdicts verbatim, without exposing the "governed" label', () => {
-    const t = text(<MatchGovernedSignals modules={[
-      mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
-      mr('rest_advantage', 'NEUTRAL', 'Even rest: both sides on 4 days.'),
-    ]} />);
-    assert.doesNotMatch(t.toLowerCase(), /governed/);   // internal term — never surfaced
-    assert.match(t, /Recent form edge/); assert.match(t, /Home venue form stronger by 12\.50\./);
-    assert.match(t, /Rest/); assert.match(t, /Even rest: both sides on 4 days\./);
-  });
-  test('a module absent from a populated set shows "not enough data", never fabricated', () => {
-    // form_gap + rest present, travel absent → travel slot is honest, not invented.
-    const t = text(<MatchGovernedSignals modules={[
-      mr('form_gap_accuracy', 'SUPPORTS', 'Home venue form stronger by 12.50.'),
-      mr('rest_advantage', 'NEUTRAL', 'Even rest.'),
-    ]} />);
-    assert.match(t, /Travel/); assert.match(t, /Not enough data yet/i);
-  });
-});
-
-describe('Key match evidence + progression (observed)', () => {
-  test('evidence shows observed values and links to full statistics; no winner colour language', () => {
-    const markup = html(<KeyMatchEvidence stats={STATS} slug="palmeiras-vs-vasco-da-gama-292" />);
-    assert.match(markup, /href="\/v2\/matches\/palmeiras-vs-vasco-da-gama-292\?tab=statistics"/);
-    const t = text(<KeyMatchEvidence stats={STATS} slug="palmeiras-vs-vasco-da-gama-292" />);
-    assert.match(t, /Possession/); assert.match(t, /57%/); assert.match(t, /43%/);
-    assert.match(t, /Expected goals/); assert.match(t, /1\.74/); assert.match(t, /2\.15/);
-  });
-  test('progression derives 2nd-half score as full − half-time (0–0 then 4–1)', () => {
-    const t = text(<MatchProgression stats={STATS} result={RESULT} />);
-    assert.match(t, /0 – 0/);   // first-half score (half-time)
-    assert.match(t, /4 – 1/);   // second-half score = 4−0, 1−0
-    assert.match(t, /1st half/i); assert.match(t, /2nd half/i);
-  });
-});
-
-describe('Statistics tab (canonical, grouped)', () => {
-  const t = text(<MatchStatisticsFull stats={STATS} homeName="Palmeiras" awayName="Vasco da Gama" />);
-  test('groups by category, shows full match, and explains bars are share not verdict', () => {
-    assert.match(t, /Match statistics/i);
-    assert.match(t, /Full match/i); assert.match(t, /Match overview/); assert.match(t, /Shots/);
-    assert.match(t, /share of the two-team total, not which side performed better/i);
-    assert.doesNotMatch(t, /FEATURE_ABSENT/i);
-  });
-  test('absent statistics → honest empty state', () => {
-    const empty: MatchTeamStatistics = { periods: [], coverage: { teamStatistics: 'absent', periodsPresent: [], statisticsAreObserved: true, provider: null, retrievedAt: null } };
-    assert.match(text(<MatchStatisticsFull stats={empty} homeName="A" awayName="B" />), /No team statistics recorded/i);
-  });
-});
-
-describe('State-aware match state + H2H', () => {
-  test('scheduled fixture shows status, not statistics', () => {
+  test('scheduled → honest not-yet-played note (no fabricated 0–0)', () => {
     const scheduled: MatchDetailResponse = { ...DETAIL, match: { ...DETAIL.match, status: 'SCHEDULED', score: null } };
-    const t = text(<MatchStatePanel detail={scheduled} result={null} />);
-    assert.match(t, /Match status/i);
-    assert.match(t, /will appear once the fixture has been played/i);
-    assert.doesNotMatch(t, /Half time/i);
+    const t = text(<ResultCard detail={scheduled} result={null} />);
+    assert.match(t, /Not yet played/i);
+    assert.doesNotMatch(t, /0 – 0/);
   });
-  test('completed fixture shows HT and FT result', () => {
-    const t = text(<MatchStatePanel detail={DETAIL} result={RESULT} />);
-    assert.match(t, /Half time/i); assert.match(t, /Full time/i); assert.match(t, /4 – 1/);
+});
+
+describe('RecentFormPanel', () => {
+  test('shows recent form for both sides', () => {
+    const t = text(<RecentFormPanel detail={DETAIL} />);
+    assert.match(t, /Recent form/); assert.match(t, /Palmeiras/); assert.match(t, /Vasco da Gama/);
   });
-  test('H2H is an honest empty state (never fabricated)', () => {
-    assert.match(text(<HeadToHeadUnavailable />), /not available for this fixture/i);
+});
+
+describe('MatchFactorList (7 rows)', () => {
+  const t = text(<MatchFactorList detail={DETAIL} />);
+  test('renders factor labels, status words, and plain sentence for missing data', () => {
+    assert.match(t, /Match factors/);
+    assert.match(t, /Travel Impact/); assert.match(t, /Rest Advantage/); assert.match(t, /Form Gap Accuracy/);
+    assert.match(t, /Home\/Away Split/); assert.match(t, /Readiness/);
+    assert.match(t, /Neutral/);                              // split status
+    assert.match(t, /Balanced home and away record\./);       // split verdict verbatim
+    assert.match(t, /No data recorded for this match\./);     // absent + inactive rows
   });
-  test('Lineups unavailable is an honest empty state, no unavailable/fit/selection claim', () => {
-    const t = text(<LineupsUnavailable />);
-    assert.match(t, /Lineups/);
-    assert.match(t, /Lineup information is not available for this fixture yet\./);
-    const lower = t.toLowerCase();
-    for (const term of ['injur', 'unavailable player', 'not fit', 'suspend', 'will not play', 'ruled out', 'selected', 'available to play']) {
-      assert.equal(lower.includes(term), false, `must not contain "${term}"`);
+  test('never exposes the inactiveReason code or backend jargon', () => {
+    assert.doesNotMatch(t, /FEATURE_ABSENT/i);
+    assert.doesNotMatch(t.toLowerCase(), /governed/);
+    assert.doesNotMatch(t, /\bINACTIVE\b/);
+  });
+});
+
+describe('StatisticsTab', () => {
+  const t = text(<StatisticsTab stats={STATS} homeName="Palmeiras" awayName="Vasco da Gama" />);
+  test('period switch, grouped compare rows, better-side note', () => {
+    assert.match(t, /Statistics/);
+    assert.match(t, /Full match/); assert.match(t, /1st half/); assert.match(t, /2nd half/);
+    assert.match(t, /Match overview/); assert.match(t, /Shots/);
+    assert.match(t, /57%/); assert.match(t, /43%/);
+    assert.match(t, /brighter, bolder side/i);
+  });
+});
+
+describe('LineupsTab', () => {
+  test('formation, position-group headers, canonical player links, substitutes', () => {
+    const markup = html(<LineupsTab lineups={LINEUPS} />);
+    assert.match(markup, /4-2-3-1/);
+    assert.match(markup, /href="\/v2\/players\/weverton-1-11"/);
+    const t = text(<LineupsTab lineups={LINEUPS} />);
+    assert.match(t, /Goalkeeper/); assert.match(t, /Defence/);
+    assert.match(t, /Substitutes/i);
+  });
+  test('both sides null → honest empty', () => {
+    const none: MatchLineups = { home: null, away: null, coverage: { lineups: 'absent', lineupsAreObserved: true } };
+    assert.match(text(<LineupsTab lineups={none} />), /No lineups reported/i);
+  });
+});
+
+describe('VenueFormRail', () => {
+  test('renders the switch and honest empty rows', () => {
+    const t = text(<VenueFormRail homeName="Palmeiras" awayName="Vasco da Gama" home={DETAIL.recentVenueForm.home} away={DETAIL.recentVenueForm.away} />);
+    assert.match(t, /Venue form/); assert.match(t, /This fixture/);
+    assert.match(t, /No recent matches recorded\./);
+  });
+});
+
+describe('no betting / prediction language across the Overview surfaces', () => {
+  test('assembled surfaces carry no forbidden lexicon', () => {
+    const all = [
+      text(<MatchHeader context={DETAIL} venue={null} result={RESULT} />),
+      text(<TeamFeatureCompare detail={DETAIL} />),
+      text(<ResultCard detail={DETAIL} result={RESULT} />),
+      text(<MatchFactorList detail={DETAIL} />),
+      text(<StatisticsTab stats={STATS} homeName="Palmeiras" awayName="Vasco da Gama" />),
+    ].join(' ').toLowerCase();
+    for (const term of ['predicted', 'prediction', 'probability', 'odds', 'bookmaker', 'stake', 'wager', 'betting', 'tip', 'guaranteed', 'best bet', 'favourite', 'favorite']) {
+      assert.equal(all.includes(term), false, `must not contain "${term}"`);
     }
+    assert.doesNotMatch(all, /\bbet\b/);
+    assert.doesNotMatch(all, /\bpick\b/);
   });
 });

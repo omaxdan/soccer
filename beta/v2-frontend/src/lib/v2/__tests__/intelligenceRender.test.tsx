@@ -1,25 +1,25 @@
 // MATCH INTELLIGENCE — RENDER TESTS (DB-free; react-dom/server, no network, no DOM).
 //
-// Locks the reconciled, user-facing Match Intelligence surface (Phase F):
-//   • the reading at kickoff shows its dates, consensus counts, completeness and the
-//     recorded edges — with un-recorded edges/risk/confidence stated, never zeroed;
-//   • module readings show name · subject · status word · verbatim verdict · sample;
-//   • cited evidence shows input · team · value · kind · sample, with NO feature ids,
-//     versions or checksums;
-//   • historical response shows after-win / after-loss with an APPLIES marker;
-//   • CRITICAL: the surface exposes none of the internal vocabulary (sealed, governed,
-//     snapshot, provenance, checksum, immutable, composition, feature version) and no
-//     betting lexicon.
-//
-// Runs under tsconfig.test.json (jsx: react-jsx) so the component .tsx files, which do
-// not import React, transform with the automatic runtime.
+// Locks the rebuilt Match Intelligence surfaces (authoritative wireframe):
+//   • IntelligenceSummary — lock band, consensus counts (Supports/Counters/Neutral/
+//     Inactive) + segment bar, completeness;
+//   • EdgeGrid — six home-relative edges; present edges show magnitude + "Favours <team>",
+//     null edges show "Not available" (never a fabricated 0);
+//   • ModuleReadingList — numbered readings: name · subject · status word · verdict ·
+//     obs (CONTRADICTS → "Counters"), no version/id;
+//   • PreparednessPanel — empty array → honest "No preparedness readings for this match.";
+//   • EvidenceTable — input · value · kind · obs grouped by team, NO feature ids/versions;
+//   • HistoricalResponse — after-win/after-loss with APPLIES marker;
+//   • CRITICAL: none of the internal vocabulary (sealed/governed/snapshot/provenance/
+//     checksum/immutable/composition/version/ids) and no betting lexicon.
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
-  ReadingAtKickoff, ModuleReadings, CitedEvidenceTable, HistoricalResponse, NearFutureNote, IntelligenceUnavailable,
+  IntelligenceSummary, EdgeGrid, ModuleReadingList, PreparednessPanel, EvidenceTable,
+  HistoricalResponse, IntelligenceUnavailable,
 } from '@/components/v2/intelligence';
 import type { MatchIntelligence, HistoricalResponseSide } from '@/lib/v2/types';
 
@@ -72,66 +72,81 @@ function visibleText(html: string): string {
 const HOME = 'Vitória', AWAY = 'Grêmio';
 const fullMarkup = renderToStaticMarkup(
   <div>
-    <ReadingAtKickoff intelligence={INTEL} />
-    <ModuleReadings modules={INTEL.modules} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />
-    <CitedEvidenceTable citedEvidence={INTEL.citedEvidence} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />
+    <IntelligenceSummary intelligence={INTEL} />
+    <EdgeGrid verdict={INTEL.verdict} homeName={HOME} awayName={AWAY} />
+    <ModuleReadingList modules={INTEL.modules} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />
+    <PreparednessPanel preparedness={INTEL.preparedness} homeName={HOME} awayName={AWAY} />
+    <EvidenceTable citedEvidence={INTEL.citedEvidence} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />
     <HistoricalResponse historicalResponse={HISTORICAL} homeName={HOME} awayName={AWAY} />
-    <NearFutureNote />
   </div>,
 );
 const fullText = visibleText(fullMarkup);
 
-describe('reading at kickoff', () => {
-  const t = visibleText(renderToStaticMarkup(<ReadingAtKickoff intelligence={INTEL} />));
-  test('shows dates, consensus counts, completeness and recorded edges', () => {
+describe('intelligence summary', () => {
+  const t = visibleText(renderToStaticMarkup(<IntelligenceSummary intelligence={INTEL} />));
+  test('shows lock band, consensus counts and completeness', () => {
     assert.match(t, /Reading at kickoff/);
-    assert.match(t, /Taken at kickoff 7 Sept 2026/);
-    assert.match(t, /Locked 8 Sept 2026/);
-    assert.match(t, /Supports/); assert.match(t, /Contradicts/);
-    assert.match(t, /50\.00%/);              // completeness
-    assert.match(t, /Form edge/); assert.match(t, /34/);   // recorded edge
-    assert.match(t, /Rest edge/);
+    assert.match(t, /Locked at kickoff · 8 Sept 2026/);
+    assert.match(t, /Supports/); assert.match(t, /Counters/); assert.match(t, /Neutral/); assert.match(t, /Inactive/);
+    assert.match(t, /50%/);                          // completeness
+    assert.match(t, /5 modules with evidence/);
   });
-  test('un-recorded edges/risk/confidence are stated, never zeroed', () => {
-    assert.match(t, /not recorded/i);
-    assert.doesNotMatch(t, /readiness edge\s*0/i);
+});
+
+describe('edge grid', () => {
+  const t = visibleText(renderToStaticMarkup(<EdgeGrid verdict={INTEL.verdict} homeName={HOME} awayName={AWAY} />));
+  test('present edges show magnitude + favoured side; null edges show Not available', () => {
+    assert.match(t, /Form/); assert.match(t, /34/); assert.match(t, /Favours Vitória/);
+    assert.match(t, /Rest/); assert.match(t, /Favours Grêmio/);  // -6.1 → away
+    assert.match(t, /Not available/);                             // null edges
+  });
+  test('never renders a null edge as zero', () => {
+    assert.doesNotMatch(t, /Readiness\s*0/i);
   });
 });
 
 describe('module readings', () => {
-  const t = visibleText(renderToStaticMarkup(<ModuleReadings modules={INTEL.modules} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />));
-  test('name · subject · status word · verbatim verdict, in display order, no version', () => {
+  const t = visibleText(renderToStaticMarkup(<ModuleReadingList modules={INTEL.modules} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />));
+  test('numbered name · subject · status word · verdict, CONTRADICTS→Counters, no version', () => {
     assert.match(t, /Home\/Away Split/);
     assert.match(t, /Grêmio/);                       // subject team (66 = away)
-    assert.match(t, /Travel Impact/); assert.match(t, /Fixture/);  // fixture-subject module
-    assert.match(t, /Supports/); assert.match(t, /Contradicts/);
-    assert.match(t, /Home travelled 1669 km farther\./); // verbatim verdict
-    assert.match(t, /Not enough data/);              // INACTIVE readiness
-    assert.doesNotMatch(t, /v1\.0\.0/);              // no module version
+    assert.match(t, /Travel Impact/); assert.match(t, /Fixture/);
+    assert.match(t, /Supports/); assert.match(t, /Counters/);
+    assert.match(t, /Home travelled 1669 km farther\./);
+    assert.match(t, /Inactive/);
+    assert.doesNotMatch(t, /v1\.0\.0/);
   });
 });
 
-describe('cited evidence — no internal ids', () => {
-  const t = visibleText(renderToStaticMarkup(<CitedEvidenceTable citedEvidence={INTEL.citedEvidence} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />));
-  test('shows input, team, value, kind, sample', () => {
+describe('preparedness — empty', () => {
+  test('empty array → honest no-readings state, never a fabricated score', () => {
+    const t = visibleText(renderToStaticMarkup(<PreparednessPanel preparedness={[]} homeName={HOME} awayName={AWAY} />));
+    assert.match(t, /No preparedness readings for this match\./);
+    assert.doesNotMatch(t, /\b0 \/ 60\b/);
+  });
+});
+
+describe('cited evidence — grouped by team, no internal ids', () => {
+  const t = visibleText(renderToStaticMarkup(<EvidenceTable citedEvidence={INTEL.citedEvidence} homeTeamId="71" homeName={HOME} awayTeamId="66" awayName={AWAY} />));
+  test('shows input, value, kind, obs grouped by team', () => {
     assert.match(t, /Away form/);       // humanized featureKey
     assert.match(t, /Derived/); assert.match(t, /Recorded/);
     assert.match(t, /Vitória/); assert.match(t, /Grêmio/);
   });
   test('never shows raw keys, feature versions or value ids', () => {
     assert.doesNotMatch(t, /team\.away_form/);
-    assert.doesNotMatch(t, /7779/);          // featureValueId
-    assert.doesNotMatch(t, /\bv2\b/);        // featureVersionId
+    assert.doesNotMatch(t, /7779/);
+    assert.doesNotMatch(t, /\bv2\b/);
   });
 });
 
 describe('historical response (past)', () => {
   const t = visibleText(renderToStaticMarkup(<HistoricalResponse historicalResponse={HISTORICAL} homeName={HOME} awayName={AWAY} />));
   test('after-win / after-loss counts with APPLIES on the engaged trigger', () => {
-    assert.match(t, /Historical response/);
+    assert.match(t, /Historical patterns/);
     assert.match(t, /After a win/); assert.match(t, /After a loss/);
     assert.match(t, /W5 D2 L4/);       // Vitória after a loss
-    assert.match(t, /APPLIES/);
+    assert.match(t, /APPLIES TO THIS MATCH/);
     assert.match(t, /not part of the kickoff reading/i);
   });
   test('renders nothing when historical response is absent', () => {
@@ -139,7 +154,7 @@ describe('historical response (past)', () => {
   });
 });
 
-describe('NO internal vocabulary is exposed (Phase F §16 / §83)', () => {
+describe('NO internal vocabulary is exposed', () => {
   const all = `${fullText} ${visibleText(renderToStaticMarkup(<IntelligenceUnavailable />))}`.toLowerCase();
   test('never exposes sealed/governed/snapshot/provenance/checksum/immutable/composition/version ids', () => {
     for (const term of ['sealed', 'governed', 'snapshot', 'provenance', 'checksum', 'immutable', 'composition', 'feature version', 'deadbeef', '1091']) {

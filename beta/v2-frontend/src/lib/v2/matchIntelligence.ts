@@ -20,7 +20,10 @@
 // per-side feature key only — presence and values are read exclusively from the
 // API's citedEvidence. It invents no component and no score.
 
-import type { CitedEvidenceItem, IntelligenceModuleReading, IntelligenceVerdict, PreparednessSide } from './types';
+import type {
+  ApiModuleReading, CitedEvidenceItem, IntelligenceModuleReading, IntelligenceVerdict,
+  LifecycleTransition, MatchDetailResponse, PreparednessSide,
+} from './types';
 
 // ── null-honest numeric text formatting ─────────────────────────────────────────
 
@@ -339,14 +342,145 @@ export function evidenceKindLabel(code: string): string {
 }
 
 export interface StatusWord { word: string; color: string; engaged: boolean }
-/** A module consensus status as a plain word + semantic colour. These four words are
- *  the product's own consensus vocabulary (§17), not backend jargon. */
+/** A module consensus status as a plain word + semantic colour. Follows the
+ *  authoritative Match wireframe vocabulary: SUPPORTS→Supports, CONTRADICTS→Counters,
+ *  NEUTRAL→Neutral, INACTIVE→Inactive. Colours per the wireframe token map
+ *  (Supports=edge, Counters=risk, Neutral=cool, Inactive=faint). Never betting jargon. */
 export function moduleStatusWord(status: string): StatusWord {
   switch (status.toUpperCase()) {
     case 'SUPPORTS': return { word: 'Supports', color: 'var(--edge)', engaged: true };
-    case 'CONTRADICTS': return { word: 'Contradicts', color: 'var(--risk)', engaged: true };
-    case 'NEUTRAL': return { word: 'Neutral', color: 'var(--muted)', engaged: true };
-    case 'INACTIVE': return { word: 'Not enough data', color: 'var(--faint)', engaged: false };
+    case 'CONTRADICTS': return { word: 'Counters', color: 'var(--risk)', engaged: true };
+    case 'NEUTRAL': return { word: 'Neutral', color: 'var(--cool)', engaged: true };
+    case 'INACTIVE': return { word: 'Inactive', color: 'var(--faint)', engaged: false };
     default: return { word: status.charAt(0) + status.slice(1).toLowerCase(), color: 'var(--muted)', engaged: status.toUpperCase() !== 'INACTIVE' };
   }
+}
+
+// ── comparative edges (home-relative sign → "Favours <team>") ─────────────────────
+//
+// The sealed comparative edges are HOME-RELATIVE by contract (a positive value favours
+// the home side, a negative the away side, zero is level). This is documented verdict
+// semantics — not an inference — so surfacing "Favours <team>" from the sign is a
+// faithful read, never a fabricated direction. A null edge stays an honest
+// "Not available"; nothing is computed.
+
+export interface EdgeDisplay {
+  /** True when the edge carries a governed value. */
+  readonly present: boolean;
+  /** Signed magnitude text (trimmed), or the honest unavailable label. */
+  readonly magnitude: string;
+  /** The favoured side's name, or null when absent/level. */
+  readonly favours: string | null;
+}
+
+/** Resolve a home-relative edge value to a magnitude + favoured side. */
+export function edgeFavours(value: string | null, homeName: string, awayName: string): EdgeDisplay {
+  if (value === null) return { present: false, magnitude: 'Not available', favours: null };
+  const n = Number.parseFloat(value);
+  const favours = !Number.isFinite(n) || n === 0 ? null : n > 0 ? homeName : awayName;
+  return { present: true, magnitude: trimNumericText(value), favours };
+}
+
+/** The six comparative edges, in the wireframe's display order, each with the
+ *  home-relative field it reads. Governed today: form, rest (others are null). */
+export const EDGE_FIELDS: readonly { label: string; pick: (v: IntelligenceVerdict) => string | null }[] = [
+  { label: 'Form', pick: (v) => v.formEdge },
+  { label: 'Rest', pick: (v) => v.restEdge },
+  { label: 'Travel', pick: (v) => v.travelEdge },
+  { label: 'Readiness', pick: (v) => v.readinessEdge },
+  { label: 'Congestion', pick: (v) => v.congestionEdge },
+  { label: 'Availability', pick: (v) => v.availabilityEdge },
+];
+
+// ── consensus segment bar (12 segments, one per module tallied) ───────────────────
+
+export type ConsensusClass = 'supports' | 'counters' | 'neutral' | 'inactive';
+export interface ConsensusSegment { readonly kind: ConsensusClass; readonly color: string }
+
+/** Build the ordered segment list for the consensus bar: supports, then counters,
+ *  then neutral, then inactive — one segment per tallied module. Pure; counts come
+ *  straight from the sealed verdict. */
+export function consensusSegments(verdict: IntelligenceVerdict): ConsensusSegment[] {
+  const out: ConsensusSegment[] = [];
+  const push = (n: number, kind: ConsensusClass, color: string) => {
+    for (let i = 0; i < n; i++) out.push({ kind, color });
+  };
+  push(verdict.consensusSupportsCount, 'supports', 'var(--edge)');
+  push(verdict.consensusContradictsCount, 'counters', 'var(--risk)');
+  push(verdict.consensusNeutralCount, 'neutral', 'var(--cool)');
+  push(verdict.consensusInactiveCount, 'inactive', 'var(--line)');
+  return out;
+}
+
+// ── Overview "Match factors" (live readings, 7 rows) ──────────────────────────────
+//
+// The factor rows are the live/contextual match readings the Overview surfaces:
+// the fixture-subject modules (matchModules) plus each team's home/away split and
+// readiness. Assembled straight from MatchDetailResponse — nothing computed. A row
+// whose reading is absent renders an honest unavailable slot, never a zero.
+
+export interface MatchFactor {
+  readonly key: string;
+  readonly label: string;
+  /** The side a team-subject factor is about; null for a fixture-subject factor. */
+  readonly subject: string | null;
+  readonly reading: ApiModuleReading | null;
+}
+
+/** Assemble the Overview match-factor rows in the wireframe's order: the three
+ *  fixture modules, then each team's home/away split, then each team's readiness. */
+export function buildMatchFactors(detail: MatchDetailResponse): MatchFactor[] {
+  const byKey = new Map(detail.matchModules.map((m) => [m.moduleKey, m]));
+  const home = detail.match.homeTeam.name;
+  const away = detail.match.awayTeam.name;
+  const hi = detail.intelligence.home;
+  const ai = detail.intelligence.away;
+  return [
+    { key: 'travel_impact', label: 'Travel Impact', subject: null, reading: byKey.get('travel_impact') ?? null },
+    { key: 'rest_advantage', label: 'Rest Advantage', subject: null, reading: byKey.get('rest_advantage') ?? null },
+    { key: 'form_gap_accuracy', label: 'Form Gap Accuracy', subject: null, reading: byKey.get('form_gap_accuracy') ?? null },
+    { key: 'home_away_split_home', label: 'Home/Away Split', subject: home, reading: hi.homeAwaySplit },
+    { key: 'home_away_split_away', label: 'Home/Away Split', subject: away, reading: ai.homeAwaySplit },
+    { key: 'readiness_home', label: 'Readiness', subject: home, reading: hi.readiness },
+    { key: 'readiness_away', label: 'Readiness', subject: away, reading: ai.readiness },
+  ];
+}
+
+// ── merged lifecycle timeline (status + kickoff + lock + result confirmation) ─────
+//
+// The Timeline tab merges the observed lifecycle transitions with three other known
+// instants — kickoff, the intelligence lock, and result confirmation — into one
+// chronological list. Every event comes from a real payload field; nothing is
+// fabricated, and a missing source simply contributes no event.
+
+export interface TimelineEvent {
+  readonly at: string;
+  readonly title: string;
+  readonly detail: string | null;
+  /** A status change gets a filled dot; contextual markers an outline dot. */
+  readonly filled: boolean;
+}
+
+/** Merge lifecycle transitions with kickoff / lock / confirmation instants, sorted
+ *  ascending by time. `lockedAt` and `confirmedAt` are optional (null when absent). */
+export function mergeTimeline(
+  transitions: readonly LifecycleTransition[],
+  kickoffAt: string,
+  lockedAt: string | null,
+  confirmedAt: string | null,
+): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  events.push({ at: kickoffAt, title: 'Kickoff', detail: null, filled: false });
+  for (const t of transitions) {
+    const to = t.toState.displayName ?? t.toState.code;
+    const from = t.fromState?.displayName ?? t.fromState?.code ?? null;
+    events.push({ at: t.transitionedAt, title: to, detail: from ? `from ${from}` : null, filled: true });
+  }
+  if (lockedAt) events.push({ at: lockedAt, title: 'Intelligence locked', detail: 'reading taken at kickoff', filled: false });
+  if (confirmedAt) events.push({ at: confirmedAt, title: 'Result confirmed', detail: null, filled: false });
+  return events.sort((a, b) => {
+    const ta = Date.parse(a.at); const tb = Date.parse(b.at);
+    if (Number.isNaN(ta) || Number.isNaN(tb) || ta === tb) return 0;
+    return ta - tb;
+  });
 }
