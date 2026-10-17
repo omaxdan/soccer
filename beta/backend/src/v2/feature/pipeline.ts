@@ -138,9 +138,59 @@ export const CALCULATORS: readonly Calculator[] = [
   squadContinuity,
 ];
 
+// ── optional feature-key scoping (--feature) ─────────────────────────────────────
+//
+// A replay may request a subset of registered features (e.g. only
+// `team.squad_stability` after a lineup enrichment). The selection NARROWS which
+// calculators EXECUTE; it never changes the registry, the coverage assertion or the
+// dependency-derived execution order (those are computed over the full set, so a
+// requested calculator still runs in its correct place). A requested feature's
+// dependency VALUES are read from the database as usual — the filter does not
+// auto-include dependency calculators, and an absent prior value yields no row, exactly
+// as in an unscoped run.
+
+/** Every feature key any registered calculator produces — the valid universe a
+ *  `--feature` filter is validated against. Pure. */
+export function knownFeatureKeys(calculators: readonly Calculator[] = CALCULATORS): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const calculator of calculators) for (const key of calculator.featureKeys) keys.add(key);
+  return keys;
+}
+
+/** Throws clearly if any requested feature key is not produced by a registered
+ *  calculator, so a typo fails loudly rather than silently running nothing. */
+export function assertKnownFeatureKeys(
+  featureKeys: readonly string[],
+  calculators: readonly Calculator[] = CALCULATORS,
+): void {
+  const known = knownFeatureKeys(calculators);
+  const unknown = featureKeys.filter((key) => !known.has(key));
+  if (unknown.length > 0) {
+    throw new Error(
+      `unknown feature key(s): ${unknown.join(', ')}. ` +
+        `registered feature keys are: ${[...known].sort().join(', ')}`,
+    );
+  }
+}
+
+/** True when a calculator produces at least one requested feature key. A null request
+ *  (no `--feature`) matches every calculator — the unscoped default. Pure. */
+export function calculatorRequested(
+  calculator: Calculator,
+  requested: ReadonlySet<string> | null,
+): boolean {
+  return requested === null || calculator.featureKeys.some((key) => requested.has(key));
+}
+
 export interface FeatureRunOptions extends EligibilityOptions {
   /** Compute and report without writing. Opens no transaction that persists. */
   readonly dryRun?: boolean;
+  /**
+   * OPTIONAL feature-key scope. When present and non-empty, only calculators that
+   * produce one of these keys execute; the plan and coverage are still derived over
+   * the full set, so ordering is preserved. Absent/empty → every calculator runs.
+   */
+  readonly featureKeys?: readonly string[];
   /** Declare sources and dependencies before calculating. On by default. */
   readonly declare?: boolean;
   /** Overrides the run clock. Tests supply it; production does not. */
@@ -172,6 +222,12 @@ export interface FeatureRunReport {
   readonly counts: ReadonlyMap<string, RelationCounts>;
   readonly failures: number;
   readonly dryRun: boolean;
+  /** Scope echo (dry-run visibility): the editions/features the run was limited to,
+   *  or null when unscoped, plus the selection size the batches represent. */
+  readonly selectedEditionIds: readonly string[] | null;
+  readonly selectedFeatureKeys: readonly string[] | null;
+  readonly executedCalculatorKeys: readonly string[];
+  readonly uniqueTeams: number;
 }
 
 function emptyCounts(): RelationCounts {
@@ -214,6 +270,14 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
   const scopedCalculators = effective.filter(
     (calculator) => contextKindOf(calculator) === COMPETITION_SCOPED_CONTEXT_KIND
   );
+
+  // Optional --feature scope: validate the requested keys against the effective set,
+  // then a null request means "every calculator" (the unscoped default). Validation is
+  // here (single source) so an unknown key fails before any selection or write.
+  const requestedFeatureKeys =
+    options.featureKeys && options.featureKeys.length > 0
+      ? (assertKnownFeatureKeys(options.featureKeys, effective), new Set(options.featureKeys))
+      : null;
 
   // Registry and plan are loaded once, outside the write transactions. The
   // registry is "modified rarely and under governance", so a concurrent change
@@ -275,6 +339,7 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
       for (const calculatorKey of stage.calculatorKeys) {
         const calculator = byKey.get(calculatorKey);
         if (!calculator) continue;
+        if (!calculatorRequested(calculator, requestedFeatureKeys)) continue;
 
         for (const batch of batches) {
           try {
@@ -297,6 +362,7 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
     // failure is isolated, exactly as in the ALL_COMPETITIONS pass. Empty in
     // production until a COMPETITION_SCOPED calculator is registered.
     for (const calculator of scopedCalculators) {
+      if (!calculatorRequested(calculator, requestedFeatureKeys)) continue;
       for (const batch of scopedBatches) {
         try {
           const result = await runScopedBatch(registry, calculator, batch, options.dryRun === true);
@@ -317,6 +383,13 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
     }
   });
 
+  const executedCalculatorKeys = effective
+    .filter((calculator) => calculatorRequested(calculator, requestedFeatureKeys))
+    .map((calculator) => calculator.calculatorKey);
+  const teamSet = new Set<string>();
+  for (const batch of batches) for (const teamId of batch.teamIds) teamSet.add(teamId);
+  for (const batch of scopedBatches) for (const teamId of batch.teamIds) teamSet.add(teamId);
+
   return {
     batches: batches.length + scopedBatches.length,
     stages: plan.stages.map((stage) => stage.calculatorKeys),
@@ -324,6 +397,10 @@ export async function runFeaturePipeline(options: FeatureRunOptions = {}): Promi
     counts,
     failures,
     dryRun: options.dryRun === true,
+    selectedEditionIds: options.competitionEditionIds ? [...options.competitionEditionIds] : null,
+    selectedFeatureKeys: requestedFeatureKeys ? [...requestedFeatureKeys] : null,
+    executedCalculatorKeys,
+    uniqueTeams: teamSet.size,
   };
 }
 

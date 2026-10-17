@@ -15,7 +15,7 @@
 // any module that reads `process.env` at load time is evaluated.
 import '../config/env';
 
-import { runFeaturePipeline, type FeatureRunReport } from './pipeline';
+import { runFeaturePipeline, assertKnownFeatureKeys, type FeatureRunReport } from './pipeline';
 import { runAllVerifications, type VerificationResult } from './verify';
 import { closeAllPools } from '../db/pool';
 
@@ -27,6 +27,26 @@ interface Invocation {
   readonly replayFrom?: Date;
   readonly replayTo?: Date;
   readonly lookbackDays?: number;
+  /** Optional competition-edition scope (internal edition ids). */
+  readonly competitionEditionIds?: string[];
+  /** Optional registered-feature scope (feature keys). */
+  readonly featureKeys?: string[];
+}
+
+/** Collect a repeatable, optionally comma-separated flag into a flat string list,
+ *  trimming blanks. `--edition 147 --edition 18,143` → ['147','18','143']. */
+function collectList(argv: readonly string[], flag: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== flag) continue;
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith('--')) throw new Error(`${flag} expects a value`);
+    for (const part of value.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed.length > 0) out.push(trimmed);
+    }
+  }
+  return out;
 }
 
 function parseUtcDate(value: string, flag: string): Date {
@@ -59,6 +79,21 @@ export function parseArguments(argv: readonly string[]): Invocation {
     }
   }
 
+  // Optional scope filters — valid on both `calculate` and `replay`. Validated here
+  // so a bad id/key fails clearly instead of silently running the full corpus.
+  const competitionEditionIds = collectList(argv, '--edition');
+  for (const id of competitionEditionIds) {
+    if (!/^\d+$/.test(id)) {
+      throw new Error(`--edition expects positive integer edition id(s), received '${id}'`);
+    }
+  }
+  const featureKeys = collectList(argv, '--feature');
+  if (featureKeys.length > 0) assertKnownFeatureKeys(featureKeys);
+  const scope = {
+    ...(competitionEditionIds.length > 0 ? { competitionEditionIds } : {}),
+    ...(featureKeys.length > 0 ? { featureKeys } : {}),
+  };
+
   if (command === 'replay') {
     if (!flags.has('--from') || !flags.has('--to')) {
       // D-4: replay is an EXPLICIT invocation. Defaulting its range would make a
@@ -68,7 +103,7 @@ export function parseArguments(argv: readonly string[]): Invocation {
     const replayFrom = parseUtcDate(flags.get('--from')!, '--from');
     const replayTo = parseUtcDate(flags.get('--to')!, '--to');
     if (replayTo.getTime() < replayFrom.getTime()) throw new Error('--to precedes --from');
-    return { command, dryRun, replayFrom, replayTo };
+    return { command, dryRun, replayFrom, replayTo, ...scope };
   }
 
   const lookback = flags.get('--lookback-days');
@@ -76,6 +111,7 @@ export function parseArguments(argv: readonly string[]): Invocation {
     command,
     dryRun,
     lookbackDays: lookback === undefined ? undefined : Number(lookback),
+    ...scope,
   };
 }
 
@@ -85,6 +121,12 @@ function reportRun(report: FeatureRunReport): void {
     `\nv2 feature ${report.dryRun ? 'DRY RUN' : 'run'} complete: ` +
       `${report.batches} batch(es), ${report.failures} failure(s)\n`
   );
+  console.log(
+    `  scope:  editions ${report.selectedEditionIds ? report.selectedEditionIds.join(',') : 'ALL'}` +
+      ` · features ${report.selectedFeatureKeys ? report.selectedFeatureKeys.join(',') : 'ALL'}` +
+      ` · as-of batches ${report.batches} · unique teams ${report.uniqueTeams}`
+  );
+  console.log(`  running: ${report.executedCalculatorKeys.join(', ') || '(none)'}`);
   console.log(`  stages: ${report.stages.map((stage) => stage.join(' + ')).join('  ->  ')}`);
   console.log(`  order:  ${report.sequence.join(' -> ')}   (derived from feature_dependency)\n`);
   for (const [relation, counts] of [...report.counts].sort()) {
@@ -131,6 +173,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       replayFrom: invocation.replayFrom,
       replayTo: invocation.replayTo,
       lookbackDays: invocation.lookbackDays,
+      competitionEditionIds: invocation.competitionEditionIds,
+      featureKeys: invocation.featureKeys,
     });
     reportRun(report);
     // A run that completed with failed batches exits non-zero, so a deployment

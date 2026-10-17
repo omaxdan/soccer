@@ -78,6 +78,15 @@ export interface EligibilityOptions {
   /** Replay only: the inclusive kickoff range. */
   readonly replayFrom?: Date;
   readonly replayTo?: Date;
+  /**
+   * OPTIONAL competition-edition scope. When present and non-empty, only fixtures
+   * whose own `competition_edition_id` is in the set generate replay work — the
+   * `(as_of, team)` pairs are derived from those fixtures alone. It narrows the
+   * GENERATING fixtures; it never restricts a calculator's historical substrate
+   * read (squad_stability still reads a team's XIs across all competitions).
+   * Absent/empty → the existing unscoped behaviour, byte-identical.
+   */
+  readonly competitionEditionIds?: readonly string[];
 }
 
 const DEFAULT_LOOKBACK_DAYS = 2;
@@ -141,7 +150,7 @@ export async function selectBatches(
     throw new Error('the eligibility range ends before it begins');
   }
 
-  const fixtures = await readFixturesForEligibility(tx, from, to);
+  const fixtures = await readFixturesForEligibility(tx, from, to, options.competitionEditionIds);
 
   // Keyed by the instant, so two fixtures reaching the same moment for the same
   // team collapse to one subject rather than two identical writes.
@@ -209,7 +218,7 @@ export async function selectScopedBatches(
     throw new Error('the eligibility range ends before it begins');
   }
 
-  const fixtures = await readFixturesForEligibility(tx, from, to);
+  const fixtures = await readFixturesForEligibility(tx, from, to, options.competitionEditionIds);
 
   // Keyed by (instant, edition). A fixture contributes its two teams to the
   // batch of its OWN edition — the edition comes from the data, never from a

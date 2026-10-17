@@ -277,7 +277,8 @@ export async function readCompletedFixturesInWindow(
 export async function readFixturesForEligibility(
   tx: PoolClient,
   fromKickoff: Date,
-  toKickoff: Date
+  toKickoff: Date,
+  editionIds?: readonly string[]
 ): Promise<
   {
     fixtureId: string;
@@ -293,6 +294,14 @@ export async function readFixturesForEligibility(
     competitionEditionId: string;
   }[]
 > {
+  // Optional edition scope: when supplied, ONLY fixtures whose own
+  // competition_edition_id is in the set generate replay work. This narrows which
+  // fixtures produce (as_of, team) pairs; it does NOT touch any calculator's
+  // historical substrate read (e.g. squad_stability still reads a team's starting
+  // XIs across all competitions — that read lives elsewhere and is unchanged).
+  const scoped = editionIds !== undefined && editionIds.length > 0;
+  const params: unknown[] = [fromKickoff, toKickoff];
+  if (scoped) params.push([...editionIds]);
   const { rows } = await tx.query<{
     fixture_id: string;
     scheduled_kickoff_at: Date;
@@ -308,9 +317,9 @@ export async function readFixturesForEligibility(
        FROM football.fixture
       WHERE lifecycle_state_code IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED')
         AND scheduled_kickoff_at >= $1
-        AND scheduled_kickoff_at <= $2
+        AND scheduled_kickoff_at <= $2${scoped ? '\n        AND competition_edition_id = ANY($3::bigint[])' : ''}
       ORDER BY scheduled_kickoff_at, id`,
-    [fromKickoff, toKickoff]
+    params
   );
   return rows.map((row) => ({
     fixtureId: row.fixture_id,
