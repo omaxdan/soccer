@@ -32,6 +32,7 @@ import type { PoolClient } from 'pg';
 import {
   AmbiguousFixtureIdentityError,
   findFixtureByProviderIdentity,
+  isRescheduledBeforePartition,
   lifecycleTransitionFor,
   partitionForWrite,
   resolveFixture,
@@ -91,6 +92,38 @@ describe('U-9 · which partition a fixture is written to', () => {
   it('4. the partition is derived in UTC, so a late kickoff does not drift a day', () => {
     assert.equal(partitionForWrite(null, kickoff('2026-12-31T23:59:00Z')), '2026-12-31');
     assert.equal(partitionForWrite(null, kickoff('2027-01-01T00:01:00Z')), '2027-01-01');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// U-10 · the earlier-than-partition rule, without a database
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('U-10 · when the writer refuses an earlier-than-partition reschedule', () => {
+  it('4a. a move to an earlier UTC date is refused', () => {
+    // The move the partition cannot represent: kickoff now precedes the frozen
+    // partition, which ck_fixture__partition_not_after_kickoff would reject.
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-07-20T14:00:00Z')), true);
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-07-31T23:59:00Z')), true);
+  });
+
+  it('4b. a later reschedule is NOT refused — the blessed direction', () => {
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-08-15T14:00:00Z')), false);
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2027-03-14T14:00:00Z')), false);
+  });
+
+  it('4c. an intra-day backward move (same UTC date) is NOT refused', () => {
+    // 20:00 → 14:00 on the same UTC date leaves the partition date unchanged, so
+    // the CHECK still holds and the writer must let it through.
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-08-01T14:00:00Z')), false);
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-08-01T00:00:00Z')), false);
+  });
+
+  it('4d. the comparison is in UTC, so a late-evening kickoff is judged by its UTC date', () => {
+    // 2026-07-31 23:00 UTC is UTC-date 2026-07-31 — earlier than partition 08-01.
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-07-31T23:00:00Z')), true);
+    // 2026-08-01 00:30 UTC is UTC-date 2026-08-01 — equal, not earlier.
+    assert.equal(isRescheduledBeforePartition('2026-08-01', kickoff('2026-08-01T00:30:00Z')), false);
   });
 });
 
@@ -244,6 +277,45 @@ describe('U-9 · the cross-partition lookup', () => {
     );
     assert.equal(queries.length, 1, 'nothing is written after an ambiguous identity');
     assert.ok(!queries.some((q) => /INSERT|UPDATE|DELETE/i.test(q.sql)));
+  });
+
+  it('13a. U-10 — resolveFixture refuses an earlier reschedule before issuing any statement', async () => {
+    // The stored fixture lives in partition 2026-08-01; the incoming kickoff is
+    // 2026-07-20, an earlier UTC date. The writer must refuse it BEFORE writing
+    // — exactly as test 13 proves for an ambiguous identity — rather than let
+    // ck_fixture__partition_not_after_kickoff fire and roll back the season.
+    const { tx, queries } = recordingClient([
+      { id: '7', fixture_partition_on: '2026-08-01', lifecycle_state_code: 'SCHEDULED' },
+    ]);
+    const counts = new IngestionCounts();
+    const transitionCounts = new IngestionCounts();
+    const result = await resolveFixture(
+      tx,
+      {
+        externalId: 'EXT-1',
+        competitionEditionId: '1',
+        competitionStageId: null,
+        venueId: null,
+        isNeutralVenue: false,
+        homeTeamId: '1',
+        awayTeamId: '2',
+        scheduledKickoffAt: kickoff('2026-07-20T14:00:00Z'),
+        providerStatusCode: 100,
+        providerStatusRaw: { code: 100 },
+      },
+      counts,
+      transitionCounts
+    );
+
+    assert.equal(result, null, 'the fixture is refused, not resolved');
+    assert.equal(queries.length, 1, 'only the identity lookup ran');
+    assert.ok(
+      !queries.some((q) => /INSERT|UPDATE|DELETE/i.test(q.sql)),
+      'no statement was issued for the refused fixture'
+    );
+    assert.equal(counts.rejected, 1, 'counted as a rejection');
+    assert.equal(counts.written, 0, 'nothing written');
+    assert.equal(transitionCounts.examined, 0, 'no lifecycle transition for a refused fixture');
   });
 });
 
@@ -512,21 +584,35 @@ describe('U-9 persistence (requires a V2 database)', { skip: !hasDatabase }, () 
     });
   });
 
-  it('23. U-10 — an EARLIER reschedule still fails the CHECK, loudly and by name', async () => {
-    // Deliberately NOT accommodated. Advancing the partition to match would be
-    // the corruption U-9 exists to prevent; swallowing the change would leave
-    // the platform wrong about when the match is. A named constraint violation
-    // is the correct outcome until U-10 is decided on its own terms.
+  it('23. U-10 — an EARLIER reschedule is REFUSED before any write; the season continues and the row is unchanged', async () => {
+    // Was: the CHECK fired and rolled back the whole season. Now the writer holds
+    // the stored partition, sees the incoming kickoff on an earlier UTC date, and
+    // refuses THIS fixture before issuing a statement (doc 49 §7, option C). The
+    // run does not throw, and the stored row is left exactly as it was.
     await scenario(async (tx) => {
       await ingest(tx);
-      await assert.rejects(
+      const [before] = await fixtureRows(tx);
+      const beforeTransitions = await transitions(tx);
+
+      await assert.doesNotReject(
         () => ingest(tx, { startTimestamp: at('2026-07-20T14:00:00Z') }),
-        (error: unknown) => {
-          const failure = error as { code?: string; constraint?: string };
-          assert.equal(failure.code, '23514', 'a check violation');
-          assert.equal(failure.constraint, 'ck_fixture__partition_not_after_kickoff');
-          return true;
-        }
+        'an earlier reschedule no longer aborts the run'
+      );
+
+      const rows = await fixtureRows(tx);
+      assert.equal(rows.length, 1, 'no second row, and none removed');
+      assert.equal(rows[0].id, before.id, 'identity unchanged');
+      assert.equal(rows[0].partition, '2026-08-01', 'the partition never moved');
+      assert.equal(
+        rows[0].kickoff.toISOString(),
+        before.kickoff.toISOString(),
+        'the stored kickoff is UNCHANGED — the earlier restatement was refused, not applied'
+      );
+      assert.equal(rows[0].state, before.state, 'lifecycle unchanged');
+      assert.deepEqual(
+        await transitions(tx),
+        beforeTransitions,
+        'no lifecycle transition is recorded for a refused fixture'
       );
     });
   });

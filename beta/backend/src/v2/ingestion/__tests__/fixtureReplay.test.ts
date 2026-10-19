@@ -508,23 +508,35 @@ describe('replay · fixture ingestion against captured evidence', { skip: !runna
     });
   });
 
-  it('21. U-10 — an EARLIER reschedule still fails the CHECK, and is not swallowed', async () => {
+  it('21. U-10 — an EARLIER restatement is REFUSED before any write; the rest of the season is untouched', async () => {
+    // Was: the CHECK fired against the real captured payload and rolled back the
+    // run. Now the writer refuses the one restated-earlier fixture before issuing
+    // a statement (doc 49 §7); the write does not throw, every other fixture
+    // commits, and the refused fixture keeps its stored kickoff and partition.
     await scenario(async (tx) => {
       await replay(tx);
+      const universe = (await tally(tx)).fixtures;
+      const before = await fixtureRow(tx, COMPLETED);
+
       const earlier = capturedPageEvents('tournament_season_events_last', 0).map((event) =>
         String(event.id) === COMPLETED
           ? { ...event, startTimestamp: Math.floor(Date.UTC(2026, 5, 1, 19, 0) / 1000) }
           : event
       );
 
-      await assert.rejects(
+      await assert.doesNotReject(
         () => writeEvents(tx, earlier, 'rescheduled-earlier'),
-        (error: unknown) => {
-          const failure = error as { code?: string; constraint?: string };
-          assert.equal(failure.code, '23514');
-          assert.equal(failure.constraint, 'ck_fixture__partition_not_after_kickoff');
-          return true;
-        }
+        'an earlier restatement no longer aborts the run'
+      );
+
+      const after = await fixtureRow(tx, COMPLETED);
+      assert.equal((await tally(tx)).fixtures, universe, 'no fixture added or removed');
+      assert.equal(after?.fixture_id, before?.fixture_id, 'the same row');
+      assert.equal(after?.fixture_partition_on, before?.fixture_partition_on, 'the partition never moved');
+      assert.equal(
+        after?.scheduled_kickoff_at,
+        before?.scheduled_kickoff_at,
+        'the stored kickoff is UNCHANGED — the earlier restatement was refused, not applied'
       );
     });
   });

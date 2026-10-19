@@ -461,6 +461,11 @@ async function ingestEvent(
     stage.for('football.fixture_lifecycle_transition')
   );
 
+  // U-10. The fixture was refused before write (an earlier-than-partition
+  // reschedule resolveFixture cannot store): skip its result too and leave the
+  // rest of the season to commit. The refusal is already counted and logged.
+  if (!fixture) return;
+
   // ── 7. Result — only for a COMPLETED fixture ──────────────────────────────
   const homeScore = asRecord(raw.homeScore);
   const awayScore = asRecord(raw.awayScore);

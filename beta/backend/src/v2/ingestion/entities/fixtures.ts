@@ -173,6 +173,32 @@ export function partitionForWrite(
 }
 
 /**
+ * U-10. Whether an incoming kickoff falls on a UTC date BEFORE a fixture's
+ * stored partition — the one scheduling move the platform cannot represent.
+ *
+ * `fixture_partition_on` is immutable (U-9) and
+ * `ck_fixture__partition_not_after_kickoff` requires it to be `<=` the kickoff's
+ * UTC date. A fixture rescheduled (U-10a) or restated (U-10b) to an EARLIER UTC
+ * date than its partition cannot satisfy that check: moving the partition to
+ * match is the corruption U-9 exists to prevent, and storing the new kickoff
+ * against the old partition is a row the CHECK rejects. So the writer refuses it
+ * before issuing any statement (doc 49 §7).
+ *
+ * Pure, and compares exactly what the CHECK compares — the kickoff's UTC
+ * calendar date against the stored partition string. YYYY-MM-DD strings order
+ * chronologically, so `<` is the right comparison. EQUAL dates (an intra-day
+ * backward move, e.g. 20:00 → 14:00 on the same UTC date) are NOT refused; only
+ * a move across a UTC date boundary, backwards, reaches U-10. A new fixture
+ * (no stored row) can never reach it and is never passed here.
+ */
+export function isRescheduledBeforePartition(
+  storedPartitionOn: string,
+  scheduledKickoffAt: Date
+): boolean {
+  return fixturePartitionOn(scheduledKickoffAt) < storedPartitionOn;
+}
+
+/**
  * Whether this write is a lifecycle transition, and from what.
  *
  * FIVE CASES, and the vocabulary already distinguishes all five — no new model
@@ -211,13 +237,18 @@ export function lifecycleTransitionFor(
  * permit, what `immutableColumns` guards in the update branch, and what every
  * child's ON UPDATE RESTRICT enforces.
  *
- * U-10, and it is NOT handled here. A fixture rescheduled EARLIER than its
- * original date has a kickoff below its immutable partition date, and
- * `ck_fixture__partition_not_after_kickoff` rejects the update. That failure is
- * left to PostgreSQL, loudly and by name. Catching it would mean either
- * advancing the partition — the corruption this function exists to prevent — or
- * swallowing a scheduling change the platform would then be wrong about. A loud
- * abort is the correct posture until U-10 is decided on its own terms.
+ * U-10 is HANDLED here, by pre-emptive refusal (doc 49 §7). A fixture
+ * rescheduled or restated EARLIER than its original date has a kickoff below its
+ * immutable partition date, which `ck_fixture__partition_not_after_kickoff`
+ * rejects. Advancing the partition to match would be the corruption U-9 exists
+ * to prevent; letting the CHECK fire aborts the WHOLE season (one transaction)
+ * and still spends the quota. So when the writer — which already holds the
+ * stored partition — sees an incoming kickoff on an earlier UTC date, it refuses
+ * THIS fixture before issuing any statement: counts a rejection with a stated
+ * reason, logs it, and returns null so the caller skips it and the season
+ * continues. The stored row keeps its previous kickoff and lifecycle; the record
+ * is knowingly stale, which is stated, not hidden. The CHECK is NOT weakened —
+ * it remains the backstop for anything the writer misses.
  *
  * `ck_fixture__participants_distinct` refuses home = away. Not re-checked here:
  * PostgreSQL owns it, and a provider feed that reports a team playing itself is
@@ -229,7 +260,7 @@ export async function resolveFixture(
   fixture: ProviderFixture,
   counts: IngestionCounts,
   transitionCounts: IngestionCounts
-): Promise<FixtureRef> {
+): Promise<FixtureRef | null> {
   const lifecycleState = mapLifecycleState(fixture.providerStatusCode);
 
   if (isUnmappedLifecycle(fixture.providerStatusCode)) {
@@ -247,6 +278,33 @@ export async function resolveFixture(
   const existing = await findFixtureByProviderIdentity(tx, fixture.externalId);
   const partitionOn = partitionForWrite(existing, fixture.scheduledKickoffAt);
   const previous = existing?.lifecycleState ?? null;
+
+  // U-10. The incoming kickoff falls on a UTC date before the fixture's
+  // immutable partition. Storing it would violate ck_fixture__partition_not_after_kickoff
+  // and advancing the partition is forbidden (U-9), so refuse this fixture
+  // before any statement is issued — counted, logged, and returned as null —
+  // and let the rest of the season commit. The stored row is left untouched.
+  if (existing && isRescheduledBeforePartition(existing.partitionOn, fixture.scheduledKickoffAt)) {
+    const incomingPartition = fixturePartitionOn(fixture.scheduledKickoffAt);
+    const reason =
+      `U-10: ${PROVIDER_CODE}/${fixture.externalId} restated to kickoff ` +
+      `${fixture.scheduledKickoffAt.toISOString()} (UTC date ${incomingPartition}), earlier than its ` +
+      `immutable partition ${existing.partitionOn}. Refused before write — the stored kickoff and ` +
+      `lifecycle are kept; ck_fixture__partition_not_after_kickoff would reject this and the partition ` +
+      `cannot move (U-9).`;
+    counts.reject(reason);
+    logger.warn(
+      {
+        fixture: fixture.externalId,
+        provider: PROVIDER_CODE,
+        storedPartition: existing.partitionOn,
+        incomingKickoffAt: fixture.scheduledKickoffAt.toISOString(),
+        incomingUtcDate: incomingPartition,
+      },
+      'v2 ingestion: U-10 earlier-than-partition reschedule refused before write; fixture left stale, season continues'
+    );
+    return null;
+  }
 
   const row = await upsertMutable(tx, {
     relation: 'football.fixture',
